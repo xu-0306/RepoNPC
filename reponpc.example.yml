@@ -1,0 +1,197 @@
+# RepoNPC public configuration example.
+# Copy to reponpc.yml in the configured GitHub repository and replace examples.
+# Never put API keys, passwords, tokens, private URLs, or other secrets here.
+
+schema_version: 1
+
+locales:
+  default: zh-TW
+  supported:
+    - zh-TW
+    - en
+
+profile:
+  display_name: Example Developer
+  headline:
+    zh-TW: 用程式與 AI 解決實際問題的軟體工程師
+    en: Software engineer building practical systems with code and AI
+  bio:
+    zh-TW: 我專注於後端系統、開發者工具與可驗證的 AI 應用。
+    en: I focus on backend systems, developer tooling, and verifiable AI applications.
+  location: Taiwan
+  avatar_url: null
+  links:
+    - label:
+        zh-TW: GitHub
+        en: GitHub
+      url: https://github.com/your-github-name
+    - label:
+        zh-TW: 個人網站
+        en: Website
+      url: https://portfolio.example.com
+  greeting:
+    zh-TW: 嗨，我是你的 RepoNPC。想先了解哪一個專案？
+    en: Hi, I am your RepoNPC. Which project would you like to explore?
+  suggested_questions:
+    zh-TW:
+      - 哪個專案最能代表你的後端能力？
+      - 你如何設計這些專案的架構？
+      - 你在 project-one 中負責了什麼？
+      - 有哪些 Python 與 TypeScript 的實作？
+    en:
+      - Which project best demonstrates your backend experience?
+      - How did you design the architecture of these projects?
+      - What was your role in project-one?
+      - Which projects use Python or TypeScript?
+
+repositories:
+  - slug: your-github-name/project-one
+    enabled: true
+    # Omit ref to index the repository's default branch. A branch, tag, or
+    # full commit SHA is also accepted and is always resolved to an exact SHA.
+    ref: main
+    role:
+      zh-TW: 專案發起人與主要開發者
+      en: Project initiator and primary developer
+    summary:
+      zh-TW: 一個示範可驗證 AI 問答與混合檢索的開源專案。
+      en: An open-source project demonstrating verifiable AI Q&A and hybrid retrieval.
+    tags:
+      - Python
+      - FastAPI
+      - React
+      - RAG
+    demo_url: https://demo.example.com
+    include:
+      - README.md
+      - docs/**
+      - pyproject.toml
+      - package.json
+      - src/**
+      - apps/**
+    exclude:
+      - docs/generated/**
+      - '**/*.min.js'
+      - '**/fixtures/large/**'
+    claims:
+      - id: project_one_role
+        kind: responsibility
+        statement:
+          zh-TW: 我負責此專案的系統架構、後端 API 與檢索流程。
+          en: I was responsible for the system architecture, backend API, and retrieval flow.
+      - id: project_one_result
+        kind: achievement
+        statement:
+          zh-TW: 我建立了可重現的評估流程，用來追蹤檢索與引用品質。
+          en: I built a reproducible evaluation flow to track retrieval and citation quality.
+
+  - slug: your-github-name/project-two
+    enabled: true
+    role:
+      zh-TW: 維護者
+      en: Maintainer
+    summary:
+      zh-TW: 一個以 TypeScript 建立的開發者工具。
+      en: A developer tool built with TypeScript.
+    tags:
+      - TypeScript
+      - Developer Tools
+    demo_url: null
+    include:
+      - README.md
+      - docs/**
+      - package.json
+      - src/**
+    exclude:
+      - dist/**
+    claims:
+      - id: project_two_context
+        kind: context
+        statement:
+          zh-TW: 這個專案用來探索簡化本地開發流程的方法。
+          en: This project explores ways to simplify local development workflows.
+
+character:
+  mode: builtin
+  revision: 1
+  builtin:
+    body: standard
+    skin: medium
+    hair: short
+    hair_color: '#2b1d14'
+    outfit: adventurer
+    primary_color: '#6d5dfc'
+    secondary_color: '#f2c14e'
+    accessory: glasses
+  # To use a custom sheet, set mode: custom, remove builtin, and enable:
+  # custom:
+  #   sprite_path: assets/character/hero.png
+  animation:
+    frame_duration_ms: 160
+    movement: subtle
+
+card:
+  revision: 1
+  call_to_action:
+    zh-TW: 問問我的 RepoNPC
+    en: Ask my RepoNPC
+  show_repository_count: true
+  animation:
+    enabled: true
+    frame_duration_ms: 240
+  themes:
+    light:
+      background: '#f7f4e9'
+      panel: '#fffdf7'
+      text: '#24202e'
+      accent: '#6d5dfc'
+      border: '#2f2842'
+    dark:
+      background: '#171521'
+      panel: '#211e2e'
+      text: '#f8f5ff'
+      accent: '#9b8cff'
+      border: '#c8bfff'
+
+retrieval:
+  enabled_sources:
+    - owner_assertions
+    - repository_metadata
+    - documentation
+    - source_code
+  parsers:
+    tree_sitter_languages:
+      - python
+      - javascript
+      - typescript
+      - go
+      - rust
+  chunking:
+    max_characters: 6000
+    max_lines: 200
+    fallback_overlap_lines: 12
+  limits:
+    max_file_bytes: 524288
+    max_repository_text_bytes: 26214400
+    max_corpus_text_bytes: 104857600
+    max_evidence_records: 50000
+  embedding:
+    adapter: local_sentence_transformers
+    model: intfloat/multilingual-e5-small
+    dimension: 384
+    normalized: true
+    query_prefix: 'query: '
+    passage_prefix: 'passage: '
+  fusion:
+    rrf_k: 60
+    lexical_weight: 1.0
+    vector_weight: 1.0
+    candidate_count_per_channel: 30
+    final_context_records: 8
+    max_records_per_repository: 6
+  source_weights:
+    owner_assertions: 1.0
+    repository_metadata: 0.9
+    documentation: 1.0
+    source_code: 1.0
+

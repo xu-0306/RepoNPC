@@ -1,0 +1,44 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      REPONPC_ENV: ${REPONPC_ENV:-production}
+      REPONPC_PUBLIC_BASE_URL: ${REPONPC_PUBLIC_BASE_URL:-http://127.0.0.1:8000}
+      REPONPC_HOST: 0.0.0.0
+      REPONPC_PORT: "8000"
+      REPONPC_DATA_DIR: /var/lib/reponpc
+      REPONPC_LOG_LEVEL: ${REPONPC_LOG_LEVEL:-INFO}
+      REPONPC_CONFIG_REPOSITORY: ${REPONPC_CONFIG_REPOSITORY:-example/reponpc}
+      REPONPC_INDEX_MANIFEST_URL: ${REPONPC_INDEX_MANIFEST_URL:-https://raw.githubusercontent.com/example/reponpc/main/stable-manifest.json}
+      REPONPC_CHAT_MODEL: ${REPONPC_CHAT_MODEL:-setup-required}
+      REPONPC_CHAT_BASE_URL: ${REPONPC_CHAT_BASE_URL:-http://ollama:11434}
+      REPONPC_EMBEDDING_MODEL: ${REPONPC_EMBEDDING_MODEL:-intfloat/multilingual-e5-small}
+      REPONPC_ADMIN_USERNAME: ${REPONPC_ADMIN_USERNAME:-admin}
+      REPONPC_GITHUB_TOKEN_FILE: ${REPONPC_GITHUB_TOKEN_FILE:-}
+      REPONPC_CHAT_API_KEY_FILE: ${REPONPC_CHAT_API_KEY_FILE:-}
+      REPONPC_EMBEDDING_API_KEY_FILE: ${REPONPC_EMBEDDING_API_KEY_FILE:-}
+      REPONPC_IP_HASH_KEY_FILE: ${REPONPC_IP_HASH_KEY_FILE:-}
+    ports:
+      - "127.0.0.1:${REPONPC_HOST_PORT:-8000}:8000"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001
+    volumes:
+      - reponpc-data:/var/lib/reponpc
+      - ./secrets:/run/secrets:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import urlopen; assert urlopen('http://127.0.0.1:8000/healthz', timeout=3).status == 200"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  reponpc-data:

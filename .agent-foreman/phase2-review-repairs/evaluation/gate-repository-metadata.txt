@@ -1,0 +1,15 @@
+Main real-producer category probe, 2026-08-11
+
+Setup: build the Phase 2 fixture index through tests.integration.test_index_build._build
+with DeterministicEmbeddingProvider, then query the production SQLite sources table grouped
+by source_type.
+
+Exit code: 0
+Observed JSON:
+{"repository_metadata_count": 0, "source_types": [["documentation", 4], ["owner_assertion", 1], ["source_code", 2]]}
+
+Oracle: risk confirmed. The configured retrieval vocabulary includes repository_metadata,
+and docs/TECHNICAL_SPEC.md section 17 states repository metadata may remain when an empty
+repository has no eligible text, but the real Phase 2 fixture producer emits no source in
+that category. This is recorded as an unresolved producer/consumer risk, not silently
+treated as covered by component-only retrieval-policy tests.

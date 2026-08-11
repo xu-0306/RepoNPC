@@ -1,0 +1,54 @@
+{
+  "schema_name": "agent-foreman/evaluation",
+  "schema_version": "1.0",
+  "profile": "minimal",
+  "plan_id": "REPONPC-P2-03-P2-04-RETRIEVAL-20260810",
+  "phase_id": "P2-03-P2-04",
+  "context_freshness": "fresh",
+  "model_diversity": "unknown",
+  "model_diversity_detail": "The host did not provide an authoritative actual model identifier, so different-family or same-model diversity cannot be verified.",
+  "production_access": "read-only",
+  "evaluation_scope": "Fresh read-only evaluation of src/reponpc/retrieval/fts_query.py and src/reponpc/retrieval/vector.py; only this final evaluation directory was written.",
+  "new_probes": [
+    {
+      "probe_id": "PROBE-FINAL-FTS-BOOLEAN-QUOTE",
+      "invariant_id": "INV-FTS-NO-RAW-SYNTAX",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python -B .agent-foreman/phase2-retrieval-primitives/evaluation/final/probe_fts_boolean_quote_attack.py",
+      "setup": "Create an in-memory real SQLite FTS5 table with literal, alpha-only, beta-only, and alpha-beta decoy records.",
+      "fault_injection": "Use the quoted boolean FTS5 attack `\"alpha\" OR \"beta\"`.",
+      "production_trigger": "Call the public compile_fts_query entrypoint, then execute its generated expression unchanged as a bound MATCH parameter.",
+      "oracle": "The compiler emits `\"alpha\" AND \"OR\" AND \"beta\"` and returns only E_literal, a strict subset of the raw attack result.",
+      "anti_oracle": "The raw quoted boolean MATCH result contains E_decoy, demonstrating the broadening the compiled expression prevents.",
+      "artifact_path": ".agent-foreman/phase2-retrieval-primitives/evaluation/final/probe-fts-boolean-quote-attack-output.json",
+      "exit_code": 0
+    },
+    {
+      "probe_id": "PROBE-FINAL-VECTOR-DIRECT-CONSTRUCTION",
+      "invariant_id": "INV-VECTOR-VALIDATION",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python -B .agent-foreman/phase2-retrieval-primitives/evaluation/final/probe_vector_direct_construction.py",
+      "setup": "Directly construct ValidatedVectorMatrix from a mutable float32 source and rank it through the public rank_vectors entrypoint.",
+      "fault_injection": "Attempt direct NaN construction, then mutate the caller-owned source to NaN after successful direct construction and attempt mutation of the returned values.",
+      "production_trigger": "Invoke public ValidatedVectorMatrix and rank_vectors entrypoints.",
+      "oracle": "NaN direct construction raises ValueError; a valid matrix is an independent non-writeable finite copy and all resulting rank scores are finite.",
+      "anti_oracle": "The caller-owned source becomes NaN after construction, yet the validated matrix and scores remain finite; a direct matrix-value write raises ValueError.",
+      "artifact_path": ".agent-foreman/phase2-retrieval-primitives/evaluation/final/probe-vector-direct-construction-output.json",
+      "exit_code": 0
+    }
+  ],
+  "focused_existing_tests": {
+    "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python -B -m pytest --basetemp D:/RepoNPC/.agent-foreman/phase2-retrieval-primitives/evaluation/final/pytest-tmp -p no:cacheprovider tests/unit/test_fts_query.py tests/integration/test_fts_query.py tests/unit/test_vector.py -q",
+    "oracle": "Focused P2-03/P2-04 test suite passes.",
+    "artifact_path": ".agent-foreman/phase2-retrieval-primitives/evaluation/final/focused-existing-tests.txt",
+    "exit_code": 0,
+    "result": "45 passed in 0.10s"
+  },
+  "deferred": [
+    {
+      "area": "P2-06 bundle identity and compatibility integration",
+      "reason": "The P2-06 SQLite/blob bundle reader and writer do not yet exist. This primitive-level evaluation does not verify provider/model identity, declared adapter or prefix compatibility, checksum/readiness, activation, or rollback."
+    }
+  ],
+  "recommendation": "pass",
+  "deterministic_result": "passed",
+  "findings": []
+}

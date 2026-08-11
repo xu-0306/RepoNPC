@@ -1,0 +1,34 @@
+{
+  "schema_name": "agent-foreman/integration",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-MVP-20260810",
+  "phase_id": "MVP-FOUNDATION-PRE-EVAL",
+  "actor_role": "main",
+  "packages": [
+    "PKG-MAIN-CONTRACTS",
+    "PKG-WORKER-RRF",
+    "PKG-WORKER-CHUNK",
+    "PKG-WORKER-I18N",
+    "PKG-MAIN-API"
+  ],
+  "delta_guard": {
+    "passed": false,
+    "artifacts": [
+      ".agent-foreman/mvp/artifacts/delta-rrf.json",
+      ".agent-foreman/mvp/artifacts/delta-chunk.json",
+      ".agent-foreman/mvp/artifacts/delta-i18n.json"
+    ],
+    "limitation": "No Git history or per-agent write sandbox was available; concurrent Root/worker writes and runtime caches made the whole-workspace fingerprints non-attributable. Manual owned-path inspection is recorded but is weaker evidence."
+  },
+  "focused_gates": ["GATE-SPEC", "GATE-CONFIG", "GATE-EVIDENCE", "GATE-RRF", "GATE-CHUNK", "GATE-I18N", "GATE-API"],
+  "aggregate_gates": ["GATE-ALL"],
+  "supporting_checks": [
+    {"name": "ruff", "exit_code": 0, "artifact": ".agent-foreman/mvp/artifacts/gate-ruff.txt"},
+    {"name": "uv-lock-check", "exit_code": 0, "artifact": ".agent-foreman/mvp/artifacts/gate-lock.txt"}
+  ],
+  "deterministic_result": "passed",
+  "evaluator_recommendation": "pending",
+  "status": "integrated",
+  "rework": {"worker_changed_lines": null, "main_changed_lines_in_worker_scope": null, "reason": "No reliable line-level baseline exists in the non-Git shared workspace."}
+}

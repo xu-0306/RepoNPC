@@ -1,0 +1,117 @@
+{
+  "schema_name": "agent-foreman/evaluation",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-MVP-20260810",
+  "phase_id": "MVP-FOUNDATION-PRE-EVAL",
+  "context_freshness": "fresh",
+  "model_diversity": "unknown",
+  "production_access": "read-only",
+  "oracle_isolation": "best_effort",
+  "evaluated_at": "2026-08-10T15:23:59+08:00",
+  "probe_source": ".agent-foreman/mvp/evaluation/probes/test_phase1_falsification.py",
+  "execution": {
+    "command": "rtk proxy powershell -NoProfile -Command '$env:PYTHONDONTWRITEBYTECODE = \"1\"; uv --cache-dir D:/RepoNPC/.agent-foreman/mvp/evaluation/uv-cache run --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.agent-foreman/mvp/evaluation/pytest-tmp -p no:cacheprovider .agent-foreman/mvp/evaluation/probes/test_phase1_falsification.py -q --junitxml D:/RepoNPC/.agent-foreman/mvp/evaluation/artifacts/probe-results.xml 2>&1 | Tee-Object -FilePath D:/RepoNPC/.agent-foreman/mvp/evaluation/artifacts/probe-run.log; exit $LASTEXITCODE'",
+    "exit_code": 1,
+    "observed": "5 new probes executed: 3 passed, 2 failed; one non-blocking Starlette TestClient/httpx deprecation warning was emitted.",
+    "artifacts": [
+      ".agent-foreman/mvp/evaluation/artifacts/probe-run.log",
+      ".agent-foreman/mvp/evaluation/artifacts/probe-results.xml"
+    ]
+  },
+  "new_probes": [
+    {
+      "probe_id": "PROBE-AUTHORIZED-SCOPE-001",
+      "invariant_id": "INV-AUTHORIZED-SCOPE",
+      "setup": "Read the current Technical Specification and gate the real create_app()/GET /healthz production trigger on its recorded approval.",
+      "fault_injection": "Write an evaluator-local copy with the first Status value changed from Approved to Draft.",
+      "production_trigger": "The successful control invokes create_app() and GET /healthz; the injected Draft copy is rejected before that trigger.",
+      "oracle": "Current approved specification reaches health 200; injected Draft raises ScopeGateError.",
+      "anti_oracle": "A bare text search that does not gate the launch trigger is insufficient.",
+      "command": "rtk proxy powershell -NoProfile -Command '$env:PYTHONDONTWRITEBYTECODE = \"1\"; uv --cache-dir D:/RepoNPC/.agent-foreman/mvp/evaluation/uv-cache run --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.agent-foreman/mvp/evaluation/pytest-tmp -p no:cacheprovider .agent-foreman/mvp/evaluation/probes/test_phase1_falsification.py -q --junitxml D:/RepoNPC/.agent-foreman/mvp/evaluation/artifacts/probe-results.xml 2>&1 | Tee-Object -FilePath D:/RepoNPC/.agent-foreman/mvp/evaluation/artifacts/probe-run.log; exit $LASTEXITCODE'",
+      "exit_code": 0,
+      "result": "passed",
+      "artifact_path": ".agent-foreman/mvp/evaluation/artifacts/probe-results.xml"
+    },
+    {
+      "probe_id": "PROBE-CONFIG-STRICT-001",
+      "invariant_id": "INV-CONFIG-STRICT",
+      "setup": "Load the normative YAML through production load_public_config from an evaluator-local candidate file.",
+      "fault_injection": "Add nested profile.openaiApiKey with a recognizable canary value.",
+      "production_trigger": "load_public_config(candidate) parses and validates the untrusted YAML.",
+      "oracle": "ConfigValidationError names profile.openaiApiKey while both exception and issues omit the canary.",
+      "anti_oracle": "Mutating a decoded dictionary or inspecting _reject_secret_keys directly does not invoke the file-loading boundary.",
+      "command": "rtk proxy powershell -NoProfile -Command '$env:PYTHONDONTWRITEBYTECODE = \"1\"; uv --cache-dir D:/RepoNPC/.agent-foreman/mvp/evaluation/uv-cache run --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.agent-foreman/mvp/evaluation/pytest-tmp -p no:cacheprovider .agent-foreman/mvp/evaluation/probes/test_phase1_falsification.py -q --junitxml D:/RepoNPC/.agent-foreman/mvp/evaluation/artifacts/probe-results.xml 2>&1 | Tee-Object -FilePath D:/RepoNPC/.agent-foreman/mvp/evaluation/artifacts/probe-run.log; exit $LASTEXITCODE'",
+      "exit_code": 0,
+      "result": "passed",
+      "artifact_path": ".agent-foreman/mvp/evaluation/artifacts/probe-results.xml"
+    },
+    {
+      "probe_id": "PROBE-EVIDENCE-STABLE-001",
+      "invariant_id": "INV-EVIDENCE-STABLE",
+      "setup": "Construct a production EvidenceRecord at its public Pydantic validation boundary with fixed class, SHA, path, line range, and content.",
+      "fault_injection": "Use repository_slug owner/repo/extra, which violates the configured owner/name source-metadata contract.",
+      "production_trigger": "EvidenceRecord.model_validate receives the malformed metadata and executes validate_record.",
+      "oracle": "The record must raise ValidationError before an evidence ID can be accepted.",
+      "anti_oracle": "Checking only that an otherwise valid record has a deterministic ID does not test malformed repository metadata.",
+      "command": "rtk proxy powershell -NoProfile -Command '$env:PYTHONDONTWRITEBYTECODE = \"1\"; uv --cache-dir D:/RepoNPC/.agent-foreman/mvp/evaluation/uv-cache run --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.agent-foreman/mvp/evaluation/pytest-tmp -p no:cacheprovider .agent-foreman/mvp/evaluation/probes/test_phase1_falsification.py -q --junitxml D:/RepoNPC/.agent-foreman/mvp/evaluation/artifacts/probe-results.xml 2>&1 | Tee-Object -FilePath D:/RepoNPC/.agent-foreman/mvp/evaluation/artifacts/probe-run.log; exit $LASTEXITCODE'",
+      "exit_code": 1,
+      "result": "failed",
+      "artifact_path": ".agent-foreman/mvp/evaluation/artifacts/probe-results.xml"
+    },
+    {
+      "probe_id": "PROBE-PUBLIC-SETUP-SAFE-001",
+      "invariant_id": "INV-PUBLIC-SETUP-SAFE",
+      "setup": "Create the real FastAPI app with an injected setup snapshot and consume GET /api/public/status through TestClient.",
+      "fault_injection": "Supply one private-provider URL canary as both index_version and model_provider.",
+      "production_trigger": "GET /api/public/status serializes SetupState.public_status through the public HTTP boundary.",
+      "oracle": "The successful 200 public response must omit the canary and private URL.",
+      "anti_oracle": "Inspecting SetupState or PublicStatus directly without an HTTP request does not test public serialization.",
+      "command": "rtk proxy powershell -NoProfile -Command '$env:PYTHONDONTWRITEBYTECODE = \"1\"; uv --cache-dir D:/RepoNPC/.agent-foreman/mvp/evaluation/uv-cache run --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.agent-foreman/mvp/evaluation/pytest-tmp -p no:cacheprovider .agent-foreman/mvp/evaluation/probes/test_phase1_falsification.py -q --junitxml D:/RepoNPC/.agent-foreman/mvp/evaluation/artifacts/probe-results.xml 2>&1 | Tee-Object -FilePath D:/RepoNPC/.agent-foreman/mvp/evaluation/artifacts/probe-run.log; exit $LASTEXITCODE'",
+      "exit_code": 1,
+      "result": "failed",
+      "artifact_path": ".agent-foreman/mvp/evaluation/artifacts/probe-results.xml"
+    },
+    {
+      "probe_id": "PROBE-I18N-PARITY-001",
+      "invariant_id": "INV-I18N-PARITY",
+      "setup": "Create the real FastAPI app and replace the route's translation boundary with locale-tagged evaluator markers.",
+      "fault_injection": "Translation emits a distinct marker for each locale instead of normal catalog text.",
+      "production_trigger": "GET /api/public/profile is issued for zh-TW and en.",
+      "oracle": "Each 503 error contains the marker for its selected locale and the same index_unavailable key.",
+      "anti_oracle": "Calling translate directly bypasses request locale parsing and the public route.",
+      "command": "rtk proxy powershell -NoProfile -Command '$env:PYTHONDONTWRITEBYTECODE = \"1\"; uv --cache-dir D:/RepoNPC/.agent-foreman/mvp/evaluation/uv-cache run --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.agent-foreman/mvp/evaluation/pytest-tmp -p no:cacheprovider .agent-foreman/mvp/evaluation/probes/test_phase1_falsification.py -q --junitxml D:/RepoNPC/.agent-foreman/mvp/evaluation/artifacts/probe-results.xml 2>&1 | Tee-Object -FilePath D:/RepoNPC/.agent-foreman/mvp/evaluation/artifacts/probe-run.log; exit $LASTEXITCODE'",
+      "exit_code": 0,
+      "result": "passed",
+      "artifact_path": ".agent-foreman/mvp/evaluation/artifacts/probe-results.xml"
+    }
+  ],
+  "integrity_check": {
+    "command": "rtk proxy powershell -NoProfile -ExecutionPolicy Bypass -File .agent-foreman\\mvp\\evaluation\\probes\\verify_integrity.ps1",
+    "exit_code": 0,
+    "result": "passed: every protected production and existing-input hash matches production-baseline.txt",
+    "artifact_path": ".agent-foreman/mvp/evaluation/artifacts/post-probe-integrity.txt"
+  },
+  "deterministic_result": "failed",
+  "findings": [
+    {
+      "finding_id": "FIND-EVIDENCE-REPOSITORY-SLUG-001",
+      "invariant_id": "INV-EVIDENCE-STABLE",
+      "location": "src/reponpc/domain/evidence.py:EvidenceRecord.validate_record",
+      "actual": "EvidenceRecord.model_validate accepts repository_slug=owner/repo/extra and assigns an E_ identifier.",
+      "expected": "Reject any repository slug that is not exactly owner/name before accepting immutable source metadata.",
+      "artifact": ".agent-foreman/mvp/evaluation/artifacts/probe-results.xml",
+      "next_action": "Add owner/name slug validation at the EvidenceRecord boundary and one production contract regression test."
+    },
+    {
+      "finding_id": "FIND-PUBLIC-STATUS-REFLECTION-001",
+      "invariant_id": "INV-PUBLIC-SETUP-SAFE",
+      "location": "src/reponpc/api/public.py:SetupState.public_status",
+      "actual": "GET /api/public/status reflects an injected private-provider URL in index.version and model.provider.",
+      "expected": "The public status boundary must never serialize provider URLs or other sensitive diagnostics.",
+      "artifact": ".agent-foreman/mvp/evaluation/artifacts/probe-results.xml",
+      "next_action": "Constrain or sanitize public status fields at serialization and add an HTTP regression test with a URL canary."
+    }
+  ],
+  "recommendation": "revise"
+}

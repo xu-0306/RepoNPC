@@ -1,0 +1,181 @@
+{
+  "schema_name": "reponpc/phase2-benchmark",
+  "schema_version": 1,
+  "oracle_isolation": "best_effort",
+  "provider": "deterministic-fixture-only",
+  "reference_host": {
+    "python": "3.14.7",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.5.2"
+  },
+  "thresholds": {
+    "recall_at_8": 0.85,
+    "language_parity": 0.9,
+    "warm_p95_ms": 750.0
+  },
+  "repeatable": true,
+  "recall_at_8": 1.0,
+  "language_parity": 1.0,
+  "warm_p95_ms": 0.4808,
+  "results": [
+    {
+      "id": "rank-evidence-en",
+      "pair_id": "rank-evidence",
+      "locale": "en",
+      "hit": true,
+      "retrieved_paths": [
+        "README.md",
+        "docs/adversarial-evidence.md",
+        "reponpc.yml",
+        "reponpc.yml",
+        "docs/architecture.md",
+        "docs/unsupported-claims.md",
+        "src/retrieval_pipeline.py",
+        "src/retrieval_pipeline.py"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "rank-evidence-zh-tw",
+      "pair_id": "rank-evidence",
+      "locale": "zh-TW",
+      "hit": true,
+      "retrieved_paths": [
+        "README.md",
+        "docs/unsupported-claims.md",
+        "reponpc.yml",
+        "reponpc.yml",
+        "docs/architecture.md",
+        "src/retrieval_pipeline.py",
+        "docs/adversarial-evidence.md",
+        "src/retrieval_pipeline.py"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "citation-resolver-en",
+      "pair_id": "citation-resolver",
+      "locale": "en",
+      "hit": true,
+      "retrieved_paths": [
+        "src/retrieval_pipeline.py",
+        "docs/adversarial-evidence.md",
+        "src/retrieval_pipeline.py",
+        "docs/unsupported-claims.md",
+        "src/retrieval_pipeline.py",
+        "src/search_handler.ts",
+        "src/search_handler.ts",
+        "reponpc.yml"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "citation-resolver-zh-tw",
+      "pair_id": "citation-resolver",
+      "locale": "zh-TW",
+      "hit": true,
+      "retrieved_paths": [
+        "src/retrieval_pipeline.py",
+        "docs/unsupported-claims.md",
+        "docs/adversarial-evidence.md",
+        "src/retrieval_pipeline.py",
+        "reponpc.yml",
+        "src/retrieval_pipeline.py",
+        "src/retrieval_pipeline.py",
+        "docs/architecture.md"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "hybrid-architecture-en",
+      "pair_id": "hybrid-architecture",
+      "locale": "en",
+      "hit": true,
+      "retrieved_paths": [
+        "docs/architecture.md",
+        "README.md",
+        "reponpc.yml",
+        "docs/adversarial-evidence.md",
+        "src/search_handler.ts",
+        "docs/unsupported-claims.md",
+        "src/search_handler.ts",
+        "reponpc.yml"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "hybrid-architecture-zh-tw",
+      "pair_id": "hybrid-architecture",
+      "locale": "zh-TW",
+      "hit": true,
+      "retrieved_paths": [
+        "docs/architecture.md",
+        "reponpc.yml",
+        "README.md",
+        "src/retrieval_pipeline.py",
+        "docs/unsupported-claims.md",
+        "docs/adversarial-evidence.md",
+        "src/retrieval_pipeline.py",
+        "src/retrieval_pipeline.py"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "untrusted-evidence-en",
+      "pair_id": "untrusted-evidence",
+      "locale": "en",
+      "hit": true,
+      "retrieved_paths": [
+        "src/retrieval_pipeline.py",
+        "README.md",
+        "reponpc.yml",
+        "docs/adversarial-evidence.md",
+        "docs/unsupported-claims.md",
+        "reponpc.yml",
+        "docs/architecture.md",
+        "src/search_handler.ts"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "untrusted-evidence-zh-tw",
+      "pair_id": "untrusted-evidence",
+      "locale": "zh-TW",
+      "hit": true,
+      "retrieved_paths": [
+        "src/retrieval_pipeline.py",
+        "docs/unsupported-claims.md",
+        "docs/adversarial-evidence.md",
+        "reponpc.yml",
+        "README.md",
+        "docs/architecture.md",
+        "src/retrieval_pipeline.py",
+        "src/search_handler.ts"
+      ],
+      "expected_path_count": 1
+    }
+  ],
+  "pair_results": [
+    {
+      "pair_id": "citation-resolver",
+      "equivalent": true,
+      "both_hit": true
+    },
+    {
+      "pair_id": "hybrid-architecture",
+      "equivalent": true,
+      "both_hit": true
+    },
+    {
+      "pair_id": "rank-evidence",
+      "equivalent": true,
+      "both_hit": true
+    },
+    {
+      "pair_id": "untrusted-evidence",
+      "equivalent": true,
+      "both_hit": true
+    }
+  ],
+  "passed": true
+}

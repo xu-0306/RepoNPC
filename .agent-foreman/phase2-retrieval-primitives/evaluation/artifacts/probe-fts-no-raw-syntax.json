@@ -1,0 +1,32 @@
+{
+  "anti_oracle": {
+    "bypassed_compiler_expression": "alpha OR beta",
+    "raw_result": [
+      "E_alpha",
+      "E_beta",
+      "E_literal"
+    ],
+    "reason": "direct FTS syntax broadens to operator-decoy records and is not evidence of safe compilation"
+  },
+  "expected": {
+    "compiled_result": [
+      "E_literal"
+    ],
+    "raw_contains": [
+      "E_alpha",
+      "E_beta"
+    ]
+  },
+  "fault_injection": "alpha\" OR \"beta",
+  "invariant_id": "INV-FTS-NO-RAW-SYNTAX",
+  "oracle": {
+    "compiled_mode": "match",
+    "compiled_result": [
+      "E_literal"
+    ]
+  },
+  "passed": true,
+  "probe_id": "EVAL-PROBE-FTS-001",
+  "setup": "in-memory SQLite FTS5 virtual table with literal and decoy alpha/beta records",
+  "trigger": "compile_fts_query followed by public SQLite MATCH with the generated expression as one bound value"
+}

@@ -1,0 +1,23 @@
+{
+  "schema_name": "agent-foreman/integration",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-P2-FOUNDATION-20260810",
+  "phase_id": "P2-00",
+  "actor_role": "main",
+  "packages": ["P2-00-main-direct"],
+  "delta_guard": {
+    "passed": false,
+    "artifact": "artifacts/baseline-sha256.json",
+    "limitation": "Repository has no Git metadata; the preserved enumerated SHA-256 manifest cannot attribute concurrent writes."
+  },
+  "focused_gates": ["GATE-SCOPE", "GATE-ENV", "GATE-RUNTIME", "GATE-LOGGING", "GATE-MOCKS", "GATE-WEB", "GATE-API", "GATE-CI", "GATE-TYPE", "GATE-PY-LOCK", "GATE-BUILD"],
+  "aggregate_gates": ["GATE-PYTHON", "GATE-RUFF", "GATE-ALL"],
+  "deterministic_result": "passed",
+  "evaluator_recommendation": "pass",
+  "status": "verified",
+  "rework": {
+    "worker_changed_lines": 0,
+    "main_changed_lines_in_worker_scope": 0
+  }
+}

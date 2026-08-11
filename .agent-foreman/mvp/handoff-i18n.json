@@ -1,0 +1,24 @@
+{
+  "schema_name": "agent-foreman/handoff",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-MVP-20260810",
+  "package_id": "PKG-WORKER-I18N",
+  "status": "implemented",
+  "requested_selector": "gpt-5.6-terra/high",
+  "resolved_model_id": null,
+  "model_verification": "unavailable",
+  "reasoning_effort": "unavailable",
+  "changed_paths": [
+    "src/reponpc/i18n/catalog.py",
+    "tests/unit/test_i18n_catalog.py"
+  ],
+  "diff_artifact": ".agent-foreman/mvp/artifacts/scope-i18n.txt",
+  "test_artifacts": [".agent-foreman/mvp/artifacts/gate-i18n.txt"],
+  "gate_results": [
+    {"gate_id": "GATE-I18N", "exit_code": 0, "observed": "8 passed in 0.01s"}
+  ],
+  "summary": "Implemented a strict immutable zh-TW/en catalog with matching keys and placeholders in the two frozen owned paths.",
+  "delta_guard": {"passed": false, "artifact": ".agent-foreman/mvp/artifacts/delta-i18n.json", "limitation": "Shared concurrent workspace and unfiltered runtime artifacts prevented attribution."},
+  "blocked_record": null
+}

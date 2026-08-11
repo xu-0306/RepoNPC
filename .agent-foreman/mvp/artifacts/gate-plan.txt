@@ -1,0 +1,6 @@
+Gate: agent-foreman canonical plan validation and render
+Commands:
+- rtk proxy D:/RepoNPC/.venv/Scripts/python.exe C:/Users/xu/.codex/skills/agent-foreman/scripts/validate_plan.py D:/RepoNPC/.agent-foreman/mvp/plan.json
+- rtk proxy D:/RepoNPC/.venv/Scripts/python.exe C:/Users/xu/.codex/skills/agent-foreman/scripts/render_plan.py D:/RepoNPC/.agent-foreman/mvp/plan.json --out D:/RepoNPC/.agent-foreman/mvp/plan.md
+Exit codes: 0, 0
+Observed: plan.json is valid; plan.md was regenerated deterministically. Plan metadata, all five packages, and all eight blocking acceptance gates are verified/passed; one evaluation and two integration records are present.

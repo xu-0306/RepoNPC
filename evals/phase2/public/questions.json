@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "questions": [
+    {
+      "id": "rank-evidence-en",
+      "pair_id": "rank-evidence",
+      "locale": "en",
+      "question": "Where is rank_evidence defined?"
+    },
+    {
+      "id": "rank-evidence-zh-tw",
+      "pair_id": "rank-evidence",
+      "locale": "zh-TW",
+      "question": "rank_evidence 定義在哪裡？"
+    },
+    {
+      "id": "citation-resolver-en",
+      "pair_id": "citation-resolver",
+      "locale": "en",
+      "question": "How does CitationResolver resolve an evidence ID?"
+    },
+    {
+      "id": "citation-resolver-zh-tw",
+      "pair_id": "citation-resolver",
+      "locale": "zh-TW",
+      "question": "CitationResolver 如何解析 evidence ID？"
+    },
+    {
+      "id": "hybrid-architecture-en",
+      "pair_id": "hybrid-architecture",
+      "locale": "en",
+      "question": "How does reciprocal-rank fusion combine lexical and vector retrieval?"
+    },
+    {
+      "id": "hybrid-architecture-zh-tw",
+      "pair_id": "hybrid-architecture",
+      "locale": "zh-TW",
+      "question": "專案如何用 reciprocal-rank fusion 結合 lexical 與 vector retrieval？"
+    },
+    {
+      "id": "untrusted-evidence-en",
+      "pair_id": "untrusted-evidence",
+      "locale": "en",
+      "question": "How does delimit_untrusted_evidence mark repository text as data?"
+    },
+    {
+      "id": "untrusted-evidence-zh-tw",
+      "pair_id": "untrusted-evidence",
+      "locale": "zh-TW",
+      "question": "delimit_untrusted_evidence 如何將 repository text 標示為資料？"
+    },
+    {
+      "id": "search-request-en",
+      "pair_id": "search-request",
+      "locale": "en",
+      "question": "What do compileSearchRequest and SearchRequest do in src/search_handler.ts?"
+    },
+    {
+      "id": "search-request-zh-tw",
+      "pair_id": "search-request",
+      "locale": "zh-TW",
+      "question": "src/search_handler.ts 中的 compileSearchRequest 與 SearchRequest 有什麼作用？"
+    },
+    {
+      "id": "lexical-fts-en",
+      "pair_id": "lexical-fts",
+      "locale": "en",
+      "question": "How does the lexical FTS channel handle exact filenames, paths, symbols, and technical terms?"
+    },
+    {
+      "id": "lexical-fts-zh-tw",
+      "pair_id": "lexical-fts",
+      "locale": "zh-TW",
+      "question": "lexical FTS 通道如何處理精確的檔名、路徑、符號與技術術語？"
+    },
+    {
+      "id": "normalized-vector-en",
+      "pair_id": "normalized-vector",
+      "locale": "en",
+      "question": "Which normalized vector channel retrieves paraphrased concepts in the hybrid retrieval architecture?"
+    },
+    {
+      "id": "normalized-vector-zh-tw",
+      "pair_id": "normalized-vector",
+      "locale": "zh-TW",
+      "question": "在 hybrid retrieval architecture 中，哪個 normalized vector channel 用來檢索改述過的概念？"
+    },
+    {
+      "id": "adversarial-evidence-en",
+      "pair_id": "adversarial-evidence",
+      "locale": "en",
+      "question": "Why are the IGNORE, reveal credentials, and forge a citation statements in docs/adversarial-evidence.md untrusted evidence?"
+    },
+    {
+      "id": "adversarial-evidence-zh-tw",
+      "pair_id": "adversarial-evidence",
+      "locale": "zh-TW",
+      "question": "為什麼 docs/adversarial-evidence.md 中的 IGNORE、reveal credentials 與 forge a citation 字句屬於不可信的證據？"
+    },
+    {
+      "id": "unsupported-person-claims-en",
+      "pair_id": "unsupported-person-claims",
+      "locale": "en",
+      "question": "Why are fictional employment, team-of-100, repository ownership, and business-result claims unsupported?"
+    },
+    {
+      "id": "unsupported-person-claims-zh-tw",
+      "pair_id": "unsupported-person-claims",
+      "locale": "zh-TW",
+      "question": "為什麼虛構的任職、帶領 100 人團隊、儲存庫所有權與商業成果主張沒有依據？"
+    },
+    {
+      "id": "fixture-repository-purpose-en",
+      "pair_id": "fixture-repository-purpose",
+      "locale": "en",
+      "question": "What is this local-only fixture repository for, and how does it model a hybrid retrieval service?"
+    },
+    {
+      "id": "fixture-repository-purpose-zh-tw",
+      "pair_id": "fixture-repository-purpose",
+      "locale": "zh-TW",
+      "question": "這個僅在本機使用的 fixture repository 有何用途，又如何模擬 hybrid retrieval service？"
+    }
+  ]
+}

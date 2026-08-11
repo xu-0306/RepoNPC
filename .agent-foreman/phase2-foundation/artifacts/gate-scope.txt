@@ -1,0 +1,3 @@
+Command: rtk proxy uv ... pytest tests/contract/test_foundation_scope.py -q
+Exit: 0
+Result: 1 passed in 0.01s

@@ -1,0 +1,7 @@
+Gate: GATE-CHUNK
+Command: rtk powershell -NoProfile -Command "$env:CLAUDE_CONFIG_DIR = 'C:\Users\xu\.claude'; $env:PYTHONDONTWRITEBYTECODE = '1'; rtk proxy uv --cache-dir D:\RepoNPC\.uv-cache run --python C:\Python314\python.exe --no-managed-python pytest --basetemp D:\RepoNPC\.pytest-tmp\chunk -p no:cacheprovider tests/unit/test_line_chunker.py -q"
+Exit code: 0
+Observed: 9 line chunker unit tests passed in 0.02 seconds.
+Output:
+.........                                                                [100%]
+9 passed in 0.02s

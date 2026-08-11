@@ -1,0 +1,2 @@
+# Deliberately excluded lock-file fixture; this is not a real lock graph.
+fixture-lock-version = 1

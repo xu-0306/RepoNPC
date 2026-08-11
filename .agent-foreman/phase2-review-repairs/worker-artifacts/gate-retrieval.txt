@@ -1,0 +1,1 @@
+Main evidence summary (not raw stdout): retrieval gate reported 79 passed; Ruff, format, and mypy passed.

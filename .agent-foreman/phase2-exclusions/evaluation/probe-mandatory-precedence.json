@@ -1,0 +1,20 @@
+{
+  "probe_id": "P2-01-PROBE-MANDATORY-PRECEDENCE",
+  "invariant_id": "INV-MANDATORY-EXCLUSIONS",
+  "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python .agent-foreman/phase2-exclusions/evaluation/run_p2_01_probes.py",
+  "setup": "Use a broad ** include and a regular-file metadata fixture for each unsafe candidate, plus secret and symlink metadata cases.",
+  "fault_injection": "Install global/repository exclusions followed by negated rules that would re-include the exact .env, key, dependency, and minified targets if policy precedence ran first.",
+  "production_trigger": "Call classify_source for every unsafe candidate through the public module API.",
+  "oracle": "Every candidate skips with its mandatory stable reason rather than ELIGIBLE, GLOBAL_EXCLUDED, or REPOSITORY_EXCLUDED.",
+  "anti_oracle": "A policy with no matching include/exclude pattern would only prove a default skip; this probe uses ** plus later negated re-inclusion rules for each path category.",
+  "observations": {
+    ".env.production": "ENVIRONMENT_FILE",
+    "keys/id_rsa": "CREDENTIAL_OR_KEY",
+    "node_modules/pkg/index.py": "DEPENDENCY_OR_VENDOR",
+    "static/app.min.js": "MINIFIED_OR_SOURCE_MAP",
+    "src/normal.py": "HIGH_CONFIDENCE_SECRET",
+    "src/link.py": "SYMLINK"
+  },
+  "exit_code": 0,
+  "deterministic_result": "passed"
+}

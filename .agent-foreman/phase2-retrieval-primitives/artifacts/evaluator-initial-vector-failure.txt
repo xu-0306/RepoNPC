@@ -1,0 +1,10 @@
+Fresh evaluator finding before Main repair:
+
+Invariant: INV-VECTOR-VALIDATION
+Gate: fresh evaluator probe EVAL-PROBE-VECTOR-001
+Location: src/reponpc/retrieval/vector.py:rank_vectors
+Actual: A directly constructed ValidatedVectorMatrix containing a NaN float32 row reached rank_vectors and returned VectorMatch(evidence_id='E_nan', score=nan).
+Expected: Forgeable or mutable invalid matrix state must be rejected before any ranking score is returned.
+Next action: Make the public ValidatedVectorMatrix construction boundary validate, copy, and freeze its row-aligned matrix; add a direct-construction NaN regression test.
+
+The Main repair was verified by the updated evaluator report and the focused r2 test artifact.

@@ -1,0 +1,9 @@
+Command:
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-01-all-r2 -p no:cacheprovider -q
+
+Exit code: 0
+
+129 passed, 3 skipped, 1 warning in 0.83s
+
+The skips are Windows-only POSIX secret-permission probes. The warning is the
+existing FastAPI/TestClient deprecation warning.

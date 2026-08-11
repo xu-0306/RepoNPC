@@ -1,0 +1,1 @@
+Main evidence summary (not raw stdout): GitHub/update tests reported 25 passed with one existing warning. Full mypy reported no issues in 28 source files after the redirect override annotation repair. Workflow static tests pass, but workflow execution is blocked because the reponpc config/index CLI commands do not exist and the entrypoint is ASGI-only.

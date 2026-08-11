@@ -1,0 +1,498 @@
+{
+  "schema_name": "agent-foreman/plan",
+  "schema_version": "1.0",
+  "profile": "minimal",
+  "metadata": {
+    "plan_id": "REPONPC-P2-06-INDEX-BUNDLES-20260810",
+    "objective": "Implement P2-06 source/ref resolution, schema-v1 SQLite evidence indexing, immutable bundle serialization and validation, runtime candidate activation and rollback, plus publication-last support without weakening the last-known-good or immutable-citation contracts.",
+    "repo_root": "D:/RepoNPC",
+    "revision": null,
+    "dirty_state": "non-Git shared workspace; pre-existing P2-00 through P2-05 work and user changes are preserved and cannot be attributed by Git",
+    "status": "verified",
+    "completed_by": "main",
+    "resolution_state": "resolved"
+  },
+  "main_model": {
+    "source": "current_conversation",
+    "resolved_model_id": null,
+    "verification": "unavailable",
+    "reasoning_effort": null
+  },
+  "architecture_decision": {
+    "mode": "main_direct",
+    "selected_profile": "minimal",
+    "reasons": [
+      "P2-06 joins durable SQLite/index data, archive security, activation lifecycle, concurrent handles, runtime state, and publication ordering at shared producer-consumer seams.",
+      "The host does not provide authoritative child-model identity or isolated worktrees, so a qualified worker package cannot own these critical contracts."
+    ],
+    "rejected_modes": [
+      {
+        "mode": "main_plan_weak_leaf",
+        "reason": "The candidate changes are all persistence, security, network, lifecycle, concurrency, or producer-consumer work owned by Main under the execution playbook."
+      },
+      {
+        "mode": "hybrid_main_seams",
+        "reason": "No frozen, noncritical production leaf remains after Main retains the required P2-06 seams; read-only evaluation is sufficient additional review."
+      }
+    ],
+    "advisor_required": false
+  },
+  "current_state_evidence": [
+    {
+      "path": "src/reponpc/config/models.py",
+      "symbol": "PublicConfig",
+      "observation": "Validated public configuration already supplies enabled repositories, ref, inclusion/exclusion policy, chunk limits, and the embedding identity consumed by the index builder.",
+      "status": "observed"
+    },
+    {
+      "path": "src/reponpc/domain/evidence.py",
+      "symbol": "EvidenceRecord",
+      "observation": "Stable content-addressed E_ evidence IDs, normalized paths/content, evidence classes, and exact commit validation already exist; P2-06 must consume rather than redefine them.",
+      "status": "observed"
+    },
+    {
+      "path": "src/reponpc/indexing/exclusions.py",
+      "symbol": "classify_source",
+      "observation": "The P2-01 pure classifier accepts bounded metadata and returns body-free inclusion decisions, but no production source-intake caller exists yet.",
+      "status": "observed"
+    },
+    {
+      "path": "src/reponpc/indexing/parsing.py",
+      "symbol": "chunk_source",
+      "observation": "The P2-02 parser emits bounded deterministic candidates, but no evidence/database producer consumes them yet.",
+      "status": "observed"
+    },
+    {
+      "path": "src/reponpc/retrieval/fts_query.py",
+      "symbol": "compile_fts_query",
+      "observation": "The P2-03 compiler creates only generated quoted FTS expressions or a short exact-value mode; the P2-06 reader must bind those values to both real FTS5 tables.",
+      "status": "observed"
+    },
+    {
+      "path": "src/reponpc/retrieval/vector.py",
+      "symbol": "ValidatedVectorMatrix",
+      "observation": "The P2-04 reader primitive validates frozen float32 unit vectors, dimensions, finite values, and stable ranking; the bundle reader must construct it only after manifest/database compatibility checks.",
+      "status": "observed"
+    },
+    {
+      "path": "src/reponpc/runtime/database.py",
+      "symbol": "RuntimeDatabase.MIGRATIONS",
+      "observation": "Mutable runtime.sqlite already contains the bundle_state logical table; no immutable index or active-bundle lifecycle owner is implemented.",
+      "status": "observed"
+    },
+    {
+      "path": "src/reponpc/main.py",
+      "symbol": "create_app",
+      "observation": "The real FastAPI lifespan initializes runtime storage and exposes a SetupState supplier, but it starts no bundle poller or handle manager.",
+      "status": "observed"
+    },
+    {
+      "path": "tests/fixtures/phase2/reponpc.yml",
+      "symbol": "phase2 fixture configuration",
+      "observation": "A public, licence-safe fixture configuration and repository corpus exist for real source-to-index and bundle producer-consumer gates; public fixtures intentionally contain no hidden evaluation oracle.",
+      "status": "observed"
+    }
+  ],
+  "control_flow": [
+    {
+      "id": "FLOW-CONFIG-TO-INDEX",
+      "kind": "producer",
+      "path": "src/reponpc/config/models.py",
+      "symbol": "PublicConfig -> P2-06 index builder (new)",
+      "next": ["FLOW-ELIGIBLE-TO-EVIDENCE"],
+      "failure_path": "Safe build error with no stable-manifest mutation"
+    },
+    {
+      "id": "FLOW-ELIGIBLE-TO-EVIDENCE",
+      "kind": "producer",
+      "path": "src/reponpc/indexing/exclusions.py",
+      "symbol": "classify_source -> chunk_source -> EvidenceRecord -> schema-v1 index.sqlite (new)",
+      "next": ["FLOW-INDEX-TO-BUNDLE"],
+      "failure_path": "Body-free skip record or failed candidate build; no bundle publication"
+    },
+    {
+      "id": "FLOW-INDEX-TO-BUNDLE",
+      "kind": "producer_consumer",
+      "path": "src/reponpc/domain/evidence.py",
+      "symbol": "EvidenceRecord -> index.sqlite -> manifest/checksums/tar.zst (new)",
+      "next": ["FLOW-BUNDLE-TO-ACTIVE"],
+      "failure_path": "Archive, checksum, schema, or smoke failure leaves release/stable manifest unchanged"
+    },
+    {
+      "id": "FLOW-BUNDLE-TO-ACTIVE",
+      "kind": "lifecycle",
+      "path": "src/reponpc/runtime/database.py",
+      "symbol": "bundle_state -> staged verifier -> atomic active handle/pointer (new)",
+      "next": ["FLOW-ACTIVE-TO-RETRIEVAL"],
+      "failure_path": "Candidate quarantine and safe runtime state update retain the active/previous known-good handles"
+    },
+    {
+      "id": "FLOW-ACTIVE-TO-RETRIEVAL",
+      "kind": "consumer",
+      "path": "src/reponpc/retrieval/fts_query.py",
+      "symbol": "active read-only index -> bound FTS5 queries + ValidatedVectorMatrix + RRF",
+      "next": [],
+      "failure_path": "Readiness remains false or a safe unavailable state is returned; no partial activation"
+    },
+    {
+      "id": "FLOW-RELEASE-PUBLICATION",
+      "kind": "external_side_effect",
+      "path": "tests/mocks/servers.py",
+      "symbol": "immutable release asset upload/availability verification -> stable-manifest update last (new production workflow/client)",
+      "next": ["FLOW-BUNDLE-TO-ACTIVE"],
+      "failure_path": "Any validation/upload/availability failure retains the prior stable manifest"
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-SOURCE-REF-IMMUTABLE",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Only configured public GitHub repository/ref inputs on allowed hosts are resolved, and every indexed/config repository is recorded using one exact lowercase 40-character commit SHA.",
+      "enforcement_owner": "Main-owned source resolver and index-builder validation boundary",
+      "prohibited_behavior": "Using a mutable branch/tag/ref in database records or fetching a repository-content URL/redirect host outside the configured allowlist.",
+      "counterexample": "A configured default branch resolves to a fake 39-character SHA or redirects to an unapproved host yet produces a source/index row.",
+      "gate_ids": ["GATE-P2-06-SOURCE-INDEX"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-06", "P2-07"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-INDEX-PRODUCER-CONSUMER",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Eligible fixture source bytes pass P2-01/P2-02/P1 evidence validation into schema-v1 index.sqlite with dual FTS5 rows and finite normalized float32 blobs that the real reader can load and query read-only.",
+      "enforcement_owner": "Main-owned index schema writer plus read-only bundle reader",
+      "prohibited_behavior": "Persisting excluded/secret-like input, an unstable evidence ID, unvalidated embedding bytes, or writer-only output never parsed by the runtime reader.",
+      "counterexample": "A P2-01 excluded .env fixture creates an evidence/embedding row, or a produced index cannot load through the real FTS/vector consumer.",
+      "gate_ids": ["GATE-P2-06-SOURCE-INDEX", "GATE-P2-06-PRODUCER-CONSUMER"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-06", "P2-07"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-BUNDLE-ARCHIVE-SAFETY",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "A bundle contains only the declared normalized regular files, canonical manifest and internal checksums; outer and internal checksum, duplicate, traversal, link/device, count, compressed/uncompressed-size, unknown/missing-file failures are rejected before extraction or activation.",
+      "enforcement_owner": "Main-owned bundle serializer and safe staged archive verifier",
+      "prohibited_behavior": "Extracting arbitrary archive members, following any link, trusting a manifest/checksum without bytes verification, or accepting an incomplete/unknown layout.",
+      "counterexample": "A tar.zst with ../runtime.sqlite, a symlink, duplicate index.sqlite, a checksum mismatch, or an undeclared file becomes active.",
+      "gate_ids": ["GATE-P2-06-BUNDLE-NEGATIVES", "GATE-P2-06-PRODUCER-CONSUMER"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-06", "P2-07"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-BUNDLE-COMPATIBILITY-READONLY",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Only a bundle whose manifest schema, application range, index schema, declared embedding identity/dimension/prefix/normalization, required assets, SQLite quick_check, and real retrieval/card smoke check match the runtime becomes ready; its index opens read-only/query-only.",
+      "enforcement_owner": "Main-owned candidate verifier and read-only bundle handle constructor",
+      "prohibited_behavior": "Activating a schema/application/embedding mismatch, corrupt SQLite, failed smoke query, or writable index connection.",
+      "counterexample": "A candidate with the fixture model but a one-off dimension/prefix mismatch returns a usable vector handle or readiness true.",
+      "gate_ids": ["GATE-P2-06-BUNDLE-NEGATIVES", "GATE-P2-06-PRODUCER-CONSUMER"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-06", "P2-07"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-ACTIVATION-LAST-KNOWN-GOOD",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Download/staging/verification finish before one atomic active transition; invalid candidates and crashes before pointer swap retain the existing active bundle, in-flight handles stay usable, active and previous validated bundles are retained, and pin/unpin selects only retained compatible IDs.",
+      "enforcement_owner": "Main-owned bundle manager, runtime bundle-state transaction, and handle reference counting",
+      "prohibited_behavior": "Replacing/removing the active pointer before validation, interrupting an in-flight reader, activating an unknown/incompatible pin, or deleting the only known-good bundle on failure.",
+      "counterexample": "An active A reader fails after B activation, a fault before the pointer swap leaves no A pointer, or a failed B changes active_bundle_id.",
+      "gate_ids": ["GATE-P2-06-ACTIVATION-ROLLBACK"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-06", "P2-07"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-POLLING-NETWORK-BOUNDARY",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Stable-manifest polling uses allowed-host URL/redirect validation, ETag conditional requests, byte/time bounds, and safe state diagnostics; 304 updates check time without downloading/activating and a failed check retains the prior active bundle.",
+      "enforcement_owner": "Main-owned stable-manifest client and bundle updater",
+      "prohibited_behavior": "Following an unapproved manifest/asset host, treating 304 as a new candidate, exposing private URLs/errors, or clearing valid state after poll failure.",
+      "counterexample": "A redirect to an unconfigured host is followed or a 304 response downloads an asset/changes the active bundle.",
+      "gate_ids": ["GATE-P2-06-POLLING-LIFECYCLE", "GATE-P2-06-BUNDLE-NEGATIVES"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-06", "P2-07"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-PUBLICATION-LAST",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "The index publication workflow validates/builds/tests, uploads one immutable tar.zst Release asset, verifies its availability/checksum, and updates stable-manifest.json only as the final mutation; every preceding failure preserves the prior stable manifest.",
+      "enforcement_owner": "Main-owned publication workflow/client and mocked GitHub integration gate",
+      "prohibited_behavior": "Updating the stable manifest before immutable asset availability or overwriting a Release asset in place after an earlier stage fails.",
+      "counterexample": "A mocked upload failure increments the stable-manifest mutation counter or leaves a stable manifest referencing an unavailable asset.",
+      "gate_ids": ["GATE-P2-06-PUBLICATION-LAST"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-06", "P2-07"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-DETERMINISTIC-BUNDLE",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Identical normalized configuration, resolved commits, source contents, parser/chunker version, embedding identity, and assets yield stable evidence IDs, canonical manifest/checksum values, and declared-equivalent bundle contents; only documented build timestamp metadata may differ.",
+      "enforcement_owner": "Main-owned deterministic index/bundle builder and P2-07 repeat-build evaluator",
+      "prohibited_behavior": "Using unordered filesystem/database iteration, random IDs, local paths, or noncanonical JSON in identity/checksum inputs.",
+      "counterexample": "Two builds from the same fixture inputs have different evidence IDs, hash suffix, SQLite logical records, or non-timestamp manifest fields.",
+      "gate_ids": ["GATE-P2-06-PRODUCER-CONSUMER", "GATE-P2-07-REPEAT-BUILD"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-07"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-PHASE2-RETRIEVAL-EVALUATION",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "The committed Phase 2 fixture evaluation uses the real immutable builder, verifier, read-only hybrid consumer, and a separately stored expected-path oracle; it demonstrates Recall@8 at least 85%, paired zh-TW/en evidence parity at least 90%, and warm retrieval p95 at most 750 ms under recorded host conditions.",
+      "enforcement_owner": "Main-owned Phase 2 fixture benchmark and reviewed controller oracle",
+      "prohibited_behavior": "Scoring against expected evidence stored in the public fixture, bypassing the verified bundle reader, or presenting an unrecorded/local performance result as an acceptance metric.",
+      "counterexample": "A public fixture contains expected evidence paths, a benchmark directly calls a retrieval primitive rather than a verified bundle, or one language in a pair retrieves no overlapping evidence despite a passing aggregate.",
+      "gate_ids": ["GATE-P2-07-BENCHMARK"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-07"],
+      "not_applicable": null
+    }
+  ],
+  "acceptance_gates": [
+    {
+      "id": "GATE-P2-06-SOURCE-INDEX",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-06-source-index -p no:cacheprovider tests/integration/test_index_build.py tests/integration/test_github_resolution.py -q --junitxml D:/RepoNPC/.agent-foreman/phase2-index-bundles/artifacts/gate-source-index.xml",
+      "oracle": "The real fixture intake resolves exact 40-character commits, applies P2-01 exclusions before decoding/chunking, writes schema-v1 repositories/sources/evidence/dual-FTS/embeddings, and records no excluded or secret-like source body.",
+      "artifact_path": ".agent-foreman/phase2-index-bundles/artifacts/gate-source-index.xml",
+      "invariant_ids": ["INV-SOURCE-REF-IMMUTABLE", "INV-INDEX-PRODUCER-CONSUMER"],
+      "blocking": true,
+      "scope": "integration",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-P2-06-PRODUCER-CONSUMER",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-06-producer-consumer -p no:cacheprovider tests/integration/test_bundle_producer_consumer.py -q --junitxml D:/RepoNPC/.agent-foreman/phase2-index-bundles/artifacts/gate-producer-consumer.xml",
+      "oracle": "The exact tar.zst bytes emitted by the production builder pass the production verifier, produce a read-only handle, bind generated FTS parameters to both real FTS5 tables, load the float32 matrix, and return fixture evidence through the real reader path.",
+      "artifact_path": ".agent-foreman/phase2-index-bundles/artifacts/gate-producer-consumer.xml",
+      "invariant_ids": ["INV-INDEX-PRODUCER-CONSUMER", "INV-BUNDLE-ARCHIVE-SAFETY", "INV-BUNDLE-COMPATIBILITY-READONLY", "INV-DETERMINISTIC-BUNDLE"],
+      "blocking": true,
+      "scope": "system",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-P2-06-BUNDLE-NEGATIVES",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-06-bundle-negatives -p no:cacheprovider tests/security/test_bundle_validation.py tests/integration/test_bundle_producer_consumer.py -q --junitxml D:/RepoNPC/.agent-foreman/phase2-index-bundles/artifacts/gate-bundle-negatives.xml",
+      "oracle": "Outer/internal checksum, traversal, absolute path, symlink/hardlink/device, duplicate, count/size limit, unknown/missing file, schema/application/embedding mismatch, corrupt SQLite, and smoke-query candidates each fail before activation and yield no secret/path body in a safe diagnostic.",
+      "artifact_path": ".agent-foreman/phase2-index-bundles/artifacts/gate-bundle-negatives.xml",
+      "invariant_ids": ["INV-BUNDLE-ARCHIVE-SAFETY", "INV-BUNDLE-COMPATIBILITY-READONLY", "INV-POLLING-NETWORK-BOUNDARY"],
+      "blocking": true,
+      "scope": "integration",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-P2-06-ACTIVATION-ROLLBACK",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-06-activation -p no:cacheprovider tests/integration/test_bundle_activation.py -q --junitxml D:/RepoNPC/.agent-foreman/phase2-index-bundles/artifacts/gate-activation-rollback.xml",
+      "oracle": "With active A, a real in-flight A handle survives one atomic B activation; new handles see B; a fault before pointer swap and every candidate failure leave A active; pin/unpin restores only retained compatible bundles and runtime bundle_state records active/previous/pinned IDs coherently.",
+      "artifact_path": ".agent-foreman/phase2-index-bundles/artifacts/gate-activation-rollback.xml",
+      "invariant_ids": ["INV-ACTIVATION-LAST-KNOWN-GOOD"],
+      "blocking": true,
+      "scope": "runtime",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-P2-06-POLLING-LIFECYCLE",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-06-polling -p no:cacheprovider tests/integration/test_bundle_updater.py tests/integration/test_bundle_updater_lifecycle.py -q --junitxml D:/RepoNPC/.agent-foreman/phase2-index-bundles/artifacts/gate-polling-lifecycle.xml",
+      "oracle": "The real FastAPI lifespan starts/stops the configured updater; a valid ETag poll activates only a compatible candidate, 304 sends no download, host/redirect violation and network failure preserve the active bundle, and public status/readiness expose only safe state.",
+      "artifact_path": ".agent-foreman/phase2-index-bundles/artifacts/gate-polling-lifecycle.xml",
+      "invariant_ids": ["INV-POLLING-NETWORK-BOUNDARY", "INV-ACTIVATION-LAST-KNOWN-GOOD"],
+      "blocking": true,
+      "scope": "runtime",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-P2-06-PUBLICATION-LAST",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-06-publication -p no:cacheprovider tests/integration/test_publication_last.py tests/integration/test_github_publication.py -q --junitxml D:/RepoNPC/.agent-foreman/phase2-index-bundles/artifacts/gate-publication-last.xml",
+      "oracle": "A real publication client/workflow target against the GitHub mock records validation/build/test, immutable asset upload, availability/checksum verification, then exactly one final stable-manifest mutation; each injected preceding failure leaves the prior manifest bytes unchanged.",
+      "artifact_path": ".agent-foreman/phase2-index-bundles/artifacts/gate-publication-last.xml",
+      "invariant_ids": ["INV-PUBLICATION-LAST"],
+      "blocking": true,
+      "scope": "system",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-P2-07-REPEAT-BUILD",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-07-repeat-build -p no:cacheprovider tests/integration/test_phase2_repeat_build.py -q --junitxml D:/RepoNPC/.agent-foreman/phase2-index-bundles/artifacts/gate-p2-07-repeat-build.xml",
+      "oracle": "Two independently staged real builds from identical fixture/configuration inputs have equal stable evidence IDs, bundle hash suffix, checksums, SQLite logical content, and every manifest field other than the documented timestamp.",
+      "artifact_path": ".agent-foreman/phase2-index-bundles/artifacts/gate-p2-07-repeat-build.xml",
+      "invariant_ids": ["INV-DETERMINISTIC-BUNDLE"],
+      "blocking": true,
+      "scope": "system",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-P2-07-BENCHMARK",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python evals/phase2/run_benchmark.py --artifacts D:/RepoNPC/.agent-foreman/phase2-index-bundles/artifacts/gate-p2-07-benchmark.json",
+      "oracle": "A double-built fixture bundle is verified and queried only through the read-only hybrid consumer; the controller-held expected path oracle yields Recall@8 >= 85%, paired zh-TW/en parity >= 90%, and a documented warm p95 <= 750 ms.",
+      "artifact_path": ".agent-foreman/phase2-index-bundles/artifacts/gate-p2-07-benchmark.json",
+      "invariant_ids": ["INV-PHASE2-RETRIEVAL-EVALUATION"],
+      "blocking": true,
+      "scope": "system",
+      "result": "passed"
+    }
+  ],
+  "evaluations": [
+    {
+      "schema_name": "agent-foreman/evaluation",
+      "schema_version": "1.0",
+      "profile": "full",
+      "plan_id": "REPONPC-P2-06-INDEX-BUNDLES-20260810",
+      "phase_id": "P2-06/P2-07",
+      "context_freshness": "fresh",
+      "model_diversity": "unknown",
+      "production_access": "read-only",
+      "artifact_path": ".agent-foreman/phase2-index-bundles/evaluation/fresh-evaluation.json",
+      "new_probes": [
+        {
+          "probe_id": "PROBE-P2-06-SOURCE-REF",
+          "invariant_id": "INV-SOURCE-REF-IMMUTABLE",
+          "setup": "Production GitHubSourceResolver with a deterministic API-response boundary.",
+          "fault_injection": "A 39-character commit SHA and an untrusted repository HTML host.",
+          "production_trigger": "GitHubSourceResolver.resolve().",
+          "oracle": "Valid resolution returns a 40-character SHA and both faults fail closed.",
+          "anti_oracle": "Direct ResolvedRepository construction does not count.",
+          "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python .agent-foreman/phase2-index-bundles/evaluation/run_fresh_p2_06_evaluation.py",
+          "artifact_path": ".agent-foreman/phase2-index-bundles/evaluation/artifacts/probe-p2-06-source-ref.json",
+          "exit_code": 0
+        },
+        {
+          "probe_id": "PROBE-P2-06-ARCHIVE-SAFETY",
+          "invariant_id": "INV-BUNDLE-ARCHIVE-SAFETY",
+          "setup": "Production archive member-name validator on the Windows runtime target.",
+          "fault_injection": "A Windows drive-qualified archive member path.",
+          "production_trigger": "archive._safe_member_name() before staging extraction.",
+          "oracle": "Traversal, backslash, and drive-qualified members are rejected.",
+          "anti_oracle": "Writing the malicious member does not count.",
+          "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python .agent-foreman/phase2-index-bundles/evaluation/run_fresh_p2_06_evaluation.py",
+          "artifact_path": ".agent-foreman/phase2-index-bundles/evaluation/artifacts/probe-p2-06-archive-safety.json",
+          "exit_code": 0
+        },
+        {
+          "probe_id": "PROBE-P2-06-PRODUCER-CONSUMER",
+          "invariant_id": "INV-INDEX-PRODUCER-CONSUMER",
+          "setup": "The real index builder, bundle serializer, staged verifier, and read-only consumer use the checked-in fixture corpus.",
+          "fault_injection": "The consumer attempts a SQLite mutation after loading the exact builder output.",
+          "production_trigger": "verify_bundle_archive() then the real ReadOnlyIndex query.",
+          "oracle": "The consumer queries the producer bytes and SQLite refuses mutation.",
+          "anti_oracle": "Opening a database without the verifier does not count.",
+          "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python .agent-foreman/phase2-index-bundles/evaluation/run_fresh_p2_06_evaluation.py",
+          "artifact_path": ".agent-foreman/phase2-index-bundles/evaluation/artifacts/probe-p2-06-compatibility-readonly.json",
+          "exit_code": 0
+        },
+        {
+          "probe_id": "PROBE-P2-06-COMPATIBILITY-READONLY",
+          "invariant_id": "INV-BUNDLE-COMPATIBILITY-READONLY",
+          "setup": "A real fixture bundle is verified before the read-only consumer opens it.",
+          "fault_injection": "An application compatibility range excluding the running application.",
+          "production_trigger": "verify_bundle_archive() followed by the real read-only consumer.",
+          "oracle": "The incompatible bundle is rejected before activation; valid SQLite stays read-only.",
+          "anti_oracle": "Reading manifest JSON alone does not count.",
+          "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python .agent-foreman/phase2-index-bundles/evaluation/run_fresh_p2_06_evaluation.py",
+          "artifact_path": ".agent-foreman/phase2-index-bundles/evaluation/artifacts/probe-p2-06-compatibility-readonly.json",
+          "exit_code": 0
+        },
+        {
+          "probe_id": "PROBE-P2-06-ACTIVATION-LKG",
+          "invariant_id": "INV-ACTIVATION-LAST-KNOWN-GOOD",
+          "setup": "A real RuntimeDatabase and BundleManager retain verified A/B bundles.",
+          "fault_injection": "A fault immediately before pointer replacement and then a fresh manager construction.",
+          "production_trigger": "BundleManager.activate() and acquire() for an in-flight reader.",
+          "oracle": "In-flight A survives, the pre-swap fault retains B, and restart reopens B.",
+          "anti_oracle": "A direct ReadOnlyIndex query bypassing BundleManager does not count.",
+          "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python .agent-foreman/phase2-index-bundles/evaluation/run_fresh_p2_06_evaluation.py",
+          "artifact_path": ".agent-foreman/phase2-index-bundles/evaluation/artifacts/probe-p2-06-activation-lkg.json",
+          "exit_code": 0
+        },
+        {
+          "probe_id": "PROBE-P2-06-POLLING-LIFECYCLE",
+          "invariant_id": "INV-POLLING-NETWORK-BOUNDARY",
+          "setup": "The real FastAPI lifespan runs BundleUpdater and BundleManager.",
+          "fault_injection": "A post-activation 304 and an untrusted asset host.",
+          "production_trigger": "create_app() lifespan and BundleUpdater.poll_once().",
+          "oracle": "304 skips asset download; hostile host retains the active bundle.",
+          "anti_oracle": "Instantiating an updater without starting lifespan does not count.",
+          "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python .agent-foreman/phase2-index-bundles/evaluation/run_fresh_p2_06_evaluation.py",
+          "artifact_path": ".agent-foreman/phase2-index-bundles/evaluation/artifacts/probe-p2-06-polling-host-304-lifecycle.json",
+          "exit_code": 0
+        },
+        {
+          "probe_id": "PROBE-P2-06-PUBLICATION-LAST",
+          "invariant_id": "INV-PUBLICATION-LAST",
+          "setup": "Production PublicationCoordinator uses a mutation-recording immutable-release boundary.",
+          "fault_injection": "Independent release, upload, and availability failures.",
+          "production_trigger": "PublicationCoordinator.publish().",
+          "oracle": "Failures retain stable bytes; successful order is release, upload, verify, stable.",
+          "anti_oracle": "Calling a publisher method outside PublicationCoordinator does not count.",
+          "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python .agent-foreman/phase2-index-bundles/evaluation/run_fresh_p2_06_evaluation.py",
+          "artifact_path": ".agent-foreman/phase2-index-bundles/evaluation/artifacts/probe-p2-06-publication-last.json",
+          "exit_code": 0
+        },
+        {
+          "probe_id": "PROBE-P2-07-REPEATABLE-BENCHMARK",
+          "invariant_id": "INV-DETERMINISTIC-BUNDLE",
+          "setup": "The real benchmark double-builds the fixture corpus through the immutable producer and consumer.",
+          "fault_injection": "An evaluator-owned public question ID differs from the controller oracle.",
+          "production_trigger": "evals/phase2/run_benchmark.py.",
+          "oracle": "The normal result is repeatable and the ID mismatch cannot emit a passing score.",
+          "anti_oracle": "Comparing IDs only in evaluator code does not count.",
+          "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python .agent-foreman/phase2-index-bundles/evaluation/run_p2_07_benchmark_evaluation.py",
+          "artifact_path": ".agent-foreman/phase2-index-bundles/evaluation/artifacts/p2-07-benchmark-id-mismatch.json",
+          "exit_code": 0
+        },
+        {
+          "probe_id": "PROBE-P2-07-RETRIEVAL-EVALUATION",
+          "invariant_id": "INV-PHASE2-RETRIEVAL-EVALUATION",
+          "setup": "The real Phase 2 benchmark uses the verified immutable builder and read-only hybrid consumer.",
+          "fault_injection": "A public/controller question-ID mismatch.",
+          "production_trigger": "evals/phase2/run_benchmark.py.",
+          "oracle": "Recall@8 and paired-language parity are 1.0, warm p95 is below 750 ms, and mismatch exits nonzero without a score artifact.",
+          "anti_oracle": "Embedding expected paths in public questions does not count.",
+          "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python .agent-foreman/phase2-index-bundles/evaluation/run_p2_07_benchmark_evaluation.py",
+          "artifact_path": ".agent-foreman/phase2-index-bundles/evaluation/artifacts/p2-07-benchmark-normal.json",
+          "exit_code": 0
+        }
+      ],
+      "recommendation": "pass",
+      "deterministic_result": "passed",
+      "findings": [],
+      "phase_completion_claim": "not made by the evaluator; Main determines closure from blocking gates and fresh evidence."
+    }
+  ],
+  "evidence_ledger": [],
+  "stop_conditions": [
+    "Stop and ask the owner before changing a public API, environment variable, database/index schema contract, manifest/stable-manifest field, GitHub permission, provider fallback, asset layout, security posture, acceptance threshold, or v1 scope.",
+    "Fail closed and return to Main-only repair when a blocking producer-consumer, archive-security, compatibility, activation, or publication-last gate fails after one precise repair.",
+    "Do not call P2 complete until P2-07 independently proves repeatability, retrieval quality/parity/performance, and all required fresh falsification probes."
+  ],
+  "fallback_policy": {
+    "mode": "single_main",
+    "triggers": [
+      "Any unresolved public/security/persistence/network/activation contract",
+      "A critical deterministic gate failure",
+      "A dependency or lockfile change required for archive support",
+      "A package would require concurrent writes to a shared production seam"
+    ]
+  }
+}

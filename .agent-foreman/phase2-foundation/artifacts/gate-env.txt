@@ -1,0 +1,4 @@
+Command: rtk proxy uv ... pytest tests/contract/test_environment.py -q
+Exit: 0
+Result: 8 passed, 2 skipped in 0.32s
+Note: POSIX permission and descriptor-race probes are skipped on Windows.

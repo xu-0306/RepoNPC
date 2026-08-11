@@ -1,0 +1,19 @@
+{
+  "probe_id": "PROBE-P2-06-COMPATIBILITY-READONLY",
+  "invariant_id": "INV-BUNDLE-COMPATIBILITY-READONLY",
+  "setup": "Real index builder, bundle serializer, staged verifier, and ReadOnlyIndex consumer using the checked-in fixture corpus.",
+  "fault_injection": "A syntactically valid bundle declares application compatibility 0.2.0 <= app < 0.3.0, excluding the running 0.1.0 application.",
+  "production_trigger": "verify_bundle_archive() followed by the real ReadOnlyIndex lexical query and attempted SQLite mutation.",
+  "oracle": "The incompatible candidate is rejected before activation; a valid candidate queries successfully and SQLite refuses DELETE.",
+  "anti_oracle": "Reading manifest JSON alone or opening SQLite without the production verifier does not count.",
+  "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python .agent-foreman/phase2-index-bundles/evaluation/run_fresh_p2_06_evaluation.py",
+  "expected_exit_code": 0,
+  "exit_code": 0,
+  "deterministic_result": "passed",
+  "artifact_path": ".agent-foreman/phase2-index-bundles/evaluation/artifacts/probe-p2-06-compatibility-readonly.json",
+  "observed": {
+    "incompatible_code": "bundle_application_incompatible",
+    "valid_smoke_candidate_count": 1,
+    "write_attempt": "sqlite_operational_error"
+  }
+}

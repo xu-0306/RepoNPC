@@ -1,0 +1,6 @@
+Command:
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python -c "import tree_sitter, tree_sitter_go, tree_sitter_javascript, tree_sitter_python, tree_sitter_rust, tree_sitter_typescript"
+
+Exit code: 0
+
+All required Tree-sitter runtime and grammar bindings imported successfully.

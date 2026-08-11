@@ -1,0 +1,211 @@
+{
+  "schema_name": "agent-foreman/plan",
+  "schema_version": "1.0",
+  "profile": "minimal",
+  "metadata": {
+    "plan_id": "REPONPC-P2-03-P2-04-RETRIEVAL-20260810",
+    "objective": "Implement safe lexical FTS compilation and deterministic vector validation/ranking primitives without owning SQLite schema, provider/network, bundle compatibility, or public API behavior.",
+    "repo_root": "D:/RepoNPC",
+    "revision": null,
+    "dirty_state": "D:/RepoNPC is not a Git worktree; current Phase 1/P2 source and campaign evidence are preserved.",
+    "status": "implemented",
+    "completed_by": null,
+    "resolution_state": "resolved"
+  },
+  "main_model": {
+    "source": "current_conversation",
+    "resolved_model_id": null,
+    "verification": "unavailable",
+    "reasoning_effort": null
+  },
+  "architecture_decision": {
+    "mode": "main_direct",
+    "selected_profile": "minimal",
+    "reasons": [
+      "FTS raw-query denial and finite normalized vector validation are security/retrieval contracts, but actual worker model identity is unavailable and only degraded delegation is permitted.",
+      "The bounded modules need one Main-owned real SQLite FTS integration probe and shared future bundle consumer semantics."
+    ],
+    "rejected_modes": [
+      {
+        "mode": "main_plan_weak_leaf",
+        "reason": "P2-03 directly enforces an NFR-001 injection boundary and P2-04 validates the numeric boundary consumed by future bundle/readiness work."
+      },
+      {
+        "mode": "hybrid_main_seams",
+        "reason": "Both modules are small but their public internal types and real SQLite FTS integration must remain coherently Main-owned until P2-06 exists."
+      }
+    ],
+    "advisor_required": false
+  },
+  "current_state_evidence": [
+    {
+      "path": "docs/TECHNICAL_SPEC.md",
+      "symbol": "sections 5.4, 6, and 7",
+      "observation": "Lexical FTS uses allowlisted syntax with raw user query syntax forbidden; vectors must be finite normalized float32 with declared dimension; lexical/vector channels later fuse through RRF.",
+      "status": "observed"
+    },
+    {
+      "path": "src/reponpc/retrieval/rrf.py",
+      "symbol": "fuse_rankings",
+      "observation": "RRF already consumes ranked evidence ID sequences, but there is no FTS query compiler, SQLite retrieval adapter, vector matrix validator, or vector ranking module.",
+      "status": "observed"
+    },
+    {
+      "path": "pyproject.toml and uv.lock",
+      "symbol": "runtime dependencies",
+      "observation": "NumPy is now a locked runtime dependency under ADR-004; no provider, model identity, or bundle compatibility behavior exists yet.",
+      "status": "observed"
+    }
+  ],
+  "control_flow": [
+    {
+      "id": "FLOW-FTS-COMPILER",
+      "kind": "future_lexical_channel",
+      "path": "src/reponpc/retrieval/fts_query.py",
+      "symbol": "compile_fts_query",
+      "next": ["FLOW-P2-06-SQLITE"],
+      "failure_path": "Empty/control-only input returns a no-query mode and all accepted terms become allowlisted quoted FTS syntax, never executable user syntax."
+    },
+    {
+      "id": "FLOW-VECTOR-RANKER",
+      "kind": "future_vector_channel",
+      "path": "src/reponpc/retrieval/vector.py",
+      "symbol": "validate_vector_matrix and rank_vectors",
+      "next": ["FLOW-P2-06-SQLITE", "src/reponpc/retrieval/rrf.py:fuse_rankings"],
+      "failure_path": "Invalid shapes, IDs, values, norms, and dimensions fail before ranking; stable ordering makes equal scores reproducible."
+    },
+    {
+      "id": "FLOW-P2-06-SQLITE",
+      "kind": "future_producer_consumer",
+      "path": "P2-06 index reader/writer (not yet implemented)",
+      "symbol": "SQLite FTS/vector blob loading",
+      "next": [],
+      "failure_path": "Real bundle identity/mismatch/readiness integration remains deferred and cannot be claimed by primitive component gates."
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-FTS-NO-RAW-SYNTAX",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Raw user FTS operators, quotes, wildcards, punctuation, and controls never become executable MATCH syntax; the compiler emits only allowlisted quoted term conjunctions or a no-query/short-exact value mode.",
+      "enforcement_owner": "src/reponpc/retrieval/fts_query.py:compile_fts_query",
+      "prohibited_behavior": "Returning a raw query string, accepting user-provided FTS operators, or requiring SQL/FTS execution for empty/control-only text.",
+      "counterexample": "An input containing OR, NEAR, quotes, parentheses, wildcard, NUL, path punctuation, and a two-character symbol cannot broaden a real FTS5 MATCH result beyond its literal terms.",
+      "gate_ids": ["GATE-FTS-UNIT", "GATE-FTS-SQLITE-INTEGRATION"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-03 focused implementation", "AC-007 future retrieval integration"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-VECTOR-VALIDATION",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Vectors entering ranking have an exact declared dimension, finite float32 values, nonzero unit norms, one unique evidence ID per row, and a read-only normalized matrix representation.",
+      "enforcement_owner": "src/reponpc/retrieval/vector.py:validate_vector_matrix and validate_query_vector",
+      "prohibited_behavior": "Silently normalizing bad vectors, accepting NaN/Inf/zero values, shape mismatch, duplicate IDs, or mutating input vectors in place.",
+      "counterexample": "A wrong-dimension, NaN, Inf, zero, non-unit, duplicate-ID, empty/mismatched matrix input fails before any score is returned.",
+      "gate_ids": ["GATE-VECTOR-UNIT", "GATE-VECTOR-BUNDLE-INTEGRATION"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-04 focused implementation", "AC-008/AC-009 future bundle integration"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-VECTOR-STABLE-RANK",
+      "applies": true,
+      "classification": "noncritical",
+      "severity": "medium",
+      "statement": "Cosine/dot scores for valid normalized vectors rank descending and use evidence ID ascending as the deterministic equal-score tie-breaker.",
+      "enforcement_owner": "src/reponpc/retrieval/vector.py:rank_vectors",
+      "prohibited_behavior": "Unstable NumPy sort order, provider/model behavior, or hidden metadata weights affecting the primitive rank order.",
+      "counterexample": "Two distinct IDs with equal dot product are returned in lexical ID order and limit truncation preserves that order.",
+      "gate_ids": ["GATE-VECTOR-UNIT"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-04 focused implementation"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-RETRIEVAL-PRIMITIVE-SCOPE",
+      "applies": true,
+      "classification": "noncritical",
+      "severity": "medium",
+      "statement": "The primitives own no SQLite connection/schema, provider/network request, embedding identity, bundle compatibility/readiness, public API, logging, or RRF policy.",
+      "enforcement_owner": "src/reponpc/retrieval/fts_query.py and src/reponpc/retrieval/vector.py",
+      "prohibited_behavior": "Adding a database owner, using raw SQL construction, contacting an embedding provider, or deciding model/bundle compatibility inside a primitive.",
+      "counterexample": "Compile and rank supplied values against a temporary FTS5 table/NumPy matrix with no network client or persistent production store.",
+      "gate_ids": ["GATE-FTS-SQLITE-INTEGRATION", "GATE-VECTOR-UNIT", "GATE-PYTHON-ALL"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-03/P2-04 focused implementation"],
+      "not_applicable": null
+    }
+  ],
+  "acceptance_gates": [
+    {
+      "id": "GATE-FTS-UNIT",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-03-fts-unit -p no:cacheprovider tests/unit/test_fts_query.py -q",
+      "oracle": "Normal, quoted/operator, punctuation/control, short-symbol, Chinese, and empty compiler cases emit the exact allowlisted mode and query/value representation.",
+      "artifact_path": ".agent-foreman/phase2-retrieval-primitives/artifacts/gate-fts-unit.txt",
+      "invariant_ids": ["INV-FTS-NO-RAW-SYNTAX"],
+      "blocking": true,
+      "scope": "component",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-FTS-SQLITE-INTEGRATION",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-03-fts-integration -p no:cacheprovider tests/integration/test_fts_query.py -q",
+      "oracle": "Compiler output is passed unchanged as a bound value to real FTS5 term/trigram tables; injection-shaped inputs cannot broaden results or execute syntax.",
+      "artifact_path": ".agent-foreman/phase2-retrieval-primitives/artifacts/gate-fts-sqlite-integration.txt",
+      "invariant_ids": ["INV-FTS-NO-RAW-SYNTAX", "INV-RETRIEVAL-PRIMITIVE-SCOPE"],
+      "blocking": true,
+      "scope": "integration",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-VECTOR-UNIT",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-04-vector -p no:cacheprovider tests/unit/test_vector.py -q",
+      "oracle": "Finite/normalized/dimension/ID validation rejects malformed inputs and valid ranking has exact scores, stable ties, and bounded limit behavior.",
+      "artifact_path": ".agent-foreman/phase2-retrieval-primitives/artifacts/gate-vector-unit-r2.txt",
+      "invariant_ids": ["INV-VECTOR-VALIDATION", "INV-VECTOR-STABLE-RANK", "INV-RETRIEVAL-PRIMITIVE-SCOPE"],
+      "blocking": true,
+      "scope": "component",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-PYTHON-ALL",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-03-p2-04-all -p no:cacheprovider -q",
+      "oracle": "All existing and primitive tests pass together and report platform-limited skips exactly.",
+      "artifact_path": ".agent-foreman/phase2-retrieval-primitives/artifacts/gate-python-all-r2.txt",
+      "invariant_ids": ["INV-RETRIEVAL-PRIMITIVE-SCOPE"],
+      "blocking": true,
+      "scope": "system",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-VECTOR-BUNDLE-INTEGRATION",
+      "command": "Deferred: load real P2-06 embedding blobs and verify declared adapter/model/dimension/prefix compatibility before ranking.",
+      "oracle": "A real bundle mismatch prevents readiness and valid blobs preserve evidence ID ordering without altered bytes.",
+      "artifact_path": ".agent-foreman/phase2-retrieval-primitives/artifacts/gate-vector-bundle-integration.txt",
+      "invariant_ids": ["INV-VECTOR-VALIDATION"],
+      "blocking": false,
+      "scope": "integration",
+      "result": "not_run"
+    }
+  ],
+  "evidence_ledger": [],
+  "stop_conditions": [
+    "Stop and ask the owner before changing FTS schema/tokenizer, configuration/query limits, RRF/metadata policy, provider/model identity, bundle compatibility/readiness, endpoint/API behavior, or dependency manager.",
+    "Do not claim real vector-bundle compatibility before P2-06 SQLite/blob loading exists.",
+    "A blocking FTS/vector gate failure after one precise Main repair returns the affected primitive to Main replan."
+  ],
+  "fallback_policy": {
+    "mode": "single_main",
+    "triggers": [
+      "SQLite FTS5 unavailable in the supported Python build",
+      "A required schema/provider/bundle contract change appears",
+      "A critical deterministic gate fails after one precise repair",
+      "A future consumer requires an unowned behavior"
+    ]
+  }
+}

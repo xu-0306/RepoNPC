@@ -1,0 +1,6 @@
+Command:
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-02-all -p no:cacheprovider -q
+
+Exit code: 0
+
+193 passed, 3 skipped, 1 existing FastAPI/TestClient deprecation warning in 1.10s

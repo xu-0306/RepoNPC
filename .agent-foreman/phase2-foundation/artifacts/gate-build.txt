@@ -1,0 +1,4 @@
+Command: rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache build --offline --out-dir D:/RepoNPC/.agent-foreman/phase2-foundation/artifacts/dist
+Exit: 0
+Result: built reponpc-0.1.0.tar.gz and reponpc-0.1.0-py3-none-any.whl; inspected contents contain no cache, virtual environment, or governance files.
+Warning: uv reported the in-tree cache as a generic inclusion risk; archive inspection confirmed it is excluded.

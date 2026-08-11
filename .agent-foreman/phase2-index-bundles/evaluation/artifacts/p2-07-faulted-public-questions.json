@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "questions": [
+    {
+      "id": "mismatch-rank-evidence-en",
+      "pair_id": "rank-evidence",
+      "locale": "en",
+      "question": "Where is rank_evidence defined?"
+    },
+    {
+      "id": "rank-evidence-zh-tw",
+      "pair_id": "rank-evidence",
+      "locale": "zh-TW",
+      "question": "rank_evidence 定義在哪裡？"
+    },
+    {
+      "id": "citation-resolver-en",
+      "pair_id": "citation-resolver",
+      "locale": "en",
+      "question": "How does CitationResolver resolve an evidence ID?"
+    },
+    {
+      "id": "citation-resolver-zh-tw",
+      "pair_id": "citation-resolver",
+      "locale": "zh-TW",
+      "question": "CitationResolver 如何解析 evidence ID？"
+    },
+    {
+      "id": "hybrid-architecture-en",
+      "pair_id": "hybrid-architecture",
+      "locale": "en",
+      "question": "How does reciprocal-rank fusion combine lexical and vector retrieval?"
+    },
+    {
+      "id": "hybrid-architecture-zh-tw",
+      "pair_id": "hybrid-architecture",
+      "locale": "zh-TW",
+      "question": "專案如何用 reciprocal-rank fusion 結合 lexical 與 vector retrieval？"
+    },
+    {
+      "id": "untrusted-evidence-en",
+      "pair_id": "untrusted-evidence",
+      "locale": "en",
+      "question": "How does delimit_untrusted_evidence mark repository text as data?"
+    },
+    {
+      "id": "untrusted-evidence-zh-tw",
+      "pair_id": "untrusted-evidence",
+      "locale": "zh-TW",
+      "question": "delimit_untrusted_evidence 如何將 repository text 標示為資料？"
+    }
+  ]
+}

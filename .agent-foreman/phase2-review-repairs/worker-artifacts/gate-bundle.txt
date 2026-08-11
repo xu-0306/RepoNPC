@@ -1,0 +1,1 @@
+Main evidence summary (not raw stdout): bundle manager gate reported 29 passed; Ruff, format, and mypy passed.

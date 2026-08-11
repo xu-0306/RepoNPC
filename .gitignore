@@ -1,0 +1,37 @@
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+secrets/
+
+# Mutable runtime data
+runtime-data/
+*.sqlite
+*.sqlite-*
+
+# Python environments, caches, and reports
+.venv/
+.uv-cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pytest-tmp/
+**/pytest-tmp*/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
+
+# JavaScript dependencies and generated builds
+.pnpm-store/
+node_modules/
+apps/web/node_modules/
+dist/
+apps/web/dist/
+
+# Editor and operating-system noise
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp

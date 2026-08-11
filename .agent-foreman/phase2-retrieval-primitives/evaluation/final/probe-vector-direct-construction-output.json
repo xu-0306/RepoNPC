@@ -1,0 +1,15 @@
+{
+  "probe": "direct vector construction and mutable caller input",
+  "nan_direct_construction": "rejected",
+  "matrix_writeable": false,
+  "shares_caller_memory": false,
+  "matrix_is_finite_after_caller_nan_mutation": true,
+  "rank_scores": [
+    1.0,
+    0.0
+  ],
+  "rank_scores_all_finite": true,
+  "oracle": "NaN direct construction is rejected; valid direct construction copies to a read-only finite matrix and ranking stays finite",
+  "anti_oracle": "caller source was changed to NaN after construction but matrix and scores stayed finite",
+  "result": "passed"
+}

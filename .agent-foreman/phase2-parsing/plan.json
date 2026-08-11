@@ -1,0 +1,209 @@
+{
+  "schema_name": "agent-foreman/plan",
+  "schema_version": "1.0",
+  "profile": "minimal",
+  "metadata": {
+    "plan_id": "REPONPC-P2-02-PARSING-20260810",
+    "objective": "Add deterministic bounded Tree-sitter and text chunk candidates for Python, JavaScript, TypeScript/TSX, Go, Rust, Markdown, and fallback text without changing public configuration, evidence IDs, or index/bundle behavior.",
+    "repo_root": "D:/RepoNPC",
+    "revision": null,
+    "dirty_state": "D:/RepoNPC is not a Git worktree; existing P2-00/P2-01 files and non-Git user work must be preserved.",
+    "status": "implemented",
+    "completed_by": null,
+    "resolution_state": "resolved"
+  },
+  "main_model": {
+    "source": "current_conversation",
+    "resolved_model_id": null,
+    "verification": "unavailable",
+    "reasoning_effort": null
+  },
+  "architecture_decision": {
+    "mode": "main_direct",
+    "selected_profile": "minimal",
+    "reasons": [
+      "The parser registry, third-party grammar/lockfile choice, candidate contract, and future producer-to-consumer seam are shared Main-owned responsibilities.",
+      "The only potential parser leaves cannot be delegated safely until their grammar API, registry protocol, and independent integration oracle are established."
+    ],
+    "rejected_modes": [
+      {
+        "mode": "main_plan_weak_leaf",
+        "reason": "Actual worker capability is degraded and P2-02 must change the dependency lockfile and frozen parser/candidate contracts."
+      },
+      {
+        "mode": "hybrid_main_seams",
+        "reason": "No adapter protocol currently exists, so splitting languages before Main creates it would make workers choose shared semantics."
+      }
+    ],
+    "advisor_required": false
+  },
+  "current_state_evidence": [
+    {
+      "path": "docs/TECHNICAL_SPEC.md",
+      "symbol": "sections 5.3 and 4.3",
+      "observation": "Supported Tree-sitter languages are Python, JavaScript/TypeScript, Go, and Rust; named symbols should be preferred, oversized nodes split deterministically, fallback is bounded, and line ranges are one-based inclusive.",
+      "status": "observed"
+    },
+    {
+      "path": "src/reponpc/indexing/line_chunker.py",
+      "symbol": "chunk_text",
+      "observation": "A deterministic bounded line fallback exists, but there is no parser registry, source-language dispatch, syntax candidate type, Markdown sectioning, or Tree-sitter dependency.",
+      "status": "observed"
+    },
+    {
+      "path": "pyproject.toml and uv.lock",
+      "symbol": "project dependencies",
+      "observation": "Tree-sitter and NumPy are absent from the locked Python environment; adding grammar bindings requires a normal uv dependency/lock update under ADR-012.",
+      "status": "observed"
+    },
+    {
+      "path": "docs/SUBAGENT_EXECUTION_PLAYBOOK.md",
+      "symbol": "P2-02",
+      "observation": "P2-02 requires language golden tests and a future Main producer-to-consumer integration from eligible source bytes to accepted evidence records.",
+      "status": "observed"
+    }
+  ],
+  "control_flow": [
+    {
+      "id": "FLOW-PARSER-DISPATCH",
+      "kind": "future_indexing_intake",
+      "path": "src/reponpc/indexing/parsing.py",
+      "symbol": "chunk_source",
+      "next": ["FLOW-EVIDENCE-BUILDER"],
+      "failure_path": "Unsupported or syntactically invalid source returns deterministic bounded fallback candidates; no parser exception or unbounded node can reach a future evidence writer."
+    },
+    {
+      "id": "FLOW-EVIDENCE-BUILDER",
+      "kind": "future_producer_consumer",
+      "path": "P2-06 index writer (not yet implemented)",
+      "symbol": "candidate-to-evidence conversion",
+      "next": [],
+      "failure_path": "No current evidence writer consumes candidates, so the real source-to-evidence integration gate remains deferred rather than claimed passed."
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-PARSER-DETERMINISTIC",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "For identical bytes, path, language, and limits, parser dispatch returns the same ordered symbol/text candidates with one-based inclusive line ranges and normalized LF content.",
+      "enforcement_owner": "src/reponpc/indexing/parsing.py:chunk_source",
+      "prohibited_behavior": "Host-dependent parser ordering, mutable grammar/version output, zero-based ranges, source text loss, or unhandled syntax errors.",
+      "counterexample": "Run a nested Python/JS/TS/Go/Rust fixture with CRLF and multibyte text twice, then compare all candidates and their line coordinates.",
+      "gate_ids": ["GATE-PARSING-UNIT", "GATE-PARSER-CONSUMER-INTEGRATION"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-02 focused implementation", "future P2-06 source-to-evidence integration"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-PARSER-BOUNDS",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Every emitted candidate is nonempty and obeys configured character and line bounds; oversized syntax nodes split on deterministic child boundaries before falling back to bounded line windows.",
+      "enforcement_owner": "src/reponpc/indexing/parsing.py:chunk_source",
+      "prohibited_behavior": "Emitting an oversize candidate, looping on a one-line oversize input, or discarding eligible text after a parser failure.",
+      "counterexample": "A class/function or one source line larger than max_characters yields deterministic bounded fragments that cover the original normalized content.",
+      "gate_ids": ["GATE-PARSING-UNIT", "GATE-PARSER-CONSUMER-INTEGRATION"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-02 focused implementation", "AC-005/AC-006 future integration"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-PARSER-SCOPE",
+      "applies": true,
+      "classification": "noncritical",
+      "severity": "medium",
+      "statement": "P2-02 only parses already-eligible supplied text; it does not fetch repositories, read source paths, alter exclusion/configuration policy, construct evidence IDs, write SQLite, or change bundle behavior.",
+      "enforcement_owner": "src/reponpc/indexing/parsing.py",
+      "prohibited_behavior": "Adding I/O, network, persistence, configuration, evidence-ID, or bundle logic to the parser boundary.",
+      "counterexample": "A path-like input must be metadata only and source parsing succeeds without a filesystem/network adapter.",
+      "gate_ids": ["GATE-PARSING-UNIT", "GATE-PYTHON-ALL"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-02 focused implementation"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-LOCKED-DEPENDENCIES",
+      "applies": true,
+      "classification": "noncritical",
+      "severity": "medium",
+      "statement": "Required parser bindings are declared through uv and recorded in uv.lock; no second package manager or unpinned runtime package is introduced.",
+      "enforcement_owner": "pyproject.toml and uv.lock",
+      "prohibited_behavior": "Using an undeclared grammar at runtime or leaving the lockfile out of sync with the project dependency declaration.",
+      "counterexample": "Run uv lock --check and import each configured grammar in the locked environment.",
+      "gate_ids": ["GATE-PARSER-IMPORTS", "GATE-PY-LOCK"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["P2-02 focused implementation"],
+      "not_applicable": null
+    }
+  ],
+  "acceptance_gates": [
+    {
+      "id": "GATE-PARSER-IMPORTS",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python -c \"import tree_sitter, tree_sitter_go, tree_sitter_javascript, tree_sitter_python, tree_sitter_rust, tree_sitter_typescript\"",
+      "oracle": "The locked runtime imports the parser core and every required language binding.",
+      "artifact_path": ".agent-foreman/phase2-parsing/artifacts/gate-parser-imports.txt",
+      "invariant_ids": ["INV-LOCKED-DEPENDENCIES"],
+      "blocking": true,
+      "scope": "system",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-PARSING-UNIT",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-02-parsing -p no:cacheprovider tests/unit/test_parsing.py -q",
+      "oracle": "Language, fallback, CRLF, multibyte, syntax-error, nested-symbol, and oversize fixtures return exact bounded candidates and coordinates.",
+      "artifact_path": ".agent-foreman/phase2-parsing/artifacts/gate-parsing-unit.txt",
+      "invariant_ids": ["INV-PARSER-DETERMINISTIC", "INV-PARSER-BOUNDS", "INV-PARSER-SCOPE"],
+      "blocking": true,
+      "scope": "component",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-PY-LOCK",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache lock --check --offline",
+      "oracle": "uv confirms pyproject.toml and uv.lock describe the same locked dependency graph.",
+      "artifact_path": ".agent-foreman/phase2-parsing/artifacts/gate-py-lock.txt",
+      "invariant_ids": ["INV-LOCKED-DEPENDENCIES"],
+      "blocking": true,
+      "scope": "system",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-PYTHON-ALL",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-02-all -p no:cacheprovider -q",
+      "oracle": "All existing and P2-02 Python tests pass together, with any platform-limited skips reported exactly.",
+      "artifact_path": ".agent-foreman/phase2-parsing/artifacts/gate-python-all.txt",
+      "invariant_ids": ["INV-PARSER-SCOPE"],
+      "blocking": true,
+      "scope": "system",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-PARSER-CONSUMER-INTEGRATION",
+      "command": "Deferred: send real eligible source bytes through the future P2-06 index intake and evidence writer.",
+      "oracle": "The unchanged parser candidate content/ranges become accepted evidence records and malformed/oversize inputs cannot reach the writer unbounded.",
+      "artifact_path": ".agent-foreman/phase2-parsing/artifacts/gate-parser-consumer-integration.txt",
+      "invariant_ids": ["INV-PARSER-DETERMINISTIC", "INV-PARSER-BOUNDS"],
+      "blocking": false,
+      "scope": "integration",
+      "result": "not_run"
+    }
+  ],
+  "evidence_ledger": [],
+  "stop_conditions": [
+    "Stop and request owner direction before changing public configuration limits/patterns, evidence-ID or schema contracts, source acquisition/network policy, bundle behavior, or adding a service/provider.",
+    "Do not call the future source-to-evidence integration proved before a P2-06 writer exists.",
+    "Fail closed and retain Main ownership if the selected grammar packages cannot support the approved Python runtime or locked dependency policy."
+  ],
+  "fallback_policy": {
+    "mode": "single_main",
+    "triggers": [
+      "Grammar API incompatibility or unavailable package support",
+      "A source-to-evidence contract change is required",
+      "A blocking parser gate fails after one precise Main repair",
+      "A new external/network or configuration requirement appears"
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+Package: PKG-WORKER-I18N
+Dispatch baseline: both owned paths were absent.
+Handoff state:
+- src/reponpc/i18n/catalog.py | sha256 dc923ad169fe52b9239353a04177d5544ae06656202d184b02910197fb1cd82d | 2222 bytes
+- tests/unit/test_i18n_catalog.py | sha256 b7de39c4fa36ad682d89480652b27ec87b7418bdd36061c2c9b7c7a840e6397c | 2149 bytes
+Delta guard: failed for the same shared-workspace, concurrent-write, and unfiltered-cache reasons recorded in artifacts/delta-i18n.json. It is not reported as passed.
+Manual evidence: Root inspected both current owned files, reran the focused gate, and compared the worker's host-delivered changed-path report. This is weaker than an enforced delta guard.

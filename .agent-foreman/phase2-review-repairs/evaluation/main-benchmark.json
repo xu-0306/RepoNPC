@@ -1,0 +1,411 @@
+{
+  "schema_name": "reponpc/phase2-benchmark",
+  "schema_version": 1,
+  "oracle_isolation": "best_effort",
+  "provider": {
+    "adapter": "deterministic_fixture",
+    "model_id": "sha256-token-hash-v1",
+    "dimension": 384,
+    "normalized": true,
+    "query_prefix": "query: ",
+    "passage_prefix": "passage: "
+  },
+  "provider_is_production": false,
+  "oracle_isolation_enforced": false,
+  "reference_host_verified": false,
+  "reference_host": {
+    "python": "3.14.7",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.5.2",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+    "logical_cpu_count": 12,
+    "target": {
+      "cpu_cores": 4,
+      "memory_gib": 8
+    }
+  },
+  "thresholds": {
+    "recall_at_8": 0.85,
+    "language_parity": 0.9,
+    "warm_p95_ms": 750.0
+  },
+  "warmup_rounds": 2,
+  "measurement_rounds": 5,
+  "timing_sample_count": 100,
+  "timing_policy": "untimed_warmup_then_full_measurement_rounds",
+  "question_count": 20,
+  "pair_count": 10,
+  "distinct_expected_path_count": 6,
+  "indexed": {
+    "evidence_records": 16,
+    "repositories": 1,
+    "sources": 7
+  },
+  "repeatable": true,
+  "recall_at_8": 0.9,
+  "language_parity": 0.9,
+  "warm_p95_ms": 1.4684,
+  "results": [
+    {
+      "id": "rank-evidence-en",
+      "pair_id": "rank-evidence",
+      "locale": "en",
+      "hit": false,
+      "retrieved_paths": [
+        "README.md",
+        "docs/adversarial-evidence.md",
+        "reponpc.yml",
+        "reponpc.yml",
+        "reponpc.yml",
+        "docs/architecture.md"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "rank-evidence-zh-tw",
+      "pair_id": "rank-evidence",
+      "locale": "zh-TW",
+      "hit": false,
+      "retrieved_paths": [
+        "README.md",
+        "docs/unsupported-claims.md",
+        "reponpc.yml",
+        "reponpc.yml",
+        "reponpc.yml",
+        "docs/architecture.md"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "citation-resolver-en",
+      "pair_id": "citation-resolver",
+      "locale": "en",
+      "hit": true,
+      "retrieved_paths": [
+        "src/retrieval_pipeline.py",
+        "docs/adversarial-evidence.md",
+        "docs/unsupported-claims.md",
+        "src/retrieval_pipeline.py",
+        "reponpc.yml",
+        "src/search_handler.ts"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "citation-resolver-zh-tw",
+      "pair_id": "citation-resolver",
+      "locale": "zh-TW",
+      "hit": true,
+      "retrieved_paths": [
+        "src/retrieval_pipeline.py",
+        "docs/unsupported-claims.md",
+        "docs/adversarial-evidence.md",
+        "src/retrieval_pipeline.py",
+        "reponpc.yml",
+        "reponpc.yml"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "hybrid-architecture-en",
+      "pair_id": "hybrid-architecture",
+      "locale": "en",
+      "hit": true,
+      "retrieved_paths": [
+        "docs/architecture.md",
+        "README.md",
+        "reponpc.yml",
+        "reponpc.yml",
+        "docs/adversarial-evidence.md",
+        "reponpc.yml"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "hybrid-architecture-zh-tw",
+      "pair_id": "hybrid-architecture",
+      "locale": "zh-TW",
+      "hit": true,
+      "retrieved_paths": [
+        "docs/architecture.md",
+        "reponpc.yml",
+        "README.md",
+        "src/retrieval_pipeline.py",
+        "docs/unsupported-claims.md",
+        "reponpc.yml"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "untrusted-evidence-en",
+      "pair_id": "untrusted-evidence",
+      "locale": "en",
+      "hit": true,
+      "retrieved_paths": [
+        "src/retrieval_pipeline.py",
+        "README.md",
+        "reponpc.yml",
+        "docs/adversarial-evidence.md",
+        "docs/unsupported-claims.md",
+        "reponpc.yml"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "untrusted-evidence-zh-tw",
+      "pair_id": "untrusted-evidence",
+      "locale": "zh-TW",
+      "hit": true,
+      "retrieved_paths": [
+        "src/retrieval_pipeline.py",
+        "docs/unsupported-claims.md",
+        "docs/adversarial-evidence.md",
+        "reponpc.yml",
+        "reponpc.yml",
+        "README.md"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "search-request-en",
+      "pair_id": "search-request",
+      "locale": "en",
+      "hit": true,
+      "retrieved_paths": [
+        "reponpc.yml",
+        "src/search_handler.ts",
+        "reponpc.yml",
+        "README.md",
+        "reponpc.yml",
+        "src/search_handler.ts"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "search-request-zh-tw",
+      "pair_id": "search-request",
+      "locale": "zh-TW",
+      "hit": true,
+      "retrieved_paths": [
+        "src/search_handler.ts",
+        "reponpc.yml",
+        "src/search_handler.ts",
+        "README.md",
+        "src/retrieval_pipeline.py",
+        "reponpc.yml"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "lexical-fts-en",
+      "pair_id": "lexical-fts",
+      "locale": "en",
+      "hit": true,
+      "retrieved_paths": [
+        "docs/architecture.md",
+        "README.md",
+        "src/retrieval_pipeline.py",
+        "src/retrieval_pipeline.py",
+        "src/retrieval_pipeline.py",
+        "reponpc.yml"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "lexical-fts-zh-tw",
+      "pair_id": "lexical-fts",
+      "locale": "zh-TW",
+      "hit": true,
+      "retrieved_paths": [
+        "docs/architecture.md",
+        "README.md",
+        "docs/unsupported-claims.md",
+        "reponpc.yml",
+        "reponpc.yml",
+        "docs/adversarial-evidence.md"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "normalized-vector-en",
+      "pair_id": "normalized-vector",
+      "locale": "en",
+      "hit": true,
+      "retrieved_paths": [
+        "docs/architecture.md",
+        "docs/unsupported-claims.md",
+        "reponpc.yml",
+        "README.md",
+        "reponpc.yml",
+        "reponpc.yml"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "normalized-vector-zh-tw",
+      "pair_id": "normalized-vector",
+      "locale": "zh-TW",
+      "hit": true,
+      "retrieved_paths": [
+        "docs/architecture.md",
+        "reponpc.yml",
+        "reponpc.yml",
+        "README.md",
+        "reponpc.yml",
+        "docs/unsupported-claims.md"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "adversarial-evidence-en",
+      "pair_id": "adversarial-evidence",
+      "locale": "en",
+      "hit": true,
+      "retrieved_paths": [
+        "docs/adversarial-evidence.md",
+        "docs/unsupported-claims.md",
+        "README.md",
+        "docs/architecture.md",
+        "reponpc.yml",
+        "reponpc.yml"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "adversarial-evidence-zh-tw",
+      "pair_id": "adversarial-evidence",
+      "locale": "zh-TW",
+      "hit": true,
+      "retrieved_paths": [
+        "docs/adversarial-evidence.md",
+        "src/retrieval_pipeline.py",
+        "docs/unsupported-claims.md",
+        "README.md",
+        "reponpc.yml",
+        "reponpc.yml"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "unsupported-person-claims-en",
+      "pair_id": "unsupported-person-claims",
+      "locale": "en",
+      "hit": true,
+      "retrieved_paths": [
+        "docs/unsupported-claims.md",
+        "reponpc.yml",
+        "README.md",
+        "reponpc.yml",
+        "reponpc.yml",
+        "docs/adversarial-evidence.md"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "unsupported-person-claims-zh-tw",
+      "pair_id": "unsupported-person-claims",
+      "locale": "zh-TW",
+      "hit": true,
+      "retrieved_paths": [
+        "docs/unsupported-claims.md",
+        "src/retrieval_pipeline.py",
+        "reponpc.yml",
+        "reponpc.yml",
+        "README.md",
+        "docs/architecture.md"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "fixture-repository-purpose-en",
+      "pair_id": "fixture-repository-purpose",
+      "locale": "en",
+      "hit": true,
+      "retrieved_paths": [
+        "README.md",
+        "reponpc.yml",
+        "docs/adversarial-evidence.md",
+        "docs/architecture.md",
+        "docs/unsupported-claims.md",
+        "reponpc.yml"
+      ],
+      "expected_path_count": 1
+    },
+    {
+      "id": "fixture-repository-purpose-zh-tw",
+      "pair_id": "fixture-repository-purpose",
+      "locale": "zh-TW",
+      "hit": true,
+      "retrieved_paths": [
+        "reponpc.yml",
+        "docs/unsupported-claims.md",
+        "README.md",
+        "docs/architecture.md",
+        "reponpc.yml",
+        "reponpc.yml"
+      ],
+      "expected_path_count": 1
+    }
+  ],
+  "pair_results": [
+    {
+      "pair_id": "adversarial-evidence",
+      "equivalent": true,
+      "both_hit": true
+    },
+    {
+      "pair_id": "citation-resolver",
+      "equivalent": true,
+      "both_hit": true
+    },
+    {
+      "pair_id": "fixture-repository-purpose",
+      "equivalent": true,
+      "both_hit": true
+    },
+    {
+      "pair_id": "hybrid-architecture",
+      "equivalent": true,
+      "both_hit": true
+    },
+    {
+      "pair_id": "lexical-fts",
+      "equivalent": true,
+      "both_hit": true
+    },
+    {
+      "pair_id": "normalized-vector",
+      "equivalent": true,
+      "both_hit": true
+    },
+    {
+      "pair_id": "rank-evidence",
+      "equivalent": false,
+      "both_hit": false
+    },
+    {
+      "pair_id": "search-request",
+      "equivalent": true,
+      "both_hit": true
+    },
+    {
+      "pair_id": "unsupported-person-claims",
+      "equivalent": true,
+      "both_hit": true
+    },
+    {
+      "pair_id": "untrusted-evidence",
+      "equivalent": true,
+      "both_hit": true
+    }
+  ],
+  "harness_thresholds_met": true,
+  "formal_blockers": [
+    "fixture_provider_nonproduction",
+    "oracle_isolation_not_enforced",
+    "reference_host_not_verified"
+  ],
+  "formal_acceptance": false,
+  "passed": false
+}

@@ -1,0 +1,7 @@
+Package: PKG-WORKER-RRF
+Dispatch baseline: both owned paths were absent.
+Handoff state:
+- src/reponpc/retrieval/rrf.py | sha256 8cf6a90b735ea1afc7a5022ec165e33457ccb9ff49355cda7ac98f9fa4f662c1 | 2131 bytes
+- tests/unit/test_rrf.py | sha256 cdd7c5d37868af7a99a6e12ae21a402c058b4e8fe7b9c19401851187851bf7d5 | 1910 bytes
+Delta guard: failed. The repository had no Git metadata or per-worker path sandbox, and Root plus three workers wrote to the shared workspace concurrently. The generic fingerprint also included virtualenv, cache, bytecode, and pytest temporary files. Therefore the guard cannot attribute the concurrent non-owned paths and is not accepted as proof of worker scope compliance.
+Manual evidence: Root inspected both current owned files, reran the focused gate, and compared the worker's host-delivered changed-path report. This is weaker than an enforced delta guard.

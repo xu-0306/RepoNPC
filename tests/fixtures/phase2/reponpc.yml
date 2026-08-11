@@ -1,0 +1,122 @@
+# RepoNPC P2 fixture configuration. All text is invented for local tests.
+schema_version: 1
+
+locales:
+  default: zh-TW
+  supported: [zh-TW, en]
+
+profile:
+  display_name: Fixture Developer
+  headline:
+    zh-TW: 以可驗證證據設計檢索系統的工程師
+    en: Engineer building retrieval systems with verifiable evidence
+  bio:
+    zh-TW: 此設定僅供 RepoNPC 的非秘密測試語料使用。
+    en: This configuration is invented non-secret material for RepoNPC tests.
+  location: null
+  avatar_url: null
+  links: []
+  greeting:
+    zh-TW: 歡迎閱讀測試語料。
+    en: Welcome to the fixture corpus.
+  suggested_questions:
+    zh-TW: ["此專案如何混合字詞與向量檢索？"]
+    en: ["How does this project combine lexical and vector retrieval?"]
+
+repositories:
+  - slug: fixture-owner/reponpc-demo
+    enabled: true
+    ref: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    role:
+      zh-TW: 範例檢索系統的負責人
+      en: Responsible for the fixture retrieval system
+    summary:
+      zh-TW: 包含雙語文件、程式符號與惡意指令文字的測試專案。
+      en: A test project with bilingual documents, code symbols, and malicious instruction text.
+    tags: [Python, TypeScript, Retrieval]
+    demo_url: null
+    include: [README.md, docs/**, src/**]
+    exclude: [docs/generated/**, '**/*.min.js', node_modules/**, '*.lock']
+    claims:
+      - id: fixture_retrieval_design
+        kind: responsibility
+        statement:
+          zh-TW: 我負責定義此範例的混合檢索與可驗證引用設計。
+          en: I was responsible for this fixture's hybrid retrieval and verifiable citation design.
+      - id: fixture_test_context
+        kind: context
+        statement:
+          zh-TW: 這些內容是人工撰寫的測試資料，不代表真實工作經歷。
+          en: These materials are authored test data and do not represent real work history.
+
+character:
+  mode: builtin
+  revision: 0
+  builtin:
+    body: standard
+    skin: medium
+    hair: short
+    hair_color: '#2b1d14'
+    outfit: engineer
+    primary_color: '#6d5dfc'
+    secondary_color: '#f2c14e'
+    accessory: glasses
+  animation:
+    frame_duration_ms: 160
+    movement: subtle
+
+card:
+  revision: 0
+  call_to_action:
+    zh-TW: 閱讀範例
+    en: Read the fixture
+  show_repository_count: true
+  animation:
+    enabled: true
+    frame_duration_ms: 240
+  themes:
+    light:
+      background: '#f7f4e9'
+      panel: '#fffdf7'
+      text: '#24202e'
+      accent: '#6d5dfc'
+      border: '#2f2842'
+    dark:
+      background: '#171521'
+      panel: '#211e2e'
+      text: '#f8f5ff'
+      accent: '#9b8cff'
+      border: '#c8bfff'
+
+retrieval:
+  enabled_sources: [owner_assertions, repository_metadata, documentation, source_code]
+  parsers:
+    tree_sitter_languages: [python, javascript, typescript, go, rust]
+  chunking:
+    max_characters: 6000
+    max_lines: 200
+    fallback_overlap_lines: 12
+  limits:
+    max_file_bytes: 524288
+    max_repository_text_bytes: 26214400
+    max_corpus_text_bytes: 104857600
+    max_evidence_records: 50000
+  embedding:
+    adapter: local_sentence_transformers
+    model: intfloat/multilingual-e5-small
+    dimension: 384
+    normalized: true
+    query_prefix: 'query: '
+    passage_prefix: 'passage: '
+  fusion:
+    rrf_k: 60
+    lexical_weight: 1.0
+    vector_weight: 1.0
+    candidate_count_per_channel: 30
+    final_context_records: 8
+    max_records_per_repository: 6
+  source_weights:
+    owner_assertions: 1.0
+    repository_metadata: 0.9
+    documentation: 1.0
+    source_code: 1.0

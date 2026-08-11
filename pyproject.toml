@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "reponpc"
+version = "0.1.0"
+description = "Evidence-backed RPG developer portfolio"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+  "fastapi>=0.116,<1",
+  "numpy>=2.2,<3",
+  "pydantic>=2.11,<3",
+  "pyyaml>=6.0.2,<7",
+  "tree-sitter>=0.26,<0.27",
+  "tree-sitter-go>=0.25,<0.26",
+  "tree-sitter-javascript>=0.25,<0.26",
+  "tree-sitter-python>=0.25,<0.26",
+  "tree-sitter-rust>=0.24,<0.25",
+  "tree-sitter-typescript>=0.23,<0.24",
+  "uvicorn[standard]>=0.35,<1",
+]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28,<1",
+  "mypy>=1.15,<2",
+  "pytest>=8.4,<10",
+  "pytest-cov>=6.2,<8",
+  "ruff>=0.12,<1",
+  "types-pyyaml>=6.0.12.20250822,<7",
+]
+
+[project.scripts]
+reponpc = "reponpc.main:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reponpc"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/README.md",
+  "/pyproject.toml",
+  "/src/reponpc",
+  "/tests",
+]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [
+  ".agent-foreman",
+  ".pytest-tmp",
+  ".uv-cache",
+  ".venv",
+  "apps/web/dist",
+  "node_modules",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

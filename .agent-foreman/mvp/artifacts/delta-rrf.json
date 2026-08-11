@@ -1,0 +1,929 @@
+{
+  "authorized_paths": [
+    "src/reponpc/retrieval/rrf.py",
+    "tests/unit/test_rrf.py"
+  ],
+  "changed_paths": [
+    ".agent-foreman/mvp/dispatch-manifest.json",
+    ".pytest-tmp/test_file_size_and_utf8_are_bo0/invalid.yml",
+    ".pytest-tmp/test_file_size_and_utf8_are_bo0/large.yml",
+    ".ruff_cache/0.16.2/11360360541413016071",
+    ".ruff_cache/0.16.2/11842273988687747159",
+    ".ruff_cache/0.16.2/13544872828482927915",
+    ".ruff_cache/0.16.2/335156688621428953",
+    ".ruff_cache/0.16.2/5476918154230889504",
+    ".ruff_cache/0.16.2/6671000495354997357",
+    ".ruff_cache/0.16.2/8704662562674102481",
+    ".venv/Lib/site-packages/annotated_doc/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/annotated_doc/__pycache__/main.cpython-314.pyc",
+    ".venv/Lib/site-packages/click/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/click/__pycache__/_compat.cpython-314.pyc",
+    ".venv/Lib/site-packages/click/__pycache__/_utils.cpython-314.pyc",
+    ".venv/Lib/site-packages/click/__pycache__/_winconsole.cpython-314.pyc",
+    ".venv/Lib/site-packages/click/__pycache__/core.cpython-314.pyc",
+    ".venv/Lib/site-packages/click/__pycache__/decorators.cpython-314.pyc",
+    ".venv/Lib/site-packages/click/__pycache__/exceptions.cpython-314.pyc",
+    ".venv/Lib/site-packages/click/__pycache__/formatting.cpython-314.pyc",
+    ".venv/Lib/site-packages/click/__pycache__/globals.cpython-314.pyc",
+    ".venv/Lib/site-packages/click/__pycache__/parser.cpython-314.pyc",
+    ".venv/Lib/site-packages/click/__pycache__/termui.cpython-314.pyc",
+    ".venv/Lib/site-packages/click/__pycache__/types.cpython-314.pyc",
+    ".venv/Lib/site-packages/click/__pycache__/utils.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/applications.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/background.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/concurrency.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/datastructures.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/encoders.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/exception_handlers.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/exceptions.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/logger.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/param_functions.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/params.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/requests.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/responses.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/routing.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/sse.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/testclient.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/types.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/utils.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/__pycache__/websockets.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/_compat/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/_compat/__pycache__/shared.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/_compat/__pycache__/v2.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/dependencies/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/dependencies/__pycache__/models.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/dependencies/__pycache__/utils.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/middleware/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/middleware/__pycache__/asyncexitstack.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/openapi/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/openapi/__pycache__/constants.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/openapi/__pycache__/docs.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/openapi/__pycache__/models.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/openapi/__pycache__/utils.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/security/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/security/__pycache__/api_key.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/security/__pycache__/base.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/security/__pycache__/http.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/security/__pycache__/oauth2.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/security/__pycache__/open_id_connect_url.cpython-314.pyc",
+    ".venv/Lib/site-packages/fastapi/security/__pycache__/utils.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/__version__.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_api.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_auth.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_client.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_config.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_content.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_decoders.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_exceptions.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_main.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_models.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_multipart.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_status_codes.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_types.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_urlparse.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_urls.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/__pycache__/_utils.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/_transports/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/_transports/__pycache__/asgi.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/_transports/__pycache__/base.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/_transports/__pycache__/default.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/_transports/__pycache__/mock.cpython-314.pyc",
+    ".venv/Lib/site-packages/httpx/_transports/__pycache__/wsgi.cpython-314.pyc",
+    ".venv/Lib/site-packages/idna/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/idna/__pycache__/core.cpython-314.pyc",
+    ".venv/Lib/site-packages/idna/__pycache__/idnadata.cpython-314.pyc",
+    ".venv/Lib/site-packages/idna/__pycache__/intranges.cpython-314.pyc",
+    ".venv/Lib/site-packages/idna/__pycache__/package_data.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/__pycache__/color.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/__pycache__/networks.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/__pycache__/type_adapter.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/annotated_types.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/class_validators.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/color.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/config.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/dataclasses.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/datetime_parse.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/decorator.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/env_settings.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/error_wrappers.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/errors.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/fields.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/json.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/main.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/networks.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/parse.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/schema.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/tools.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/types.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/typing.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/utils.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/validators.cpython-314.pyc",
+    ".venv/Lib/site-packages/pydantic/v1/__pycache__/version.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/_exception_handler.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/_utils.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/applications.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/background.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/concurrency.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/convertors.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/datastructures.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/exceptions.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/formparsers.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/requests.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/responses.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/routing.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/staticfiles.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/status.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/testclient.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/types.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/__pycache__/websockets.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/middleware/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/middleware/__pycache__/base.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/middleware/__pycache__/body_limit.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/middleware/__pycache__/errors.cpython-314.pyc",
+    ".venv/Lib/site-packages/starlette/middleware/__pycache__/exceptions.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/__pycache__/_ansi.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/__pycache__/_compat.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/__pycache__/_subprocess.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/__pycache__/_types.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/__pycache__/config.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/__pycache__/importer.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/__pycache__/logging.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/__pycache__/main.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/__pycache__/server.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/middleware/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/middleware/__pycache__/asgi2.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/middleware/__pycache__/message_logger.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/middleware/__pycache__/proxy_headers.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/middleware/__pycache__/wsgi.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/supervisors/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/supervisors/__pycache__/basereload.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/supervisors/__pycache__/multiprocess.cpython-314.pyc",
+    ".venv/Lib/site-packages/uvicorn/supervisors/__pycache__/watchfilesreload.cpython-314.pyc",
+    ".venv/Lib/site-packages/watchfiles/__pycache__/__init__.cpython-314.pyc",
+    ".venv/Lib/site-packages/watchfiles/__pycache__/filters.cpython-314.pyc",
+    ".venv/Lib/site-packages/watchfiles/__pycache__/main.cpython-314.pyc",
+    ".venv/Lib/site-packages/watchfiles/__pycache__/run.cpython-314.pyc",
+    ".venv/Lib/site-packages/watchfiles/__pycache__/version.cpython-314.pyc",
+    "src/reponpc/__pycache__/main.cpython-314.pyc",
+    "src/reponpc/api/__pycache__/public.cpython-314.pyc",
+    "src/reponpc/api/public.py",
+    "src/reponpc/config/__pycache__/models.cpython-314.pyc",
+    "src/reponpc/i18n/__pycache__/catalog.cpython-314.pyc",
+    "src/reponpc/i18n/catalog.py",
+    "src/reponpc/indexing/__pycache__/line_chunker.cpython-314.pyc",
+    "src/reponpc/indexing/line_chunker.py",
+    "src/reponpc/main.py",
+    "src/reponpc/retrieval/__pycache__/rrf.cpython-314.pyc",
+    "src/reponpc/retrieval/rrf.py",
+    "tests/integration/__pycache__/test_mvp_api.cpython-314-pytest-9.1.1.pyc",
+    "tests/integration/test_mvp_api.py",
+    "tests/unit/__pycache__/test_i18n_catalog.cpython-314-pytest-9.1.1.pyc",
+    "tests/unit/__pycache__/test_line_chunker.cpython-314-pytest-9.1.1.pyc",
+    "tests/unit/__pycache__/test_rrf.cpython-314-pytest-9.1.1.pyc",
+    "tests/unit/test_i18n_catalog.py",
+    "tests/unit/test_line_chunker.py",
+    "tests/unit/test_rrf.py"
+  ],
+  "dirty_state_rule": "compare handoff only against dispatch snapshot",
+  "dispatch_workspace_digest": "f28f8f51b2047defde7ee2238bf61037f2551d18d7d30ab789aa69e171dba8c8",
+  "handoff_workspace_digest": "8988076ba4cd3c952c4911cfa679936c4e4dc0df4a3a13e2a366121b0d931608",
+  "package_id": "PKG-WORKER-RRF",
+  "passed": false,
+  "schema_name": "agent-foreman/delta-result",
+  "schema_version": "1.0",
+  "violations": [
+    {
+      "path": ".agent-foreman/mvp/dispatch-manifest.json",
+      "reason": "unknown"
+    },
+    {
+      "path": ".pytest-tmp/test_file_size_and_utf8_are_bo0/invalid.yml",
+      "reason": "unknown"
+    },
+    {
+      "path": ".pytest-tmp/test_file_size_and_utf8_are_bo0/large.yml",
+      "reason": "unknown"
+    },
+    {
+      "path": ".ruff_cache/0.16.2/11360360541413016071",
+      "reason": "unknown"
+    },
+    {
+      "path": ".ruff_cache/0.16.2/11842273988687747159",
+      "reason": "unknown"
+    },
+    {
+      "path": ".ruff_cache/0.16.2/13544872828482927915",
+      "reason": "unknown"
+    },
+    {
+      "path": ".ruff_cache/0.16.2/335156688621428953",
+      "reason": "unknown"
+    },
+    {
+      "path": ".ruff_cache/0.16.2/5476918154230889504",
+      "reason": "unknown"
+    },
+    {
+      "path": ".ruff_cache/0.16.2/6671000495354997357",
+      "reason": "unknown"
+    },
+    {
+      "path": ".ruff_cache/0.16.2/8704662562674102481",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/annotated_doc/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/annotated_doc/__pycache__/main.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/click/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/click/__pycache__/_compat.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/click/__pycache__/_utils.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/click/__pycache__/_winconsole.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/click/__pycache__/core.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/click/__pycache__/decorators.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/click/__pycache__/exceptions.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/click/__pycache__/formatting.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/click/__pycache__/globals.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/click/__pycache__/parser.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/click/__pycache__/termui.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/click/__pycache__/types.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/click/__pycache__/utils.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/applications.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/background.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/concurrency.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/datastructures.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/encoders.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/exception_handlers.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/exceptions.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/logger.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/param_functions.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/params.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/requests.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/responses.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/routing.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/sse.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/testclient.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/types.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/utils.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/__pycache__/websockets.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/_compat/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/_compat/__pycache__/shared.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/_compat/__pycache__/v2.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/dependencies/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/dependencies/__pycache__/models.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/dependencies/__pycache__/utils.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/middleware/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/middleware/__pycache__/asyncexitstack.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/openapi/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/openapi/__pycache__/constants.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/openapi/__pycache__/docs.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/openapi/__pycache__/models.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/openapi/__pycache__/utils.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/security/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/security/__pycache__/api_key.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/security/__pycache__/base.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/security/__pycache__/http.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/security/__pycache__/oauth2.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/security/__pycache__/open_id_connect_url.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/fastapi/security/__pycache__/utils.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/__version__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_api.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_auth.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_client.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_config.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_content.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_decoders.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_exceptions.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_main.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_models.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_multipart.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_status_codes.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_types.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_urlparse.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_urls.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/__pycache__/_utils.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/_transports/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/_transports/__pycache__/asgi.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/_transports/__pycache__/base.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/_transports/__pycache__/default.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/_transports/__pycache__/mock.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/httpx/_transports/__pycache__/wsgi.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/idna/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/idna/__pycache__/core.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/idna/__pycache__/idnadata.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/idna/__pycache__/intranges.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/idna/__pycache__/package_data.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/__pycache__/color.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/__pycache__/networks.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/__pycache__/type_adapter.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/annotated_types.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/class_validators.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/color.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/config.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/dataclasses.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/datetime_parse.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/decorator.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/env_settings.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/error_wrappers.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/errors.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/fields.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/json.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/main.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/networks.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/parse.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/schema.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/tools.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/types.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/typing.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/utils.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/validators.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/pydantic/v1/__pycache__/version.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/_exception_handler.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/_utils.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/applications.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/background.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/concurrency.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/convertors.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/datastructures.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/exceptions.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/formparsers.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/requests.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/responses.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/routing.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/staticfiles.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/status.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/testclient.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/types.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/__pycache__/websockets.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/middleware/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/middleware/__pycache__/base.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/middleware/__pycache__/body_limit.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/middleware/__pycache__/errors.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/starlette/middleware/__pycache__/exceptions.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/__pycache__/_ansi.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/__pycache__/_compat.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/__pycache__/_subprocess.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/__pycache__/_types.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/__pycache__/config.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/__pycache__/importer.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/__pycache__/logging.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/__pycache__/main.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/__pycache__/server.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/middleware/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/middleware/__pycache__/asgi2.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/middleware/__pycache__/message_logger.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/middleware/__pycache__/proxy_headers.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/middleware/__pycache__/wsgi.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/supervisors/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/supervisors/__pycache__/basereload.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/supervisors/__pycache__/multiprocess.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/uvicorn/supervisors/__pycache__/watchfilesreload.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/watchfiles/__pycache__/__init__.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/watchfiles/__pycache__/filters.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/watchfiles/__pycache__/main.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/watchfiles/__pycache__/run.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": ".venv/Lib/site-packages/watchfiles/__pycache__/version.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": "src/reponpc/__pycache__/main.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": "src/reponpc/api/__pycache__/public.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": "src/reponpc/api/public.py",
+      "reason": "prohibited"
+    },
+    {
+      "path": "src/reponpc/config/__pycache__/models.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": "src/reponpc/i18n/__pycache__/catalog.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": "src/reponpc/i18n/catalog.py",
+      "reason": "unknown"
+    },
+    {
+      "path": "src/reponpc/indexing/__pycache__/line_chunker.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": "src/reponpc/indexing/line_chunker.py",
+      "reason": "unknown"
+    },
+    {
+      "path": "src/reponpc/main.py",
+      "reason": "prohibited"
+    },
+    {
+      "path": "src/reponpc/retrieval/__pycache__/rrf.cpython-314.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": "tests/integration/__pycache__/test_mvp_api.cpython-314-pytest-9.1.1.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": "tests/integration/test_mvp_api.py",
+      "reason": "unknown"
+    },
+    {
+      "path": "tests/unit/__pycache__/test_i18n_catalog.cpython-314-pytest-9.1.1.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": "tests/unit/__pycache__/test_line_chunker.cpython-314-pytest-9.1.1.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": "tests/unit/__pycache__/test_rrf.cpython-314-pytest-9.1.1.pyc",
+      "reason": "unknown"
+    },
+    {
+      "path": "tests/unit/test_i18n_catalog.py",
+      "reason": "unknown"
+    },
+    {
+      "path": "tests/unit/test_line_chunker.py",
+      "reason": "unknown"
+    }
+  ]
+}

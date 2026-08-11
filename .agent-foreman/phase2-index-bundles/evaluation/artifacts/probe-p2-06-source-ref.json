@@ -1,0 +1,19 @@
+{
+  "probe_id": "PROBE-P2-06-SOURCE-REF",
+  "invariant_id": "INV-SOURCE-REF-IMMUTABLE",
+  "setup": "Production GitHubSourceResolver with a deterministic API-response boundary.",
+  "fault_injection": "A 39-character commit SHA and an untrusted repository HTML host.",
+  "production_trigger": "GitHubSourceResolver.resolve() resolves the default branch through metadata, commit, and tree paths.",
+  "oracle": "A valid response returns the exact 40-character SHA; both faults fail closed with safe source-resolution codes.",
+  "anti_oracle": "Constructing ResolvedRepository directly is excluded; this calls the resolver's public resolution path.",
+  "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python python .agent-foreman/phase2-index-bundles/evaluation/run_fresh_p2_06_evaluation.py",
+  "expected_exit_code": 0,
+  "exit_code": 0,
+  "deterministic_result": "passed",
+  "artifact_path": ".agent-foreman/phase2-index-bundles/evaluation/artifacts/probe-p2-06-source-ref.json",
+  "observed": {
+    "valid_commit_sha": "dddddddddddddddddddddddddddddddddddddddd",
+    "bad_sha_code": "github_commit_invalid",
+    "bad_host_code": "github_host_not_allowed"
+  }
+}

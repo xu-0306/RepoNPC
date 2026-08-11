@@ -1,0 +1,3 @@
+Command: rtk proxy uv ... pytest -q
+Exit: 0
+Result: 87 passed, 3 skipped, 1 warning in 0.82s

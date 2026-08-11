@@ -1,0 +1,65 @@
+:root {
+  color: #24202e;
+  background: #f7f4e9;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+button {
+  background: #fffdf7;
+  border: 2px solid #2f2842;
+  border-radius: 0.35rem;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+}
+
+button:focus-visible {
+  outline: 3px solid #6d5dfc;
+  outline-offset: 3px;
+}
+
+button[aria-pressed="true"] {
+  background: #6d5dfc;
+  color: #fff;
+}
+
+.setup-shell {
+  margin: 0 auto;
+  max-width: 48rem;
+  padding: clamp(1.5rem, 6vw, 4rem);
+}
+
+.eyebrow {
+  color: #5547b8;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.status-card {
+  background: #fffdf7;
+  border: 2px solid #2f2842;
+  border-radius: 0.5rem;
+  margin-block: 2rem;
+  padding: 1.25rem;
+}
+
+.locale-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto;
+  }
+}

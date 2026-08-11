@@ -1,0 +1,45 @@
+{
+  "schema_name": "agent-foreman/dispatch",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-MVP-20260810",
+  "package_id": "PKG-WORKER-I18N",
+  "authorization_source": "Owner explicitly requested terra high subagents on 2026-08-10 and asked Root to continue on 2026-08-10",
+  "requested_selector": "gpt-5.6-terra/high",
+  "expected_model_verification": "unavailable",
+  "objective": "Implement the frozen bilingual MVP message catalog and focused parity tests",
+  "frozen_contracts": [
+    "I18N-CATALOG-V1: SUPPORTED_LOCALES is exactly zh-TW,en; both locales have identical keys and placeholders for index_unavailable, service_not_ready, validation_error; translate rejects unsupported locale and unknown keys and formats declared placeholders"
+  ],
+  "owned_paths": [
+    "src/reponpc/i18n/catalog.py",
+    "tests/unit/test_i18n_catalog.py"
+  ],
+  "prohibited_paths": [
+    "pyproject.toml",
+    "src/reponpc/config/models.py",
+    "src/reponpc/domain/evidence.py",
+    "src/reponpc/main.py",
+    "src/reponpc/api/public.py"
+  ],
+  "read_first": [
+    "docs/TECHNICAL_SPEC.md",
+    "pyproject.toml"
+  ],
+  "invariant_ids": ["INV-I18N-PARITY"],
+  "gate_ids": ["GATE-I18N"],
+  "commands": [
+    "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --python C:/Python314/python.exe --no-managed-python pytest tests/unit/test_i18n_catalog.py -q"
+  ],
+  "expected_artifacts": [
+    "src/reponpc/i18n/catalog.py",
+    "tests/unit/test_i18n_catalog.py",
+    ".agent-foreman/mvp/handoff-i18n.json"
+  ],
+  "handoff_writer": "Root persists the handoff from the worker's returned evidence; the worker must not edit .agent-foreman",
+  "stop_conditions": [
+    "Stop blocked if any unowned path or locale fallback policy change is required",
+    "Stop blocked if the focused gate cannot run after one transient retry"
+  ],
+  "allowed_statuses": ["implemented", "blocked"]
+}

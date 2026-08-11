@@ -1,0 +1,82 @@
+Final rerun after the R2 repairs. Commands are recorded exactly; existing
+earlier abbreviated ledger entries are deliberately retained as historical
+evidence rather than being altered.
+
+[GATE-SCOPE]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-scope -p no:cacheprovider tests/contract/test_foundation_scope.py -q
+exit 0: 1 passed in 0.02s
+
+[GATE-ENV]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-env -p no:cacheprovider tests/contract/test_environment.py -q
+exit 0: 9 passed, 2 skipped in 0.34s
+The skips are the Windows-only POSIX secret-file permission and descriptor
+replacement probes.
+
+[GATE-RUNTIME]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-runtime -p no:cacheprovider tests/integration/test_runtime_database.py -q
+exit 0: 5 passed in 0.09s
+
+[GATE-LOGGING]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-logging -p no:cacheprovider tests/security/test_safe_logging.py -q
+exit 0: 4 passed in 0.02s
+
+[GATE-MOCKS]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-mocks -p no:cacheprovider tests/integration/test_mock_servers.py -q
+exit 0: 8 passed, 1 pre-existing FastAPI/TestClient deprecation warning in 0.38s
+
+[GATE-CI]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-ci -p no:cacheprovider tests/contract/test_ci_deployment.py -q
+exit 0: 2 passed in 0.01s
+
+[GATE-API]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-api-final -p no:cacheprovider tests/integration/test_mvp_api.py tests/integration/test_static_web.py -q
+exit 0: 11 passed, 1 pre-existing FastAPI/TestClient deprecation warning in 0.37s
+The built bundle-secret/private-provider canary passed.
+
+[GATE-WEB]
+rtk proxy C:\Users\xu\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\fallback\pnpm.cmd --dir D:\RepoNPC run web:check
+exit 0: Prettier check, ESLint, TypeScript type check, 2 Vitest tests, and
+Vite production build passed. Vite transformed 30 modules.
+
+[GATE-TYPE]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python mypy src/reponpc
+exit 0: Success: no issues found in 13 source files
+
+[GATE-PY-LOCK]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache lock --check --offline
+exit 0: Resolved 37 packages in 0.64ms
+
+[GATE-BUILD]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache build --offline --out-dir D:/RepoNPC/.agent-foreman/phase2-foundation/artifacts/dist
+exit 0: built reponpc-0.1.0.tar.gz and reponpc-0.1.0-py3-none-any.whl.
+The generic uv warning that its cache lies beneath the source tree was emitted.
+Archive inspection found no .uv-cache, .agent-foreman, node_modules, .env,
+__pycache__, or .pytest-tmp entries:
+rtk proxy C:/Python314/python.exe -c "import tarfile, zipfile; archive_root=r'D:/RepoNPC/.agent-foreman/phase2-foundation/artifacts/dist'; names=tarfile.open(archive_root + '/reponpc-0.1.0.tar.gz').getnames() + zipfile.ZipFile(archive_root + '/reponpc-0.1.0-py3-none-any.whl').namelist(); needles=('.uv-cache/', '.agent-foreman/', 'node_modules/', '.env', '__pycache__/', '.pytest-tmp/'); matches=[name for name in names if any(needle in name for needle in needles)]; print('forbidden archive entries:', matches); raise SystemExit(bool(matches))"
+exit 0: forbidden archive entries: []
+
+[GATE-DEPLOYMENT]
+rtk proxy docker.exe compose -f D:/RepoNPC/compose.yml config --quiet
+exit 1: rtk could not resolve or execute docker.exe because docker.exe is not
+installed on this host. This external runtime gate was not run.
+
+[GATE-CONTAINER]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-container -p no:cacheprovider tests/smoke/test_container.py -q
+exit 0: 1 skipped in 0.05s because docker.exe is unavailable. This is not a
+passing real-container oracle.
+
+[GATE-RUFF]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python ruff check .
+exit 0: All checks passed!
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python ruff format --check .
+exit 0: 44 files already formatted
+
+[GATE-PYTHON]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-python -p no:cacheprovider -q
+exit 0: 89 passed, 3 skipped, 1 pre-existing FastAPI/TestClient deprecation
+warning in 0.83s. Skips: two Windows-only POSIX probes and Docker smoke.
+
+[GATE-ALL]
+rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-all -p no:cacheprovider -q
+exit 0: 89 passed, 3 skipped, 1 pre-existing FastAPI/TestClient deprecation
+warning in 0.84s. The only unsatisfied blocking oracle is real Docker/Compose.

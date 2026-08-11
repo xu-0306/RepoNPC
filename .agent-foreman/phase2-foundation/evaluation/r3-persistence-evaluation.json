@@ -1,0 +1,28 @@
+{
+  "schema_name": "agent-foreman/evaluation",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-P2-FOUNDATION-20260810",
+  "phase_id": "P2-00",
+  "context_freshness": "fresh",
+  "model_diversity": "unknown",
+  "production_access": "read-only",
+  "oracle_isolation": "best_effort",
+  "new_probes": [
+    {
+      "probe_id": "R3-VOLUME-PERSISTENCE",
+      "invariant_id": "INV-DEPLOYMENT-PORTABLE",
+      "setup": "Inspect the real smoke test, Compose volume mount, Docker evidence, and final aggregate evidence.",
+      "fault_injection": "A nonpersistent or unavailable runtime data directory would lose the UUID marker across restart while a health-only check could still pass.",
+      "production_trigger": "The isolated Compose smoke writes the marker in /var/lib/reponpc, restarts app, waits for /healthz, and reads the exact marker back through docker compose exec.",
+      "oracle": "The exact marker remains readable after restart; EVID-P2-044, EVID-P2-045, and EVID-P2-046 all pass with the recorded artifact hash.",
+      "anti_oracle": "A successful health response or setup_required status without reading persisted runtime data does not prove volume retention.",
+      "command": "Read-only inspection plus Docker Desktop Compose config validation recorded in artifacts/gate-docker-persistence.txt",
+      "artifact_path": "artifacts/gate-docker-persistence.txt",
+      "exit_code": 0
+    }
+  ],
+  "recommendation": "pass",
+  "deterministic_result": "passed",
+  "findings": []
+}

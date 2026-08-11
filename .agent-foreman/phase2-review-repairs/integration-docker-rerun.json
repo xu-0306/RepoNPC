@@ -1,0 +1,96 @@
+{
+  "schema_name": "agent-foreman/integration",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-P2-REPAIR-20260811",
+  "phase_id": "PHASE-2-REPAIR-DOCKER-RERUN",
+  "actor_role": "main",
+  "packages": [
+    "PKG-MAIN-FREEZE",
+    "PKG-TERRA-P2-REPAIR",
+    "PKG-MAIN-REVIEW"
+  ],
+  "delta_guard": {
+    "passed": false,
+    "artifact": ".agent-foreman/phase2-review-repairs/evaluation/delta-guard-amendment-01.json",
+    "limitation": "The historical non-Git shared-workspace attribution failure remains unchanged by the Docker rerun."
+  },
+  "focused_gates": [
+    "GATE-RUNTIME",
+    "GATE-GITHUB",
+    "GATE-RETRIEVAL",
+    "GATE-PUBLIC",
+    "GATE-BUNDLE",
+    "GATE-INDEX",
+    "GATE-SECURITY",
+    "GATE-BENCHMARK"
+  ],
+  "aggregate_gates": [
+    "GATE-PYTHON",
+    "GATE-RUFF",
+    "GATE-WEB",
+    "GATE-DOCKER",
+    "GATE-LEDGER"
+  ],
+  "deterministic_result": "failed",
+  "evaluator_recommendation": "not_run",
+  "status": "blocked",
+  "rework": {
+    "worker_changed_lines": null,
+    "main_changed_lines_in_worker_scope": null,
+    "reason": "No production code changed during the Docker rerun."
+  },
+  "resolved_gates": [
+    {
+      "gate_id": "GATE-DOCKER",
+      "evidence": ".agent-foreman/phase2-review-repairs/evaluation/gate-docker-live.xml",
+      "finding": "Docker Desktop client/server were reachable and the real container persistence/restart smoke passed: 1 passed in 30.06s."
+    }
+  ],
+  "blocked_record": {
+    "blocked_from": "implemented",
+    "invariant_id": "INV-REPAIR-EVIDENCE",
+    "gate_id": "GATE-BENCHMARK",
+    "location": "evals/phase2/run_benchmark.py:formal_acceptance",
+    "actual": "Formal benchmark acceptance is false; GATE-GITHUB and GATE-PUBLIC also fail, and the historical ownership delta guard remains failed.",
+    "expected": "Every blocking deterministic Phase 2 gate passes with attributable evidence.",
+    "evidence_artifact": ".agent-foreman/phase2-review-repairs/evaluation/main-benchmark.json",
+    "next_action": "Obtain the owner's sequencing and schema decision for the production embedding path and bilingual profile bundle contract."
+  },
+  "remaining_blockers": [
+    {
+      "gate_id": "GATE-GITHUB",
+      "evidence": ".agent-foreman/phase2-review-repairs/evaluation/gate-github-cli.txt",
+      "finding": "The workflow invokes reponpc config/index commands that do not exist; the console entrypoint starts ASGI deployment and exits on missing deployment environment."
+    },
+    {
+      "gate_id": "GATE-PUBLIC",
+      "evidence": ".agent-foreman/phase2-review-repairs/evaluation/gate-public-contract.txt",
+      "finding": "The real route returns one profile.json object unchanged for both locales, while the approved public response contract requires the requested locale."
+    },
+    {
+      "gate_id": "GATE-BENCHMARK",
+      "evidence": ".agent-foreman/phase2-review-repairs/evaluation/main-benchmark.json",
+      "finding": "Recall, parity, and latency meet harness thresholds, but fixture provider, unenforced oracle isolation, and unverified reference host keep formal_acceptance=false."
+    },
+    {
+      "gate_id": null,
+      "evidence": ".agent-foreman/phase2-review-repairs/evaluation/delta-guard-amendment-01.json",
+      "finding": "The historical ownership guard remains failed and includes tests/unit/test_rrf.py outside the frozen worker scope."
+    }
+  ],
+  "remaining_risks": [
+    {
+      "evidence": ".agent-foreman/phase2-review-repairs/evaluation/gate-repository-metadata.txt",
+      "finding": "The real fixture index emits zero repository_metadata sources although that category is configurable and expected by the specification."
+    },
+    {
+      "evidence": "docs/DELIVERY_PHASES.md:24",
+      "finding": "Phase 2 requires a declared embedding contract, while concrete OpenAI-compatible, Ollama, and local adapters are sequenced in Phase 3; the build workflow needs a production embedding path."
+    },
+    {
+      "evidence": "Agent Foreman evaluation protocol",
+      "finding": "Verified completion still requires fresh independent falsification evidence after the remaining production repairs."
+    }
+  ]
+}

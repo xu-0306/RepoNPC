@@ -1,0 +1,4 @@
+Command: rtk proxy uv ... ruff check .
+Exit: 0
+Result: All checks passed.
+Scope: repository Ruff exclusions omit cache, generated frontend build, virtual environment, temporary test, and governance-artifact paths.
