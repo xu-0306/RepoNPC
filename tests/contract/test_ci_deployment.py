@@ -56,3 +56,18 @@ def test_ci_uses_least_privilege_pinned_actions_and_locked_gates() -> None:
         "docker build --tag reponpc:ci .",
     ):
         assert command in workflow
+
+
+def test_index_workflow_installs_indexer_extra_and_keeps_manifest_publication_last() -> None:
+    workflow = read(".github/workflows/build-index.yml")
+
+    assert "uv sync --locked --extra indexer" in workflow
+    commands = [
+        "uv run reponpc config validate reponpc.yml",
+        "uv run reponpc index build --config reponpc.yml --output dist",
+        "uv run reponpc index publish --bundle-dir dist",
+        "uv run reponpc index publish-manifest --bundle-dir dist",
+    ]
+    positions = [workflow.index(command) for command in commands]
+    assert positions == sorted(positions)
+    assert workflow.rstrip().endswith("uv run reponpc index publish-manifest --bundle-dir dist")

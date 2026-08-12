@@ -44,6 +44,9 @@ _SECRET_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
 )
 _DOCUMENT_SUFFIXES: Final[frozenset[str]] = frozenset({".md", ".markdown", ".rst", ".txt"})
+_ROOT_REPOSITORY_METADATA: Final[frozenset[str]] = frozenset(
+    {"pyproject.toml", "package.json", "Cargo.toml", "go.mod", "requirements.txt"}
+)
 
 
 class IndexBuildError(RuntimeError):
@@ -539,7 +542,7 @@ class IndexDatabaseBuilder:
         if not evidence_rows:
             raise IndexBuildError("index_has_no_evidence")
         ordered = tuple(sorted(evidence_rows, key=lambda item: item.evidence_id or ""))
-        texts = [self._identity.passage_prefix + evidence.content for evidence in ordered]
+        texts = [evidence.content for evidence in ordered]
         vectors = self._embedding_provider.embed_passages(texts)
         try:
             matrix = validate_vector_matrix(
@@ -658,6 +661,8 @@ def _language_for_path(path: str) -> str:
 
 
 def _source_type(path: str) -> str:
+    if path in _ROOT_REPOSITORY_METADATA:
+        return "repository_metadata"
     return "documentation" if Path(path).suffix.casefold() in _DOCUMENT_SUFFIXES else "source_code"
 
 

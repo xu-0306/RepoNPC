@@ -1,218 +1,205 @@
+"""Host-only scoring and Docker oracle-isolation contract for the formal benchmark."""
+
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
-from evals.phase2 import run_benchmark
-from evals.phase2.run_benchmark import (
-    FixtureEmbeddingProvider,
-    _pair_results,
-    _retrieve,
-    _validate_inputs,
-)
+from evals.phase2.run_benchmark import derive_formal_report, validate_candidate_output
+
+ROOT = Path(__file__).parents[2]
+QUESTIONS = ROOT / "evals" / "phase2" / "public" / "questions.json"
+ORACLE = ROOT / "evals" / "phase2" / "controller" / "expected-evidence.json"
 
 
-def _valid() -> tuple[list[dict[str, str]], dict[str, tuple[str, ...]]]:
-    questions = []
-    expectations: dict[str, tuple[str, ...]] = {}
-    for number in range(10):
-        for locale in ("en", "zh-TW"):
-            identifier = f"q{number}-{locale}"
-            questions.append(
-                {
-                    "id": identifier,
-                    "pair_id": f"p{number}",
-                    "locale": locale,
-                    "question": "question",
-                }
-            )
-            expectations[identifier] = (f"src/{number % 5}.py",)
+def _inputs():
+    questions = json.loads(QUESTIONS.read_text(encoding="utf-8"))["questions"]
+    expectations = {
+        item["id"]: tuple(item["acceptable_paths"])
+        for item in json.loads(ORACLE.read_text(encoding="utf-8"))["expectations"]
+    }
     return questions, expectations
 
 
-def test_fixture_identity_is_truthful() -> None:
-    identity = FixtureEmbeddingProvider().identity()
-    assert (identity.adapter, identity.model_id) == (
-        "deterministic_fixture",
-        "sha256-token-hash-v1",
-    )
-
-
-def test_pair_parity_requires_both_hits_not_path_overlap() -> None:
-    result = _pair_results(
-        [
-            {"pair_id": "p", "locale": "en", "hit": True, "retrieved_paths": ["wrong"]},
-            {"pair_id": "p", "locale": "zh-TW", "hit": False, "retrieved_paths": ["wrong"]},
-        ]
-    )[0]
-    assert result["equivalent"] is False and result["both_hit"] is False
-
-
-def test_valid_synthetic_inputs_pass() -> None:
-    questions, expectations = _valid()
-    _validate_inputs(questions, expectations)
-
-
-@pytest.mark.parametrize(
-    "kind",
-    ["duplicate", "locale", "question", "pair", "mismatch", "paths", "pairing", "pairs", "targets"],
-)
-def test_invalid_inputs_fail(kind: str) -> None:
-    questions, expectations = _valid()
-    if kind == "duplicate":
-        questions[1]["id"] = questions[0]["id"]
-    elif kind == "locale":
-        questions[0]["locale"] = "fr"
-    elif kind == "question":
-        questions[0]["question"] = ""
-    elif kind == "pair":
-        questions[0]["pair_id"] = ""
-    elif kind == "mismatch":
-        expectations.pop(next(iter(expectations)))
-    elif kind == "paths":
-        expectations[next(iter(expectations))] = ("",)
-    elif kind == "pairing":
-        questions[1]["locale"] = "en"
-    elif kind == "pairs":
-        questions = questions[:18]
-        expectations = {q["id"]: expectations[q["id"]] for q in questions}
-    else:
-        expectations = {key: ("one.py",) for key in expectations}
-    with pytest.raises(ValueError):
-        _validate_inputs(questions, expectations)
-
-
-def test_retrieve_warmup_and_measurement_round_accounting() -> None:
-    questions, expectations = _valid()
-    questions = questions[:10]
-    expectations = {item["id"]: expectations[item["id"]] for item in questions}
-
-    class Index:
-        def __init__(self) -> None:
-            self.calls = 0
-
-        def hybrid_candidates(self, *args: object, **kwargs: object) -> list[str]:
-            self.calls += 1
-            return []
-
-        def evidence(self, evidence_id: str) -> None:
-            return None
-
-    class Verified:
-        def __init__(self) -> None:
-            self.index = Index()
-
-    verified = Verified()
-    _, warmup_timings = _retrieve(
-        verified, FixtureEmbeddingProvider(), questions, expectations, timed=False
-    )
-    assert warmup_timings == []
-    verified.index.calls = 0
-    results, timings = _retrieve(
-        verified, FixtureEmbeddingProvider(), questions, expectations, rounds=5, timed=True
-    )
-    assert verified.index.calls == 50
-    assert len(timings) == 50
-    assert len(results) == 10
-
-
-@pytest.mark.parametrize(
-    ("warmup_rounds", "measurement_rounds"),
-    [(True, 1), (1, False), (0, 1), (-1, 1), (1, 0), (1, -1)],
-)
-def test_run_rejects_invalid_round_counts_before_building_or_writing_artifacts(
-    tmp_path, monkeypatch, warmup_rounds: int, measurement_rounds: int
-) -> None:
-    questions, expectations = _valid()
-    questions_path = tmp_path / "questions.json"
-    oracle_path = tmp_path / "oracle.json"
-    artifacts_path = tmp_path / "artifacts" / "benchmark.json"
-    questions_path.write_text(
-        json.dumps({"schema_version": 1, "questions": questions}), encoding="utf-8"
-    )
-    oracle_path.write_text(
-        json.dumps(
+def _candidate() -> dict[str, object]:
+    questions, expectations = _inputs()
+    return {
+        "schema_name": "reponpc/phase2-candidate",
+        "schema_version": 1,
+        "provider": {
+            "adapter": "local_sentence_transformers",
+            "model_id": "intfloat/multilingual-e5-small",
+            "dimension": 384,
+            "normalized": True,
+            "query_prefix": "query: ",
+            "passage_prefix": "passage: ",
+        },
+        "builds": [
             {
-                "schema_version": 1,
-                "expectations": [
-                    {"id": identifier, "acceptable_paths": list(paths)}
-                    for identifier, paths in expectations.items()
-                ],
+                "manifest_sha256": "a" * 64,
+                "archive_sha256": "b" * 64,
+                "database_sha256": "c" * 64,
+            },
+            {
+                "manifest_sha256": "a" * 64,
+                "archive_sha256": "b" * 64,
+                "database_sha256": "c" * 64,
+            },
+        ],
+        "results": [
+            {
+                "id": item["id"],
+                "pair_id": item["pair_id"],
+                "locale": item["locale"],
+                "retrieved_evidence_ids": [f"evidence-{index}"],
+                "retrieved_paths": [expectations[item["id"]][0]],
             }
-        ),
-        encoding="utf-8",
-    )
-    build_called = False
-
-    def fail_if_called(*args: object, **kwargs: object) -> None:
-        nonlocal build_called
-        build_called = True
-        raise AssertionError("bundle build must not run for invalid round counts")
-
-    monkeypatch.setattr(run_benchmark, "_build_verified_bundle", fail_if_called)
-
-    with pytest.raises(ValueError) as captured:
-        run_benchmark.run(
-            questions_path=questions_path,
-            oracle_path=oracle_path,
-            artifacts_path=artifacts_path,
-            warmup_rounds=warmup_rounds,
-            measurement_rounds=measurement_rounds,
-        )
-
-    assert str(captured.value) == "round counts must be positive"
-    assert build_called is False
-    assert artifacts_path.exists() is False
-
-
-def test_real_pipeline_report_contract(tmp_path) -> None:
-    artifacts_path = tmp_path / "benchmark.json"
-    report = run_benchmark.run(
-        questions_path=run_benchmark.PUBLIC_QUESTIONS,
-        oracle_path=run_benchmark.CONTROLLER_ORACLE,
-        artifacts_path=artifacts_path,
-        warmup_rounds=2,
-        measurement_rounds=2,
-    )
-
-    assert report["question_count"] == 20
-    assert report["pair_count"] == 10
-    assert report["distinct_expected_path_count"] == 6
-    assert report["timing_sample_count"] == 40
-    indexed = report["indexed"]
-    assert isinstance(indexed, dict)
-    assert isinstance(indexed["evidence_records"], int) and indexed["evidence_records"] > 0
-    assert isinstance(indexed["sources"], int) and indexed["sources"] > 0
-    assert indexed["repositories"] == 1
-    assert report["provider"] == {
-        "adapter": "deterministic_fixture",
-        "model_id": "sha256-token-hash-v1",
-        "dimension": 384,
-        "normalized": True,
-        "query_prefix": "query: ",
-        "passage_prefix": "passage: ",
+            for index, item in enumerate(questions)
+        ],
+        "timings_ns": [1_000_000] * (len(questions) * 5),
+        "warmup_rounds": 2,
+        "measurement_rounds": 5,
+        "indexed": {"repositories": 1, "sources": 10, "evidence_records": 20},
+        "provenance": {
+            "python": "3.14.7",
+            "numpy": "2.4.3",
+            "sentence_transformers": "5.7.0",
+            "torch": "2.13.0",
+            "platform": "linux",
+        },
     }
-    assert report["provider_is_production"] is False
-    host = report["reference_host"]
-    assert isinstance(host, dict)
-    assert all(host.get(key) for key in ("python", "platform", "numpy", "machine", "processor"))
-    assert isinstance(host.get("logical_cpu_count"), int)
-    assert host["target"] == {"cpu_cores": 4, "memory_gib": 8}
-    assert report["oracle_isolation"] == "best_effort"
-    assert report["oracle_isolation_enforced"] is False
-    assert report["reference_host_verified"] is False
-    assert report["formal_blockers"] == [
-        "fixture_provider_nonproduction",
-        "oracle_isolation_not_enforced",
-        "reference_host_not_verified",
-    ]
+
+
+def _inspect() -> dict[str, object]:
+    return {
+        "HostConfig": {
+            "NanoCpus": 4_000_000_000,
+            "Memory": 8 * 1024 * 1024 * 1024,
+            "NetworkMode": "none",
+        },
+        "Mounts": [
+            {"Type": "bind", "Destination": "/input", "RW": False},
+            {"Type": "bind", "Destination": "/output", "RW": True},
+        ],
+        "State": {"ExitCode": 0},
+    }
+
+
+def test_host_derives_formal_acceptance_from_raw_candidate_and_docker_evidence() -> None:
+    questions, _ = _inputs()
+    candidate = _candidate()
+    validate_candidate_output(candidate, questions)
+
+    report = derive_formal_report(
+        candidate=candidate,
+        container_inspect=_inspect(),
+        image_inspect={"Id": "sha256:" + "d" * 64, "RepoDigests": []},
+        access_probe={
+            "oracle_paths_readable": False,
+            "oracle_named_files": [],
+            "input_files": ["questions.json", "reponpc.yml", "repository"],
+        },
+        host_provenance={"docker": "fixture", "host": "fixture"},
+        candidate_exit_code=0,
+    )
+
+    assert report["provider_is_production"] is True
+    assert report["oracle_isolation_enforced"] is True
+    assert report["reference_host_verified"] is True
+    assert report["repeatable"] is True
+    assert report["recall_at_8"] == 1.0
+    assert report["language_parity"] == 1.0
+    assert report["formal_blockers"] == []
+    assert report["formal_acceptance"] is True
+    assert report["inputs"] == {
+        "questions_path": "evals/phase2/public/questions.json",
+        "questions_sha256": hashlib.sha256(QUESTIONS.read_bytes()).hexdigest(),
+        "oracle_path": "evals/phase2/controller/expected-evidence.json",
+        "oracle_sha256": hashlib.sha256(ORACLE.read_bytes()).hexdigest(),
+    }
+
+
+def test_candidate_cannot_supply_oracle_or_acceptance_booleans() -> None:
+    questions, _ = _inputs()
+    candidate = _candidate()
+    candidate["formal_acceptance"] = True
+
+    with pytest.raises(ValueError):
+        validate_candidate_output(candidate, questions)
+
+
+def test_missing_limit_or_probe_evidence_blocks_host_acceptance() -> None:
+    inspect = _inspect()
+    inspect["HostConfig"]["Memory"] = 1024  # type: ignore[index]
+
+    report = derive_formal_report(
+        candidate=_candidate(),
+        container_inspect=inspect,
+        image_inspect={"Id": "sha256:" + "d" * 64, "RepoDigests": []},
+        access_probe={"oracle_paths_readable": True, "oracle_named_files": ["forbidden"]},
+        host_provenance={"docker": "fixture", "host": "fixture"},
+        candidate_exit_code=0,
+    )
+
     assert report["formal_acceptance"] is False
-    assert report["passed"] is False
-    assert isinstance(report["harness_thresholds_met"], bool)
-    pair_results = report["pair_results"]
-    assert isinstance(pair_results, list)
-    for pair in pair_results:
-        assert isinstance(pair, dict)
-        assert pair["equivalent"] == pair["both_hit"]
-    assert json.loads(artifacts_path.read_text(encoding="utf-8")) == report
+    assert "resource_limits_not_verified" in report["formal_blockers"]
+    assert "oracle_isolation_not_enforced" in report["formal_blockers"]
+    assert report["oracle_isolation"] == "failed"
+
+
+def test_formal_controller_hard_binds_reviewed_questions_and_oracle(tmp_path: Path) -> None:
+    candidate = _candidate()
+    for result in candidate["results"]:  # type: ignore[union-attr]
+        result["retrieved_paths"] = ["attacker-selected.md"]
+
+    report = derive_formal_report(
+        candidate=candidate,
+        container_inspect=_inspect(),
+        image_inspect={"Id": "sha256:" + "d" * 64, "RepoDigests": []},
+        access_probe={
+            "oracle_paths_readable": False,
+            "oracle_named_files": [],
+            "input_files": ["questions.json", "reponpc.yml", "repository"],
+        },
+        host_provenance={"docker": "fixture", "host": "fixture"},
+        candidate_exit_code=0,
+    )
+
+    assert report["recall_at_8"] == 0.0
+    assert report["formal_acceptance"] is False
+    assert "recall_below_threshold" in report["formal_blockers"]
+
+    artifact = tmp_path / "must-not-exist.json"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "evals" / "phase2" / "run_benchmark.py"),
+            "--artifacts",
+            str(artifact),
+            "--oracle",
+            str(tmp_path / "attacker-oracle.json"),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    assert completed.returncode == 2
+    assert "unrecognized arguments: --oracle" in completed.stderr
+    assert not artifact.exists()
+
+
+def test_benchmark_image_never_copies_controller_or_oracle() -> None:
+    dockerfile = (ROOT / "evals" / "phase2" / "Dockerfile").read_text(encoding="utf-8")
+    lowered = dockerfile.casefold()
+
+    assert "controller" not in lowered
+    assert "expected-evidence" not in lowered
+    assert "copy candidate_runner.py" in lowered
+    assert "--extra indexer" in dockerfile

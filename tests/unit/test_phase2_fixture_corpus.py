@@ -23,6 +23,7 @@ PUBLIC_FIXTURE_PATHS = {
     "keys/id_rsa",
     "node_modules/fixture-package/index.js",
     "poetry.lock",
+    "pyproject.toml",
     "src/retrieval_pipeline.py",
     "src/search_handler.ts",
 }

@@ -1,0 +1,21 @@
+{
+  "anti_oracle": "Independent producer snapshots or route fixtures that never cross archive verification do not count.",
+  "artifact_path": ".agent-foreman/phase2-closure/evaluation/probe-profile-bilingual.json",
+  "baseline_commit": "83c3dd44f7cc2856dc3b61d9f637337f1a466d3e",
+  "command": "rtk proxy .venv/Scripts/python.exe .agent-foreman/phase2-closure/evaluation/fresh_probes.py profile_bilingual .agent-foreman/phase2-closure/evaluation/probe-profile-bilingual.json",
+  "exit_code": 0,
+  "fault_injection": "Delete the en locale from the produced schema in memory and pass it to the production profile parser.",
+  "invariant_id": "INV-PROFILE-BILINGUAL",
+  "next_action": null,
+  "observations": {
+    "en_status": 200,
+    "missing_en_rejected": true,
+    "valid_route": true,
+    "zh_status": 200
+  },
+  "oracle": "Both real locale routes return distinct complete payloads; a missing locale is rejected.",
+  "probe_id": "PROBE-P2C-PROFILE-BILINGUAL-001",
+  "production_trigger": "Run build_bundle -> verify_bundle_archive -> GET /api/public/profile for both locales, plus the schema parser fault boundary.",
+  "setup": "Build production profile bytes into a real archive, verify it, and expose that same verified public directory through the real FastAPI route.",
+  "status": "passed"
+}

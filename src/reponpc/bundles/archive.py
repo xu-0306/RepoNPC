@@ -25,6 +25,11 @@ from reponpc.bundles.manifest import (
     parse_bundle_manifest,
 )
 from reponpc.indexing.index_database import IndexBuildResult
+from reponpc.indexing.public_profile import (
+    PublicProfileError,
+    parse_public_profile_bytes,
+    validate_public_profile_metadata,
+)
 from reponpc.indexing.sources import EmbeddingIdentity, ResolvedConfiguration, ResolvedRepository
 
 APPLICATION_VERSION: Final = "0.1.0"
@@ -123,6 +128,7 @@ def build_bundle(
         ),
         files=files,
     )
+    _validate_public_profile_payload(public_files["public/profile.json"], manifest)
     manifest_bytes = manifest.canonical_bytes()
     checksums = {
         "manifest.json": _sha256(manifest_bytes),
@@ -203,7 +209,7 @@ def verify_bundle_archive(
         if manifest.embedding != expected_embedding:
             raise BundleError("bundle_embedding_incompatible")
         _verify_layout_and_checksums(staging_directory, manifest)
-        _verify_public_assets(staging_directory)
+        _verify_public_assets(staging_directory, manifest)
         try:
             index = ReadOnlyIndex.open(
                 staging_directory / "index.sqlite", expected_embedding=expected_embedding
@@ -244,7 +250,7 @@ def verify_retained_bundle_directory(
         if manifest.embedding != expected_embedding:
             raise BundleError("bundle_embedding_incompatible")
         _verify_layout_and_checksums(directory, manifest)
-        _verify_public_assets(directory)
+        _verify_public_assets(directory, manifest)
         try:
             index = ReadOnlyIndex.open(
                 directory / "index.sqlite", expected_embedding=expected_embedding
@@ -326,13 +332,12 @@ def _verify_layout_and_checksums(staging: Path, manifest: BundleManifest) -> Non
             raise BundleError("bundle_payload_checksum_invalid")
 
 
-def _verify_public_assets(staging: Path) -> None:
+def _verify_public_assets(staging: Path, manifest: BundleManifest) -> None:
     try:
-        profile = json.loads((staging / "public/profile.json").read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        profile_bytes = (staging / "public/profile.json").read_bytes()
+        _validate_public_profile_payload(profile_bytes, manifest)
+    except (OSError, PublicProfileError) as exc:
         raise BundleError("bundle_profile_invalid") from exc
-    if not isinstance(profile, dict):
-        raise BundleError("bundle_profile_invalid")
     if not (staging / "public/character.png").read_bytes().startswith(_PNG_SIGNATURE):
         raise BundleError("bundle_character_invalid")
     for path in _CARD_VARIANTS:
@@ -341,6 +346,20 @@ def _verify_public_assets(staging: Path) -> None:
             raise BundleError("bundle_card_invalid")
         if path.endswith(".svg") and not payload.lstrip().startswith(b"<svg"):
             raise BundleError("bundle_card_invalid")
+
+
+def _validate_public_profile_payload(payload: bytes, manifest: BundleManifest) -> None:
+    try:
+        document = parse_public_profile_bytes(payload)
+        statistics = dict(manifest.statistics)
+        validate_public_profile_metadata(
+            document,
+            index_version=manifest.bundle_id,
+            built_at=manifest.built_at,
+            repository_count=statistics["repositories"],
+        )
+    except (KeyError, PublicProfileError) as exc:
+        raise BundleError("bundle_profile_invalid") from exc
 
 
 def _safe_member_name(name: str) -> bool:

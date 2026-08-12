@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="4" time="0.617" timestamp="2026-08-12T01:22:39.643496+08:00" hostname="DESKTOP-M18GQTS"><testcase classname="tests.integration.test_cli" name="test_real_pipeline_builds_verifies_then_splits_pending_pointer_publication" time="0.065"><failure message="reponpc.indexing.pipeline.IndexPipelineError: index workflow failed">bundle = BuiltBundle(archive_path=WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-cli/test_real_pipeline_builds_veri0/dist/reponpc-i...b8d4a71cb39'))), archive_sha256='fbcb76ada16cf801acd0d57c63afb1f8f226cb36d8a05b35a85d626917aa3374', archive_size=28225)
+output = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-cli/test_real_pipeline_builds_veri0/dist')
+
+    def _verify_built_bundle(bundle: BuiltBundle, output: Path) -&gt; None:
+        try:
+            with tempfile.TemporaryDirectory(prefix=".verify-", dir=output) as temporary:
+&gt;               verified = verify_bundle_archive(
+                    archive_path=bundle.archive_path,
+                    staging_directory=Path(temporary) / "candidate",
+                    expected_outer_sha256=bundle.archive_sha256,
+                    expected_embedding=bundle.manifest.embedding,
+                    max_bundle_bytes=bundle.archive_size,
+                )
+
+src\reponpc\indexing\pipeline.py:257: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\reponpc\bundles\archive.py:205: in verify_bundle_archive
+    _stage_safe_members(archive_path, staging_directory, max_bundle_bytes)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+archive_path = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-cli/test_real_pipeline_builds_veri0/dist/reponpc-index-20260812T010203Z-ec85ad28360a.tar.zst')
+staging = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-cli/test_real_pipeline_builds_veri0/dist/.verify-0w2poese/candidate')
+max_size = 28225
+
+    def _stage_safe_members(archive_path: Path, staging: Path, max_size: int) -&gt; None:
+        with tarfile.open(archive_path, "r:zst") as archive:
+            members = archive.getmembers()
+            names = [member.name for member in members]
+            if len(members) &gt; ARCHIVE_FILE_LIMIT or len(names) != len(set(names)):
+                raise BundleError("bundle_member_count_invalid")
+            total_size = 0
+            for member in members:
+                if not member.isreg() or not _safe_member_name(member.name):
+                    raise BundleError("bundle_member_unsafe")
+                total_size += member.size
+                if member.size &lt; 0 or total_size &gt; max_size:
+&gt;                   raise BundleError("bundle_uncompressed_size_invalid")
+E                   reponpc.bundles.archive.BundleError: bundle validation failed
+
+src\reponpc\bundles\archive.py:301: BundleError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-cli/test_real_pipeline_builds_veri0')
+
+    def test_real_pipeline_builds_verifies_then_splits_pending_pointer_publication(
+        tmp_path: Path,
+    ) -&gt; None:
+        config_path = tmp_path / "reponpc.yml"
+        config_content = FIXTURE_CONFIG.read_text(encoding="utf-8")
+        config_path.write_text(config_content, encoding="utf-8")
+        public_directory = _write_public_assets(tmp_path)
+        output = tmp_path / "dist"
+        built_at = datetime(2026, 8, 12, 1, 2, 3, tzinfo=UTC)
+        configuration_source = ResolvedConfiguration(
+            repository_slug="fixture-owner/reponpc-demo",
+            commit_sha="a" * 40,
+            path="reponpc.yml",
+            content=config_content,
+            github_html_url="https://github.com/fixture-owner/reponpc-demo",
+        )
+    
+&gt;       bundle = build_index_bundle(
+            config_path,
+            output,
+            resolver=FixtureResolver(),
+            embedding_provider=DeterministicEmbeddingProvider(),
+            configuration_source=configuration_source,
+            built_at=built_at,
+            public_directory=public_directory,
+        )
+
+tests\integration\test_cli.py:96: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\reponpc\indexing\pipeline.py:163: in build_index_bundle
+    _verify_built_bundle(bundle, output)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+bundle = BuiltBundle(archive_path=WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-cli/test_real_pipeline_builds_veri0/dist/reponpc-i...b8d4a71cb39'))), archive_sha256='fbcb76ada16cf801acd0d57c63afb1f8f226cb36d8a05b35a85d626917aa3374', archive_size=28225)
+output = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-cli/test_real_pipeline_builds_veri0/dist')
+
+    def _verify_built_bundle(bundle: BuiltBundle, output: Path) -&gt; None:
+        try:
+            with tempfile.TemporaryDirectory(prefix=".verify-", dir=output) as temporary:
+                verified = verify_bundle_archive(
+                    archive_path=bundle.archive_path,
+                    staging_directory=Path(temporary) / "candidate",
+                    expected_outer_sha256=bundle.archive_sha256,
+                    expected_embedding=bundle.manifest.embedding,
+                    max_bundle_bytes=bundle.archive_size,
+                )
+                verified.close()
+        except (BundleError, OSError) as exc:
+&gt;           raise IndexPipelineError("built_bundle_verification_failed") from exc
+E           reponpc.indexing.pipeline.IndexPipelineError: index workflow failed
+
+src\reponpc\indexing\pipeline.py:266: IndexPipelineError</failure></testcase><testcase classname="tests.integration.test_cli" name="test_entrypoint_mapping_and_no_argument_serve_dispatch" time="0.002" /><testcase classname="tests.integration.test_cli" name="test_config_and_index_commands_do_not_start_server" time="0.016" /><testcase classname="tests.integration.test_cli" name="test_cli_failure_is_nonzero_safe_and_does_not_echo_internal_text" time="0.003" /></testsuite></testsuites>

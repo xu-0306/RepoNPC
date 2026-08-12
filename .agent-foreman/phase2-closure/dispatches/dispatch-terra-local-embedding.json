@@ -1,0 +1,60 @@
+{
+  "schema_name": "agent-foreman/dispatch",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-P2-CLOSURE-20260812",
+  "package_id": "PKG-TERRA-LOCAL-EMBEDDING",
+  "authorization_source": "The owner requested a Terra subagent repair and approved the recommended closure plan with '照建議方案'.",
+  "requested_selector": "gpt-5.6-terra",
+  "expected_model_verification": "unavailable",
+  "objective": "Implement only the frozen build-time local sentence-transformers adapter and its focused unit tests.",
+  "frozen_contracts": [
+    "Class LocalSentenceTransformersEmbeddingProvider has keyword-only constructor model_id: str, dimension: int, normalized: bool, query_prefix: str, passage_prefix: str, device: str='cpu', batch_size: int=32; identity(), embed_query(list[str]), and embed_passages(list[str]) implement the Main-owned protocol.",
+    "identity must be local_sentence_transformers, configured model ID/dimension/prefixes, normalized=true.",
+    "embed_query and embed_passages accept raw strings, apply exactly one configured query/passage prefix, and return finite normalized float32 matrices; empty input returns a zero-row matrix with declared width.",
+    "The module import is dependency-light; sentence_transformers is imported lazily. Dependency, model-load, encode, and output failures raise EmbeddingProviderError codes embedding_dependency_unavailable, embedding_model_load_failed, embedding_encode_failed, or embedding_output_invalid respectively, without upstream text and without trying another provider/model.",
+    "SentenceTransformer loads the configured model once on the configured device with trust_remote_code disabled; encode uses convert_to_numpy=true, normalize_embeddings=true, show_progress_bar=false, and the configured batch size."
+  ],
+  "owned_paths": [
+    "src/reponpc/providers/local_sentence_transformers.py",
+    "tests/unit/test_local_sentence_transformers.py"
+  ],
+  "prohibited_paths": [
+    "pyproject.toml",
+    "uv.lock",
+    "src/reponpc/indexing/sources.py",
+    "src/reponpc/indexing/index_database.py",
+    "src/reponpc/cli.py",
+    "evals/phase2/run_benchmark.py",
+    "docs/TECHNICAL_SPEC.md",
+    "docs/ACCEPTANCE_CRITERIA.md",
+    "docs/DECISIONS.md",
+    ".github/workflows/build-index.yml",
+    ".agent-foreman/phase2-review-repairs/plan.json",
+    ".agent-foreman/phase2-review-repairs/evidence-ledger.jsonl"
+  ],
+  "read_first": [
+    "AGENTS.md",
+    "docs/TECHNICAL_SPEC.md sections 5.4 and 13.2-13.3",
+    "docs/ACCEPTANCE_CRITERIA.md AC-008 and AC-009",
+    "docs/DECISIONS.md ADR-006 and ADR-015",
+    "src/reponpc/indexing/sources.py"
+  ],
+  "invariant_ids": ["INV-EMBEDDING-PRODUCTION", "INV-ATTRIBUTION"],
+  "gate_ids": ["GATE-LOCAL-EMBEDDING", "GATE-DELTA"],
+  "commands": [
+    "rtk proxy .venv/Scripts/python.exe -m pytest tests/unit/test_local_sentence_transformers.py -q",
+    "rtk proxy .venv/Scripts/python.exe -m ruff check src/reponpc/providers/local_sentence_transformers.py tests/unit/test_local_sentence_transformers.py",
+    "rtk proxy .venv/Scripts/python.exe -m ruff format --check src/reponpc/providers/local_sentence_transformers.py tests/unit/test_local_sentence_transformers.py"
+  ],
+  "expected_artifacts": [
+    "Main-captured exact command output for GATE-LOCAL-EMBEDDING",
+    "A handoff message containing changed paths, exact exit codes, observed results, and implemented or blocked status."
+  ],
+  "stop_conditions": [
+    "Stop as blocked if any unowned file or contract change is required.",
+    "Stop as blocked if the optional dependency cannot be imported through the frozen lazy-load boundary.",
+    "Do not modify lockfiles, provider selection, CLI, benchmark, or public contracts."
+  ],
+  "allowed_statuses": ["implemented", "blocked"]
+}

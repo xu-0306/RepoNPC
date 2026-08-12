@@ -8,13 +8,13 @@ RepoNPC is an open-source, self-hosted AI developer portfolio. It turns owner-se
 
 ## Project status
 
-RepoNPC completed specification approval on 2026-08-10. Application implementation is beginning with an MVP delivery phase while retaining the complete v1 scope.
+RepoNPC completed initial specification approval on 2026-08-10. Phase 1 and the main Phase 2 retrieval/bundle foundation are implemented; an owner-approved Phase 2 closure campaign now addresses the production index CLI/local adapter, bilingual bundle profile, repository metadata producer, and isolated formal benchmark while retaining the complete v1 scope.
 
 | Item | State |
 | --- | --- |
 | Product scope | Complete v1 defined; not a reduced MVP |
-| Technical specification | Approved 0.1.0 on 2026-08-10 |
-| Application code | MVP delivery phase in progress |
+| Technical specification | Approved 0.1.1; Phase 2 closure amendment approved 2026-08-11 |
+| Application code | Delivery Phase 2 closure in progress |
 | License target | MIT |
 | Estimated implementation | 8–12 weeks for one developer |
 
@@ -65,7 +65,7 @@ Repository/configuration text and model output are untrusted. The model has no t
 Read in this order:
 
 1. [Project context](docs/PROJECT_CONTEXT.md) — problem, users, journeys, goals, boundaries, vocabulary.
-2. [Owner review](docs/OWNER_REVIEW.md) — seven new implementation-level defaults awaiting confirmation.
+2. [Owner review](docs/OWNER_REVIEW.md) — the accepted implementation-level defaults and approval record.
 3. [Technical specification](docs/TECHNICAL_SPEC.md) — normative requirements, contracts, schemas, security, and edge cases.
 4. [Acceptance criteria](docs/ACCEPTANCE_CRITERIA.md) — Given/When/Then evidence required for every FR/NFR.
 5. [Architecture decisions](docs/DECISIONS.md) — proposed decisions and their consequences.
@@ -88,7 +88,7 @@ If these documents conflict, follow the source-of-truth order in `PROJECT_CONTEX
 - Application/indexer: FastAPI, Python, uv
 - Search: SQLite FTS5, NumPy vector ranking, RRF
 - Parsing: Tree-sitter
-- Models: OpenAI-compatible APIs, Ollama, local sentence-transformers embedding option
+- Models: optional indexer-only local sentence-transformers adapter in Phase 2; OpenAI-compatible/Ollama and runtime query-provider integration in Phase 3
 - Automation/artifacts: GitHub Actions, GitHub Releases, stable index manifest
 - Deployment: one application image through Docker Compose
 - Runtime state: persistent SQLite separate from immutable index SQLite

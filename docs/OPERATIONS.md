@@ -3,6 +3,8 @@
 **Status:** Draft operational contract; exact command output must be verified during implementation  
 **Audience:** a single owner self-hosting RepoNPC
 
+Technical Specification 0.1.1 and ADR-015 freeze the Phase 2 index CLI and build-time local-adapter boundary. Commands below remain Draft until their real closure gates pass.
+
 This guide defines the operating experience the implementation must provide. Commands are the intended stable interface; because application code does not exist yet, they must be exercised and corrected against the release candidate before this document is marked complete.
 
 ## 1. Deployment topology
@@ -75,7 +77,7 @@ No organization, issue, pull-request, package, secret, or unrelated repository a
 
 Set `REPONPC_CHAT_PROVIDER=ollama`, its private base URL, model name, and honest context/output limits. Do not publish Ollama's port to the Internet. If Ollama runs on the Docker host, use the platform's documented private host gateway rather than a public address.
 
-The embedding adapter/model used to build the bundle must exactly match runtime. The default `local_sentence_transformers` model is downloaded/cached by the build/runtime image or a documented model volume.
+The embedding adapter/model used to build the bundle must exactly match runtime. Phase 2 installs the default `local_sentence_transformers` model only through the locked optional indexer dependency used by GitHub Actions and the formal benchmark image; the normal application runtime image is not enlarged solely for indexing. Phase 3 supplies runtime query-provider health/readiness integration. Model load or encode failure is explicit and never falls back to another provider/model.
 
 ### OpenAI-compatible service
 
@@ -84,6 +86,19 @@ Set provider to `openai_compatible`, HTTPS base URL, model, and secret file. Con
 RepoNPC never silently moves between local and cloud providers. Operators should test health/status before sharing the public page.
 
 ## 6. Publish the first index
+
+The installed entrypoint is intentionally dual-purpose:
+
+```bash
+reponpc                         # start the application
+reponpc serve                   # explicit equivalent
+reponpc config validate reponpc.yml
+reponpc index build --config reponpc.yml --output dist
+reponpc index publish --bundle-dir dist
+reponpc index publish-manifest --bundle-dir dist
+```
+
+Help and index/config commands do not load unrelated deployment startup settings. `index build` generates `public/profile.json` from validated configuration/index data and, until Phase 4 integrates the card/character producer, requires all non-profile public assets in the documented `public/` input directory. Missing or invalid assets fail the build; production placeholders are never fabricated.
 
 The `build-index.yml` workflow must:
 
@@ -95,6 +110,12 @@ The `build-index.yml` workflow must:
 6. update `stable-manifest.json` on `reponpc-index` last.
 
 The workflow may be run manually for first setup and is triggered by relevant configuration changes. A failed run must leave the prior stable manifest untouched. Do not hand-edit an immutable release asset under the same tag/name.
+
+The final two commands enforce publication-last across separate workflow steps. `index publish` creates/uploads/verifies the Release asset and writes a local pending manifest below `dist`; it cannot update the remote pointer. `index publish-manifest` refuses to run without that verified pending artifact and performs the sole stable-branch mutation.
+
+### Phase 2 formal benchmark
+
+The formal gate builds a dedicated candidate image, then runs it with four CPUs, 8 GiB memory, and only the repository fixture/public questions mounted. The reviewed expected-evidence oracle remains on the host controller and is not copied into the candidate image. The controller records Docker inspect data, an oracle access probe, image digest, Docker/host/Python/library provenance, warm-up rounds, raw timing samples, Recall@8, bilingual parity, and warm p95. It derives acceptance from those observations; there is no supported flag for callers or the candidate to assert a pass.
 
 ## 7. Start the application
 

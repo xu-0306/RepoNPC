@@ -55,7 +55,7 @@ def test_index_build_workflow_enforces_immutable_publication_order() -> None:
     assert checkout["with"]["persist-credentials"] == "false"
     assert (
         next(step for step in steps if step.get("name") == "Install locked dependencies")["run"]
-        == "uv sync --locked"
+        == "uv sync --locked --extra indexer"
     )
 
     for step in steps:
@@ -153,13 +153,26 @@ def test_concrete_publisher_releases_verifies_then_updates_only_the_fixed_pointe
     bundle, _ = _bundle(tmp_path)
     transport = RecordingGitHubTransport()
     publisher = _publisher(transport)
-    result = PublicationCoordinator(publisher).publish(
+    coordinator = PublicationCoordinator(publisher)
+    result = coordinator.publish_immutable(
         bundle,
         now=datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
     )
 
     assert result.release_tag == f"index-{bundle.manifest.bundle_id}"
-    assert [call[0] for call in transport.calls] == ["POST", "POST", "GET", "GET", "PUT"]
+    assert [call[0] for call in transport.calls] == ["POST", "POST", "GET"]
+    assert all("stable-manifest.json" not in call[1] for call in transport.calls)
+
+    coordinator.publish_manifest(result.stable_manifest)
+
+    assert [call[0] for call in transport.calls] == [
+        "POST",
+        "POST",
+        "GET",
+        "GET",
+        "GET",
+        "PUT",
+    ]
     assert transport.calls[0][1] == "https://api.github.com/repos/example/portfolio/releases"
     assert transport.calls[1][1].startswith(
         "https://uploads.github.com/repos/example/portfolio/releases/17/assets?name="
@@ -178,10 +191,12 @@ def test_existing_pointer_uses_its_current_blob_sha_only_at_final_mutation(tmp_p
     bundle, _ = _bundle(tmp_path)
     transport = RecordingGitHubTransport(existing_manifest=True)
 
-    PublicationCoordinator(_publisher(transport)).publish(
+    coordinator = PublicationCoordinator(_publisher(transport))
+    pending = coordinator.publish_immutable(
         bundle,
         now=datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
-    )
+    ).stable_manifest
+    coordinator.publish_manifest(pending)
 
     stable_write = json.loads((transport.calls[-1][2] or b"{}").decode("utf-8"))
     assert stable_write["sha"] == "a" * 40
@@ -192,7 +207,7 @@ def test_upload_failure_never_reads_or_writes_the_stable_manifest(tmp_path) -> N
     transport = RecordingGitHubTransport(fail_upload=True)
 
     with pytest.raises(PublicationError) as error:
-        PublicationCoordinator(_publisher(transport)).publish(
+        PublicationCoordinator(_publisher(transport)).publish_immutable(
             bundle,
             now=datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
         )

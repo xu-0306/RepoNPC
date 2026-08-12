@@ -21,13 +21,16 @@ This phase proves the foundation and the setup/degraded public boundary. It is n
 
 - GitHub source/ref resolution and mandatory exclusions;
 - Tree-sitter adapters and text fallback;
-- SQLite FTS5 plus declared embedding contract and NumPy vector search;
+- SQLite FTS5 plus declared embedding contract, the optional build-time production `local_sentence_transformers` adapter, and NumPy vector search;
+- executable `reponpc config validate` and `reponpc index build|publish|publish-manifest` commands while no arguments/`serve` retain application startup;
+- line-addressable root manifest evidence classified as `repository_metadata` without conflating owner assertions;
+- one verified bilingual `public/profile.json` producer consumed by the bundle verifier and locale-selecting public route;
 - immutable bundle build, validation, activation, retention, pinning, and rollback;
-- retrieval, reproducibility, bilingual parity, and bundle-security gates.
+- retrieval, reproducibility, bilingual parity, bundle-security, publication-last, and Docker-isolated formal benchmark gates with host-only oracle/scoring.
 
 ## Phase 3 — Grounded chat and visitor experience
 
-- OpenAI-compatible, Ollama, and local embedding adapters;
+- OpenAI-compatible and Ollama chat/embedding adapters plus runtime query-provider health/readiness integration of the Phase 2 local adapter;
 - buffered answer validation, owner-assertion policy, immutable citations, abstention, and exact SSE contract;
 - public limits, safe logging, model/index status, and no silent provider fallback;
 - responsive bilingual visitor UI, suggested questions, citations, keyboard/accessibility, and character lifecycle states.

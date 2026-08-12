@@ -52,12 +52,18 @@ def test_publication_advances_stable_manifest_only_after_verified_immutable_asse
 ) -> None:
     bundle, _ = _bundle(tmp_path)
     publisher = RecordingPublisher()
-    result = PublicationCoordinator(publisher).publish(
+    coordinator = PublicationCoordinator(publisher)
+    result = coordinator.publish_immutable(
         bundle,
         now=datetime(2026, 8, 10, 12, 1, tzinfo=UTC),
     )
 
-    assert publisher.events == ["release", "upload", "verify", "stable"]
+    assert publisher.events == ["release", "upload", "verify"]
+    assert publisher.stable_content == b'{"prior":"stable"}'
+
+    coordinator.publish_manifest(result.stable_manifest)
+
+    assert publisher.events == ["release", "upload", "verify", "verify", "stable"]
     assert publisher.stable_content == result.stable_manifest.canonical_bytes()
 
 
@@ -70,10 +76,27 @@ def test_failed_preceding_stage_preserves_prior_stable_manifest(
     prior = publisher.stable_content
 
     with pytest.raises(PublicationError) as error:
-        PublicationCoordinator(publisher).publish(
+        PublicationCoordinator(publisher).publish_immutable(
             bundle,
             now=datetime(2026, 8, 10, 12, 1, tzinfo=UTC),
         )
     assert error.value.code == "bundle_publication_failed"
     assert publisher.stable_content == prior
     assert "stable" not in publisher.events
+
+
+def test_manifest_step_reverifies_pending_asset_before_pointer_mutation(tmp_path: Path) -> None:
+    bundle, _ = _bundle(tmp_path)
+    publisher = RecordingPublisher()
+    coordinator = PublicationCoordinator(publisher)
+    pending = coordinator.publish_immutable(
+        bundle,
+        now=datetime(2026, 8, 10, 12, 1, tzinfo=UTC),
+    ).stable_manifest
+    publisher.fail_at = "verify"
+
+    with pytest.raises(PublicationError):
+        coordinator.publish_manifest(pending)
+
+    assert publisher.events == ["release", "upload", "verify", "verify"]
+    assert publisher.stable_content == b'{"prior":"stable"}'

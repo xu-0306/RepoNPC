@@ -1,0 +1,1028 @@
+{
+  "schema_name": "agent-foreman/plan",
+  "schema_version": "1.0",
+  "profile": "full",
+  "metadata": {
+    "plan_id": "REPONPC-P2-CLOSURE-20260812",
+    "objective": "Close RepoNPC Delivery Phase 2 from the owner-approved Git baseline by specifying and implementing the production index CLI, build-time local sentence-transformers adapter, bilingual public profile producer-consumer contract, repository metadata evidence, and a Docker-isolated formal retrieval benchmark while preserving prior evidence and last-known-good behavior.",
+    "repo_root": "D:/RepoNPC",
+    "revision": "83c3dd44f7cc2856dc3b61d9f637337f1a466d3e",
+    "dirty_state": "The owner-approved baseline plus attributed Phase 2 closure deltas are uncommitted; protected historical campaigns remain unchanged.",
+    "status": "verified",
+    "completed_by": "main",
+    "resolution_state": "resolved"
+  },
+  "main_model": {
+    "source": "current_conversation",
+    "resolved_model_id": null,
+    "verification": "unavailable",
+    "reasoning_effort": null
+  },
+  "architecture_decision": {
+    "mode": "hybrid_main_seams",
+    "selected_profile": "full",
+    "reasons": [
+      "The closure crosses the production console entrypoint, bundle publication, public API, provider identity, and benchmark trust boundary.",
+      "The owner explicitly authorized Terra, but only a frozen one-production-file/one-test-file embedding leaf is safe under degraded identity verification."
+    ],
+    "rejected_modes": [
+      {
+        "mode": "main_plan_weak_leaf",
+        "reason": "Public profile, CLI, publication-last, and oracle isolation are critical shared seams and cannot be delegated."
+      },
+      {
+        "mode": "main_direct",
+        "reason": "Main-direct is safe but would not use the owner-authorized bounded Terra leaf after its interface is frozen."
+      }
+    ],
+    "advisor_required": true
+  },
+  "capability_cards": [
+    {
+      "card_id": "CAP-TERRA-LOCAL-EMBEDDING",
+      "requested_selector": "gpt-5.6-terra",
+      "resolved_model_id": null,
+      "verification": "unavailable",
+      "context_limit": "unknown",
+      "tool_access": [
+        "shared D:/RepoNPC filesystem",
+        "apply_patch",
+        "rtk-prefixed PowerShell commands",
+        "pytest"
+      ],
+      "repository_access": "Shared workspace access is host-defined; write scope is enforced by dispatch fingerprint and Git delta guard.",
+      "evidence": [],
+      "known_limits": [
+        "Actual model identity and comparable capability evidence are unavailable before dispatch.",
+        "Degraded routing permits at most one production file and one test file."
+      ],
+      "routing_confidence": "degraded"
+    }
+  ],
+  "current_state_evidence": [
+    {
+      "path": "pyproject.toml",
+      "symbol": "project.scripts.reponpc",
+      "observation": "The console script resolves to reponpc.main:run, so --help and every workflow subcommand enter deployment startup and fail environment validation.",
+      "status": "observed"
+    },
+    {
+      "path": "src/reponpc/indexing/sources.py",
+      "symbol": "PassageEmbeddingProvider",
+      "observation": "Only a protocol exists and its docstring explicitly defers concrete adapters; no production local sentence-transformers adapter is shipped.",
+      "status": "observed"
+    },
+    {
+      "path": "src/reponpc/api/public.py",
+      "symbol": "create_public_router.profile",
+      "observation": "The route validates locale but returns the same unvalidated profile.json object for zh-TW and en.",
+      "status": "observed"
+    },
+    {
+      "path": "src/reponpc/bundles/archive.py",
+      "symbol": "_verify_public_assets",
+      "observation": "The verifier requires only that profile.json decode to an object; it does not validate both locale payloads or the public response fields.",
+      "status": "observed"
+    },
+    {
+      "path": "src/reponpc/indexing/index_database.py",
+      "symbol": "_source_type",
+      "observation": "All non-documentation files are classified as source_code, so the real Phase 2 fixture produces zero repository_metadata rows.",
+      "status": "observed"
+    },
+    {
+      "path": "evals/phase2/run_benchmark.py",
+      "symbol": "run",
+      "observation": "The benchmark uses FixtureEmbeddingProvider, reads the controller oracle in the candidate process, does not enforce Docker resource limits, and hardcodes formal_acceptance false.",
+      "status": "observed"
+    },
+    {
+      "path": ".agent-foreman/phase2-review-repairs/integration-docker-rerun.json",
+      "symbol": "GATE-DOCKER",
+      "observation": "A real Docker persistence/restart smoke passed on Docker Desktop 4.86.0 / Engine 29.7.2 and remains historical evidence.",
+      "status": "observed"
+    },
+    {
+      "path": ".git",
+      "symbol": "HEAD",
+      "observation": "Owner-approved audited closure baseline is commit 83c3dd44f7cc2856dc3b61d9f637337f1a466d3e with a clean production tree.",
+      "status": "observed"
+    }
+  ],
+  "control_flow": [
+    {
+      "id": "FLOW-CLI",
+      "kind": "production_entrypoint",
+      "path": "pyproject.toml -> src/reponpc/cli.py -> src/reponpc/main.py or indexing pipeline",
+      "symbol": "reponpc",
+      "next": ["FLOW-BUILD", "FLOW-PUBLISH"],
+      "failure_path": "Argparse returns a nonzero safe error without loading deployment secrets for help/validation failures."
+    },
+    {
+      "id": "FLOW-BUILD",
+      "kind": "producer",
+      "path": "config -> GitHub resolver -> embedding adapter -> IndexDatabaseBuilder -> public profile -> build_bundle",
+      "symbol": "index build",
+      "next": ["FLOW-PUBLISH", "FLOW-RUNTIME-PROFILE", "FLOW-BENCHMARK"],
+      "failure_path": "Any source, embedding, public-asset, database, or archive failure leaves no completed bundle and cannot advance a manifest."
+    },
+    {
+      "id": "FLOW-PUBLISH",
+      "kind": "external_side_effect",
+      "path": "bundle -> immutable release asset -> verified pending stable manifest -> stable branch update",
+      "symbol": "index publish / index publish-manifest",
+      "next": ["FLOW-RUNTIME-PROFILE"],
+      "failure_path": "Failure before publish-manifest leaves the previous remote stable manifest unchanged."
+    },
+    {
+      "id": "FLOW-RUNTIME-PROFILE",
+      "kind": "producer_consumer",
+      "path": "public_profile producer -> archive verifier -> BundleManager active public directory -> GET /api/public/profile",
+      "symbol": "profile.json locales selection",
+      "next": [],
+      "failure_path": "Missing, invalid, or incomplete locale data rejects the candidate or returns INDEX_UNAVAILABLE; it never cross-falls back."
+    },
+    {
+      "id": "FLOW-BENCHMARK",
+      "kind": "evaluation_boundary",
+      "path": "host controller oracle -> Docker candidate with public inputs only -> candidate retrieval output -> host scoring",
+      "symbol": "formal Phase 2 benchmark",
+      "next": [],
+      "failure_path": "Any oracle visibility, nonproduction provider, missing resource limit, missing provenance, or threshold miss forces formal_acceptance=false."
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "IFACE-EMBEDDING-P2",
+      "contract": "Build-time adapter identity exactly matches config and manifest; embed_query(list[str]) and embed_passages(list[str]) return finite normalized float32 matrices with the declared dimension. No adapter fallback is permitted.",
+      "producer": "src/reponpc/providers/local_sentence_transformers.py",
+      "consumers": ["src/reponpc/indexing/index_database.py", "evals/phase2/candidate_runner.py"]
+    },
+    {
+      "id": "IFACE-PROFILE-INTERNAL-V1",
+      "contract": "profile.json schema_version=1 contains exact locales keys zh-TW and en; each locale has profile, repositories, suggested_questions; character and index are shared validated objects.",
+      "producer": "src/reponpc/indexing/public_profile.py",
+      "consumers": ["src/reponpc/bundles/archive.py", "src/reponpc/api/public.py"]
+    },
+    {
+      "id": "IFACE-PROFILE-PUBLIC-V1",
+      "contract": "GET /api/public/profile returns the existing approved schema_version, requested locale, localized profile/repositories/suggested_questions, character, and index fields.",
+      "producer": "src/reponpc/api/public.py",
+      "consumers": ["public web client", "tests/integration/test_mvp_api.py"]
+    },
+    {
+      "id": "IFACE-CLI-PUBLICATION-V1",
+      "contract": "index publish creates/uploads/verifies an immutable asset and writes a local pending manifest; only index publish-manifest may update the remote stable manifest.",
+      "producer": "src/reponpc/cli.py and src/reponpc/indexing/publication.py",
+      "consumers": [".github/workflows/build-index.yml"]
+    },
+    {
+      "id": "IFACE-BENCHMARK-CANDIDATE-V1",
+      "contract": "Candidate input contains repository fixture, public questions, and adapter/model configuration only; candidate output contains retrieved IDs/paths, timing samples, identity, and access-probe evidence but no expected answers or pass flags.",
+      "producer": "evals/phase2/candidate_runner.py",
+      "consumers": ["evals/phase2/run_benchmark.py host controller"]
+    }
+  ],
+  "lifecycle": [
+    {
+      "id": "LIFE-CLI-SERVE",
+      "states": ["parse", "serve_or_command", "exit"],
+      "owner": "Main",
+      "rule": "No arguments and explicit serve both invoke the existing validated server startup exactly once."
+    },
+    {
+      "id": "LIFE-PUBLICATION",
+      "states": ["built", "asset_uploaded", "asset_verified", "pending_manifest_written", "stable_manifest_advanced"],
+      "owner": "Main",
+      "rule": "The final remote state transition is impossible before immutable verification."
+    },
+    {
+      "id": "LIFE-BENCHMARK",
+      "states": ["image_built", "candidate_created", "candidate_completed", "container_inspected", "host_scored", "artifacts_written"],
+      "owner": "Main",
+      "rule": "The controller derives all formal booleans after inspecting the stopped candidate container and its output."
+    }
+  ],
+  "state_transitions": [
+    {
+      "id": "STATE-BUNDLE-PUBLICATION",
+      "transition": "verified immutable asset -> pending local manifest -> remote stable manifest",
+      "forbidden": "remote stable manifest mutation from build or publish before verification"
+    },
+    {
+      "id": "STATE-BUNDLE-ACTIVATION",
+      "transition": "candidate profile and index verified -> active pointer swap",
+      "forbidden": "activation with one missing locale, invalid profile field, or embedding mismatch"
+    },
+    {
+      "id": "STATE-BENCHMARK-ACCEPTANCE",
+      "transition": "all provenance/isolation/resource/provider/threshold evidence true -> formal_acceptance true",
+      "forbidden": "caller-supplied or candidate-supplied acceptance booleans"
+    }
+  ],
+  "failure_boundaries": [
+    {
+      "id": "FAIL-CLI",
+      "class": "production_entrypoint",
+      "safe_result": "nonzero exit with stable safe message and no server startup for command failures"
+    },
+    {
+      "id": "FAIL-PROFILE",
+      "class": "producer_consumer",
+      "safe_result": "bundle candidate rejected or public route returns INDEX_UNAVAILABLE; no locale fallback"
+    },
+    {
+      "id": "FAIL-PUBLICATION",
+      "class": "rollback",
+      "safe_result": "prior stable manifest remains byte-for-byte unchanged"
+    },
+    {
+      "id": "FAIL-BENCHMARK",
+      "class": "scope_safety",
+      "safe_result": "formal_acceptance and passed are false with explicit derived blockers"
+    },
+    {
+      "id": "FAIL-WORKER-SCOPE",
+      "class": "scope_safety",
+      "safe_result": "handoff is blocked or rejected when any path outside the adapter/test/artifact scope changes"
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-SPEC-FIRST",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Owner-approved Phase 2 boundaries and all changed public/CLI/profile/benchmark contracts are recorded in approved normative documents before application implementation.",
+      "enforcement_owner": "Main plus contract traceability tests",
+      "prohibited_behavior": "Writing production behavior for an undocumented phase or public contract.",
+      "counterexample": "The local adapter is shipped while DELIVERY_PHASES still says all local adapters begin in Phase 3.",
+      "gate_ids": ["GATE-SPEC"],
+      "oracle_origin": ["existing_contract"],
+      "phase_exit": ["Phase 2 closure"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-CLI-ENTRYPOINT",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "The installed reponpc entrypoint starts the server with no arguments or serve, and executes config/index commands without entering deployment startup.",
+      "enforcement_owner": "src/reponpc/cli.py argparse dispatch",
+      "prohibited_behavior": "--help or config validate loads deployment environment or starts Uvicorn.",
+      "counterexample": "reponpc config validate reponpc.example.yml exits with deployment environment is invalid.",
+      "gate_ids": ["GATE-CLI", "GATE-WORKFLOW"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["Phase 2 closure", "AC-001", "AC-002", "AC-029"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-EMBEDDING-PRODUCTION",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Phase 2 indexing and formal evaluation use the shipped local_sentence_transformers adapter with exact identity, finite normalized float32 output, and no fallback.",
+      "enforcement_owner": "local embedding adapter plus IndexDatabaseBuilder identity validation",
+      "prohibited_behavior": "Using FixtureEmbeddingProvider or silently switching adapter/model after load or encode failure.",
+      "counterexample": "The formal report names deterministic_fixture or accepts a 383-dimensional result.",
+      "gate_ids": ["GATE-LOCAL-EMBEDDING", "GATE-FORMAL-BENCHMARK"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["FR-006", "FR-012", "AC-008", "AC-009"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-PROFILE-BILINGUAL",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "One produced profile.json contains complete zh-TW and en payloads, is schema-validated unchanged by the archive verifier, and yields the existing locale-specific public response.",
+      "enforcement_owner": "public profile schema, bundle verifier, and public route",
+      "prohibited_behavior": "Returning the same locale payload for both requests or accepting a bundle missing one locale.",
+      "counterexample": "profile.json has only zh-TW and GET locale=en returns zh-TW content with 200.",
+      "gate_ids": ["GATE-PROFILE"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["FR-022", "AC-023", "Phase 2 closure"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-REPOSITORY-METADATA",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Allowlisted line-addressable root manifests are emitted as REPOSITORY_FACT evidence with source_type repository_metadata and participate in configured retrieval weighting.",
+      "enforcement_owner": "IndexDatabaseBuilder source classifier and read-only retrieval policy",
+      "prohibited_behavior": "The producer emits zero metadata rows while consumer weights claim support, or classifies owner role/summary as repository facts.",
+      "counterexample": "A root pyproject.toml is stored as source_code or an owner-authored role is stored as REPOSITORY_FACT.",
+      "gate_ids": ["GATE-REPOSITORY-METADATA", "GATE-FORMAL-BENCHMARK"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["FR-007", "FR-008", "AC-009", "AC-010"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-PUBLICATION-LAST",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Only publish-manifest mutates the stable pointer, and it can consume only a locally recorded manifest derived from a verified immutable asset.",
+      "enforcement_owner": "PublicationCoordinator and GitHubReleasePublisher",
+      "prohibited_behavior": "Build or publish advances stable-manifest.json before asset verification.",
+      "counterexample": "Upload verification fails but the mock records a stable-manifest PUT.",
+      "gate_ids": ["GATE-CLI", "GATE-PUBLICATION-LAST"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["FR-020", "AC-029"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-FORMAL-BENCHMARK",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "The candidate container cannot read the oracle, runs the production adapter with 4 CPU and 8 GiB limits, and returns only candidate evidence/timings; the host controller derives formal results and provenance.",
+      "enforcement_owner": "host benchmark controller plus Docker mount/resource inspection",
+      "prohibited_behavior": "Mounting or baking the oracle into the candidate image, accepting candidate pass flags, or reporting reference_host_verified without inspect evidence.",
+      "counterexample": "The candidate can stat /workspace/evals/phase2/controller/expected-evidence.json or report formal_acceptance=true itself.",
+      "gate_ids": ["GATE-FORMAL-BENCHMARK"],
+      "oracle_origin": ["existing_contract", "deterministic_derived", "evaluator_authored"],
+      "phase_exit": ["NFR-004", "NFR-006", "NFR-008", "AC-009"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-LAST-KNOWN-GOOD",
+      "applies": true,
+      "classification": "critical",
+      "severity": "high",
+      "statement": "Closure changes do not weaken bundle rejection, atomic activation, or preservation of the active bundle on failure.",
+      "enforcement_owner": "BundleManager, verifier, updater, and regression gates",
+      "prohibited_behavior": "Invalid profile/embedding/publication candidates replace the active bundle or pointer.",
+      "counterexample": "A profile missing en activates over a valid current bundle.",
+      "gate_ids": ["GATE-PROFILE", "GATE-PUBLICATION-LAST", "GATE-PYTHON-ALL", "GATE-DOCKER"],
+      "oracle_origin": ["existing_contract", "deterministic_derived"],
+      "phase_exit": ["FR-021", "AC-030", "AC-031"],
+      "not_applicable": null
+    },
+    {
+      "id": "INV-ATTRIBUTION",
+      "applies": true,
+      "classification": "noncritical",
+      "severity": "medium",
+      "statement": "Every closure delta is attributable to the new Git baseline and historical ledgers remain byte-for-byte unchanged.",
+      "enforcement_owner": "Git baseline, fingerprint manifests, and Main delta guard",
+      "prohibited_behavior": "Rewriting old failed delta evidence or accepting an unowned worker path.",
+      "counterexample": "tests/unit/test_rrf.py or an old evidence-ledger.jsonl changes during the Terra package.",
+      "gate_ids": ["GATE-DELTA"],
+      "oracle_origin": ["deterministic_derived"],
+      "phase_exit": ["Phase 2 closure governance"],
+      "not_applicable": null
+    }
+  ],
+  "packages": [
+    {
+      "id": "PKG-MAIN-SPEC",
+      "wave": 0,
+      "depends_on": [],
+      "may_impact": ["All closure implementation packages"],
+      "consumes": ["Owner approval recorded in conversation", "Technical Specification 0.1.0"],
+      "produces": ["ADR-015 and updated approved Phase 2 contracts"],
+      "owner_role": "main",
+      "capability_card_id": null,
+      "owned_paths": [
+        "docs/TECHNICAL_SPEC.md",
+        "docs/ACCEPTANCE_CRITERIA.md",
+        "docs/DECISIONS.md",
+        "docs/DELIVERY_PHASES.md",
+        "docs/IMPLEMENTATION_PLAN.md",
+        "docs/OPERATIONS.md",
+        "README.md",
+        "tests/contract/test_phase2_closure_spec.py"
+      ],
+      "prohibited_paths": ["src/**", "evals/**", ".github/workflows/**"],
+      "read_first": ["AGENTS.md required order", "docs/SUBAGENT_EXECUTION_PLAYBOOK.md section 7.1"],
+      "invariant_ids": ["INV-SPEC-FIRST"],
+      "verification_gate_ids": ["GATE-SPEC"],
+      "replan_policy": "affected_subgraph",
+      "status": "verified",
+      "size_exception": "Main must update the coupled normative documents and their traceability test atomically before any production implementation."
+    },
+    {
+      "id": "PKG-MAIN-EMBEDDING-CONTRACT",
+      "wave": 1,
+      "depends_on": ["PKG-MAIN-SPEC"],
+      "may_impact": ["PKG-TERRA-LOCAL-EMBEDDING", "PKG-MAIN-CLI-PUBLIC", "PKG-MAIN-BENCHMARK"],
+      "consumes": ["ADR-015", "IFACE-EMBEDDING-P2"],
+      "produces": ["Frozen local adapter constructor/method/error contract", "Locked optional indexer dependency"],
+      "owner_role": "main",
+      "capability_card_id": null,
+      "owned_paths": [
+        "src/reponpc/indexing/sources.py",
+        "src/reponpc/providers/__init__.py",
+        "pyproject.toml",
+        "uv.lock",
+        "tests/contract/test_embedding_provider_contract.py"
+      ],
+      "prohibited_paths": ["src/reponpc/providers/local_sentence_transformers.py", "tests/unit/test_local_sentence_transformers.py"],
+      "read_first": ["docs/TECHNICAL_SPEC.md sections 5.4 and 13", "docs/DECISIONS.md ADR-006 and ADR-015"],
+      "invariant_ids": ["INV-EMBEDDING-PRODUCTION", "INV-SPEC-FIRST"],
+      "verification_gate_ids": ["GATE-SPEC", "GATE-EMBEDDING-CONTRACT"],
+      "replan_policy": "main_takeover",
+      "status": "verified",
+      "size_exception": "Main owns the shared provider protocol plus dependency declaration and lockfile; splitting these files would create an unfrozen worker contract."
+    },
+    {
+      "id": "PKG-TERRA-LOCAL-EMBEDDING",
+      "wave": 2,
+      "depends_on": ["PKG-MAIN-EMBEDDING-CONTRACT"],
+      "may_impact": ["PKG-MAIN-BENCHMARK", "PKG-MAIN-CLI-PUBLIC"],
+      "consumes": ["IFACE-EMBEDDING-P2", "Locked optional indexer dependency"],
+      "produces": ["Production local sentence-transformers adapter"],
+      "owner_role": "worker",
+      "capability_card_id": "CAP-TERRA-LOCAL-EMBEDDING",
+      "owned_paths": [
+        "src/reponpc/providers/local_sentence_transformers.py",
+        "tests/unit/test_local_sentence_transformers.py"
+      ],
+      "prohibited_paths": [
+        "pyproject.toml",
+        "uv.lock",
+        "src/reponpc/indexing/sources.py",
+        "src/reponpc/indexing/index_database.py",
+        "src/reponpc/cli.py",
+        "evals/phase2/run_benchmark.py",
+        "docs/TECHNICAL_SPEC.md",
+        "docs/ACCEPTANCE_CRITERIA.md",
+        "docs/DECISIONS.md",
+        ".github/workflows/build-index.yml",
+        ".agent-foreman/phase2-review-repairs/plan.json",
+        ".agent-foreman/phase2-review-repairs/evidence-ledger.jsonl"
+      ],
+      "read_first": [
+        "AGENTS.md",
+        "docs/TECHNICAL_SPEC.md sections 5.4 and 13.2-13.3",
+        "docs/ACCEPTANCE_CRITERIA.md AC-008 and AC-009",
+        "docs/DECISIONS.md ADR-006 and ADR-015",
+        "src/reponpc/indexing/sources.py"
+      ],
+      "invariant_ids": ["INV-EMBEDDING-PRODUCTION", "INV-ATTRIBUTION"],
+      "verification_gate_ids": ["GATE-LOCAL-EMBEDDING", "GATE-DELTA"],
+      "replan_policy": "main_takeover",
+      "status": "verified",
+      "size_exception": null
+    },
+    {
+      "id": "PKG-MAIN-CLI-PUBLIC",
+      "wave": 2,
+      "depends_on": ["PKG-MAIN-EMBEDDING-CONTRACT"],
+      "may_impact": ["PKG-MAIN-BENCHMARK", "PKG-MAIN-INTEGRATION"],
+      "consumes": ["Updated normative contracts", "IFACE-PROFILE-INTERNAL-V1", "IFACE-CLI-PUBLICATION-V1"],
+      "produces": ["Executable CLI", "Bilingual public profile pipeline", "Repository metadata evidence", "Split publication-last state"],
+      "owner_role": "main",
+      "capability_card_id": null,
+      "owned_paths": [
+        "src/reponpc/cli.py",
+        "src/reponpc/indexing/pipeline.py",
+        "src/reponpc/indexing/public_profile.py",
+        "src/reponpc/indexing/index_database.py",
+        "src/reponpc/indexing/github.py",
+        "src/reponpc/indexing/publication.py",
+        "src/reponpc/indexing/github_publication.py",
+        "src/reponpc/bundles/archive.py",
+        "src/reponpc/api/public.py",
+        ".github/workflows/build-index.yml",
+        "tests/integration/test_cli.py",
+        "tests/integration/test_index_build.py",
+        "tests/integration/test_retrieval_policy.py",
+        "tests/integration/test_bundle_producer_consumer.py",
+        "tests/integration/test_bundle_activation.py",
+        "tests/integration/test_mvp_api.py",
+        "tests/integration/test_publication_last.py",
+        "tests/integration/test_github_publication.py",
+        "tests/security/test_bundle_validation.py",
+        "tests/unit/test_phase2_fixture_corpus.py",
+        "tests/fixtures/phase2/reponpc.yml",
+        "tests/fixtures/repos/reponpc-demo/pyproject.toml"
+      ],
+      "prohibited_paths": ["src/reponpc/providers/local_sentence_transformers.py", "tests/unit/test_local_sentence_transformers.py", "evals/phase2/controller/expected-evidence.json"],
+      "read_first": ["Updated Technical Specification", "AC-001, AC-002, AC-008, AC-009, AC-010, AC-023, AC-029", "Security sections 4, 6, 7, 9"],
+      "invariant_ids": ["INV-CLI-ENTRYPOINT", "INV-PROFILE-BILINGUAL", "INV-REPOSITORY-METADATA", "INV-PUBLICATION-LAST", "INV-LAST-KNOWN-GOOD"],
+      "verification_gate_ids": ["GATE-CLI", "GATE-WORKFLOW", "GATE-PROFILE", "GATE-REPOSITORY-METADATA", "GATE-PUBLICATION-LAST"],
+      "replan_policy": "affected_subgraph",
+      "status": "verified",
+      "size_exception": "This is the critical Main-owned CLI, publication, index producer, bundle verifier, and public-route integration seam; splitting ownership would invalidate producer-consumer and publication-last evidence."
+    },
+    {
+      "id": "PKG-MAIN-BENCHMARK",
+      "wave": 3,
+      "depends_on": ["PKG-TERRA-LOCAL-EMBEDDING", "PKG-MAIN-CLI-PUBLIC"],
+      "may_impact": ["PKG-MAIN-INTEGRATION"],
+      "consumes": ["Production local embedding adapter", "Real index/bundle/retrieval producer-consumer", "Hidden controller oracle"],
+      "produces": ["Docker-isolated candidate runner", "Host-derived formal benchmark report"],
+      "owner_role": "main",
+      "capability_card_id": null,
+      "owned_paths": [
+        "evals/phase2/run_benchmark.py",
+        "evals/phase2/candidate_runner.py",
+        "evals/phase2/Dockerfile",
+        "evals/phase2/README.md",
+        "tests/integration/test_phase2_benchmark.py"
+      ],
+      "prohibited_paths": ["evals/phase2/controller/expected-evidence.json", "evals/phase2/public/questions.json", "src/reponpc/providers/local_sentence_transformers.py"],
+      "read_first": ["NFR-004, NFR-006, NFR-008", "AC-009", "docs/IMPLEMENTATION_PLAN.md section 12"],
+      "invariant_ids": ["INV-EMBEDDING-PRODUCTION", "INV-REPOSITORY-METADATA", "INV-FORMAL-BENCHMARK"],
+      "verification_gate_ids": ["GATE-FORMAL-BENCHMARK"],
+      "replan_policy": "main_takeover",
+      "status": "verified",
+      "size_exception": "The controller, candidate, Docker image, documentation, and integration test form one oracle-isolation boundary and remain Main-owned."
+    },
+    {
+      "id": "PKG-MAIN-INTEGRATION",
+      "wave": 4,
+      "depends_on": ["PKG-MAIN-BENCHMARK"],
+      "may_impact": [],
+      "consumes": ["All closure deltas and evidence"],
+      "produces": ["Main integration record", "Fresh evaluator probes", "Phase 2 verified or blocked state"],
+      "owner_role": "main",
+      "capability_card_id": null,
+      "owned_paths": [
+        ".agent-foreman/phase2-closure/artifacts",
+        ".agent-foreman/phase2-closure/evaluation",
+        ".agent-foreman/phase2-closure/integrations",
+        ".agent-foreman/phase2-closure/evidence-ledger.jsonl",
+        ".agent-foreman/phase2-closure/evidence-ledger-v2.jsonl",
+        ".agent-foreman/phase2-closure/plan.json",
+        ".agent-foreman/phase2-closure/plan.md"
+      ],
+      "prohibited_paths": [".agent-foreman/phase2-review-repairs/**", ".agent-foreman/phase2-index-bundles/**"],
+      "read_first": ["All changed files", "All blocking gate artifacts", "Fresh evaluator findings"],
+      "invariant_ids": ["INV-CLI-ENTRYPOINT", "INV-EMBEDDING-PRODUCTION", "INV-PROFILE-BILINGUAL", "INV-REPOSITORY-METADATA", "INV-PUBLICATION-LAST", "INV-FORMAL-BENCHMARK", "INV-LAST-KNOWN-GOOD", "INV-ATTRIBUTION"],
+      "verification_gate_ids": ["GATE-PYTHON-ALL", "GATE-QUALITY", "GATE-WEB", "GATE-DOCKER", "GATE-DELTA"],
+      "replan_policy": "main_takeover",
+      "status": "verified",
+      "size_exception": "Main exclusively owns campaign artifacts, plan state, evaluation, and integration records required for closure authority."
+    }
+  ],
+  "dependency_graph": {
+    "nodes": ["PKG-MAIN-SPEC", "PKG-MAIN-EMBEDDING-CONTRACT", "PKG-TERRA-LOCAL-EMBEDDING", "PKG-MAIN-CLI-PUBLIC", "PKG-MAIN-BENCHMARK", "PKG-MAIN-INTEGRATION"],
+    "edges": [
+      {"from": "PKG-MAIN-SPEC", "to": "PKG-MAIN-EMBEDDING-CONTRACT"},
+      {"from": "PKG-MAIN-EMBEDDING-CONTRACT", "to": "PKG-TERRA-LOCAL-EMBEDDING"},
+      {"from": "PKG-MAIN-EMBEDDING-CONTRACT", "to": "PKG-MAIN-CLI-PUBLIC"},
+      {"from": "PKG-TERRA-LOCAL-EMBEDDING", "to": "PKG-MAIN-BENCHMARK"},
+      {"from": "PKG-MAIN-CLI-PUBLIC", "to": "PKG-MAIN-BENCHMARK"},
+      {"from": "PKG-MAIN-BENCHMARK", "to": "PKG-MAIN-INTEGRATION"}
+    ]
+  },
+  "acceptance_gates": [
+    {
+      "id": "GATE-SPEC",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest tests/contract/test_phase2_closure_spec.py -q --basetemp .pytest-tmp/phase2-closure-spec-r2 -p no:cacheprovider --junitxml=.agent-foreman/phase2-closure/artifacts/gate-spec.xml",
+      "oracle": "ADR-015 is Accepted; affected approved documents agree on Phase 2 adapter/CLI/profile/metadata/benchmark contracts and Phase 3 exclusions.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-spec.xml",
+      "invariant_ids": ["INV-SPEC-FIRST"],
+      "blocking": true,
+      "scope": "integration",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-EMBEDDING-CONTRACT",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest tests/contract/test_embedding_provider_contract.py -q --basetemp .pytest-tmp/embedding-contract-green -p no:cacheprovider --junitxml=.agent-foreman/phase2-closure/artifacts/gate-embedding-contract.xml && rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache lock --check --offline",
+      "oracle": "The runtime-checkable provider protocol requires query and passage batches, safe failures expose only a stable code, and the Python 3.14-compatible optional indexer dependency is locked without entering the normal dependency set.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-embedding-contract.xml",
+      "invariant_ids": ["INV-EMBEDDING-PRODUCTION", "INV-SPEC-FIRST"],
+      "blocking": true,
+      "scope": "integration",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-CLI",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest tests/integration/test_cli.py -q -p no:cacheprovider --basetemp .pytest-tmp/phase2-cli-r4 --junitxml=.agent-foreman/phase2-closure/artifacts/gate-cli-r4.xml",
+      "oracle": "The real installed dispatch exposes help/config/index commands, preserves no-argument/serve startup, and exercises build/publish/publish-manifest failure ordering with safe exits.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-cli-r4.xml",
+      "invariant_ids": ["INV-CLI-ENTRYPOINT", "INV-PUBLICATION-LAST"],
+      "blocking": true,
+      "scope": "system",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-WORKFLOW",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest tests/contract/test_ci_deployment.py -q -p no:cacheprovider --basetemp .pytest-tmp/phase2-workflow --junitxml=.agent-foreman/phase2-closure/artifacts/gate-workflow.xml",
+      "oracle": "build-index.yml installs the locked indexer extra and invokes only implemented CLI commands in publication-last order.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-workflow.xml",
+      "invariant_ids": ["INV-CLI-ENTRYPOINT"],
+      "blocking": true,
+      "scope": "integration",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-LOCAL-EMBEDDING",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest tests/unit/test_local_sentence_transformers.py -q",
+      "oracle": "The adapter applies exact prefixes, rejects identity/output mismatches, emits finite normalized float32 matrices, and never loads another model after failure.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/worker-local-embedding.txt",
+      "invariant_ids": ["INV-EMBEDDING-PRODUCTION"],
+      "blocking": true,
+      "scope": "component",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-PROFILE",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest tests/integration/test_bundle_producer_consumer.py tests/integration/test_mvp_api.py -q -p no:cacheprovider --basetemp .pytest-tmp/phase2-profile-r5 --junitxml=.agent-foreman/phase2-closure/artifacts/gate-profile-r5.xml",
+      "oracle": "The same produced bytes pass archive verification and return distinct complete zh-TW/en public payloads; missing/invalid locale data fails closed and preserves active state.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-profile-r5.xml",
+      "invariant_ids": ["INV-PROFILE-BILINGUAL", "INV-LAST-KNOWN-GOOD"],
+      "blocking": true,
+      "scope": "integration",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-REPOSITORY-METADATA",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest tests/integration/test_index_build.py tests/integration/test_retrieval_policy.py -q -p no:cacheprovider --basetemp .pytest-tmp/phase2-metadata --junitxml=.agent-foreman/phase2-closure/artifacts/gate-repository-metadata.xml",
+      "oracle": "A real root manifest produces line-addressable REPOSITORY_FACT repository_metadata rows and configured source weighting consumes them without reclassifying owner assertions.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-repository-metadata.xml",
+      "invariant_ids": ["INV-REPOSITORY-METADATA"],
+      "blocking": true,
+      "scope": "integration",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-PUBLICATION-LAST",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest tests/integration/test_publication_last.py tests/integration/test_github_publication.py -q -p no:cacheprovider --basetemp .pytest-tmp/phase2-publication-r2 --junitxml=.agent-foreman/phase2-closure/artifacts/gate-publication-last-r2.xml",
+      "oracle": "Every pre-manifest injected failure records zero stable-manifest mutations and a success records immutable create/upload/verify before exactly one pointer write.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-publication-last-r2.xml",
+      "invariant_ids": ["INV-PUBLICATION-LAST", "INV-LAST-KNOWN-GOOD"],
+      "blocking": true,
+      "scope": "integration",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-FORMAL-BENCHMARK",
+      "command": "rtk proxy .venv/Scripts/python.exe evals/phase2/run_benchmark.py --artifacts .agent-foreman/phase2-closure/artifacts/formal-benchmark-r2.json",
+      "oracle": "Docker inspect proves only public mounts, 4 CPU and 8 GiB limits; access probe cannot see the oracle; the report records the hard-bound canonical question/oracle SHA-256 values, names local_sentence_transformers, includes image/runtime/host provenance and raw timings, meets Recall@8/parity/p95 thresholds, and host-derived formal_acceptance=true.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/formal-benchmark-r2.json",
+      "invariant_ids": ["INV-EMBEDDING-PRODUCTION", "INV-REPOSITORY-METADATA", "INV-FORMAL-BENCHMARK"],
+      "blocking": true,
+      "scope": "runtime",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-PYTHON-ALL",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider --basetemp .pytest-tmp/phase2-all-r3 --junitxml=.agent-foreman/phase2-closure/artifacts/gate-python-all-r3.xml",
+      "oracle": "The complete Python suite exits 0 with no omitted failing domain.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-python-all-r3.xml",
+      "invariant_ids": ["INV-CLI-ENTRYPOINT", "INV-EMBEDDING-PRODUCTION", "INV-PROFILE-BILINGUAL", "INV-REPOSITORY-METADATA", "INV-PUBLICATION-LAST", "INV-LAST-KNOWN-GOOD"],
+      "blocking": true,
+      "scope": "system",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-QUALITY",
+      "command": "rtk proxy .venv/Scripts/python.exe -m ruff check . && rtk proxy .venv/Scripts/python.exe -m ruff format --check . && rtk proxy .venv/Scripts/python.exe -m mypy src/reponpc evals/phase2/run_benchmark.py evals/phase2/candidate_runner.py",
+      "oracle": "Ruff lint and format checks pass repository-wide; mypy passes the repository-established production package target plus both new formal benchmark runners.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-quality.txt",
+      "invariant_ids": ["INV-CLI-ENTRYPOINT", "INV-EMBEDDING-PRODUCTION", "INV-PROFILE-BILINGUAL", "INV-REPOSITORY-METADATA", "INV-PUBLICATION-LAST"],
+      "blocking": true,
+      "scope": "system",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-WEB",
+      "command": "rtk proxy pnpm run web:check",
+      "oracle": "Frontend format, lint, typecheck, unit tests, and production build all exit 0 after public profile contract changes.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-web.txt",
+      "invariant_ids": ["INV-PROFILE-BILINGUAL"],
+      "blocking": true,
+      "scope": "system",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-DOCKER",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest tests/smoke/test_container.py -q -p no:cacheprovider --basetemp .pytest-tmp/phase2-docker --junitxml=.agent-foreman/phase2-closure/artifacts/gate-docker.xml",
+      "oracle": "The real container starts, preserves runtime state across restart, and serves the no-argument CLI server path.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-docker.xml",
+      "invariant_ids": ["INV-CLI-ENTRYPOINT", "INV-LAST-KNOWN-GOOD"],
+      "blocking": true,
+      "scope": "runtime",
+      "result": "passed"
+    },
+    {
+      "id": "GATE-DELTA",
+      "command": "rtk git diff --name-status 83c3dd44f7cc2856dc3b61d9f637337f1a466d3e -- && rtk proxy .venv/Scripts/python.exe C:/Users/xu/.codex/skills/agent-foreman/scripts/guard_delta.py --plan .agent-foreman/phase2-closure/plan.json --package PKG-TERRA-LOCAL-EMBEDDING --dispatch-manifest .agent-foreman/phase2-closure/fingerprints/dispatch-manifest.json --handoff-manifest .agent-foreman/phase2-closure/fingerprints/handoff-manifest.json",
+      "oracle": "Every worker delta is owned, historical campaign files are unchanged, and the guard exits 0.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-delta.txt",
+      "invariant_ids": ["INV-ATTRIBUTION"],
+      "blocking": true,
+      "scope": "integration",
+      "result": "passed"
+    }
+  ],
+  "evidence_ledger": [
+    {
+      "evidence_id": "EVID-P2C-BASELINE-001",
+      "actor_role": "human",
+      "invariant_ids": ["INV-SPEC-FIRST", "INV-ATTRIBUTION"],
+      "gate_id": null,
+      "command": null,
+      "exit_code": null,
+      "observed": "The owner approved the recommended Phase 2 closure boundaries and a new audited Git baseline.",
+      "artifact_path": "conversation approval: 照建議方案",
+      "classification": "human_ruling"
+    },
+    {
+      "evidence_id": "EVID-P2C-GIT-001",
+      "actor_role": "main",
+      "invariant_ids": ["INV-ATTRIBUTION"],
+      "gate_id": "GATE-DELTA",
+      "command": "rtk git rev-parse HEAD",
+      "exit_code": 0,
+      "observed": "Owner-approved audited state committed as 83c3dd44f7cc2856dc3b61d9f637337f1a466d3e; production worktree was clean immediately afterward.",
+      "artifact_path": ".git/HEAD",
+      "classification": "deterministic"
+    },
+    {
+      "evidence_id": "EVID-P2C-BLOCKERS-001",
+      "actor_role": "main",
+      "invariant_ids": ["INV-CLI-ENTRYPOINT", "INV-PROFILE-BILINGUAL", "INV-REPOSITORY-METADATA", "INV-FORMAL-BENCHMARK"],
+      "gate_id": null,
+      "command": null,
+      "exit_code": 1,
+      "observed": "Historical review artifacts show real failures for CLI dispatch and profile localization, zero repository_metadata rows, and a nonformal benchmark.",
+      "artifact_path": ".agent-foreman/phase2-review-repairs/integration-final.json",
+      "classification": "deterministic"
+    },
+    {
+      "evidence_id": "EVID-P2C-DOCKER-001",
+      "actor_role": "main",
+      "invariant_ids": ["INV-LAST-KNOWN-GOOD"],
+      "gate_id": "GATE-DOCKER",
+      "command": "historical real Docker persistence/restart smoke",
+      "exit_code": 0,
+      "observed": "1 passed in 30.06s on Docker Desktop 4.86.0 / Engine 29.7.2; this remains historical and must be rerun after closure changes.",
+      "artifact_path": ".agent-foreman/phase2-review-repairs/evaluation/gate-docker-live.xml",
+      "classification": "deterministic"
+    },
+    {
+      "evidence_id": "EVID-P2C-SPEC-001",
+      "actor_role": "main",
+      "invariant_ids": ["INV-SPEC-FIRST"],
+      "gate_id": "GATE-SPEC",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest tests/contract/test_phase2_closure_spec.py -q --basetemp .pytest-tmp/phase2-closure-spec -p no:cacheprovider --junitxml=.agent-foreman/phase2-closure/artifacts/gate-spec-initial.xml",
+      "exit_code": 1,
+      "observed": "Initial trace gate had two passes and one assertion wording mismatch; no production code was started.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-spec-initial.xml",
+      "classification": "deterministic"
+    },
+    {
+      "evidence_id": "EVID-P2C-SPEC-002",
+      "actor_role": "main",
+      "invariant_ids": ["INV-SPEC-FIRST"],
+      "gate_id": "GATE-SPEC",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest tests/contract/test_phase2_closure_spec.py -q --basetemp .pytest-tmp/phase2-closure-spec-r2 -p no:cacheprovider --junitxml=.agent-foreman/phase2-closure/artifacts/gate-spec.xml",
+      "exit_code": 0,
+      "observed": "Three Phase 2 closure specification trace tests passed after correcting the test oracle to the accepted ADR wording.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-spec.xml",
+      "classification": "deterministic"
+    },
+    {
+      "evidence_id": "EVID-P2C-DEPENDENCY-001",
+      "actor_role": "main",
+      "invariant_ids": ["INV-EMBEDDING-PRODUCTION"],
+      "gate_id": "GATE-EMBEDDING-CONTRACT",
+      "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache pip install --dry-run --python C:/Python314/python.exe sentence-transformers>=5.1,<6",
+      "exit_code": 0,
+      "observed": "Python 3.14.7 resolved sentence-transformers 5.7.0 and torch 2.13.0 without installation; uv.lock now records the optional indexer graph and offline lock check passes.",
+      "artifact_path": "pyproject.toml and uv.lock",
+      "classification": "deterministic"
+    },
+    {
+      "evidence_id": "EVID-P2C-EMBED-CONTRACT-001",
+      "actor_role": "main",
+      "invariant_ids": ["INV-EMBEDDING-PRODUCTION", "INV-SPEC-FIRST"],
+      "gate_id": "GATE-EMBEDDING-CONTRACT",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest tests/contract/test_phase2_closure_spec.py tests/contract/test_embedding_provider_contract.py -q --basetemp .pytest-tmp/phase2-contracts-r2 -p no:cacheprovider --junitxml=.agent-foreman/phase2-closure/artifacts/gate-contracts-r2.xml",
+      "exit_code": 0,
+      "observed": "Five specification/provider contract tests passed; focused Ruff lint and format checks passed for all contract files.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-contracts-r2.xml",
+      "classification": "deterministic"
+    },
+    {
+      "evidence_id": "EVID-P2C-PYTHON-003",
+      "actor_role": "main",
+      "invariant_ids": ["INV-CLI-ENTRYPOINT", "INV-EMBEDDING-PRODUCTION", "INV-PROFILE-BILINGUAL", "INV-REPOSITORY-METADATA", "INV-PUBLICATION-LAST", "INV-LAST-KNOWN-GOOD"],
+      "gate_id": "GATE-PYTHON-ALL",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider --basetemp .pytest-tmp/phase2-all-r3 --junitxml=.agent-foreman/phase2-closure/artifacts/gate-python-all-r3.xml",
+      "exit_code": 0,
+      "observed": "The post-repair aggregate Python suite completed with 354 collected tests: 351 passed, 3 skipped, 0 failures, and 0 errors.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-python-all-r3.xml",
+      "classification": "deterministic"
+    },
+    {
+      "evidence_id": "EVID-P2C-FORMAL-002",
+      "actor_role": "main",
+      "invariant_ids": ["INV-EMBEDDING-PRODUCTION", "INV-REPOSITORY-METADATA", "INV-FORMAL-BENCHMARK"],
+      "gate_id": "GATE-FORMAL-BENCHMARK",
+      "command": "rtk proxy .venv/Scripts/python.exe evals/phase2/run_benchmark.py --artifacts .agent-foreman/phase2-closure/artifacts/formal-benchmark-r2.json",
+      "exit_code": 0,
+      "observed": "The post-repair Docker benchmark used the production local_sentence_transformers provider, verified canonical input digests and oracle isolation, enforced 4 CPU/8 GiB/network-none, reached Recall@8=1.0 and language parity=1.0 with warm p95=56.001268 ms, and derived formal_acceptance=true with no blockers.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/formal-benchmark-r2.json",
+      "classification": "deterministic"
+    },
+    {
+      "evidence_id": "EVID-P2C-DOCKER-002",
+      "actor_role": "main",
+      "invariant_ids": ["INV-CLI-ENTRYPOINT", "INV-LAST-KNOWN-GOOD"],
+      "gate_id": "GATE-DOCKER",
+      "command": "rtk proxy .venv/Scripts/python.exe -m pytest tests/smoke/test_container.py -q -p no:cacheprovider --basetemp .pytest-tmp/phase2-docker --junitxml=.agent-foreman/phase2-closure/artifacts/gate-docker.xml",
+      "exit_code": 0,
+      "observed": "The current closure Compose startup, restart, health, and runtime-volume persistence smoke passed: 1 test, 0 failures, 0 errors, and 0 skipped in 26.05 seconds.",
+      "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-docker.xml",
+      "classification": "deterministic"
+    },
+    {
+      "evidence_id": "EVID-P2C-EVALUATOR-002",
+      "actor_role": "evaluator",
+      "invariant_ids": ["INV-SPEC-FIRST", "INV-CLI-ENTRYPOINT", "INV-EMBEDDING-PRODUCTION", "INV-PROFILE-BILINGUAL", "INV-REPOSITORY-METADATA", "INV-PUBLICATION-LAST", "INV-FORMAL-BENCHMARK", "INV-LAST-KNOWN-GOOD"],
+      "gate_id": null,
+      "command": null,
+      "exit_code": 0,
+      "observed": "Fresh read-only evaluation passed all critical probes, verified both current runtime artifacts, resolved the formal false-green and Docker not-run findings, excluded historical substitutes, and recommended pass with no open findings.",
+      "artifact_path": ".agent-foreman/phase2-closure/evaluation/evaluation-phase2-closure.json",
+      "classification": "advisory"
+    },
+    {
+      "evidence_id": "EVID-P2C-INTEGRATION-001",
+      "actor_role": "main",
+      "invariant_ids": ["INV-SPEC-FIRST", "INV-CLI-ENTRYPOINT", "INV-EMBEDDING-PRODUCTION", "INV-PROFILE-BILINGUAL", "INV-REPOSITORY-METADATA", "INV-PUBLICATION-LAST", "INV-FORMAL-BENCHMARK", "INV-LAST-KNOWN-GOOD", "INV-ATTRIBUTION"],
+      "gate_id": null,
+      "command": null,
+      "exit_code": 0,
+      "observed": "Main verified all 14 blocking gates and declared artifacts, accepted the fresh evaluator pass recommendation, confirmed no protected-history delta or non-test live-secret pattern, and completed the Phase 2 closure integration.",
+      "artifact_path": ".agent-foreman/phase2-closure/integrations/integration-phase2-closure.json",
+      "classification": "deterministic"
+    }
+  ],
+  "dispatches": [
+    {
+      "schema_name": "agent-foreman/dispatch",
+      "schema_version": "1.0",
+      "profile": "full",
+      "plan_id": "REPONPC-P2-CLOSURE-20260812",
+      "package_id": "PKG-TERRA-LOCAL-EMBEDDING",
+      "authorization_source": "The owner requested a Terra subagent repair and approved the recommended closure plan with '照建議方案'.",
+      "requested_selector": "gpt-5.6-terra",
+      "expected_model_verification": "unavailable",
+      "objective": "Implement only the frozen build-time local sentence-transformers adapter and its focused unit tests.",
+      "frozen_contracts": [
+        "Class LocalSentenceTransformersEmbeddingProvider has keyword-only constructor model_id: str, dimension: int, normalized: bool, query_prefix: str, passage_prefix: str, device: str='cpu', batch_size: int=32; identity(), embed_query(list[str]), and embed_passages(list[str]) implement the Main-owned protocol.",
+        "identity must be local_sentence_transformers, configured model ID/dimension/prefixes, normalized=true.",
+        "embed_query and embed_passages accept raw strings, apply exactly one configured query/passage prefix, and return finite normalized float32 matrices; empty input returns a zero-row matrix with declared width.",
+        "The module import is dependency-light; sentence_transformers is imported lazily. Dependency, model-load, encode, and output failures raise EmbeddingProviderError codes embedding_dependency_unavailable, embedding_model_load_failed, embedding_encode_failed, or embedding_output_invalid respectively, without upstream text and without trying another provider/model.",
+        "SentenceTransformer loads the configured model once on the configured device with trust_remote_code disabled; encode uses convert_to_numpy=true, normalize_embeddings=true, show_progress_bar=false, and the configured batch size."
+      ],
+      "owned_paths": [
+        "src/reponpc/providers/local_sentence_transformers.py",
+        "tests/unit/test_local_sentence_transformers.py"
+      ],
+      "prohibited_paths": [
+        "pyproject.toml",
+        "uv.lock",
+        "src/reponpc/indexing/sources.py",
+        "src/reponpc/indexing/index_database.py",
+        "src/reponpc/cli.py",
+        "evals/phase2/run_benchmark.py",
+        "docs/TECHNICAL_SPEC.md",
+        "docs/ACCEPTANCE_CRITERIA.md",
+        "docs/DECISIONS.md",
+        ".github/workflows/build-index.yml",
+        ".agent-foreman/phase2-review-repairs/plan.json",
+        ".agent-foreman/phase2-review-repairs/evidence-ledger.jsonl"
+      ],
+      "read_first": [
+        "AGENTS.md",
+        "docs/TECHNICAL_SPEC.md sections 5.4 and 13.2-13.3",
+        "docs/ACCEPTANCE_CRITERIA.md AC-008 and AC-009",
+        "docs/DECISIONS.md ADR-006 and ADR-015",
+        "src/reponpc/indexing/sources.py"
+      ],
+      "invariant_ids": ["INV-EMBEDDING-PRODUCTION", "INV-ATTRIBUTION"],
+      "gate_ids": ["GATE-LOCAL-EMBEDDING", "GATE-DELTA"],
+      "commands": [
+        "rtk proxy .venv/Scripts/python.exe -m pytest tests/unit/test_local_sentence_transformers.py -q",
+        "rtk proxy .venv/Scripts/python.exe -m ruff check src/reponpc/providers/local_sentence_transformers.py tests/unit/test_local_sentence_transformers.py",
+        "rtk proxy .venv/Scripts/python.exe -m ruff format --check src/reponpc/providers/local_sentence_transformers.py tests/unit/test_local_sentence_transformers.py"
+      ],
+      "expected_artifacts": [
+        ".agent-foreman/phase2-closure/artifacts/worker-local-embedding.txt",
+        "A handoff message containing changed paths, exact exit codes, observed results, and implemented or blocked status."
+      ],
+      "stop_conditions": [
+        "Stop as blocked if any unowned file or contract change is required.",
+        "Stop as blocked if the optional dependency cannot be imported through the frozen lazy-load boundary.",
+        "Do not modify lockfiles, provider selection, CLI, benchmark, or public contracts."
+      ],
+      "allowed_statuses": ["implemented", "blocked"]
+    }
+  ],
+  "handoffs": [
+    {
+      "schema_name": "agent-foreman/handoff",
+      "schema_version": "1.0",
+      "profile": "full",
+      "plan_id": "REPONPC-P2-CLOSURE-20260812",
+      "package_id": "PKG-TERRA-LOCAL-EMBEDDING",
+      "status": "implemented",
+      "requested_selector": "gpt-5.6-terra",
+      "resolved_model_id": null,
+      "model_verification": "unavailable",
+      "reasoning_effort": "unavailable",
+      "changed_paths": [
+        "src/reponpc/providers/local_sentence_transformers.py",
+        "tests/unit/test_local_sentence_transformers.py"
+      ],
+      "diff_artifact": ".agent-foreman/phase2-closure/artifacts/terra-local-embedding-diff-manifest.json",
+      "test_artifacts": [
+        ".agent-foreman/phase2-closure/artifacts/worker-local-embedding.txt",
+        ".agent-foreman/phase2-closure/artifacts/gate-local-embedding.xml",
+        ".agent-foreman/phase2-closure/artifacts/gate-delta-terra-r3.json"
+      ],
+      "gate_results": [
+        {
+          "gate_id": "GATE-LOCAL-EMBEDDING",
+          "exit_code": 0,
+          "observed": "20 focused unit tests passed; Ruff lint and format checks passed."
+        },
+        {
+          "gate_id": "GATE-DELTA",
+          "exit_code": 0,
+          "observed": "The accepted r3 guard found exactly the two authorized worker paths and no violations; the two earlier failed guard artifacts are preserved."
+        }
+      ],
+      "summary": "Implemented the frozen local_sentence_transformers build-time embedding adapter with lazy dependency loading, exact prefixes, normalized finite float32 validation, safe error codes, no fallback, and focused tests.",
+      "blocked_record": null
+    }
+  ],
+  "integration_records": [
+    {
+      "schema_name": "agent-foreman/integration",
+      "schema_version": "1.0",
+      "profile": "full",
+      "plan_id": "REPONPC-P2-CLOSURE-20260812",
+      "phase_id": "PHASE-2-CLOSURE",
+      "actor_role": "main",
+      "packages": ["PKG-MAIN-SPEC", "PKG-MAIN-EMBEDDING-CONTRACT", "PKG-TERRA-LOCAL-EMBEDDING", "PKG-MAIN-CLI-PUBLIC", "PKG-MAIN-BENCHMARK", "PKG-MAIN-INTEGRATION"],
+      "delta_guard": {
+        "passed": true,
+        "artifact": ".agent-foreman/phase2-closure/artifacts/gate-delta.txt"
+      },
+      "focused_gates": ["GATE-SPEC", "GATE-EMBEDDING-CONTRACT", "GATE-CLI", "GATE-WORKFLOW", "GATE-LOCAL-EMBEDDING", "GATE-PROFILE", "GATE-REPOSITORY-METADATA", "GATE-PUBLICATION-LAST"],
+      "aggregate_gates": ["GATE-FORMAL-BENCHMARK", "GATE-PYTHON-ALL", "GATE-QUALITY", "GATE-WEB", "GATE-DOCKER", "GATE-DELTA"],
+      "deterministic_result": "passed",
+      "evaluator_recommendation": "pass",
+      "status": "verified",
+      "rework": {
+        "worker_changed_lines": 251,
+        "main_changed_lines_in_worker_scope": 0
+      },
+      "artifact_path": ".agent-foreman/phase2-closure/integrations/integration-phase2-closure.json"
+    }
+  ],
+  "evaluations": [
+    {
+      "schema_name": "agent-foreman/evaluation",
+      "schema_version": "1.0",
+      "profile": "full",
+      "plan_id": "REPONPC-P2-CLOSURE-20260812",
+      "phase_id": "PHASE-2-CLOSURE",
+      "context_freshness": "fresh",
+      "model_diversity": "unknown",
+      "production_access": "read-only",
+      "new_probes": [
+        {"probe_id": "PROBE-P2C-SPEC-FIRST-001", "invariant_id": "INV-SPEC-FIRST", "exit_code": 0, "artifact_path": ".agent-foreman/phase2-closure/evaluation/probe-spec-first.json"},
+        {"probe_id": "PROBE-P2C-CLI-ENTRYPOINT-001", "invariant_id": "INV-CLI-ENTRYPOINT", "exit_code": 0, "artifact_path": ".agent-foreman/phase2-closure/evaluation/probe-cli-entrypoint.json"},
+        {"probe_id": "PROBE-P2C-EMBEDDING-PRODUCTION-001", "invariant_id": "INV-EMBEDDING-PRODUCTION", "exit_code": 0, "artifact_path": ".agent-foreman/phase2-closure/evaluation/probe-embedding-production.json"},
+        {"probe_id": "PROBE-P2C-FORMAL-BENCHMARK-001", "invariant_id": "INV-FORMAL-BENCHMARK", "exit_code": 0, "artifact_path": ".agent-foreman/phase2-closure/evaluation/probe-formal-benchmark.json"},
+        {"probe_id": "PROBE-P2C-PROFILE-BILINGUAL-001", "invariant_id": "INV-PROFILE-BILINGUAL", "exit_code": 0, "artifact_path": ".agent-foreman/phase2-closure/evaluation/probe-profile-bilingual.json"},
+        {"probe_id": "PROBE-P2C-PUBLICATION-LAST-001", "invariant_id": "INV-PUBLICATION-LAST", "exit_code": 0, "artifact_path": ".agent-foreman/phase2-closure/evaluation/probe-publication-last.json"},
+        {"probe_id": "PROBE-P2C-REPOSITORY-METADATA-001", "invariant_id": "INV-REPOSITORY-METADATA", "exit_code": 0, "artifact_path": ".agent-foreman/phase2-closure/evaluation/probe-repository-metadata.json"},
+        {"probe_id": "PROBE-P2C-LAST-KNOWN-GOOD-001", "invariant_id": "INV-LAST-KNOWN-GOOD", "exit_code": 0, "artifact_path": ".agent-foreman/phase2-closure/evaluation/probe-last-known-good.json"},
+        {"probe_id": "PROBE-P2C-GATE-DOCKER-001", "invariant_id": "INV-CLI-ENTRYPOINT,INV-LAST-KNOWN-GOOD", "exit_code": 0, "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-docker.xml"}
+      ],
+      "recommendation": "pass",
+      "deterministic_result": "passed",
+      "findings": [],
+      "resolved_findings": ["FIND-P2C-001", "FIND-P2C-002"],
+      "artifact_path": ".agent-foreman/phase2-closure/evaluation/evaluation-phase2-closure.json"
+    }
+  ],
+  "stop_conditions": [
+    "Stop and return to the owner before changing a schema version, public API shape, error code, environment variable, GitHub permission, provider fallback behavior, benchmark threshold, oracle, or reference resource limit beyond the approved decision.",
+    "Do not dispatch Terra until normative documents, the embedding contract, optional dependency lock, plan validation/render, and dispatch fingerprint all complete.",
+    "Do not mark Phase 2 verified while any blocking gate is failed or not run.",
+    "Never rewrite prior campaign ledgers or represent their failed delta guards as passed."
+  ],
+  "fallback_policy": {
+    "mode": "main_takeover",
+    "triggers": [
+      "Terra requires an unowned path or fails one precise nontransient repair.",
+      "The sentence-transformers dependency is unsupported on Python 3.14 after one evidence-backed resolution attempt.",
+      "Two packages fail against the same embedding or profile contract.",
+      "Docker isolation or deterministic evidence conflicts with a model recommendation."
+    ]
+  }
+}

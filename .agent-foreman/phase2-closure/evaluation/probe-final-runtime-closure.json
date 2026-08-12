@@ -1,0 +1,52 @@
+{
+  "schema_name": "agent-foreman/final-runtime-closure-probe",
+  "schema_version": "1.0",
+  "probe_id": "PROBE-P2C-FINAL-RUNTIME-CLOSURE-001",
+  "plan_id": "REPONPC-P2-CLOSURE-20260812",
+  "phase_id": "PHASE-2-CLOSURE",
+  "observed_at": "2026-08-12T05:55:38.9886623+08:00",
+  "baseline_revision": "83c3dd44f7cc2856dc3b61d9f637337f1a466d3e",
+  "production_access": "read-only",
+  "formal_benchmark": {
+    "artifact_path": ".agent-foreman/phase2-closure/artifacts/formal-benchmark-r2.json",
+    "formal_acceptance": true,
+    "passed": true,
+    "formal_blockers": [],
+    "provider_is_production": true,
+    "oracle_isolation_enforced": true,
+    "reference_host_verified": true,
+    "repeatable": true,
+    "resource_limits_verified": true,
+    "mount_isolation_verified": true,
+    "candidate_network_disabled": true,
+    "recall_at_8": 1.0,
+    "language_parity": 1.0,
+    "warm_p95_ms": 56.001268,
+    "question_count": 20,
+    "pair_count": 10,
+    "container_exit_code": 0,
+    "image_id": "sha256:fc9e4c35801d1847b89fada19c6bb2348ea852cf3ead0099134a1513245f4870",
+    "canonical_inputs": {
+      "questions_path": "evals/phase2/public/questions.json",
+      "questions_sha256": "e76e22f27ccf09006101d6945e90c5cbc837e95c1786d5d1fb73576623f18432",
+      "oracle_path": "evals/phase2/controller/expected-evidence.json",
+      "oracle_sha256": "e0de26e42a81be2fa03645a889ef31fc16b3000495dcad3f25646639e84ba498"
+    }
+  },
+  "docker_closure": {
+    "artifact_path": ".agent-foreman/phase2-closure/artifacts/gate-docker.xml",
+    "tests": 1,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "testcase": "tests.smoke.test_container::test_compose_container_health_and_runtime_volume_survive_restart",
+    "time_seconds": 26.019,
+    "timestamp": "2026-08-12T05:53:27.842281+08:00"
+  },
+  "evidence_policy": {
+    "old_formal_benchmark_excluded": true,
+    "historical_docker_evidence_excluded": true,
+    "statement": "The old formal benchmark and historical Docker evidence were excluded; only formal-benchmark-r2.json and the current closure gate-docker.xml were counted for final runtime closure."
+  },
+  "result": "passed"
+}

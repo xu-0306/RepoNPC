@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 from pathlib import Path
 
@@ -42,14 +43,17 @@ class DeterministicEmbeddingProvider:
             query_prefix="query: ",
             passage_prefix=prefix,
         )
+        self.raw_passages: list[str] = []
 
     def identity(self) -> EmbeddingIdentity:
         return self._identity
 
     def embed_passages(self, texts: list[str]) -> np.ndarray:
+        self.raw_passages.extend(texts)
         result = np.zeros((len(texts), self._identity.dimension), dtype=np.float32)
         for row, text in enumerate(texts):
-            digest = hashlib.sha256(text.encode("utf-8")).digest()
+            prefixed = self._identity.passage_prefix + text
+            digest = hashlib.sha256(prefixed.encode("utf-8")).digest()
             result[row, int.from_bytes(digest[:2], "big") % self._identity.dimension] = 1.0
         return result
 
@@ -119,6 +123,7 @@ def test_fixture_sources_flow_through_exclusion_chunking_evidence_and_schema(
         }
         assert "src/retrieval_pipeline.py" in source_paths
         assert "docs/architecture.md" in source_paths
+        assert "pyproject.toml" in source_paths
         assert ".env.fixture" not in source_paths
         assert connection.execute(
             "SELECT value FROM bundle_meta WHERE key = 'index_schema_version'"
@@ -141,6 +146,29 @@ def test_fixture_sources_flow_through_exclusion_chunking_evidence_and_schema(
         assert assertion[1] == "fixture_retrieval_design"
         assert assertion[2] <= assertion[3]
         assert connection.execute("PRAGMA quick_check").fetchone() == ("ok",)
+
+
+def test_root_manifest_is_line_addressable_repository_metadata_and_provider_adds_prefix(
+    tmp_path: Path,
+) -> None:
+    provider = DeterministicEmbeddingProvider()
+    result = _build(tmp_path, provider=provider)
+
+    with sqlite3.connect(result.database_path) as connection:
+        rows = connection.execute(
+            "SELECT sources.source_type, evidence.evidence_class, evidence.start_line, "
+            "evidence.end_line, evidence.metadata_json "
+            "FROM sources JOIN evidence USING(source_id) WHERE sources.path = 'pyproject.toml'"
+        ).fetchall()
+
+    assert rows
+    assert all(row[0] == "repository_metadata" for row in rows)
+    assert all(row[1] == "REPOSITORY_FACT" for row in rows)
+    assert all(1 <= row[2] <= row[3] for row in rows)
+    assert all(json.loads(row[4])["source_type"] == "repository_metadata" for row in rows)
+    assert provider.raw_passages
+    passage_prefix = provider.identity().passage_prefix
+    assert all(not text.startswith(passage_prefix) for text in provider.raw_passages)
 
 
 def test_high_confidence_secret_blob_is_skipped_without_persisting_its_body(tmp_path: Path) -> None:

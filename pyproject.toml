@@ -23,6 +23,11 @@ dependencies = [
   "uvicorn[standard]>=0.35,<1",
 ]
 
+[project.optional-dependencies]
+indexer = [
+  "sentence-transformers>=5.7,<6",
+]
+
 [dependency-groups]
 dev = [
   "httpx>=0.28,<1",
@@ -34,7 +39,7 @@ dev = [
 ]
 
 [project.scripts]
-reponpc = "reponpc.main:run"
+reponpc = "reponpc.cli:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/reponpc"]

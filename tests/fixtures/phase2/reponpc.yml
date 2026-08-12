@@ -35,7 +35,7 @@ repositories:
       en: A test project with bilingual documents, code symbols, and malicious instruction text.
     tags: [Python, TypeScript, Retrieval]
     demo_url: null
-    include: [README.md, docs/**, src/**]
+    include: [README.md, pyproject.toml, docs/**, src/**]
     exclude: [docs/generated/**, '**/*.min.js', node_modules/**, '*.lock']
     claims:
       - id: fixture_retrieval_design

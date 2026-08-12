@@ -1,7 +1,7 @@
 # RepoNPC v1 Acceptance Criteria
 
-**Document status:** Draft  
-**Applies to:** RepoNPC v1 Technical Specification 0.1.0  
+**Document status:** Approved; Phase 2 closure amendment approved 2026-08-11
+**Applies to:** RepoNPC v1 Technical Specification 0.1.1
 **Rule:** Every criterion is required unless its mapped requirement is changed through an approved specification update.
 
 ## 1. How acceptance works
@@ -22,7 +22,7 @@
 
 - **Given** a valid copy of `reponpc.example.yml` and all required deployment secrets,
 - **When** a new owner validates the file and starts the documented index/deployment flow without changing source code,
-- **Then** validation succeeds, a bundle can be built, and the profile reaches the setup/ready states described in the specification.
+- **Then** the installed `reponpc config validate` and `reponpc index build` entrypoints execute without starting the server, a bundle can be built when required public assets are supplied, and the profile reaches the setup/ready states described in the specification.
 
 ### AC-002 — Invalid and unknown configuration is rejected safely
 
@@ -79,8 +79,8 @@
 **Maps to:** FR-006, FR-022, NFR-006, NFR-008
 
 - **Given** paraphrased and cross-language questions with no exact keyword match,
-- **When** vector retrieval uses the bundle-declared embedding contract,
-- **Then** expected evidence is returned, output vectors have the declared finite normalized shape, and a model/dimension/prefix mismatch prevents readiness.
+- **When** vector retrieval uses the bundle-declared production embedding contract,
+- **Then** expected evidence is returned, output vectors have the declared finite normalized float32 shape, a model/dimension/prefix mismatch prevents readiness, and adapter/model load or encode failure does not invoke another provider or model.
 
 ### AC-009 — Hybrid retrieval meets the committed benchmark
 
@@ -88,8 +88,8 @@
 **Verification:** Evaluation and performance test
 
 - **Given** the versioned standard evaluation corpus and questions,
-- **When** term/trigram lexical ranks and vector ranks are fused with configured RRF and final `k=8`,
-- **Then** Recall@8 is at least 85%, paired `zh-TW`/`en` questions retrieve materially equivalent expected evidence at least 90% of the time, and warm retrieval p95 is at most 750 ms on the documented reference host.
+- **When** a Docker candidate limited to four CPUs and 8 GiB receives only the repository fixture and public questions, uses the production embedding adapter, and returns term/trigram/vector/RRF candidates for host-side scoring,
+- **Then** Docker inspection and an access probe prove the reviewed oracle was neither mounted nor readable, the host controller derives every pass/provenance boolean, Recall@8 is at least 85%, paired `zh-TW`/`en` questions retrieve materially equivalent expected evidence at least 90% of the time, and warm retrieval p95 is at most 750 ms with image/runtime/host provenance and timing samples recorded.
 
 ### AC-010 — Evidence classes cannot be conflated
 
@@ -97,7 +97,7 @@
 
 - **Given** an owner assertion about responsibility, a repository fact about implementation, and an inference supported by both,
 - **When** they are indexed, retrieved, sent to the model, and rendered,
-- **Then** each keeps its evidence class, owner statements are visibly labeled, and the inference lists non-inference supporting IDs.
+- **Then** each keeps its evidence class, owner statements are visibly labeled, root manifest records classified as `repository_metadata` remain line-addressable `REPOSITORY_FACT`, configured source weighting consumes that category, and the inference lists non-inference supporting IDs.
 
 ### AC-011 — Valid answers have immutable citations
 
@@ -206,7 +206,7 @@
 
 - **Given** every visitor/admin route, state, validation error, suggested question, profile field, and standard answer scenario,
 - **When** locale switches between `zh-TW` and `en`,
-- **Then** neither locale exposes untranslated keys or missing critical content, chat uses the selected language while preserving technical names/citations, and switching does not erase the visible conversation.
+- **Then** neither locale exposes untranslated keys or missing critical content, one verified bundle profile contains both complete locale payloads, the public profile route returns the requested locale without cross-fallback, chat uses the selected language while preserving technical names/citations, and switching does not erase the visible conversation.
 
 ## 6. Administration and GitHub writeback
 
@@ -257,8 +257,8 @@
 **Maps to:** FR-020, NFR-003, NFR-011
 
 - **Given** successful and deliberately failed builds/uploads,
-- **When** the GitHub Action executes,
-- **Then** a successful run validates and publishes one immutable checksummed asset before updating `stable-manifest.json`, while any failure leaves the prior stable manifest unchanged and surfaces a failed Action.
+- **When** the GitHub Action executes the real `config validate`, `index build`, `index publish`, and `index publish-manifest` commands,
+- **Then** a successful run validates and publishes one immutable checksummed asset, verifies it, records a local pending manifest, and only then updates `stable-manifest.json`; any failure before the final command leaves the prior stable manifest unchanged and surfaces a failed Action.
 
 ### AC-030 — Bundle validation rejects every unsafe candidate
 

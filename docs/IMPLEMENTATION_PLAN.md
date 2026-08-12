@@ -7,6 +7,8 @@
 | Implementation status | Authorized on 2026-08-10; MVP delivery phase in progress |
 | Expected duration | Approximately 8–12 weeks for one developer |
 
+The owner-approved 2026-08-11 Phase 2 closure amendment is recorded in ADR-015 and Technical Specification 0.1.1. It adds executable index commands, the build-time production local adapter, bilingual bundle-profile integration, repository metadata production, and isolated formal benchmark evidence to Milestone 2 without moving chat/runtime-provider scope out of Milestone 3.
+
 ## 1. How an implementation Agent should use this plan
 
 This document provides work order and integration gates. It does not replace the normative behavior in `TECHNICAL_SPEC.md` or the proof required by `ACCEPTANCE_CRITERIA.md`.
@@ -128,11 +130,16 @@ Any delegated implementation work must also follow `SUBAGENT_EXECUTION_PLAYBOOK.
 - Add Tree-sitter adapters for Python, JavaScript, TypeScript/TSX, Go, and Rust plus Markdown/text fallback.
 - Generate stable sources/evidence IDs, owner-assertion source ranges, metadata, and deterministic chunks.
 - Build schema-v1 `index.sqlite`, dual FTS5 indexes, normalized embedding blobs, and NumPy vector matrix loading.
+- Ship the optional indexer-only `local_sentence_transformers` adapter and use it in real index builds and the formal benchmark; keep runtime query-provider lifecycle integration in Milestone 3.
+- Implement the installed `reponpc` dispatch so no arguments/`serve` start the application and `config validate`, `index build`, `index publish`, and `index publish-manifest` execute the workflow without entering server startup.
+- Produce line-addressable root manifest evidence as `repository_metadata` `REPOSITORY_FACT` records while preserving owner role/summary/claims as `OWNER_ASSERTION`.
 - Implement lexical query safety, semantic lookup, metadata policy, overlap deduplication, RRF, context packing, and retrieval diagnostics.
 - Build the evaluation fixture repositories/questions and benchmark command early enough to tune with evidence.
 - Implement canonical bundle/card asset layout, canonical JSON manifests, checksums, safe `tar.zst` creation/extraction, database integrity checks, and smoke query.
+- Generate one complete bilingual `public/profile.json`, validate both locales before activation, and make the existing public route select the requested locale without fallback.
 - Implement stable-manifest polling, ETag behavior, staging, validation, atomic activation, concurrent request handles, retention, pinning, and rollback.
 - Implement `build-index.yml`: validate, index, test, upload immutable GitHub Release asset, verify it, and update stable manifest last.
+- Run formal retrieval acceptance with a Docker candidate limited to four CPUs/8 GiB and no oracle access; score with a host-only controller and derive all formal booleans from inspection, provider identity, repeatability, measurements, and thresholds.
 
 ### Exit gate
 
@@ -148,7 +155,7 @@ Any delegated implementation work must also follow `SUBAGENT_EXECUTION_PLAYBOOK.
 
 ### Deliverables
 
-- Implement OpenAI-compatible, Ollama, and local sentence-transformers adapters with capability/identity contracts, health, bounded retries, and normalized failures.
+- Implement OpenAI-compatible and Ollama chat/embedding adapters and integrate the Phase 2 local sentence-transformers adapter into runtime query-provider health/readiness, bounded retries, and normalized failures.
 - Implement question/history validation, language handling, hybrid retrieval orchestration, context/token budgeting, and untrusted-evidence delimiters.
 - Define provider prompts/output envelope and one bounded repair path.
 - Implement complete-output buffering, evidence-ID validation, material-claim/citation checks, owner-assertion policy, inference dependencies, sanitization, and safe abstention.

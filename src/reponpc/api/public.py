@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -16,6 +15,12 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict
 
 from reponpc.i18n.catalog import SUPPORTED_LOCALES, translate
+from reponpc.indexing.public_profile import (
+    PublicProfileError,
+    localized_public_profile_bytes,
+    parse_public_profile_bytes,
+    validate_public_profile_metadata,
+)
 
 DEFAULT_LOCALE = "zh-TW"
 _PUBLIC_INDEX_VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
@@ -253,12 +258,11 @@ def create_public_router(
         if directory is None:
             return unavailable(request, locale)
         try:
-            payload = json.loads((directory / "profile.json").read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            payload = parse_public_profile_bytes((directory / "profile.json").read_bytes())
+            validate_public_profile_metadata(payload, index_version=version())
+            body = localized_public_profile_bytes(payload, locale)
+        except (OSError, PublicProfileError):
             return unavailable(request, locale)
-        if not isinstance(payload, dict):
-            return unavailable(request, locale)
-        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         return Response(
             content=body,
             media_type="application/json",

@@ -1,0 +1,36 @@
+{
+  "schema_name": "agent-foreman/handoff",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-P2-CLOSURE-20260812",
+  "package_id": "PKG-TERRA-LOCAL-EMBEDDING",
+  "status": "implemented",
+  "requested_selector": "gpt-5.6-terra",
+  "resolved_model_id": null,
+  "model_verification": "unavailable",
+  "reasoning_effort": "unavailable",
+  "changed_paths": [
+    "src/reponpc/providers/local_sentence_transformers.py",
+    "tests/unit/test_local_sentence_transformers.py"
+  ],
+  "diff_artifact": ".agent-foreman/phase2-closure/artifacts/terra-local-embedding-diff-manifest.json",
+  "test_artifacts": [
+    ".agent-foreman/phase2-closure/artifacts/worker-local-embedding.txt",
+    ".agent-foreman/phase2-closure/artifacts/gate-local-embedding.xml",
+    ".agent-foreman/phase2-closure/artifacts/gate-delta-terra-r3.json"
+  ],
+  "gate_results": [
+    {
+      "gate_id": "GATE-LOCAL-EMBEDDING",
+      "exit_code": 0,
+      "observed": "20 focused unit tests passed; Ruff lint and format checks passed."
+    },
+    {
+      "gate_id": "GATE-DELTA",
+      "exit_code": 0,
+      "observed": "The accepted r3 guard found exactly the two authorized worker paths and no violations; the two earlier failed guard artifacts are preserved."
+    }
+  ],
+  "summary": "Implemented the frozen local_sentence_transformers build-time embedding adapter with lazy dependency loading, exact prefixes, normalized finite float32 validation, safe error codes, no fallback, and focused tests.",
+  "blocked_record": null
+}

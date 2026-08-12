@@ -1,0 +1,29 @@
+{
+  "anti_oracle": "A fixture provider or checking identity fields without invoking encode does not count.",
+  "artifact_path": ".agent-foreman/phase2-closure/evaluation/probe-embedding-production.json",
+  "baseline_commit": "83c3dd44f7cc2856dc3b61d9f637337f1a466d3e",
+  "command": "rtk proxy .venv/Scripts/python.exe .agent-foreman/phase2-closure/evaluation/fresh_probes.py embedding_production .agent-foreman/phase2-closure/evaluation/probe-embedding-production.json",
+  "exit_code": 0,
+  "fault_injection": "Return float64, wrong-width, NaN, and upstream-error outputs while recording model/encode calls.",
+  "invariant_id": "INV-EMBEDDING-PRODUCTION",
+  "next_action": null,
+  "observations": {
+    "failures": {
+      "encode_error": "embedding_encode_failed",
+      "float64": "embedding_output_invalid",
+      "nan": "embedding_output_invalid",
+      "wrong_width": "embedding_output_invalid"
+    },
+    "identity": {
+      "adapter": "local_sentence_transformers",
+      "dimension": 384,
+      "model_id": "intfloat/multilingual-e5-small"
+    },
+    "model_encode_call_count": 4
+  },
+  "oracle": "Every invalid output fails with a stable safe code, exact query prefix/normalization is used, and only the configured model is loaded once.",
+  "probe_id": "PROBE-P2C-EMBEDDING-PRODUCTION-001",
+  "production_trigger": "Call production LocalSentenceTransformersEmbeddingProvider.embed_query.",
+  "setup": "Inject one fake SentenceTransformer implementation behind the production lazy-load boundary.",
+  "status": "passed"
+}

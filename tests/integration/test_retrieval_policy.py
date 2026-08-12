@@ -259,6 +259,33 @@ def test_hybrid_uses_rrf_scores_and_source_weight_multipliers(
         reader.close()
 
 
+def test_hybrid_consumes_repository_metadata_weight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reader, _ = _controlled_reader(tmp_path)
+    try:
+        reader.retrieval_policy["source_weights"]["repository_metadata"] = 2.0
+        evidence = {
+            "code": _evidence("code", source_type="source_code"),
+            "metadata": _evidence("metadata", source_type="repository_metadata"),
+        }
+        _set_ranked_evidence(
+            reader,
+            monkeypatch,
+            lexical=["code", "metadata"],
+            vector=["code", "metadata"],
+            evidence=evidence,
+        )
+
+        result = reader.hybrid_candidates(
+            "question", query_vector=reader.vectors.values[0], final_limit=2
+        )
+
+        assert result == ["metadata", "code"]
+    finally:
+        reader.close()
+
+
 def test_hybrid_excludes_disabled_sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     reader, _ = _controlled_reader(tmp_path)
     try:

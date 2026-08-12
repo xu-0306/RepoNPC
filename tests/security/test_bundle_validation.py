@@ -12,7 +12,7 @@ import pytest
 
 from reponpc.bundles.archive import BundleError, build_bundle, verify_bundle_archive
 from reponpc.bundles.manifest import bundle_id_for
-from tests.integration.test_bundle_producer_consumer import _bundle
+from tests.integration.test_bundle_producer_consumer import _bundle, _public_files
 from tests.integration.test_index_build import (
     DeterministicEmbeddingProvider,
     _build,
@@ -108,22 +108,11 @@ def test_corrupt_sqlite_with_matching_internal_checksums_is_a_safe_bundle_reject
         repositories=(repository,),
         bundle_id=bundle_id,
         built_at=built_at,
-        public_files={
-            "public/profile.json": b'{"schema_version":1}',
-            "public/character.png": b"\x89PNG\r\n\x1a\nfixture",
-            **{
-                f"public/card-{theme}-{locale}.{extension}": (
-                    b"<svg xmlns='http://www.w3.org/2000/svg'/>"
-                    if extension == "svg"
-                    else b"GIF89a"
-                    if extension == "gif"
-                    else b"\x89PNG\r\n\x1a\nfixture"
-                )
-                for theme in ("light", "dark")
-                for locale in ("zh-TW", "en")
-                for extension in ("svg", "gif", "png")
-            },
-        },
+        public_files=_public_files(
+            bundle_id=bundle_id,
+            built_at=built_at,
+            repository_count=index_result.repository_count,
+        ),
         output_path=tmp_path / f"reponpc-index-{bundle_id}.tar.zst",
     )
 

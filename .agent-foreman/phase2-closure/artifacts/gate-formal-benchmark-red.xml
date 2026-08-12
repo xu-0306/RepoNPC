@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="0.375" timestamp="2026-08-12T01:30:55.655074+08:00" hostname="DESKTOP-M18GQTS"><testcase classname="" name="tests.integration.test_phase2_benchmark" time="0.000"><error message="collection failure">ImportError while importing test module 'D:\RepoNPC\tests\integration\test_phase2_benchmark.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Python314\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\integration\test_phase2_benchmark.py:10: in &lt;module&gt;
+    from evals.phase2.run_benchmark import derive_formal_report, validate_candidate_output
+E   ImportError: cannot import name 'derive_formal_report' from 'evals.phase2.run_benchmark' (D:\RepoNPC\evals\phase2\run_benchmark.py)</error></testcase></testsuite></testsuites>

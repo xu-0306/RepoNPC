@@ -1,0 +1,24 @@
+{
+  "anti_oracle": "Calling reponpc.cli.main directly or mocking run_server does not prove installed console dispatch.",
+  "artifact_path": ".agent-foreman/phase2-closure/evaluation/probe-cli-entrypoint.json",
+  "baseline_commit": "83c3dd44f7cc2856dc3b61d9f637337f1a466d3e",
+  "command": "rtk proxy .venv/Scripts/python.exe .agent-foreman/phase2-closure/evaluation/fresh_probes.py cli_entrypoint .agent-foreman/phase2-closure/evaluation/probe-cli-entrypoint.json",
+  "exit_code": 0,
+  "fault_injection": "Inject invalid deployment startup state and an empty publication directory.",
+  "invariant_id": "INV-CLI-ENTRYPOINT",
+  "next_action": null,
+  "observations": {
+    "config_exit": 0,
+    "help_exit": 0,
+    "index_exit": 1,
+    "index_stderr": "reponpc: build_receipt_invalid",
+    "serve_exit": 1,
+    "serve_startup_error": true,
+    "stable_pointer_absent": true
+  },
+  "oracle": "Help/config bypass startup, index dispatch returns its own safe error without pointer mutation, and serve alone observes startup validation.",
+  "probe_id": "PROBE-P2C-CLI-ENTRYPOINT-001",
+  "production_trigger": "Run --help, config validate, index publish, and serve through the installed reponpc.exe boundary.",
+  "setup": "Invoke the installed .venv console executable with a deliberately invalid startup-only REPONPC_PORT.",
+  "status": "passed"
+}

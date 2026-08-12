@@ -1,0 +1,18 @@
+{
+  "authorized_paths": [
+    "src/reponpc/providers/local_sentence_transformers.py",
+    "tests/unit/test_local_sentence_transformers.py"
+  ],
+  "changed_paths": [
+    "src/reponpc/providers/local_sentence_transformers.py",
+    "tests/unit/test_local_sentence_transformers.py"
+  ],
+  "dirty_state_rule": "compare handoff only against dispatch snapshot",
+  "dispatch_workspace_digest": "1641b2fa2baf61ca95805eb0c84b407a52b7b87ff64bb21c3610ba8d0b4a4caa",
+  "handoff_workspace_digest": "5bf6a67b5908c1d18382948b7b4f84d160b39f199613b2fc9fe57b13511cdd3c",
+  "package_id": "PKG-TERRA-LOCAL-EMBEDDING",
+  "passed": true,
+  "schema_name": "agent-foreman/delta-result",
+  "schema_version": "1.0",
+  "violations": []
+}

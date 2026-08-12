@@ -1,0 +1,65 @@
+{
+  "schema_name": "agent-foreman/integration",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-P2-CLOSURE-20260812",
+  "phase_id": "PHASE-2-CLOSURE",
+  "actor_role": "main",
+  "packages": [
+    "PKG-MAIN-SPEC",
+    "PKG-MAIN-EMBEDDING-CONTRACT",
+    "PKG-TERRA-LOCAL-EMBEDDING",
+    "PKG-MAIN-CLI-PUBLIC",
+    "PKG-MAIN-BENCHMARK",
+    "PKG-MAIN-INTEGRATION"
+  ],
+  "delta_guard": {
+    "passed": true,
+    "artifact": ".agent-foreman/phase2-closure/artifacts/gate-delta.txt"
+  },
+  "focused_gates": [
+    "GATE-SPEC",
+    "GATE-EMBEDDING-CONTRACT",
+    "GATE-CLI",
+    "GATE-WORKFLOW",
+    "GATE-LOCAL-EMBEDDING",
+    "GATE-PROFILE",
+    "GATE-REPOSITORY-METADATA",
+    "GATE-PUBLICATION-LAST"
+  ],
+  "aggregate_gates": [
+    "GATE-FORMAL-BENCHMARK",
+    "GATE-PYTHON-ALL",
+    "GATE-QUALITY",
+    "GATE-WEB",
+    "GATE-DOCKER",
+    "GATE-DELTA"
+  ],
+  "runtime_evidence": [
+    {
+      "gate_id": "GATE-FORMAL-BENCHMARK",
+      "artifact": ".agent-foreman/phase2-closure/artifacts/formal-benchmark-r2.json",
+      "observed": "formal_acceptance=true; Recall@8=1.0; language_parity=1.0; warm_p95_ms=56.001268; 20 questions and 100 timing samples; production provider, canonical input digests, Docker isolation, 4 CPU, and 8 GiB all verified."
+    },
+    {
+      "gate_id": "GATE-DOCKER",
+      "artifact": ".agent-foreman/phase2-closure/artifacts/gate-docker.xml",
+      "observed": "Current closure Compose startup, restart, health, and runtime-volume persistence smoke passed: 1 test, 0 failures, 0 errors, 0 skipped in 26.05 seconds."
+    }
+  ],
+  "deterministic_result": "passed",
+  "evaluator_recommendation": "pass",
+  "status": "verified",
+  "final_checks": {
+    "blocking_gates_passed": 14,
+    "missing_gate_artifacts": 0,
+    "plan_validation": "passed",
+    "git_diff_check": "passed",
+    "protected_history_diff": "passed",
+    "non_test_secret_scan": "passed"
+  },
+  "rework": {
+    "worker_changed_lines": 251,
+    "main_changed_lines_in_worker_scope": 0
+  }
+}

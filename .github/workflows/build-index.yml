@@ -23,7 +23,7 @@ jobs:
       - name: Install Python
         run: uv python install 3.14.7
       - name: Install locked dependencies
-        run: uv sync --locked
+        run: uv sync --locked --extra indexer
       - name: Validate configuration
         run: uv run reponpc config validate reponpc.yml
       - name: Build immutable index bundle

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -41,14 +41,33 @@ class EmbeddingIdentity:
             raise ValueError("RepoNPC bundle embeddings must be normalized")
 
 
-class PassageEmbeddingProvider(Protocol):
-    """Minimal index-time provider boundary; concrete adapters arrive in P3."""
+class EmbeddingProviderError(RuntimeError):
+    """Safe provider failure that never reflects model paths or upstream bodies."""
+
+    def __init__(self, code: str) -> None:
+        if not code:
+            raise ValueError("embedding provider error code must be non-empty")
+        self.code = code
+        super().__init__("embedding provider failed")
+
+
+@runtime_checkable
+class EmbeddingProvider(Protocol):
+    """Common batch embedding boundary shared by index and query consumers."""
 
     def identity(self) -> EmbeddingIdentity:
         """Return the exact provider identity used to create vectors."""
 
+    def embed_query(self, texts: list[str]) -> NDArray[np.float32]:
+        """Return one normalized float32 vector per prefixed query."""
+
     def embed_passages(self, texts: list[str]) -> NDArray[np.float32]:
         """Return one normalized float32 vector per supplied passage."""
+
+
+# Compatibility alias for the existing Phase 2 builder import. New adapters and
+# later runtime consumers use the complete EmbeddingProvider name.
+PassageEmbeddingProvider = EmbeddingProvider
 
 
 @dataclass(frozen=True, slots=True)

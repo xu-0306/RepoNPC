@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="8" skipped="0" tests="9" time="1.016" timestamp="2026-08-12T01:17:46.939939+08:00" hostname="DESKTOP-M18GQTS"><testcase classname="tests.integration.test_publication_last" name="test_publication_advances_stable_manifest_only_after_verified_immutable_asset" time="0.063"><failure message="AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'">tmp_path = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-publication-red/test_publication_advances_stab0')
+
+    def test_publication_advances_stable_manifest_only_after_verified_immutable_asset(
+        tmp_path: Path,
+    ) -&gt; None:
+        bundle, _ = _bundle(tmp_path)
+        publisher = RecordingPublisher()
+        coordinator = PublicationCoordinator(publisher)
+&gt;       result = coordinator.publish_immutable(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            bundle,
+            now=datetime(2026, 8, 10, 12, 1, tzinfo=UTC),
+        )
+E       AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'
+
+tests\integration\test_publication_last.py:56: AttributeError</failure></testcase><testcase classname="tests.integration.test_publication_last" name="test_failed_preceding_stage_preserves_prior_stable_manifest[release]" time="0.058"><failure message="AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'">tmp_path = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-publication-red/test_failed_preceding_stage_pr0')
+failure = 'release'
+
+    @pytest.mark.parametrize("failure", ["release", "upload", "verify"])
+    def test_failed_preceding_stage_preserves_prior_stable_manifest(
+        tmp_path: Path, failure: str
+    ) -&gt; None:
+        bundle, _ = _bundle(tmp_path)
+        publisher = RecordingPublisher(fail_at=failure)
+        prior = publisher.stable_content
+    
+        with pytest.raises(PublicationError) as error:
+&gt;           PublicationCoordinator(publisher).publish_immutable(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                bundle,
+                now=datetime(2026, 8, 10, 12, 1, tzinfo=UTC),
+            )
+E           AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'
+
+tests\integration\test_publication_last.py:79: AttributeError</failure></testcase><testcase classname="tests.integration.test_publication_last" name="test_failed_preceding_stage_preserves_prior_stable_manifest[upload]" time="0.050"><failure message="AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'">tmp_path = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-publication-red/test_failed_preceding_stage_pr1')
+failure = 'upload'
+
+    @pytest.mark.parametrize("failure", ["release", "upload", "verify"])
+    def test_failed_preceding_stage_preserves_prior_stable_manifest(
+        tmp_path: Path, failure: str
+    ) -&gt; None:
+        bundle, _ = _bundle(tmp_path)
+        publisher = RecordingPublisher(fail_at=failure)
+        prior = publisher.stable_content
+    
+        with pytest.raises(PublicationError) as error:
+&gt;           PublicationCoordinator(publisher).publish_immutable(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                bundle,
+                now=datetime(2026, 8, 10, 12, 1, tzinfo=UTC),
+            )
+E           AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'
+
+tests\integration\test_publication_last.py:79: AttributeError</failure></testcase><testcase classname="tests.integration.test_publication_last" name="test_failed_preceding_stage_preserves_prior_stable_manifest[verify]" time="0.049"><failure message="AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'">tmp_path = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-publication-red/test_failed_preceding_stage_pr2')
+failure = 'verify'
+
+    @pytest.mark.parametrize("failure", ["release", "upload", "verify"])
+    def test_failed_preceding_stage_preserves_prior_stable_manifest(
+        tmp_path: Path, failure: str
+    ) -&gt; None:
+        bundle, _ = _bundle(tmp_path)
+        publisher = RecordingPublisher(fail_at=failure)
+        prior = publisher.stable_content
+    
+        with pytest.raises(PublicationError) as error:
+&gt;           PublicationCoordinator(publisher).publish_immutable(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                bundle,
+                now=datetime(2026, 8, 10, 12, 1, tzinfo=UTC),
+            )
+E           AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'
+
+tests\integration\test_publication_last.py:79: AttributeError</failure></testcase><testcase classname="tests.integration.test_publication_last" name="test_manifest_step_reverifies_pending_asset_before_pointer_mutation" time="0.052"><failure message="AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'">tmp_path = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-publication-red/test_manifest_step_reverifies_0')
+
+    def test_manifest_step_reverifies_pending_asset_before_pointer_mutation(tmp_path: Path) -&gt; None:
+        bundle, _ = _bundle(tmp_path)
+        publisher = RecordingPublisher()
+        coordinator = PublicationCoordinator(publisher)
+&gt;       pending = coordinator.publish_immutable(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            bundle,
+            now=datetime(2026, 8, 10, 12, 1, tzinfo=UTC),
+        ).stable_manifest
+E       AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'
+
+tests\integration\test_publication_last.py:92: AttributeError</failure></testcase><testcase classname="tests.integration.test_github_publication" name="test_index_build_workflow_enforces_immutable_publication_order" time="0.003" /><testcase classname="tests.integration.test_github_publication" name="test_concrete_publisher_releases_verifies_then_updates_only_the_fixed_pointer" time="0.049"><failure message="AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'">tmp_path = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-publication-red/test_concrete_publisher_releas0')
+
+    def test_concrete_publisher_releases_verifies_then_updates_only_the_fixed_pointer(tmp_path) -&gt; None:
+        bundle, _ = _bundle(tmp_path)
+        transport = RecordingGitHubTransport()
+        publisher = _publisher(transport)
+        coordinator = PublicationCoordinator(publisher)
+&gt;       result = coordinator.publish_immutable(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            bundle,
+            now=datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
+        )
+E       AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'
+
+tests\integration\test_github_publication.py:157: AttributeError</failure></testcase><testcase classname="tests.integration.test_github_publication" name="test_existing_pointer_uses_its_current_blob_sha_only_at_final_mutation" time="0.048"><failure message="AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'">tmp_path = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-publication-red/test_existing_pointer_uses_its0')
+
+    def test_existing_pointer_uses_its_current_blob_sha_only_at_final_mutation(tmp_path) -&gt; None:
+        bundle, _ = _bundle(tmp_path)
+        transport = RecordingGitHubTransport(existing_manifest=True)
+    
+        coordinator = PublicationCoordinator(_publisher(transport))
+&gt;       pending = coordinator.publish_immutable(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            bundle,
+            now=datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
+        ).stable_manifest
+E       AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'
+
+tests\integration\test_github_publication.py:195: AttributeError</failure></testcase><testcase classname="tests.integration.test_github_publication" name="test_upload_failure_never_reads_or_writes_the_stable_manifest" time="0.047"><failure message="AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'">tmp_path = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-publication-red/test_upload_failure_never_read0')
+
+    def test_upload_failure_never_reads_or_writes_the_stable_manifest(tmp_path) -&gt; None:
+        bundle, _ = _bundle(tmp_path)
+        transport = RecordingGitHubTransport(fail_upload=True)
+    
+        with pytest.raises(PublicationError) as error:
+&gt;           PublicationCoordinator(_publisher(transport)).publish_immutable(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                bundle,
+                now=datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
+            )
+E           AttributeError: 'PublicationCoordinator' object has no attribute 'publish_immutable'
+
+tests\integration\test_github_publication.py:210: AttributeError</failure></testcase></testsuite></testsuites>

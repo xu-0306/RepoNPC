@@ -55,7 +55,11 @@ def _bundle_at(tmp_path: Path, minute: int):
             repositories=(repository,),
             bundle_id=bundle_id,
             built_at=built_at,
-            public_files=_public_files(),
+            public_files=_public_files(
+                bundle_id=bundle_id,
+                built_at=built_at,
+                repository_count=index_result.repository_count,
+            ),
             output_path=tmp_path / f"reponpc-index-{bundle_id}.tar.zst",
         ),
         provider,

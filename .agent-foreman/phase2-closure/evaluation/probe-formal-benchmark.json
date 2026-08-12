@@ -1,0 +1,33 @@
+{
+  "anti_oracle": "Removing the CLI flag text without proving canonical scoring/digest provenance or candidate-field rejection does not count.",
+  "artifact_path": ".agent-foreman/phase2-closure/evaluation/probe-formal-benchmark.json",
+  "baseline_commit": "83c3dd44f7cc2856dc3b61d9f637337f1a466d3e",
+  "command": "rtk proxy .venv/Scripts/python.exe .agent-foreman/phase2-closure/evaluation/fresh_probes.py formal_benchmark .agent-foreman/phase2-closure/evaluation/probe-formal-benchmark.json",
+  "exit_code": 0,
+  "fault_injection": "Pass --oracle at the real controller CLI, inject a forbidden candidate host field, and replace every candidate retrieved path with attacker-controlled misses.",
+  "invariant_id": "INV-FORMAL-BENCHMARK",
+  "next_action": null,
+  "observations": {
+    "attacker_fails_canonical": true,
+    "attacker_oracle_acceptance": false,
+    "attacker_recall_at_8": 0.0,
+    "canonical_digests_verified": true,
+    "dockerfile_oracle_free": true,
+    "host_only_field_rejected": true,
+    "legitimate_formal_acceptance": true,
+    "oracle_override_exit": 2,
+    "oracle_override_rejected": true,
+    "override_artifact_absent": true,
+    "reported_inputs": {
+      "oracle_path": "evals/phase2/controller/expected-evidence.json",
+      "oracle_sha256": "e0de26e42a81be2fa03645a889ef31fc16b3000495dcad3f25646639e84ba498",
+      "questions_path": "evals/phase2/public/questions.json",
+      "questions_sha256": "e76e22f27ccf09006101d6945e90c5cbc837e95c1786d5d1fb73576623f18432"
+    }
+  },
+  "oracle": "CLI rejects --oracle without producing an artifact; attacker paths remain Recall@8=0/formal=false; legitimate report records exact canonical input digests; host-only fields are rejected.",
+  "probe_id": "PROBE-P2C-FORMAL-BENCHMARK-001",
+  "production_trigger": "Invoke the real argparse boundary, then call production validate_candidate_output and canonical derive_formal_report.",
+  "setup": "Reuse the recorded real container/image/access evidence and canonical controller files; do not run Docker.",
+  "status": "passed"
+}

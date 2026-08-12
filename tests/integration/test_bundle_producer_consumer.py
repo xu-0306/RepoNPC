@@ -4,15 +4,22 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import tarfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
+from reponpc.api.public import SetupState
 from reponpc.bundles.archive import BundleError, build_bundle, verify_bundle_archive
 from reponpc.bundles.manifest import bundle_id_for
+from reponpc.config.models import load_public_config
+from reponpc.indexing.public_profile import build_public_profile_bytes
+from reponpc.main import create_app
 from tests.integration.test_index_build import (
+    FIXTURE_CONFIG,
     DeterministicEmbeddingProvider,
     _build,
     _configuration_source,
@@ -20,9 +27,16 @@ from tests.integration.test_index_build import (
 )
 
 
-def _public_files() -> dict[str, bytes]:
+def _public_files(
+    *, bundle_id: str, built_at: datetime, repository_count: int = 1
+) -> dict[str, bytes]:
     files: dict[str, bytes] = {
-        "public/profile.json": b'{"schema_version":1}',
+        "public/profile.json": build_public_profile_bytes(
+            config=load_public_config(FIXTURE_CONFIG),
+            index_version=bundle_id,
+            built_at=built_at,
+            repository_count=repository_count,
+        ),
         "public/character.png": b"\x89PNG\r\n\x1a\nfixture",
     }
     for theme in ("light", "dark"):
@@ -54,7 +68,11 @@ def _bundle(tmp_path: Path):
         repositories=(repository,),
         bundle_id=bundle_id,
         built_at=built_at,
-        public_files=_public_files(),
+        public_files=_public_files(
+            bundle_id=bundle_id,
+            built_at=built_at,
+            repository_count=index_result.repository_count,
+        ),
         output_path=tmp_path / f"reponpc-index-{bundle_id}.tar.zst",
     )
     return bundle, provider
@@ -81,6 +99,22 @@ def test_production_bundle_bytes_are_accepted_by_the_real_read_only_consumer(
             vector_limit=8,
             final_limit=8,
         )
+        app = create_app(
+            setup_state=SetupState(
+                index_ready=True,
+                index_version=bundle.manifest.bundle_id,
+                public_directory=verified.directory / "public",
+            )
+        )
+        with TestClient(app) as client:
+            zh_tw = client.get("/api/public/profile?locale=zh-TW")
+            english = client.get("/api/public/profile?locale=en")
+        assert zh_tw.status_code == english.status_code == 200
+        assert zh_tw.json()["locale"] == "zh-TW"
+        assert english.json()["locale"] == "en"
+        assert zh_tw.json()["profile"]["headline"] != english.json()["profile"]["headline"]
+        assert "locales" not in zh_tw.json()
+        assert zh_tw.json()["index"]["version"] == bundle.manifest.bundle_id
     finally:
         verified.close()
 
@@ -115,7 +149,11 @@ def test_build_streams_index_and_completed_archive_without_read_bytes(
         repositories=(repository,),
         bundle_id=bundle_id,
         built_at=built_at,
-        public_files=_public_files(),
+        public_files=_public_files(
+            bundle_id=bundle_id,
+            built_at=built_at,
+            repository_count=index_result.repository_count,
+        ),
         output_path=output_path,
     )
     verified = verify_bundle_archive(
@@ -130,14 +168,35 @@ def test_build_streams_index_and_completed_archive_without_read_bytes(
 
 @pytest.mark.parametrize(
     "invalid_input",
-    ["missing_index", "empty_index", "missing_public", "unexpected_public", "empty_public"],
+    [
+        "missing_index",
+        "empty_index",
+        "missing_public",
+        "unexpected_public",
+        "empty_public",
+        "missing_locale",
+    ],
 )
 def test_invalid_build_payloads_leave_no_output_or_temporary_archive(
     tmp_path: Path, invalid_input: str
 ) -> None:
     provider = DeterministicEmbeddingProvider()
     index_result = _build(tmp_path / "index", provider=provider)
-    public_files = _public_files()
+    built_at = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    configuration = _configuration_source()
+    repository = _fixture_snapshot()
+    bundle_id = bundle_id_for(
+        built_at=built_at,
+        configuration_bytes=configuration.content.encode("utf-8"),
+        repositories=((repository.slug, repository.commit_sha),),
+        embedding=provider.identity(),
+        parser_chunker_version="p2-02-v1",
+    )
+    public_files = _public_files(
+        bundle_id=bundle_id,
+        built_at=built_at,
+        repository_count=index_result.repository_count,
+    )
     if invalid_input == "missing_index":
         index_result.database_path.unlink()
     elif invalid_input == "empty_index":
@@ -146,17 +205,12 @@ def test_invalid_build_payloads_leave_no_output_or_temporary_archive(
         public_files.pop("public/profile.json")
     elif invalid_input == "unexpected_public":
         public_files["public/unexpected.txt"] = b"unexpected"
-    else:
+    elif invalid_input == "empty_public":
         public_files["public/profile.json"] = b""
-    configuration = _configuration_source()
-    repository = _fixture_snapshot()
-    bundle_id = bundle_id_for(
-        built_at=datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
-        configuration_bytes=configuration.content.encode("utf-8"),
-        repositories=((repository.slug, repository.commit_sha),),
-        embedding=provider.identity(),
-        parser_chunker_version="p2-02-v1",
-    )
+    else:
+        profile = json.loads(public_files["public/profile.json"])
+        del profile["locales"]["en"]
+        public_files["public/profile.json"] = json.dumps(profile).encode("utf-8")
     output_path = tmp_path / f"reponpc-index-{bundle_id}.tar.zst"
 
     with pytest.raises(BundleError) as error:
@@ -165,12 +219,16 @@ def test_invalid_build_payloads_leave_no_output_or_temporary_archive(
             configuration_source=configuration,
             repositories=(repository,),
             bundle_id=bundle_id,
-            built_at=datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
+            built_at=built_at,
             public_files=public_files,
             output_path=output_path,
         )
 
-    assert error.value.code in {"bundle_payload_invalid", "bundle_payload_layout_invalid"}
+    assert error.value.code in {
+        "bundle_payload_invalid",
+        "bundle_payload_layout_invalid",
+        "bundle_profile_invalid",
+    }
     assert not output_path.exists()
     assert not list(tmp_path.glob(f".{output_path.name}.*.tmp"))
 
@@ -202,7 +260,11 @@ def test_tar_write_failure_removes_the_generated_temporary_archive(
             repositories=(repository,),
             bundle_id=bundle_id,
             built_at=datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
-            public_files=_public_files(),
+            public_files=_public_files(
+                bundle_id=bundle_id,
+                built_at=datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
+                repository_count=index_result.repository_count,
+            ),
             output_path=output_path,
         )
 

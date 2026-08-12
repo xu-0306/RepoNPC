@@ -1,0 +1,6 @@
+GATE-QUALITY
+
+- `rtk proxy .venv/Scripts/python.exe -m ruff check .` -> exit 0; All checks passed.
+- `rtk proxy .venv/Scripts/python.exe -m ruff format --check .` -> exit 0; 97 files already formatted.
+- `rtk proxy .venv/Scripts/python.exe -m mypy src/reponpc evals/phase2/run_benchmark.py evals/phase2/candidate_runner.py` -> exit 0; no issues in 35 source files.
+

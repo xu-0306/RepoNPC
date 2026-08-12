@@ -1,0 +1,8 @@
+GATE-DOCKER BLOCKED / NOT RUN
+
+- Intended command: `rtk proxy .venv/Scripts/python.exe -m pytest tests/smoke/test_container.py -q -p no:cacheprovider --basetemp .pytest-tmp/phase2-docker --junitxml=.agent-foreman/phase2-closure/artifacts/gate-docker.xml`
+- The managed host rejected the required escalated Docker execution before pytest started because the Codex external-execution usage limit was exhausted.
+- This is not an application test failure, but no current closure Docker evidence was produced.
+- Historical Docker smoke evidence is intentionally not substituted for this rerun.
+- Next action: run the exact command in an authorized local terminal, or rerun after the host execution allowance becomes available.
+

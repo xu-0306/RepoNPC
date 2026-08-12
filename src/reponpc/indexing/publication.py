@@ -44,13 +44,13 @@ class PublicationResult:
 
 
 class PublicationCoordinator:
-    """Fail closed: no stable-manifest write occurs before all immutable stages pass."""
+    """Split immutable publication from the sole stable-pointer mutation."""
 
     def __init__(self, publisher: ReleasePublisher) -> None:
         self._publisher = publisher
 
-    def publish(self, bundle: BuiltBundle, *, now: datetime) -> PublicationResult:
-        """Create, upload, verify, and only then advance the stable pointer."""
+    def publish_immutable(self, bundle: BuiltBundle, *, now: datetime) -> PublicationResult:
+        """Create, upload, and verify an immutable asset without pointer mutation."""
 
         if now.tzinfo is None:
             raise ValueError("publication timestamp must be timezone-aware")
@@ -81,7 +81,6 @@ class PublicationCoordinator:
                 .isoformat(timespec="seconds")
                 .replace("+00:00", "Z"),
             )
-            self._publisher.update_stable_manifest_last(content=stable.canonical_bytes())
         except PublicationError:
             raise
         except OSError as exc:
@@ -89,3 +88,18 @@ class PublicationCoordinator:
         return PublicationResult(
             release_tag=release_tag, asset_url=asset_url, stable_manifest=stable
         )
+
+    def publish_manifest(self, stable_manifest: StableManifest) -> None:
+        """Reverify a pending immutable asset, then perform the only pointer write."""
+
+        try:
+            self._publisher.verify_asset(
+                asset_url=stable_manifest.asset_url,
+                size=stable_manifest.asset_size,
+                sha256=stable_manifest.asset_sha256,
+            )
+            self._publisher.update_stable_manifest_last(content=stable_manifest.canonical_bytes())
+        except PublicationError:
+            raise
+        except OSError as exc:
+            raise PublicationError("bundle_publication_failed") from exc

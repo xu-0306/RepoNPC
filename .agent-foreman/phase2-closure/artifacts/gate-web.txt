@@ -1,0 +1,5 @@
+GATE-WEB
+
+- `rtk proxy pnpm run web:check` -> exit 0.
+- Prettier, ESLint, TypeScript, Vitest (2 tests), and Vite production build passed.
+

@@ -3,13 +3,15 @@
 | Field | Value |
 | --- | --- |
 | Status | **Approved** |
-| Version | 0.1.0 |
+| Version | 0.1.1 |
 | Product | RepoNPC v1 |
 | Audience | Implementation Agents, reviewers, maintainers |
-| Last updated | 2026-08-10 |
-| Approval date | 2026-08-10 |
+| Last updated | 2026-08-12 |
+| Approval date | 2026-08-10; Phase 2 closure amendment approved 2026-08-11 |
 
 Application implementation is authorized under this approved specification. The words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RECOMMENDED, MAY, and OPTIONAL are normative as described by RFC 2119.
+
+Version 0.1.1 records the owner-approved Phase 2 closure boundary: Phase 2 ships the production build-time local embedding adapter and executable index CLI, while concrete chat adapters and runtime query-provider integration remain Phase 3 work. It also freezes the internal bilingual profile artifact and formal benchmark isolation rules without changing the public v1 API.
 
 ## 1. System boundary
 
@@ -264,6 +266,28 @@ The default local embedding contract is:
 
 An owner MAY select another supported OpenAI-compatible or Ollama embedding provider. Index and runtime query embeddings MUST have identical provider semantics, model identifier, dimension, prefixes, and normalization. A mismatch prevents readiness. Embedding API keys remain GitHub Action/runtime secrets and never enter bundles.
 
+Delivery Phase 2 MUST ship the production `local_sentence_transformers` adapter for index builds and the formal retrieval benchmark. It MUST implement the common identity plus passage/query embedding semantics, fail explicitly when its optional indexer dependency or configured model cannot be loaded, and MUST NOT try a different provider or model. The normal application runtime dependency set MUST NOT include the sentence-transformers/Torch stack solely for Phase 2 indexing. Runtime query-provider health/lifecycle integration and the concrete OpenAI-compatible/Ollama chat and embedding adapters remain Delivery Phase 3 work.
+
+### 5.5 Executable index CLI
+
+The installed `reponpc` console entrypoint has these Phase 2 commands:
+
+```text
+reponpc
+reponpc serve
+reponpc config validate <path>
+reponpc index build --config <path> --output <directory>
+reponpc index publish --bundle-dir <directory>
+reponpc index publish-manifest --bundle-dir <directory>
+```
+
+- No arguments and `serve` MUST enter the same validated FastAPI/Uvicorn startup path.
+- Help, configuration validation, and index commands MUST NOT start the server or require unrelated deployment settings.
+- `index build` MUST resolve exact public repository commits, use the configured production embedding adapter, build/verify the index and bundle, generate `public/profile.json`, and fail closed if the required non-profile public assets are missing or invalid. Until the Phase 4 card/character producer is integrated, those assets are supplied from the command's documented `public/` input directory; the CLI MUST NOT fabricate production placeholder assets.
+- `index publish` MUST create, upload, and verify the immutable Release asset, then write only a local pending stable-manifest artifact below the bundle directory. It MUST NOT mutate the remote stable manifest.
+- `index publish-manifest` MUST accept only that verified pending artifact and perform the sole remote `stable-manifest.json` update.
+- Every command MUST return a nonzero exit with a stable safe message on failure and MUST NOT print credentials, upstream bodies, or raw rejected configuration.
+
 ## 6. Index database schema
 
 `index.sqlite` is built once, integrity-checked, then opened read-only by the application. Schema version `1` contains at least these logical tables (additional indexes are allowed):
@@ -424,6 +448,30 @@ Success `200`:
 ```
 
 The endpoint returns `503 INDEX_UNAVAILABLE` before first bundle activation. It uses an ETag derived from bundle version and locale.
+
+The immutable bundle stores one internal `public/profile.json` with this schema-v1 shape:
+
+```json
+{
+  "schema_version": 1,
+  "locales": {
+    "zh-TW": {
+      "profile": {},
+      "repositories": [],
+      "suggested_questions": []
+    },
+    "en": {
+      "profile": {},
+      "repositories": [],
+      "suggested_questions": []
+    }
+  },
+  "character": {},
+  "index": {}
+}
+```
+
+The locale keys MUST be exactly `zh-TW` and `en`; both locale objects MUST contain every field needed for the existing public response. The bundle producer derives them from the validated configuration and built index metadata. The verifier validates both locales before activation. The route selects only the requested locale and constructs the existing response shape with `locale` added at the top level. Missing or invalid locale data fails closed; the route MUST NOT cross-fallback to the other required locale.
 
 ### 9.2 `POST /api/public/chat/stream`
 
@@ -621,11 +669,13 @@ health() -> ProviderHealth
 
 The application validates output shape, finite values, and normalization. Indexing batches may retry transient failures with bounded exponential backoff; runtime queries default to at most two transient attempts within the overall timeout.
 
+For Delivery Phase 2, the local adapter MUST expose the identity, `embed_query`, and `embed_passages` subset needed by the real indexer and isolated retrieval benchmark. Provider health polling, runtime readiness ownership, and network-adapter retry orchestration remain Phase 3 and MUST consume this same contract rather than redefine it.
+
 ### 13.3 Required adapters and fallback rule
 
 - `openai_compatible`: configurable base URL, key secret, chat model, embedding model, timeout, and optional headers from server-only secrets.
 - `ollama`: private base URL, chat model, embedding model, explicit context/output caps, and health endpoint.
-- A local sentence-transformers embedding adapter MUST be shipped to implement the default embedding contract without an external API.
+- A local sentence-transformers embedding adapter MUST be shipped in Phase 2 as an optional indexer dependency to implement the default embedding contract without an external API. Phase 3 integrates that adapter into runtime query-provider health/readiness and adds the concrete OpenAI-compatible/Ollama adapters.
 
 The selected chat and embedding adapters are explicit. RepoNPC MUST NOT silently try another provider, model, or cloud endpoint after failure.
 
@@ -650,6 +700,8 @@ public/card-*.png
 ```
 
 Archives MUST contain only regular files at normalized relative paths, no symlinks/hardlinks/devices, and no path traversal. Unknown required files or duplicate paths fail validation.
+
+`public/profile.json` uses the internal bilingual schema in section 9.1. The archive verifier MUST validate that complete schema, including both required locales and all required profile/repository/question/character/index fields, before a candidate can activate.
 
 ### 14.2 Internal manifest
 
@@ -768,6 +820,8 @@ Structured logs contain timestamp, severity, event name, request ID, route templ
 | Concurrent bundle read/activation | In-flight requests retain their opened bundle handle; new requests use new active bundle. |
 | Locale field missing | Required localized field fails configuration validation; optional field follows configured fallback policy. |
 
+For Phase 2 source classification, the exact root manifests `pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, and `requirements.txt` are `repository_metadata`. They remain line-addressable `REPOSITORY_FACT` records at the real repository path/commit and use the configured `repository_metadata` retrieval weight. Owner-authored profile, role, summary, and claim text remains `OWNER_ASSERTION` even when it describes a repository. An empty repository is allowed to retain any available repository metadata or owner assertions, but publication still fails when total evidence is zero.
+
 ## 18. Explicit v1 exclusions
 
 Private repositories, multi-owner/multi-tenant operation, billing, visitor authentication, GitHub OAuth onboarding, model fine-tuning, autonomous tools, live repository mutation by the model, arbitrary URL ingestion, multiple NPCs, navigable worlds, keyboard gameplay, mobile-native apps, externally hosted frontend origins by default, distributed replicas, and a separate vector/database service are outside v1.
@@ -778,6 +832,9 @@ Work follows `IMPLEMENTATION_PLAN.md`, but a milestone is complete only when its
 
 - every FR and NFR has at least one automated or documented acceptance result;
 - retrieval and bilingual evaluation thresholds pass on a committed, non-secret fixture corpus;
+- Phase 2 formal retrieval acceptance runs a candidate container with only the repository fixture, public questions, and production embedding configuration; the reviewed oracle and scoring remain outside the container;
+- Docker inspection proves the candidate has no oracle mount or readable oracle path, runs with `--cpus=4 --memory=8g`, and records the image digest, runtime/host provenance, warm-up policy, and raw timing samples;
+- formal benchmark booleans are derived from observed provider identity, isolation/resource evidence, repeatability, and thresholds rather than accepted from caller/candidate flags;
 - security tests cover all named trust boundaries;
 - current Chrome, Firefox, and Safari plus a real GitHub Profile render are manually verified where automation is insufficient;
 - Compose installation succeeds from clean documented prerequisites;
@@ -793,5 +850,5 @@ To approve, the project owner should explicitly state that RepoNPC v1 Technical 
 - any owner-requested exceptions before application implementation starts.
 
 **Approved by:** project owner  
-**Approved on:** 2026-08-10  
-**Approval scope:** Technical Specification 0.1.0 and OR-001 through OR-007. The owner requested an MVP delivery phase; this is a sequencing decision and does not reduce the complete v1 scope.
+**Approved on:** 2026-08-10; Phase 2 closure amendment approved 2026-08-11
+**Approval scope:** Technical Specification 0.1.0 and OR-001 through OR-007, plus version 0.1.1 Phase 2 closure decisions recorded in ADR-015. The owner requested an MVP delivery phase; this is a sequencing decision and does not reduce the complete v1 scope.

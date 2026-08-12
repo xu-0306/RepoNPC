@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="21" time="1.334" timestamp="2026-08-12T01:08:11.142743+08:00" hostname="DESKTOP-M18GQTS"><testcase classname="tests.integration.test_bundle_producer_consumer" name="test_production_bundle_bytes_are_accepted_by_the_real_read_only_consumer" time="0.092" /><testcase classname="tests.integration.test_bundle_producer_consumer" name="test_build_streams_index_and_completed_archive_without_read_bytes" time="0.062" /><testcase classname="tests.integration.test_bundle_producer_consumer" name="test_invalid_build_payloads_leave_no_output_or_temporary_archive[missing_index]" time="0.048" /><testcase classname="tests.integration.test_bundle_producer_consumer" name="test_invalid_build_payloads_leave_no_output_or_temporary_archive[empty_index]" time="0.049" /><testcase classname="tests.integration.test_bundle_producer_consumer" name="test_invalid_build_payloads_leave_no_output_or_temporary_archive[missing_public]" time="0.049" /><testcase classname="tests.integration.test_bundle_producer_consumer" name="test_invalid_build_payloads_leave_no_output_or_temporary_archive[unexpected_public]" time="0.047" /><testcase classname="tests.integration.test_bundle_producer_consumer" name="test_invalid_build_payloads_leave_no_output_or_temporary_archive[empty_public]" time="0.048" /><testcase classname="tests.integration.test_bundle_producer_consumer" name="test_tar_write_failure_removes_the_generated_temporary_archive" time="0.046" /><testcase classname="tests.integration.test_bundle_producer_consumer" name="test_outer_mismatch_and_embedding_mismatch_never_leave_staging" time="0.059" /><testcase classname="tests.integration.test_bundle_producer_consumer" name="test_archive_traversal_is_rejected_before_any_member_is_written" time="0.003" /><testcase classname="tests.integration.test_bundle_producer_consumer" name="test_internal_checksum_tampering_is_rejected_even_when_outer_digest_matches" time="0.072" /><testcase classname="tests.integration.test_mvp_api" name="test_health_is_alive_but_readiness_fails_before_bundle_activation" time="0.008" /><testcase classname="tests.integration.test_mvp_api" name="test_setup_status_is_public_and_contains_no_sensitive_diagnostics" time="0.004" /><testcase classname="tests.integration.test_mvp_api" name="test_setup_status_sanitizes_untrusted_internal_state_strings" time="0.010" /><testcase classname="tests.integration.test_mvp_api" name="test_status_distinguishes_degraded_and_ready_capabilities" time="0.020" /><testcase classname="tests.integration.test_mvp_api" name="test_runtime_migration_failure_degrades_readiness_without_breaking_health" time="0.014" /><testcase classname="tests.integration.test_mvp_api" name="test_profile_reports_localized_index_unavailable_errors" time="0.007" /><testcase classname="tests.integration.test_mvp_api" name="test_request_id_preserves_valid_uuid_and_replaces_invalid_value" time="0.006" /><testcase classname="tests.integration.test_mvp_api" name="test_unsupported_locale_uses_safe_field_error_without_echoing_value" time="0.004" /><testcase classname="tests.integration.test_mvp_api" name="test_degraded_active_public_assets_validate_variants_and_cache_identity" time="0.057"><failure message="KeyError: 'ETag'">tmp_path = WindowsPath('D:/RepoNPC/.pytest-tmp/phase2-profile-r2/test_degraded_active_public_as0')
+
+    def test_degraded_active_public_assets_validate_variants_and_cache_identity(tmp_path: Path) -&gt; None:
+        directory, profiles = _active_public_directory(tmp_path)
+        active = SetupState(
+            index_ready=True, index_version="bundle-one", model_ready=False, public_directory=directory
+        )
+        app_one = create_app(setup_state=active)
+        with TestClient(app_one) as client:
+            first_profile = client.get("/api/public/profile?locale=en")
+            repeated_profile = client.get("/api/public/profile?locale=en")
+            assert first_profile.status_code == repeated_profile.status_code == 200
+            assert first_profile.json() == profiles["en"]
+            assert first_profile.headers["content-type"] == "application/json"
+            assert first_profile.headers["ETag"] == repeated_profile.headers["ETag"]
+            assert (
+                first_profile.headers["ETag"]
+                != client.get("/api/public/profile?locale=zh-TW").headers["ETag"]
+            )
+            character = client.get("/api/public/character.png?rev=1")
+            assert character.status_code == 200 and character.headers["content-type"] == "image/png"
+            assert (
+                character.headers["ETag"]
+                != client.get("/api/public/character.png?rev=2").headers["ETag"]
+            )
+            svg = None
+            for theme in ("light", "dark"):
+                for locale in ("zh-TW", "en"):
+                    for extension, content_type in (
+                        ("svg", "image/svg+xml"),
+                        ("gif", "image/gif"),
+                        ("png", "image/png"),
+                    ):
+                        response = client.get(
+                            f"/api/public/card.{extension}?theme={theme}&amp;locale={locale}&amp;rev=1"
+                        )
+                        assert response.status_code == 200
+                        assert response.headers["content-type"] == content_type
+                        if extension == "svg":
+                            svg = response
+            assert svg is not None
+            assert (
+                svg.headers["Content-Security-Policy"]
+                == "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+            )
+            assert svg.headers["X-Content-Type-Options"] == "nosniff"
+            assert "frame-ancestors" not in svg.headers["Content-Security-Policy"]
+            assert "frame-ancestors 'none'" in character.headers["Content-Security-Policy"]
+            for query in (
+                "locale=en&amp;locale=zh-TW",
+                "locale=en&amp;theme=bad",
+                "locale=en&amp;rev=0",
+                "locale=en&amp;rev=01",
+                "locale=en&amp;rev=1234567890",
+                "locale=en&amp;rev=x",
+                "locale=en&amp;extra=x",
+                "locale=CANARY",
+            ):
+                response = client.get(f"/api/public/card.svg?{query}")
+                assert response.status_code == 400 and "CANARY" not in response.text
+            assert client.get("/api/public/card.bad?locale=en").status_code == 400
+        app_two = create_app(
+            setup_state=SetupState(
+                index_ready=True,
+                index_version="bundle-two",
+                model_ready=False,
+                public_directory=directory,
+            )
+        )
+        with TestClient(app_two) as client:
+            assert (
+&gt;               client.get("/api/public/profile?locale=en").headers["ETag"]
+                != first_profile.headers["ETag"]
+            )
+
+tests\integration\test_mvp_api.py:319: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = Headers({'content-length': '178', 'content-type': 'application/json', 'x-request-id': 'cc74b972-85af-4eac-b183-26ff545... 'referrer-policy': 'strict-origin-when-cross-origin', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY'})
+key = 'ETag'
+
+    def __getitem__(self, key: str) -&gt; str:
+        """
+        Return a single header value.
+    
+        If there are multiple headers with the same key, then we concatenate
+        them with commas. See: https://tools.ietf.org/html/rfc7230#section-3.2.2
+        """
+        normalized_key = key.lower().encode(self.encoding)
+    
+        items = [
+            header_value.decode(self.encoding)
+            for _, header_key, header_value in self._list
+            if header_key == normalized_key
+        ]
+    
+        if items:
+            return ", ".join(items)
+    
+&gt;       raise KeyError(key)
+E       KeyError: 'ETag'
+
+.venv\Lib\site-packages\httpx\_models.py:302: KeyError</failure></testcase><testcase classname="tests.integration.test_mvp_api" name="test_profile_missing_required_locale_fails_closed_without_cross_fallback" time="0.014" /></testsuite></testsuites>

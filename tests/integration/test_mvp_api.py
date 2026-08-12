@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from pathlib import Path
@@ -190,21 +191,64 @@ def test_unsupported_locale_uses_safe_field_error_without_echoing_value() -> Non
     assert_public_headers(response)
 
 
-def _active_public_directory(tmp_path: Path) -> tuple[Path, dict[str, object]]:
+def _active_public_directory(tmp_path: Path) -> tuple[Path, dict[str, dict[str, object]]]:
     directory = tmp_path / "public"
     directory.mkdir()
-    profile: dict[str, object] = {"z": "last", "a": "first"}
-    (directory / "profile.json").write_text('{ "z" : "last", "a" : "first" }', encoding="utf-8")
+    locales = {
+        locale: {
+            "profile": {
+                "display_name": "Fixture Developer",
+                "headline": "Traditional headline" if locale == "zh-TW" else "English headline",
+                "bio": "Traditional bio" if locale == "zh-TW" else "English bio",
+                "location": None,
+                "avatar_url": None,
+                "links": [],
+            },
+            "repositories": [
+                {
+                    "slug": "fixture-owner/reponpc-demo",
+                    "summary": "Traditional summary" if locale == "zh-TW" else "English summary",
+                    "role": "Traditional role" if locale == "zh-TW" else "English role",
+                    "tags": ["Python"],
+                    "demo_url": None,
+                }
+            ],
+            "suggested_questions": [
+                "Traditional question?" if locale == "zh-TW" else "English question?"
+            ],
+        }
+        for locale in ("zh-TW", "en")
+    }
+    character = {"mode": "builtin", "asset_url": "/api/public/character.png", "revision": 1}
+    index = {
+        "version": "bundle-one",
+        "built_at": "2026-08-10T12:00:00Z",
+        "repository_count": 1,
+    }
+    internal = {"schema_version": 1, "locales": locales, "character": character, "index": index}
+    (directory / "profile.json").write_text(
+        json.dumps(internal, ensure_ascii=False), encoding="utf-8"
+    )
     (directory / "character.png").write_bytes(b"same-payload")
     for theme in ("light", "dark"):
         for locale in ("zh-TW", "en"):
             for extension in ("svg", "gif", "png"):
                 (directory / f"card-{theme}-{locale}.{extension}").write_bytes(b"same-payload")
-    return directory, profile
+    responses = {
+        locale: {
+            "schema_version": 1,
+            "locale": locale,
+            **payload,
+            "character": character,
+            "index": index,
+        }
+        for locale, payload in locales.items()
+    }
+    return directory, responses
 
 
 def test_degraded_active_public_assets_validate_variants_and_cache_identity(tmp_path: Path) -> None:
-    directory, profile = _active_public_directory(tmp_path)
+    directory, profiles = _active_public_directory(tmp_path)
     active = SetupState(
         index_ready=True, index_version="bundle-one", model_ready=False, public_directory=directory
     )
@@ -213,7 +257,7 @@ def test_degraded_active_public_assets_validate_variants_and_cache_identity(tmp_
         first_profile = client.get("/api/public/profile?locale=en")
         repeated_profile = client.get("/api/public/profile?locale=en")
         assert first_profile.status_code == repeated_profile.status_code == 200
-        assert first_profile.json() == profile
+        assert first_profile.json() == profiles["en"]
         assert first_profile.headers["content-type"] == "application/json"
         assert first_profile.headers["ETag"] == repeated_profile.headers["ETag"]
         assert (
@@ -271,10 +315,28 @@ def test_degraded_active_public_assets_validate_variants_and_cache_identity(tmp_
         )
     )
     with TestClient(app_two) as client:
-        assert (
-            client.get("/api/public/profile?locale=en").headers["ETag"]
-            != first_profile.headers["ETag"]
-        )
+        mismatched_profile = client.get("/api/public/profile?locale=en")
+        assert mismatched_profile.status_code == 503
+        assert mismatched_profile.json()["error"]["code"] == "INDEX_UNAVAILABLE"
     (directory / "character.png").write_bytes(b"")
     with TestClient(app_one) as client:
         assert client.get("/api/public/character.png").status_code == 503
+
+
+def test_profile_missing_required_locale_fails_closed_without_cross_fallback(
+    tmp_path: Path,
+) -> None:
+    directory, _ = _active_public_directory(tmp_path)
+    profile_path = directory / "profile.json"
+    internal = json.loads(profile_path.read_text(encoding="utf-8"))
+    del internal["locales"]["en"]
+    profile_path.write_text(json.dumps(internal), encoding="utf-8")
+    active = SetupState(
+        index_ready=True,
+        index_version="bundle-one",
+        public_directory=directory,
+    )
+
+    with TestClient(create_app(setup_state=active)) as client:
+        assert client.get("/api/public/profile?locale=en").status_code == 503
+        assert client.get("/api/public/profile?locale=zh-TW").status_code == 503

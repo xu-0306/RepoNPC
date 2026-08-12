@@ -1,0 +1,7 @@
+[project]
+name = "reponpc-demo-fixture"
+version = "0.0.0"
+description = "Invented manifest metadata for RepoNPC tests"
+
+[project.urls]
+Repository = "https://github.com/fixture-owner/reponpc-demo"
