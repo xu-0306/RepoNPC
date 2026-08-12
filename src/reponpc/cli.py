@@ -6,7 +6,10 @@ import argparse
 import re
 import sys
 from collections.abc import Sequence
+from getpass import getpass
 from pathlib import Path
+
+from argon2 import PasswordHasher, Type
 
 from reponpc.config.models import ConfigValidationError, load_public_config
 from reponpc.indexing.pipeline import (
@@ -25,6 +28,9 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="reponpc")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("serve", help="start the RepoNPC web application")
+    admin = commands.add_parser("admin", help="administration commands")
+    admin_commands = admin.add_subparsers(dest="admin_command", required=True)
+    admin_commands.add_parser("hash-password", help="generate an Argon2id password hash")
 
     config = commands.add_parser("config", help="configuration commands")
     config_commands = config.add_subparsers(dest="config_command", required=True)
@@ -54,6 +60,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "serve":
             run_server()
+        elif args.command == "admin":
+            password = getpass("Password: ")
+            confirmation = getpass("Confirm password: ")
+            if not password or password != confirmation:
+                print("reponpc: password_confirmation_failed", file=sys.stderr)
+                return 2
+            print(PasswordHasher(type=Type.ID).hash(password))
         elif args.command == "config":
             load_public_config(args.path)
             print("configuration valid")

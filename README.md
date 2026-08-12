@@ -8,13 +8,13 @@ RepoNPC is an open-source, self-hosted AI developer portfolio. It turns owner-se
 
 ## Project status
 
-RepoNPC completed initial specification approval on 2026-08-10. Phase 1 and the main Phase 2 retrieval/bundle foundation are implemented; an owner-approved Phase 2 closure campaign now addresses the production index CLI/local adapter, bilingual bundle profile, repository metadata producer, and isolated formal benchmark while retaining the complete v1 scope.
+RepoNPC completed initial specification approval on 2026-08-10. Delivery Phases 1 through 4 are implemented and verified. Phase 4 adds the single-owner admin workflow, conflict-safe GitHub writeback, validated character assets, deterministic card outputs, and publication integration while retaining the complete v1 scope. Delivery Phase 5 remains the release-hardening boundary.
 
 | Item | State |
 | --- | --- |
 | Product scope | Complete v1 defined; not a reduced MVP |
 | Technical specification | Approved 0.1.1; Phase 2 closure amendment approved 2026-08-11 |
-| Application code | Delivery Phase 2 closure in progress |
+| Application code | Delivery Phases 1 through 4 verified; Phase 5 remains |
 | License target | MIT |
 | Estimated implementation | 8–12 weeks for one developer |
 
@@ -73,12 +73,13 @@ Read in this order:
 7. [Implementation plan](docs/IMPLEMENTATION_PLAN.md) — dependency order, milestones, deliverables, and gates.
 8. [Delivery phases](docs/DELIVERY_PHASES.md) — the owner-approved MVP-first sequencing of the complete v1.
 9. [Subagent execution playbook](docs/SUBAGENT_EXECUTION_PLAYBOOK.md) — Main/worker ownership, per-phase work packages, gates, handoffs, and evaluator evidence.
-10. [Current P2-00 handoff](docs/P2_FOUNDATION_HANDOFF.md) — live takeover steps, evidence tracker, and reviewer checkpoints for foundation closure.
-11. [Operations](docs/OPERATIONS.md) and [sprite format](docs/SPRITE_FORMAT.md) — deployment/recovery and the canonical character asset contract.
-12. [Agent instructions](AGENTS.md) — scope, escalation, invariants, verification, and reporting rules.
-13. [`reponpc.example.yml`](reponpc.example.yml) and [`.env.example`](.env.example) — public configuration and deployment boundary.
+10. [Archived P2-00 handoff](docs/P2_FOUNDATION_HANDOFF.md) — historical foundation takeover steps, evidence tracker, and reviewer checkpoints.
+11. [Phase 4 handoff](docs/P4_OWNER_ASSETS_PUBLICATION_HANDOFF.md) — owner/admin/assets/publication outcomes, evidence, and remaining release checks.
+12. [Operations](docs/OPERATIONS.md) and [sprite format](docs/SPRITE_FORMAT.md) — deployment/recovery and the canonical character asset contract.
+13. [Agent instructions](AGENTS.md) — scope, escalation, invariants, verification, and reporting rules.
+14. [`reponpc.example.yml`](reponpc.example.yml) and [`.env.example`](.env.example) — public configuration and deployment boundary.
 
-The operations and sprite documents begin as pre-implementation contracts and must be finalized with verified commands/assets before release.
+The operations and sprite documents now describe the implemented Phase 4 behavior; Phase 5 must still complete the manual release checks and final clean-host verification.
 
 If these documents conflict, follow the source-of-truth order in `PROJECT_CONTEXT.md`. Application code must remain within the approved specification and its owner-approved changes.
 

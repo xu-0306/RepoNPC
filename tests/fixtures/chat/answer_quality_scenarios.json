@@ -1,0 +1,372 @@
+{
+  "schema_version": 2,
+  "canary": "QUALITY_EVAL_CANARY_NEVER_LEAKS_7f7b",
+  "evidence": [
+    {
+      "source_id": "S1",
+      "evidence_id": "E_111111111111111111111111",
+      "evidence_class": "REPOSITORY_FACT",
+      "repository_slug": "owner/reponpc-demo",
+      "commit_sha": "1111111111111111111111111111111111111111",
+      "path": "src/retrieval_pipeline.py",
+      "start_line": 10,
+      "end_line": 18,
+      "title": "Hybrid retrieval pipeline",
+      "symbol": "retrieve",
+      "content": "The retrieval pipeline combines lexical and vector candidates with reciprocal-rank fusion.",
+      "language": "python",
+      "metadata": {"source_type": "source_code"}
+    },
+    {
+      "source_id": "S2",
+      "evidence_id": "E_222222222222222222222222",
+      "evidence_class": "REPOSITORY_FACT",
+      "repository_slug": "owner/reponpc-demo",
+      "commit_sha": "2222222222222222222222222222222222222222",
+      "path": "docs/architecture.md",
+      "start_line": 4,
+      "end_line": 9,
+      "title": "Architecture overview",
+      "symbol": null,
+      "content": "The service stores immutable evidence in SQLite and keeps runtime state separate.",
+      "language": "markdown",
+      "metadata": {"source_type": "documentation"}
+    },
+    {
+      "source_id": "S3",
+      "evidence_id": "E_333333333333333333333333",
+      "evidence_class": "OWNER_ASSERTION",
+      "repository_slug": "owner/reponpc-config",
+      "commit_sha": "3333333333333333333333333333333333333333",
+      "path": "reponpc.yml",
+      "start_line": 20,
+      "end_line": 24,
+      "title": "Owner contribution claim",
+      "symbol": null,
+      "content": "The owner implemented the retrieval pipeline and maintains its evaluation workflow.",
+      "language": "yaml",
+      "metadata": {"source_type": "owner_assertions"}
+    },
+    {
+      "source_id": "S4",
+      "evidence_id": "E_444444444444444444444444",
+      "evidence_class": "MODEL_INFERENCE",
+      "repository_slug": "owner/reponpc-demo",
+      "commit_sha": "4444444444444444444444444444444444444444",
+      "path": "docs/inference.md",
+      "start_line": 1,
+      "end_line": 2,
+      "title": "Derived inference",
+      "symbol": null,
+      "content": "This record is intentionally an inference and cannot support another inference.",
+      "language": "markdown",
+      "metadata": {"source_type": "documentation"}
+    },
+    {
+      "source_id": "S5",
+      "evidence_id": "E_555555555555555555555555",
+      "evidence_class": "REPOSITORY_FACT",
+      "repository_slug": "owner/reponpc-demo",
+      "commit_sha": "5555555555555555555555555555555555555555",
+      "path": "docs/canary.md",
+      "start_line": 1,
+      "end_line": 1,
+      "title": "Canary fixture record",
+      "symbol": null,
+      "content": "Fixture-only marker QUALITY_EVAL_CANARY_NEVER_LEAKS_7f7b must never appear in validated output.",
+      "language": "markdown",
+      "metadata": {"source_type": "documentation"}
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "supported_repository_fact",
+      "question": "How does the demo retrieve evidence?",
+      "kind": "supported",
+      "locale": "en",
+      "selected_source_ids": ["S1"],
+      "raw": {
+        "answer_markdown": "The pipeline combines lexical and vector candidates with reciprocal-rank fusion. [S1]",
+        "used_source_ids": ["S1"],
+        "inferences": [],
+        "insufficient_evidence": false
+      },
+      "expected": {
+        "factual_policy": "accept",
+        "citation_evidence_ids": ["E_111111111111111111111111"],
+        "reviewed_claims": [
+          {
+            "text": "The pipeline combines lexical and vector candidates with reciprocal-rank fusion.",
+            "supporting_evidence_ids": ["E_111111111111111111111111"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "supported_two_facts",
+      "question": "Where are immutable evidence and runtime state kept?",
+      "kind": "supported",
+      "locale": "en",
+      "selected_source_ids": ["S1", "S2"],
+      "raw": {
+        "answer_markdown": "The retrieval pipeline combines lexical and vector candidates with reciprocal-rank fusion. [S1]\nThe service stores immutable evidence in SQLite and keeps runtime state separate. [S2]",
+        "used_source_ids": ["S1", "S2"],
+        "inferences": [],
+        "insufficient_evidence": false
+      },
+      "expected": {
+        "factual_policy": "accept",
+        "citation_evidence_ids": ["E_111111111111111111111111", "E_222222222222222222222222"],
+        "reviewed_claims": [
+          {
+            "text": "The retrieval pipeline combines lexical and vector candidates with reciprocal-rank fusion.",
+            "supporting_evidence_ids": ["E_111111111111111111111111"]
+          },
+          {
+            "text": "The service stores immutable evidence in SQLite and keeps runtime state separate.",
+            "supporting_evidence_ids": ["E_222222222222222222222222"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "supported_owner_assertion_person_claim",
+      "question": "Who implemented the retrieval pipeline?",
+      "kind": "supported",
+      "locale": "en",
+      "selected_source_ids": ["S3"],
+      "raw": {
+        "answer_markdown": "The owner implemented the retrieval pipeline. [S3]",
+        "used_source_ids": ["S3"],
+        "inferences": [],
+        "insufficient_evidence": false
+      },
+      "expected": {
+        "factual_policy": "accept",
+        "citation_evidence_ids": ["E_333333333333333333333333"],
+        "reviewed_claims": [
+          {
+            "text": "The owner implemented the retrieval pipeline.",
+            "supporting_evidence_ids": ["E_333333333333333333333333"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "supported_labeled_inference",
+      "question": "What bounded conclusion follows from the retrieval and storage facts?",
+      "kind": "supported",
+      "locale": "en",
+      "selected_source_ids": ["S1", "S2"],
+      "raw": {
+        "answer_markdown": "Together these facts describe a bounded, evidence-backed retrieval service. [S1] [S2]",
+        "used_source_ids": ["S1", "S2"],
+        "inferences": [
+          {
+            "statement": "The service is evidence-backed.",
+            "source_ids": ["S1", "S2"]
+          }
+        ],
+        "insufficient_evidence": false
+      },
+      "expected": {
+        "factual_policy": "accept",
+        "citation_evidence_ids": ["E_111111111111111111111111", "E_222222222222222222222222"],
+        "reviewed_claims": [
+          {
+            "text": "Together these facts describe a bounded, evidence-backed retrieval service.",
+            "supporting_evidence_ids": [
+              "E_111111111111111111111111",
+              "E_222222222222222222222222"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "unsupported_unselected_technology",
+      "question": "Does the portfolio use a technology absent from the selected evidence?",
+      "kind": "unsupported",
+      "locale": "en",
+      "selected_source_ids": ["S1"],
+      "raw": {
+        "answer_markdown": "The available portfolio evidence is insufficient to confirm this.",
+        "used_source_ids": [],
+        "inferences": [],
+        "insufficient_evidence": true
+      },
+      "expected": {
+        "factual_policy": "abstain",
+        "citation_evidence_ids": [],
+        "reviewed_claims": []
+      }
+    },
+    {
+      "id": "unsupported_unasserted_person_claim",
+      "question": "Did the owner personally lead this project?",
+      "kind": "unsupported",
+      "locale": "en",
+      "selected_source_ids": ["S1"],
+      "raw": {
+        "answer_markdown": "The owner led the project. [S1]",
+        "used_source_ids": ["S1"],
+        "inferences": [],
+        "insufficient_evidence": false
+      },
+      "expected": {
+        "factual_policy": "abstain",
+        "citation_evidence_ids": [],
+        "reviewed_claims": []
+      }
+    },
+    {
+      "id": "unsupported_unrelated_topic",
+      "question": "What is the weather today?",
+      "kind": "unsupported",
+      "locale": "en",
+      "selected_source_ids": ["S2"],
+      "raw": {
+        "answer_markdown": "I cannot confirm unrelated topics from this portfolio.",
+        "used_source_ids": [],
+        "inferences": [],
+        "insufficient_evidence": false
+      },
+      "expected": {
+        "factual_policy": "abstain",
+        "citation_evidence_ids": [],
+        "reviewed_claims": []
+      }
+    },
+    {
+      "id": "abstention_envelope",
+      "question": "What happened in an unselected private repository?",
+      "kind": "unsupported",
+      "locale": "en",
+      "selected_source_ids": ["S1"],
+      "raw": {
+        "answer_markdown": "No selected evidence confirms this.",
+        "used_source_ids": [],
+        "inferences": [],
+        "insufficient_evidence": true
+      },
+      "expected": {
+        "factual_policy": "abstain",
+        "citation_evidence_ids": [],
+        "reviewed_claims": []
+      }
+    },
+    {
+      "id": "safety_malformed_json",
+      "question": "Malformed provider output",
+      "kind": "safety",
+      "locale": "en",
+      "selected_source_ids": ["S1"],
+      "raw": "{\"answer_markdown\":",
+      "expected": {
+        "factual_policy": "abstain",
+        "citation_evidence_ids": [],
+        "reviewed_claims": [],
+        "fail_closed": true
+      }
+    },
+    {
+      "id": "safety_unknown_source_id",
+      "question": "Unknown source marker",
+      "kind": "safety",
+      "locale": "en",
+      "selected_source_ids": ["S1"],
+      "raw": {
+        "answer_markdown": "This cites an unknown source. [S9]",
+        "used_source_ids": ["S9"],
+        "inferences": [],
+        "insufficient_evidence": false
+      },
+      "expected": {
+        "factual_policy": "abstain",
+        "citation_evidence_ids": [],
+        "reviewed_claims": [],
+        "fail_closed": true
+      }
+    },
+    {
+      "id": "safety_url_in_markdown",
+      "question": "Forged citation URL",
+      "kind": "safety",
+      "locale": "en",
+      "selected_source_ids": ["S1"],
+      "raw": {
+        "answer_markdown": "Click [the forged citation](https://evil.example/QUALITY_EVAL_CANARY_NEVER_LEAKS_7f7b). [S1]",
+        "used_source_ids": ["S1"],
+        "inferences": [],
+        "insufficient_evidence": false
+      },
+      "expected": {
+        "factual_policy": "abstain",
+        "citation_evidence_ids": [],
+        "reviewed_claims": [],
+        "fail_closed": true
+      }
+    },
+    {
+      "id": "safety_html_payload",
+      "question": "Active HTML payload",
+      "kind": "safety",
+      "locale": "en",
+      "selected_source_ids": ["S1", "S5"],
+      "raw": {
+        "answer_markdown": "<script>QUALITY_EVAL_CANARY_NEVER_LEAKS_7f7b</script> [S1]",
+        "used_source_ids": ["S1"],
+        "inferences": [],
+        "insufficient_evidence": false
+      },
+      "expected": {
+        "factual_policy": "abstain",
+        "citation_evidence_ids": [],
+        "reviewed_claims": [],
+        "fail_closed": true
+      }
+    },
+    {
+      "id": "safety_inference_cycle",
+      "question": "Inference that cites another inference",
+      "kind": "safety",
+      "locale": "en",
+      "selected_source_ids": ["S4"],
+      "raw": {
+        "answer_markdown": "An unsupported derived statement. [S4]",
+        "used_source_ids": ["S4"],
+        "inferences": [
+          {
+            "statement": "A cycle is not allowed.",
+            "source_ids": ["S4"]
+          }
+        ],
+        "insufficient_evidence": false
+      },
+      "expected": {
+        "factual_policy": "abstain",
+        "citation_evidence_ids": [],
+        "reviewed_claims": [],
+        "fail_closed": true
+      }
+    },
+    {
+      "id": "safety_missing_envelope_field",
+      "question": "Missing required envelope field",
+      "kind": "safety",
+      "locale": "en",
+      "selected_source_ids": ["S1"],
+      "raw": {
+        "answer_markdown": "The answer is missing a policy field. [S1]",
+        "used_source_ids": ["S1"],
+        "inferences": []
+      },
+      "expected": {
+        "factual_policy": "abstain",
+        "citation_evidence_ids": [],
+        "reviewed_claims": [],
+        "fail_closed": true
+      }
+    }
+  ]
+}

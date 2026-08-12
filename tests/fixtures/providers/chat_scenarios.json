@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "id": "openai_success_structured_usage",
+      "provider": "openai_compatible",
+      "status": 200,
+      "body_type": "json",
+      "body": {
+        "id": "fixture-openai-request-001",
+        "choices": [
+          {
+            "message": {
+              "content": {
+                "answer_markdown": "Fixture OpenAI answer [E1]"
+              }
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 11,
+          "completion_tokens": 7
+        }
+      }
+    },
+    {
+      "id": "openai_success_null_usage",
+      "provider": "openai_compatible",
+      "status": 200,
+      "body_type": "json",
+      "body": {
+        "id": "fixture-openai-request-002",
+        "choices": [
+          {
+            "message": {
+              "content": {
+                "answer_markdown": "Fixture OpenAI answer without usage [E1]"
+              }
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": null
+      }
+    },
+    {
+      "id": "ollama_success",
+      "provider": "ollama",
+      "status": 200,
+      "body_type": "json",
+      "body": {
+        "message": {
+          "content": "Fixture Ollama answer [E1]"
+        },
+        "done_reason": "stop",
+        "prompt_eval_count": 9,
+        "eval_count": 5
+      }
+    },
+    {
+      "id": "authentication_401",
+      "provider": "openai_compatible",
+      "status": 401,
+      "body_type": "json",
+      "body": {
+        "error": {
+          "code": "fixture-authentication",
+          "message": "Fixture authentication rejection"
+        }
+      }
+    },
+    {
+      "id": "rate_limit_429",
+      "provider": "openai_compatible",
+      "status": 429,
+      "body_type": "json",
+      "body": {
+        "error": {
+          "code": "fixture-rate-limit",
+          "message": "Fixture rate limit rejection"
+        }
+      }
+    },
+    {
+      "id": "timeout_504",
+      "provider": "openai_compatible",
+      "status": 504,
+      "body_type": "text",
+      "body": "Fixture gateway timeout body intentionally unparsed"
+    },
+    {
+      "id": "unavailable_503",
+      "provider": "openai_compatible",
+      "status": 503,
+      "body_type": "json",
+      "body": {
+        "error": {
+          "code": "fixture-unavailable",
+          "message": "Fixture provider unavailable"
+        }
+      }
+    },
+    {
+      "id": "malformed_json_body",
+      "provider": "openai_compatible",
+      "status": 200,
+      "body_type": "malformed_json",
+      "body": "{\"choices\":[fixture-malformed"
+    },
+    {
+      "id": "context_overflow_422",
+      "provider": "openai_compatible",
+      "status": 422,
+      "body_type": "json",
+      "body": {
+        "error": {
+          "code": "fixture-context-overflow",
+          "message": "Fixture context limit exceeded"
+        }
+      }
+    }
+  ]
+}

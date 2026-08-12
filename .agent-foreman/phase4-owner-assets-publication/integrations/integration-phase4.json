@@ -1,0 +1,28 @@
+{
+  "schema_name": "agent-foreman/integration",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-P4-OWNER-ASSETS-PUBLICATION-20260813",
+  "phase_id": "PHASE-4-OWNER-ASSETS-PUBLICATION",
+  "actor_role": "main",
+  "packages": ["PKG-MAIN-P4-CONTRACTS", "PKG-LUNA-P4-SPRITE", "PKG-MAIN-P4-BACKEND", "PKG-LUNA-P4-ADMIN-FORM", "PKG-MAIN-P4-CLOSURE"],
+  "delta_guard": {
+    "passed": false,
+    "artifact": ".agent-foreman/phase4-owner-assets-publication/fingerprints/handoff-manifest.json",
+    "limitation": "Failed and attribution-limited: Main and workers shared a concurrently changing worktree containing dependencies, caches, test temporaries, and campaign writes. This evidence is retained and is not a product correctness oracle."
+  },
+  "focused_gates": ["GATE-SPRITE", "GATE-ADMIN-AUTH", "GATE-GITHUB-WRITE", "GATE-ASSET", "GATE-CARD", "GATE-PUBLICATION", "GATE-EVALUATION"],
+  "aggregate_gates": ["GATE-PYTHON", "GATE-WEB", "GATE-PLAN"],
+  "deterministic_result": "passed",
+  "evaluator_recommendation": "pass",
+  "status": "verified",
+  "rework": {"worker_changed_lines": 0, "main_changed_lines_in_worker_scope": 0},
+  "observations": {
+    "python": "461 passed, 3 skipped, one upstream Starlette/httpx TestClient deprecation warning",
+    "web": "Prettier, ESLint zero errors/five existing warnings, TypeScript, 13 tests, and build passed; AdminPage emitted as a separate chunk",
+    "focused": {"admin_auth": "8 passed", "github_write": "7 passed", "assets": "18 passed", "card": "5 passed", "publication": "23 passed", "fresh_python": "7 passed", "fresh_admin": "1 passed"},
+    "quality": "Ruff check/format and mypy 54 source files passed; git diff --check passed with CRLF notices only",
+    "packaging": "wheel/sdist build passed and wheel contains NotoSansCJKtc-Regular.otf plus OFL.txt"
+  },
+  "fallback": "No deterministic Luna leaf quality defect remained after Main review and consumer gates, so Terra fallback was not invoked."
+}

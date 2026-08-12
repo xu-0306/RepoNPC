@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "command": "rtk proxy node .agent-foreman/phase3-grounded-visitor/evaluation/fresh/fresh_browser_probe.mjs",
+  "browser": {
+    "requestedChannel": "msedge",
+    "version": "151.0.4129.78"
+  },
+  "probes": [
+    {
+      "id": "edge_pure_asgi_headers",
+      "setup": "Production FastAPI pure-ASGI boundary reached from same-origin Microsoft Edge",
+      "fault_injection": "Explicit valid request ID on public status fetch",
+      "production_trigger": "Browser fetch /api/public/status through production middleware",
+      "oracle": "200 plus correlated X-Request-ID, no-store, restrictive CSP, and nosniff",
+      "anti_oracle": "Missing/corrupted headers or request-ID correlation",
+      "observed": {
+        "status": 200,
+        "requestId": "33333333-3333-4333-8333-333333333333",
+        "cacheControl": "no-store",
+        "contentSecurityPolicy": "default-src 'none'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self'; script-src 'self'; style-src 'self'",
+        "contentTypeOptions": "nosniff"
+      },
+      "passed": true
+    },
+    {
+      "id": "edge_desktop_semantics_layout",
+      "setup": "Production Vite build served same-origin by production FastAPI on Edge desktop 1440x900",
+      "fault_injection": "Normal ready profile",
+      "production_trigger": "Navigate / and wait for network idle",
+      "oracle": "zh-TW html/main lang, project visible, named controls, no horizontal overflow or console/network errors",
+      "anti_oracle": "Wrong lang, missing profile, unnamed control, overflow, console error, or failed response",
+      "observed": {
+        "htmlLang": "zh-TW",
+        "mainLang": "zh-TW",
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "projects": 1,
+        "unnamedButtons": 0,
+        "unnamedLinks": 0,
+        "consoleErrors": [],
+        "failedResponses": []
+      },
+      "passed": true
+    },
+    {
+      "id": "edge_chat_citation_character",
+      "setup": "Ready Edge visitor with edited suggested question",
+      "fault_injection": "Submit through production fetch/SSE parser",
+      "production_trigger": "Suggestion button -> textarea edit -> form submit -> SSE -> citation DOM",
+      "oracle": "Two turns, immutable GitHub SHA href, noopener noreferrer, target blank, character success",
+      "anti_oracle": "Lost turn, mutable/unsafe link, or character not success",
+      "observed": {
+        "turns": 2,
+        "href": "https://github.com/owner/repo/blob/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/src/search.py#L10-L12",
+        "rel": "noopener noreferrer",
+        "target": "_blank",
+        "characterState": "success"
+      },
+      "passed": true
+    },
+    {
+      "id": "edge_locale_history",
+      "setup": "Completed zh-TW conversation on Edge",
+      "fault_injection": "Switch locale to English",
+      "production_trigger": "English locale button and profile refetch",
+      "oracle": "html/main become en, English profile visible, conversation byte-for-byte preserved",
+      "anti_oracle": "Conversation cleared/translated or stale document language/profile",
+      "observed": {
+        "htmlLang": "en",
+        "mainLang": "en",
+        "before": [
+          "這個專案如何使用檢索？ fresh-edit",
+          "檢索由不可變證據支持。[S1]"
+        ],
+        "after": [
+          "這個專案如何使用檢索？ fresh-edit",
+          "檢索由不可變證據支持。[S1]"
+        ],
+        "citationBefore": "https://github.com/owner/repo/blob/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/src/search.py#L10-L12",
+        "citationAfter": "https://github.com/owner/repo/blob/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/src/search.py#L10-L12",
+        "headline": 1
+      },
+      "passed": true
+    },
+    {
+      "id": "edge_mobile_overflow",
+      "setup": "Same production visitor on Edge 390x844",
+      "fault_injection": "Narrow mobile viewport after populated conversation",
+      "production_trigger": "Resize live Edge page and inspect document geometry",
+      "oracle": "scrollWidth <= clientWidth with populated profile/chat/citation",
+      "anti_oracle": "Any horizontal overflow",
+      "observed": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "bodyWidth": 390
+      },
+      "passed": true
+    },
+    {
+      "id": "edge_reduced_motion",
+      "setup": "Fresh Edge context with prefers-reduced-motion: reduce",
+      "fault_injection": "Reduced-motion media preference before navigation",
+      "production_trigger": "Production matchMedia -> CharacterRenderer",
+      "oracle": "Renderer marks reduced motion and pins first frame without console errors",
+      "anti_oracle": "Animation-enabled flag, nonzero start frame, or console error",
+      "observed": {
+        "flag": "true",
+        "frameStart": "0px",
+        "errors": []
+      },
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "consoleErrors": [],
+  "failedResponses": []
+}

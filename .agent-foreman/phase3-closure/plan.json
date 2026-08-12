@@ -1,0 +1,238 @@
+{
+  "schema_name": "agent-foreman/plan",
+  "schema_version": "1.0",
+  "profile": "full",
+  "metadata": {
+    "plan_id": "REPONPC-P3-CLOSURE-20260812",
+    "objective": "Verify complete RepoNPC Delivery Phase 3 grounded chat and visitor experience after delegated implementation, Main integration, fresh falsification, browser, and deployment gates.",
+    "repo_root": "D:/RepoNPC",
+    "revision": "1b3d823a005cc8a8878b210b6d90656af47d1f18",
+    "dirty_state": "Phase 3 closure delta is uncommitted on the verified Phase 2 baseline. Pre-existing owner documentation edits are preserved. The older phase3-grounded-visitor attribution guard remains failed historical evidence and is not rewritten.",
+    "status": "verified",
+    "completed_by": "main",
+    "resolution_state": "resolved"
+  },
+  "main_model": {
+    "source": "current_conversation",
+    "resolved_model_id": null,
+    "verification": "unavailable",
+    "reasoning_effort": null
+  },
+  "architecture_decision": {
+    "mode": "hybrid_main_seams",
+    "selected_profile": "full",
+    "reasons": [
+      "Main retained provider selection, transport, lifecycle, grounding, persistence, limits, cancellation, public API, and integration seams.",
+      "The owner authorized Luna max leaf implementation with Terra fallback; bounded presentation and deterministic quality-evaluation leaves were delegated while executable aggregate gates remained authoritative."
+    ],
+    "rejected_modes": [
+      {"mode": "main_direct", "reason": "Actual bounded delegation occurred, so the full profile is required."},
+      {"mode": "main_plan_weak_leaf", "reason": "The phase crosses security, lifecycle, transport, persistence, and producer-consumer seams that cannot be leaf-owned."}
+    ],
+    "advisor_required": false
+  },
+  "capability_cards": [
+    {
+      "card_id": "CAP-TERRA-QUALITY",
+      "requested_selector": "terra",
+      "resolved_model_id": "gpt-5.6-terra",
+      "verification": "verified",
+      "context_limit": "host-managed",
+      "tool_access": ["shared repository", "apply_patch", "rtk-prefixed shell", "pytest"],
+      "repository_access": "Two exact quality-evaluation files in D:/RepoNPC; production paths prohibited.",
+      "evidence": ["Host model override resolved the terra selector to gpt-5.6-terra for the bounded worker"],
+      "known_limits": ["No authority over production code, public contracts, security, lifecycle, or completion"],
+      "routing_confidence": "qualified"
+    }
+  ],
+  "current_state_evidence": [
+    {"path": "src/reponpc/main.py", "symbol": "create_app", "observation": "Production assembly selects exactly one configured chat and embedding provider, attaches health lifecycle, public limits, same-origin web, and pure-ASGI response headers.", "status": "observed"},
+    {"path": "src/reponpc/chat/service.py", "symbol": "GroundedChatService.answer", "observation": "One limit permit and bundle handle bound retrieval, embedding, provider generation, validation, shared deadline, and cooperative cancellation.", "status": "observed"},
+    {"path": "src/reponpc/chat/answers.py", "symbol": "validate_answer", "observation": "Complete buffered model output is converted to validated text and backend-owned immutable citations or localized abstention.", "status": "observed"},
+    {"path": "apps/web/src/app/App.tsx", "symbol": "App", "observation": "The semantic bilingual visitor consumes same-origin profile and typed SSE, preserves history across locale changes, and owns accessible character lifecycle state.", "status": "observed"},
+    {"path": ".agent-foreman/phase3-grounded-visitor/evaluation/fresh/evaluation.json", "symbol": "post-repair evaluation", "observation": "Fresh read-only evaluator reports backend 6/6 and Edge 6/6 with no P0/P1/P2 finding.", "status": "observed"}
+  ],
+  "control_flow": [
+    {"id": "FLOW-PROVIDER", "kind": "provider lifecycle", "path": "environment -> create_app -> ProviderRuntime -> selected adapter", "symbol": "_configure_provider_lifecycle", "next": ["FLOW-CHAT"], "failure_path": "Selected provider remains safely unavailable; no cloud, model, or adapter fallback is constructed."},
+    {"id": "FLOW-CHAT", "kind": "producer-consumer", "path": "POST /api/public/chat/stream -> GroundedChatService.answer -> validate_answer -> delivery_events", "symbol": "chat_stream", "next": ["FLOW-VISITOR"], "failure_path": "Pre-stream failures use common JSON; post-start failure has one error terminal; disconnect emits no response."},
+    {"id": "FLOW-VISITOR", "kind": "same-origin browser", "path": "React App -> profile/status/chat SSE -> semantic DOM and CharacterRenderer", "symbol": "App", "next": [], "failure_path": "Setup/offline/error remain accessible and profile content remains usable without leaking server configuration."}
+  ],
+  "interfaces": [
+    {"id": "IFACE-PROVIDER-V1", "contract": "Typed complete-output chat and normalized embedding results, safe health/failure categories, bounded timeouts, exact identity, and no fallback.", "producer": "src/reponpc/providers", "consumers": ["ProviderRuntime", "GroundedChatService"]},
+    {"id": "IFACE-ANSWER-V1", "contract": "Model emits request-local evidence IDs only; backend validates support and constructs immutable GitHub SHA URLs.", "producer": "GroundedChatService and validate_answer", "consumers": ["delivery_events", "visitor citation DOM"]},
+    {"id": "IFACE-SSE-V1", "contract": "Validated success emits metadata, token, optional citations, complete; started failure emits exactly one error and never complete.", "producer": "public chat route", "consumers": ["typed visitor SSE client"]}
+  ],
+  "lifecycle": [
+    {"id": "LIFE-PROVIDER", "owner": "Main", "states": ["configured", "healthy", "degraded", "stopped"], "rule": "Only configured adapters are polled and published to safe public readiness."},
+    {"id": "LIFE-REQUEST", "owner": "Main", "states": ["admission", "retrieval", "generation", "validated", "streamed", "completed_or_cancelled"], "rule": "Limits precede provider cost; timeout/disconnect bound accepted work and release resources."},
+    {"id": "LIFE-CHARACTER", "owner": "Main", "states": ["idle", "walk", "listen", "think", "talk", "success", "offline"], "rule": "Application events choose state; the renderer remains presentational and reduced motion pins frame zero."}
+  ],
+  "state_transitions": [
+    {"id": "STATE-ANSWER", "transition": "complete provider result -> validated delivery -> SSE", "forbidden": "provider token or URL reaches the browser before backend validation"},
+    {"id": "STATE-DISCONNECT", "transition": "accepted request -> http.disconnect -> cancellation signal and silent ASGI completion", "forbidden": "response bytes or new provider stage after disconnect"},
+    {"id": "STATE-LOCALE", "transition": "zh-TW <-> en profile/UI refresh", "forbidden": "clearing or translating existing conversation history"}
+  ],
+  "failure_boundaries": [
+    {"id": "FAIL-PROVIDER", "class": "security and lifecycle", "safe_result": "Stable safe provider error and degraded readiness without fallback or secret/private URL exposure."},
+    {"id": "FAIL-GROUNDING", "class": "producer-consumer", "safe_result": "Unknown IDs, URLs, HTML, unsupported material/person claims, or inference cycles become citation-free abstention."},
+    {"id": "FAIL-TRANSPORT", "class": "cancellation", "safe_result": "Timeout is safe JSON before streaming; disconnect ends the ASGI request without response; started internal failure emits one error."},
+    {"id": "FAIL-ADMISSION", "class": "cost control", "safe_result": "Payload, IP, daily, and global concurrency rejection occurs before embedding or generation."}
+  ],
+  "invariants": [
+    {
+      "id": "INV-PROVIDER-RUNTIME", "applies": true, "classification": "critical", "severity": "high",
+      "statement": "OpenAI-compatible, Ollama, and local runtime embedding paths obey one safe typed contract, exact provider selection, bounded retry/deadline, readiness lifecycle, and no silent fallback.",
+      "enforcement_owner": "ProviderRuntime, concrete adapters, production assembly, and provider contract/integration tests",
+      "prohibited_behavior": "An Ollama/local failure constructs or calls a cloud adapter, reflects a secret/private URL, retries another adapter, or publishes ready.",
+      "counterexample": "Configure Ollama/local, booby-trap cloud constructors, fail local health, and observe any cloud construction or ready state.",
+      "gate_ids": ["GATE-PYTHON-ALL", "GATE-FRESH-BACKEND", "GATE-DOCKER"],
+      "oracle_origin": ["existing_contract", "deterministic_derived", "evaluator_authored"],
+      "phase_exit": ["FR-012", "AC-015", "AC-016", "NFR-001", "NFR-002"], "not_applicable": null
+    },
+    {
+      "id": "INV-GROUNDED-ANSWER", "applies": true, "classification": "critical", "severity": "high",
+      "statement": "Only fully validated evidence-backed material is published; citations resolve to reviewed evidence and backend-owned immutable locations; unsupported and unasserted person claims fail closed.",
+      "enforcement_owner": "validate_answer, GroundedChatService, deterministic scenario scorer, and grounding security tests",
+      "prohibited_behavior": "Unknown evidence, model URL/HTML, uncited material, unrelated owner assertion, or inference cycle reaches the visitor as supported content.",
+      "counterexample": "Cite an unrelated OWNER_ASSERTION for 'Alice founded the company' or emit an extra unreviewed citation and obtain a supported answer/perfect score.",
+      "gate_ids": ["GATE-QUALITY", "GATE-PYTHON-ALL", "GATE-FRESH-BACKEND"],
+      "oracle_origin": ["existing_contract", "deterministic_derived", "evaluator_authored"],
+      "phase_exit": ["FR-008", "FR-009", "FR-010", "FR-011", "AC-011", "AC-012", "AC-013", "AC-014", "AC-032", "AC-033", "NFR-007"], "not_applicable": null
+    },
+    {
+      "id": "INV-SSE-LIMITS-CANCEL", "applies": true, "classification": "critical", "severity": "high",
+      "statement": "Public chat has stable validated SSE terminals, correlated safe diagnostics, one overall deadline, cost-before-work admission, and silent bounded disconnect cancellation.",
+      "enforcement_owner": "pure-ASGI public boundary, chat_stream, ChatLimits, GroundedChatService, and direct-ASGI integration probes",
+      "prohibited_behavior": "Unvalidated partial output, complete after error, response after disconnect, fresh per-stage deadline, or provider work before rejection.",
+      "counterexample": "Send body then immediate http.disconnect while answer blocks and observe an unfinished ASGI task or any response bytes.",
+      "gate_ids": ["GATE-PYTHON-ALL", "GATE-FRESH-BACKEND", "GATE-DOCKER"],
+      "oracle_origin": ["existing_contract", "deterministic_derived", "evaluator_authored"],
+      "phase_exit": ["FR-013", "AC-017", "AC-018", "NFR-005", "NFR-012", "NFR-014"], "not_applicable": null
+    },
+    {
+      "id": "INV-VISITOR", "applies": true, "classification": "critical", "severity": "high",
+      "statement": "The same-origin visitor is responsive, bilingual, semantic, keyboard/named-control accessible, reduced-motion aware, citation safe, and preserves conversation across locale changes.",
+      "enforcement_owner": "React semantic DOM, typed SSE client, CharacterRenderer, web gates, and real Edge browser probes",
+      "prohibited_behavior": "Horizontal mobile overflow, unnamed controls, unsafe mutable citation, locale-history loss, animation under reduced motion, console/network errors, or stale document language.",
+      "counterexample": "Populate chat at 390px, switch locale, and observe overflow, lost turns, unsafe citation rel/href, wrong html lang, or animated nonzero frame under reduced motion.",
+      "gate_ids": ["GATE-WEB", "GATE-FRESH-BROWSER", "GATE-DOCKER"],
+      "oracle_origin": ["existing_contract", "deterministic_derived", "evaluator_authored"],
+      "phase_exit": ["FR-014", "FR-022", "FR-023", "AC-019", "AC-023", "AC-034", "NFR-009"], "not_applicable": null
+    },
+    {
+      "id": "INV-SECRET-SAME-ORIGIN", "applies": true, "classification": "critical", "severity": "high",
+      "statement": "Provider secrets/private URLs remain server-only and production frontend/API remain same-origin with restrictive security headers and safe logs/errors.",
+      "enforcement_owner": "environment assembly, provider transports, pure-ASGI response middleware, same-origin app, and security regression tests",
+      "prohibited_behavior": "Secret/private URL in browser, bundle, public error/log, broad CORS, missing CSP/nosniff, or redirect-based origin escape.",
+      "counterexample": "Inject a secret/private URL canary into provider failure and find it in public response, browser build, log, or Edge console/network output.",
+      "gate_ids": ["GATE-PYTHON-ALL", "GATE-WEB", "GATE-FRESH-BACKEND", "GATE-FRESH-BROWSER", "GATE-DOCKER"],
+      "oracle_origin": ["existing_contract", "deterministic_derived", "evaluator_authored"],
+      "phase_exit": ["NFR-001", "NFR-002", "NFR-012", "AC-016", "AC-017", "AC-034", "AC-035"], "not_applicable": null
+    },
+    {
+      "id": "INV-CLOSURE-EVIDENCE", "applies": true, "classification": "noncritical", "severity": "medium",
+      "statement": "Final Phase 3 status is supported by current aggregate, browser, Docker, fresh evaluator, hygiene, and canonical Foreman artifacts without rewriting historical failures.",
+      "enforcement_owner": "Main integration record, append-only closure ledger, Foreman validator, and project memory",
+      "prohibited_behavior": "Calling Phase 3 verified with a failed/not-run blocker or converting the historical attribution-limited delta guard to pass.",
+      "counterexample": "Remove the Docker/fresh evaluator artifact or mark the old GATE-DELTA passed and still validate closure.",
+      "gate_ids": ["GATE-PYTHON-ALL", "GATE-QUALITY", "GATE-WEB", "GATE-FRESH-BACKEND", "GATE-FRESH-BROWSER", "GATE-DOCKER", "GATE-HYGIENE", "GATE-FOREMAN"],
+      "oracle_origin": ["deterministic_derived", "evaluator_authored"],
+      "phase_exit": ["Phase 3 closure"], "not_applicable": null
+    }
+  ],
+  "packages": [
+    {
+      "id": "PKG-MAIN-P3-SEAMS", "wave": 0, "depends_on": [], "may_impact": ["PKG-TERRA-QUALITY", "PKG-MAIN-P3-CLOSURE"],
+      "consumes": ["Approved Phase 3 contracts", "verified Phase 2 bundle/retrieval"], "produces": ["IFACE-PROVIDER-V1", "IFACE-ANSWER-V1", "IFACE-SSE-V1", "integrated visitor runtime"],
+      "owner_role": "main", "capability_card_id": null,
+      "owned_paths": ["src/reponpc/providers/**", "src/reponpc/chat/**", "src/reponpc/api/public.py", "src/reponpc/main.py", "apps/web/src/app/**", "apps/web/src/i18n/**", "apps/web/src/styles.css"],
+      "prohibited_paths": ["Owner-modified unrelated documentation outside Phase 3 status lines"],
+      "read_first": ["docs/TECHNICAL_SPEC.md", "docs/ACCEPTANCE_CRITERIA.md", "docs/SECURITY.md", "docs/OPERATIONS.md"],
+      "invariant_ids": ["INV-PROVIDER-RUNTIME", "INV-GROUNDED-ANSWER", "INV-SSE-LIMITS-CANCEL", "INV-VISITOR", "INV-SECRET-SAME-ORIGIN"],
+      "verification_gate_ids": ["GATE-PYTHON-ALL", "GATE-WEB", "GATE-FRESH-BACKEND", "GATE-FRESH-BROWSER", "GATE-DOCKER"],
+      "replan_policy": "affected_subgraph", "status": "verified", "size_exception": "Main retained all cross-cutting security, lifecycle, transport, persistence, public API, and integration seams."
+    },
+    {
+      "id": "PKG-TERRA-QUALITY", "wave": 1, "depends_on": ["PKG-MAIN-P3-SEAMS"], "may_impact": ["PKG-MAIN-P3-CLOSURE"],
+      "consumes": ["Frozen answer validation and reviewed quality scenarios"], "produces": ["Deterministic exact-match quality scorer and negative controls"],
+      "owner_role": "worker", "capability_card_id": "CAP-TERRA-QUALITY",
+      "owned_paths": ["tests/fixtures/chat/answer_quality_scenarios.json", "tests/eval/test_chat_answer_quality.py"],
+      "prohibited_paths": ["src/**", "apps/**", "docs/**", ".agent-foreman/**"],
+      "read_first": ["tests/unit/test_answer_validation.py", "src/reponpc/chat/answers.py"],
+      "invariant_ids": ["INV-GROUNDED-ANSWER", "INV-CLOSURE-EVIDENCE"],
+      "verification_gate_ids": ["GATE-QUALITY", "GATE-PYTHON-ALL"],
+      "replan_policy": "main_takeover", "status": "verified", "size_exception": null
+    },
+    {
+      "id": "PKG-MAIN-P3-CLOSURE", "wave": 2, "depends_on": ["PKG-TERRA-QUALITY"], "may_impact": [],
+      "consumes": ["Integrated Phase 3 delta", "worker quality handoff", "fresh evaluator evidence"], "produces": ["verified canonical Phase 3 closure evidence"],
+      "owner_role": "main", "capability_card_id": null,
+      "owned_paths": [".agent-foreman/phase3-closure/**", ".claude/skills/agent-memory/memories/reponpc/**", "README.md", "docs/PROJECT_CONTEXT.md", "docs/SUBAGENT_EXECUTION_PLAYBOOK.md", "tests/contract/test_phase2_closure_spec.py"],
+      "prohibited_paths": ["Historical phase3-grounded-visitor evidence except evaluator-owned post-repair refresh"],
+      "read_first": ["All Phase 3 diffs", "all final gate artifacts", "fresh evaluation"],
+      "invariant_ids": ["INV-PROVIDER-RUNTIME", "INV-GROUNDED-ANSWER", "INV-SSE-LIMITS-CANCEL", "INV-VISITOR", "INV-SECRET-SAME-ORIGIN", "INV-CLOSURE-EVIDENCE"],
+      "verification_gate_ids": ["GATE-PYTHON-ALL", "GATE-QUALITY", "GATE-WEB", "GATE-FRESH-BACKEND", "GATE-FRESH-BROWSER", "GATE-DOCKER", "GATE-HYGIENE", "GATE-FOREMAN"],
+      "replan_policy": "main_takeover", "status": "verified", "size_exception": "Main exclusively owns aggregate integration, evaluation acceptance, documentation status, memory, and completion authority."
+    }
+  ],
+  "dependency_graph": {
+    "nodes": ["PKG-MAIN-P3-SEAMS", "PKG-TERRA-QUALITY", "PKG-MAIN-P3-CLOSURE"],
+    "edges": [
+      {"from": "PKG-MAIN-P3-SEAMS", "to": "PKG-TERRA-QUALITY"},
+      {"from": "PKG-TERRA-QUALITY", "to": "PKG-MAIN-P3-CLOSURE"}
+    ]
+  },
+  "acceptance_gates": [
+    {"id": "GATE-PYTHON-ALL", "command": "rtk proxy D:/RepoNPC/.venv/Scripts/python.exe -m pytest -p no:cacheprovider --basetemp D:/RepoNPC/.pytest-tmp/p3-final-docs -q --junitxml=.agent-foreman/phase3-closure/artifacts/gate-python-all-final.xml", "oracle": "424 passed, 3 skipped, 0 failed/errors; only one third-party Starlette/httpx deprecation warning.", "artifact_path": ".agent-foreman/phase3-closure/artifacts/gate-python-all-final.xml", "invariant_ids": ["INV-PROVIDER-RUNTIME", "INV-GROUNDED-ANSWER", "INV-SSE-LIMITS-CANCEL", "INV-SECRET-SAME-ORIGIN", "INV-CLOSURE-EVIDENCE"], "blocking": true, "scope": "system", "result": "passed"},
+    {"id": "GATE-QUALITY", "command": "rtk proxy D:/RepoNPC/.venv/Scripts/python.exe -m pytest tests/eval/test_chat_answer_quality.py -q", "oracle": "Reviewed citation resolution and supported factual entailment meet their thresholds; all unsupported/safety cases fail closed; scorer negative controls reject extra/wrong citations and unreviewed claims.", "artifact_path": ".agent-foreman/phase3-closure/artifacts/gate-python-all-final.xml", "invariant_ids": ["INV-GROUNDED-ANSWER", "INV-CLOSURE-EVIDENCE"], "blocking": true, "scope": "integration", "result": "passed"},
+    {"id": "GATE-WEB", "command": "rtk proxy pnpm run web:check", "oracle": "Prettier, ESLint with 0 errors, TypeScript, 7 unit tests, and production Vite build pass; five fast-refresh warnings are nonblocking.", "artifact_path": ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-browser-probe.json", "invariant_ids": ["INV-VISITOR", "INV-SECRET-SAME-ORIGIN", "INV-CLOSURE-EVIDENCE"], "blocking": true, "scope": "system", "result": "passed"},
+    {"id": "GATE-FRESH-BACKEND", "command": "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --python C:/Python314/python.exe --no-managed-python .agent-foreman/phase3-grounded-visitor/evaluation/fresh/fresh_backend_probe.py", "oracle": "Fresh evaluator backend probes pass 6/6, including no-fallback, grounding, quality controls, exact SSE, shared deadline, and disconnect with completed ASGI task and no response bytes.", "artifact_path": ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-backend-probe.json", "invariant_ids": ["INV-PROVIDER-RUNTIME", "INV-GROUNDED-ANSWER", "INV-SSE-LIMITS-CANCEL", "INV-SECRET-SAME-ORIGIN", "INV-CLOSURE-EVIDENCE"], "blocking": true, "scope": "runtime", "result": "passed"},
+    {"id": "GATE-FRESH-BROWSER", "command": "rtk proxy node .agent-foreman/phase3-grounded-visitor/evaluation/fresh/fresh_browser_probe.mjs", "oracle": "Fresh Microsoft Edge 151 passes 6/6 for pure-ASGI headers, desktop/mobile layout, edited question/SSE/citation/character, locale-history, reduced motion, and clean console/network.", "artifact_path": ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-browser-probe.json", "invariant_ids": ["INV-VISITOR", "INV-SECRET-SAME-ORIGIN", "INV-CLOSURE-EVIDENCE"], "blocking": true, "scope": "runtime", "result": "passed"},
+    {"id": "GATE-DOCKER", "command": "rtk proxy powershell -NoProfile -Command <Docker PATH plus pytest tests/smoke/test_container.py --junitxml=.agent-foreman/phase3-grounded-visitor/artifacts/gate-docker-final.xml>", "oracle": "Current Phase 3 Compose image builds, becomes healthy, restarts, and preserves runtime volume state: 1 passed, 0 failures/errors/skips.", "artifact_path": ".agent-foreman/phase3-grounded-visitor/artifacts/gate-docker-final.xml", "invariant_ids": ["INV-PROVIDER-RUNTIME", "INV-SSE-LIMITS-CANCEL", "INV-VISITOR", "INV-SECRET-SAME-ORIGIN", "INV-CLOSURE-EVIDENCE"], "blocking": true, "scope": "runtime", "result": "passed"},
+    {"id": "GATE-HYGIENE", "command": "rtk proxy D:/RepoNPC/.venv/Scripts/python.exe -m ruff check .; rtk proxy D:/RepoNPC/.venv/Scripts/python.exe -m ruff format --check .; rtk proxy D:/RepoNPC/.venv/Scripts/python.exe -m mypy src; rtk proxy git diff --check", "oracle": "Ruff, format check, mypy, and diff whitespace checks pass; CRLF conversion notices are nonblocking.", "artifact_path": ".agent-foreman/phase3-closure/integrations/integration-phase3-closure.json", "invariant_ids": ["INV-CLOSURE-EVIDENCE"], "blocking": true, "scope": "integration", "result": "passed"},
+    {"id": "GATE-FOREMAN", "command": "rtk proxy D:/RepoNPC/.venv/Scripts/python.exe C:/Users/xu/.codex/skills/agent-foreman/scripts/validate_plan.py .agent-foreman/phase3-closure/plan.json --ledger .agent-foreman/phase3-closure/evidence-ledger.jsonl", "oracle": "Canonical full-profile plan, references, package states, all passed gates, and append-only evidence ledger validate without diagnostics.", "artifact_path": ".agent-foreman/phase3-closure/plan.json", "invariant_ids": ["INV-CLOSURE-EVIDENCE"], "blocking": true, "scope": "integration", "result": "passed"}
+  ],
+  "evidence_ledger": [
+    {"evidence_id": "EVID-P3C-PYTHON", "actor_role": "gate_runner", "invariant_ids": ["INV-PROVIDER-RUNTIME", "INV-GROUNDED-ANSWER", "INV-SSE-LIMITS-CANCEL", "INV-SECRET-SAME-ORIGIN"], "gate_id": "GATE-PYTHON-ALL", "command": "pytest aggregate after documentation updates", "exit_code": 0, "observed": "424 passed, 3 skipped", "artifact_path": ".agent-foreman/phase3-closure/artifacts/gate-python-all-final.xml", "classification": "deterministic"},
+    {"evidence_id": "EVID-P3C-FRESH", "actor_role": "evaluator", "invariant_ids": ["INV-PROVIDER-RUNTIME", "INV-GROUNDED-ANSWER", "INV-SSE-LIMITS-CANCEL", "INV-VISITOR", "INV-SECRET-SAME-ORIGIN"], "gate_id": "GATE-FRESH-BACKEND", "command": "fresh backend and Edge probes", "exit_code": 0, "observed": "Backend 6/6 and Edge 6/6; recommendation pass; no P0/P1/P2", "artifact_path": ".agent-foreman/phase3-grounded-visitor/evaluation/fresh/evaluation.json", "classification": "advisory"},
+    {"evidence_id": "EVID-P3C-DOCKER", "actor_role": "gate_runner", "invariant_ids": ["INV-PROVIDER-RUNTIME", "INV-SSE-LIMITS-CANCEL", "INV-VISITOR", "INV-SECRET-SAME-ORIGIN"], "gate_id": "GATE-DOCKER", "command": "Compose smoke", "exit_code": 0, "observed": "1 passed in 34.69s", "artifact_path": ".agent-foreman/phase3-grounded-visitor/artifacts/gate-docker-final.xml", "classification": "deterministic"}
+  ],
+  "dispatches": [
+    {
+      "schema_name": "agent-foreman/dispatch", "schema_version": "1.0", "profile": "full", "plan_id": "REPONPC-P3-CLOSURE-20260812", "package_id": "PKG-TERRA-QUALITY",
+      "authorization_source": "Owner explicitly authorized Luna max implementation and Terra fallback when quality was inadequate; Main found the Luna scorer false-green and routed the frozen repair to Terra.",
+      "requested_selector": "terra", "expected_model_verification": "verified",
+      "objective": "Repair only the deterministic Phase 3 answer-quality scenarios and scorer so extra citations and unreviewed claims cannot produce a false green.",
+      "frozen_contracts": ["Every emitted citation is in the denominator and exact reviewed evidence/location matching is required.", "Factual entailment counts only reviewed material claims in supported scenarios.", "Unsupported and safety cases are excluded from factual scoring and must fail closed 100%."],
+      "owned_paths": ["tests/fixtures/chat/answer_quality_scenarios.json", "tests/eval/test_chat_answer_quality.py"],
+      "prohibited_paths": ["src/**", "apps/**", "docs/**", ".agent-foreman/**"],
+      "read_first": ["src/reponpc/chat/answers.py", "tests/unit/test_answer_validation.py"],
+      "invariant_ids": ["INV-GROUNDED-ANSWER", "INV-CLOSURE-EVIDENCE"], "gate_ids": ["GATE-QUALITY", "GATE-PYTHON-ALL"],
+      "commands": ["rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run pytest tests/eval/test_chat_answer_quality.py -q", "rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run ruff check tests/eval/test_chat_answer_quality.py"],
+      "expected_artifacts": ["Implemented or blocked handoff with exact test results"],
+      "stop_conditions": ["Stop when production or an unowned path is required."], "allowed_statuses": ["implemented", "blocked"]
+    }
+  ],
+  "handoffs": [
+    {
+      "schema_name": "agent-foreman/handoff", "schema_version": "1.0", "profile": "full", "plan_id": "REPONPC-P3-CLOSURE-20260812", "package_id": "PKG-TERRA-QUALITY", "status": "implemented",
+      "requested_selector": "terra", "resolved_model_id": "gpt-5.6-terra", "model_verification": "verified", "reasoning_effort": "max",
+      "changed_paths": ["tests/fixtures/chat/answer_quality_scenarios.json", "tests/eval/test_chat_answer_quality.py"],
+      "diff_artifact": ".agent-foreman/phase3-closure/integrations/integration-phase3-closure.json", "test_artifacts": [".agent-foreman/phase3-closure/artifacts/gate-python-all-final.xml"],
+      "gate_results": [{"gate_id": "GATE-QUALITY", "exit_code": 0, "observed": "Two focused quality tests and negative controls passed."}, {"gate_id": "GATE-PYTHON-ALL", "exit_code": 0, "observed": "Aggregate Python gate passed 424 with 3 skips."}],
+      "summary": "Terra corrected the citation denominator, exact evidence/location matching, factual denominator, and safety fail-closed controls after Main rejected the Luna false-green scorer.", "blocked_record": null
+    }
+  ],
+  "integration_records": [
+    {"schema_name": "agent-foreman/integration", "schema_version": "1.0", "profile": "full", "plan_id": "REPONPC-P3-CLOSURE-20260812", "phase_id": "PHASE-3-CLOSURE", "actor_role": "main", "packages": ["PKG-MAIN-P3-SEAMS", "PKG-TERRA-QUALITY", "PKG-MAIN-P3-CLOSURE"], "delta_guard": {"passed": false, "artifact": ".agent-foreman/phase3-grounded-visitor/integrations/integration-foundations.json", "limitation": "Historical shared-workspace character attribution guard failed and remains immutable; completion relies on Main diff inspection plus current system/runtime gates, not a rewritten attribution claim."}, "focused_gates": ["GATE-QUALITY", "GATE-FRESH-BACKEND", "GATE-FRESH-BROWSER"], "aggregate_gates": ["GATE-PYTHON-ALL", "GATE-WEB", "GATE-DOCKER", "GATE-HYGIENE", "GATE-FOREMAN"], "deterministic_result": "passed", "evaluator_recommendation": "pass", "status": "verified", "rework": {"worker_changed_lines": 0, "main_changed_lines_in_worker_scope": 0}}
+  ],
+  "evaluations": [
+    {"schema_name": "agent-foreman/evaluation", "schema_version": "1.0", "profile": "full", "plan_id": "REPONPC-P3-CLOSURE-20260812", "phase_id": "PHASE-3-CLOSURE", "context_freshness": "fresh", "model_diversity": "different-family", "production_access": "read-only", "new_probes": [{"probe_id": "PROBE-P3-PROVIDER", "invariant_id": "INV-PROVIDER-RUNTIME", "command": "fresh_backend_probe.py", "oracle": "Configured Ollama/local degradation constructs no cloud adapter, rejects oversized work before service cost, and exposes no secret.", "artifact_path": ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-backend-probe.json", "exit_code": 0}, {"probe_id": "PROBE-P3-GROUNDING", "invariant_id": "INV-GROUNDED-ANSWER", "command": "fresh_backend_probe.py", "oracle": "Forged IDs/URLs, HTML, unsupported person claims, mismatched owner assertions, and quality negative controls fail closed.", "artifact_path": ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-backend-probe.json", "exit_code": 0}, {"probe_id": "PROBE-P3-TRANSPORT", "invariant_id": "INV-SSE-LIMITS-CANCEL", "command": "fresh_backend_probe.py", "oracle": "Exact SSE/error/deadline behavior and silent disconnect cancellation pass.", "artifact_path": ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-backend-probe.json", "exit_code": 0}, {"probe_id": "PROBE-P3-EDGE", "invariant_id": "INV-VISITOR", "command": "fresh_browser_probe.mjs", "oracle": "Six real Edge visitor/header/browser probes pass without console/network failures.", "artifact_path": ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-browser-probe.json", "exit_code": 0}, {"probe_id": "PROBE-P3-SECRET", "invariant_id": "INV-SECRET-SAME-ORIGIN", "command": "fresh_backend_probe.py and fresh_browser_probe.mjs", "oracle": "Provider canaries never reach responses and real same-origin Edge observes request ID, no-store, restrictive CSP, nosniff, and clean network/console.", "artifact_path": ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-browser-probe.json", "exit_code": 0}], "recommendation": "pass", "deterministic_result": "passed", "findings": []}
+  ],
+  "stop_conditions": [
+    "Stop before claiming verified if any blocking gate fails or is not run.",
+    "Never rewrite the historical Phase 3 character attribution guard as passed.",
+    "Stop and ask the owner before changing any public contract, provider fallback, trust boundary, threshold, hosted dependency, or v1 scope."
+  ],
+  "fallback_policy": {"mode": "main_takeover", "triggers": ["One failed precise repair of a critical invariant", "Fresh evaluator or deterministic gate conflicts with completion", "Worker requires an unowned production path"]}
+}

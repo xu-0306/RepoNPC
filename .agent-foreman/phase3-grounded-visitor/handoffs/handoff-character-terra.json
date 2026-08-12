@@ -1,0 +1,35 @@
+{
+  "schema_name": "agent-foreman/handoff",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-P3-FOUNDATIONS-20260812",
+  "package_id": "PKG-LUNA-CHARACTER",
+  "status": "implemented",
+  "requested_selector": "gpt-5.6-terra",
+  "resolved_model_id": "gpt-5.6-terra",
+  "model_verification": "verified",
+  "reasoning_effort": "max",
+  "changed_paths": [
+    "apps/web/src/features/character/CharacterRenderer.tsx",
+    "apps/web/src/features/character/CharacterRenderer.css",
+    "apps/web/src/features/character/CharacterRenderer.test.tsx"
+  ],
+  "diff_artifact": ".agent-foreman/phase3-grounded-visitor/fingerprints/handoff-manifest.json",
+  "test_artifacts": [
+    ".agent-foreman/phase3-grounded-visitor/artifacts/gate-web.txt"
+  ],
+  "gate_results": [
+    {
+      "gate_id": "GATE-CHARACTER-LEAF",
+      "exit_code": 0,
+      "observed": "Main repository web gate ran 4 renderer tests; all passed after two bounded Terra repairs."
+    },
+    {
+      "gate_id": "GATE-DELTA",
+      "exit_code": 1,
+      "observed": "Fingerprint guard was attribution-limited by concurrent Main Foreman edits and Main-generated test/cache files; it listed the three worker files as authorized and found no other worker production path, but cannot be reported passed."
+    }
+  ],
+  "summary": "Luna exhausted its allowed pre-delta timeout retry. Terra implemented the same frozen three-file renderer leaf; Main verified formatting, lint, typecheck, four focused tests, aggregate tests, and production build.",
+  "blocked_record": null
+}

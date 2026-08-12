@@ -1,6 +1,6 @@
 # RepoNPC Project Context
 
-**Document status:** Draft  
+**Document status:** Maintained product context; implementation status current through 2026-08-13
 **Audience:** product owner, implementation Agents, reviewers, contributors  
 **Canonical product name:** RepoNPC  
 **Tagline:** Meet the NPC who knows your code.
@@ -15,15 +15,15 @@ The product is not merely a decorative README widget and is not a general-purpos
 
 ## 2. Current project state
 
-At the time this specification was written:
+As of the Phase 4 closure based on commit `1b3d823` on 2026-08-13:
 
-- the repository contains planning and specification documents only;
-- there is no existing application code, database, public API, deployment, or compatibility contract;
-- the implementation may establish the repository structure and conventions defined in `TECHNICAL_SPEC.md`;
-- v1 is intentionally the complete product described here, not a reduced MVP;
+- `TECHNICAL_SPEC.md` 0.1.1 is approved and application implementation is authorized;
+- Delivery Phases 1 through 4 are implemented and verified, including the production index CLI, immutable bundle lifecycle, hybrid retrieval, runtime model adapters, grounded chat, immutable citations, cost controls, bilingual visitor experience, owner administration, character/card assets, GitHub writeback, and publication integration;
+- Delivery Phase 5 (release hardening, current Docker/clean-host evidence, and remaining manual checks) is the next implementation boundary;
+- v1 remains the complete product described here, not a reduced MVP;
 - milestones are delivery and verification boundaries, not permission to remove later v1 features.
 
-Implementation MUST NOT begin while `TECHNICAL_SPEC.md` has status `Draft`. The project owner must explicitly approve the specification first.
+If `TECHNICAL_SPEC.md` returns to `Draft`, or an owner decision reopens an affected contract, implementation of that affected scope MUST stop until the project owner approves it again.
 
 ## 3. Intended users
 

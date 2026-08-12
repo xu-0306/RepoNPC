@@ -62,7 +62,7 @@ A dispatch may provide a smaller `read_first` list only after Main has completed
 
 ### 2.3 Specification gate
 
-Technical Specification 0.1.0 is approved as of 2026-08-10, so implementation is authorized. If its status returns to `Draft`, or an owner decision reopens an affected contract, Main must block the affected campaign before production edits.
+Technical Specification 0.1.1 is approved as of 2026-08-10, including the owner-approved Phase 2 closure amendment from 2026-08-11, so implementation is authorized. If its status returns to `Draft`, or an owner decision reopens an affected contract, Main must block the affected campaign before production edits.
 
 ## 3. Current baseline and honest completion state
 
@@ -88,9 +88,23 @@ Canonical evidence is in:
 
 The three original worker delta guards remain failed because this non-Git shared workspace mixed concurrent production writes with cache and temporary-file noise. They must never be reported as passed. Later campaigns must use package-local manifests or enforced path isolation.
 
-### 3.2 What Phase 1 did not complete
+### 3.2 Verified Delivery Phase 2 closure
 
-Delivery Phase 1 is not the same as all of Implementation Plan Milestone 1. The following Milestone 1 obligations remain and must be carried forward:
+The `.agent-foreman/phase2-closure/` campaign and commit `1b3d823` verify Delivery Phase 2. The production index CLI, build-time local sentence-transformers adapter, repository metadata producer, bilingual profile producer/consumer, publication-last workflow, immutable bundle lifecycle, and Docker-isolated formal benchmark are complete. All 14 blocking gates passed; the fresh evaluator recommended `pass` with no open findings.
+
+Canonical evidence is in:
+
+- `.agent-foreman/phase2-closure/plan.json`;
+- `.agent-foreman/phase2-closure/integrations/integration-phase2-closure.json`;
+- `.agent-foreman/phase2-closure/evaluation/evaluation-phase2-closure.json`;
+- `.agent-foreman/phase2-closure/artifacts/formal-benchmark-r2.json`;
+- `.agent-foreman/phase2-closure/artifacts/gate-docker.xml`.
+
+Delivery Phase 3 is verified by the `.agent-foreman/phase3-closure/` campaign. Delivery Phase 4 is verified by the `.agent-foreman/phase4-owner-assets-publication/` campaign; its shared-workspace worker delta gate remains attribution-limited and is not a completion oracle. Delivery Phase 5 is the next active boundary. Do not rerun or redesign earlier phases unless a regression, approved contract change, or later integration impact requires it.
+
+### 3.3 Historical Phase 1 carry-forward ledger
+
+Delivery Phase 1 was not the same as all of Implementation Plan Milestone 1. The following table records the obligations that were outstanding at the Phase 1 checkpoint. It is retained as history and must not be treated as the current outstanding-work list; use the verified Phase 2 campaign and the selected later-phase plan for current status.
 
 | Carry-forward item | Governing references | Must be complete before |
 | --- | --- | --- |
@@ -298,11 +312,13 @@ Only Main may transition integrated work to `verified`. Closure requires all blo
 - remaining risks, assumptions, carry-forward items, and owner decisions;
 - any failed/limited delta guard without softening it.
 
-## 7. Remaining execution map
+## 7. Delivery execution map
 
-The following packages are routing defaults. Before dispatch, Main must convert each selected package into exact files and a fresh full plan. A package marked `MAIN` is still a required step; it is not a subagent task.
+The following packages are routing defaults and completed-package history. Delivery Phases 1 through 4 are verified; the remaining implementation begins with Phase 5. Before dispatch, Main must convert each selected package into exact files and a fresh full plan. A package marked `MAIN` is still a required step; it is not a subagent task.
 
 ## 7.1 Delivery Phase 2 — Immutable evidence and retrieval
+
+**Status:** Verified at commit `1b3d823`. This section is retained as the completed package map and evidence contract, not as an instruction to repeat Phase 2.
 
 **Implementation mapping:** Milestone 2 plus the runtime/logging/mock prerequisites carried from Milestone 1.  
 **Primary requirements:** FR-002–FR-007, FR-020, FR-021; NFR-001, NFR-003, NFR-004, NFR-006, NFR-008, NFR-011.  

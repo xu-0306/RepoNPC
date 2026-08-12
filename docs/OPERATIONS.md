@@ -3,9 +3,9 @@
 **Status:** Draft operational contract; exact command output must be verified during implementation  
 **Audience:** a single owner self-hosting RepoNPC
 
-Technical Specification 0.1.1 and ADR-015 freeze the Phase 2 index CLI and build-time local-adapter boundary. Commands below remain Draft until their real closure gates pass.
+Technical Specification 0.1.1 and ADR-015 freeze the Phase 2 index CLI and build-time local-adapter boundary. The Phase 2 index/config commands and formal benchmark passed their closure gates at commit `1b3d823`; the Phase 3 and Phase 4 closures add verified provider, admin, asset, card, and publication behavior. Phase 5 still owns the final clean-host and manual release checks.
 
-This guide defines the operating experience the implementation must provide. Commands are the intended stable interface; because application code does not exist yet, they must be exercised and corrected against the release candidate before this document is marked complete.
+This guide defines the operating experience the implementation must provide. Implemented commands are exercised at their delivery-phase gates; prospective commands must still be exercised and corrected against the release candidate before this document is marked complete.
 
 ## 1. Deployment topology
 
@@ -41,13 +41,13 @@ The default configuration repository may be the GitHub Profile repository (`owne
 
 ## 4. Create deployment secrets
 
-The implementation must provide a non-echoing password hash command:
+The implemented non-echoing password hash command is:
 
 ```bash
 docker compose run --rm app reponpc admin hash-password
 ```
 
-It prompts twice and prints one Argon2id PHC hash. Store the hash as `REPONPC_ADMIN_PASSWORD_HASH`; never store the plaintext password.
+It prompts twice and prints one Argon2id PHC hash. Store the hash as `REPONPC_ADMIN_PASSWORD_HASH`; never store the plaintext password. Restarting the service preserves only hashed session and CSRF values in runtime SQLite. Refresh rotates the session and CSRF token, logout revokes the current session, and logout-all verifies the current password before incrementing the durable session epoch.
 
 Generate a unique IP pseudonymization key (example operator command):
 
@@ -98,7 +98,7 @@ reponpc index publish --bundle-dir dist
 reponpc index publish-manifest --bundle-dir dist
 ```
 
-Help and index/config commands do not load unrelated deployment startup settings. `index build` generates `public/profile.json` from validated configuration/index data and, until Phase 4 integrates the card/character producer, requires all non-profile public assets in the documented `public/` input directory. Missing or invalid assets fail the build; production placeholders are never fabricated.
+Help and index/config commands do not load unrelated deployment startup settings. `index build` generates `public/profile.json`, the canonical character PNG, and all twelve locale/theme/format card variants from validated configuration. Built-in character composition and custom uploads both pass the same canonical `128x224` sprite validator before the exact bytes reach preview, GitHub writeback, card rendering, or bundle production. Missing or invalid inputs fail the build; production placeholders are never fabricated.
 
 The `build-index.yml` workflow must:
 
@@ -160,6 +160,8 @@ After readiness:
 6. increment `card.revision` after visible asset changes when cache invalidation is needed.
 
 The image is not interactive. It links to the public HTTPS site.
+
+The raster card renderer uses the bundled Noto Sans CJK TC font to keep Traditional Chinese output deterministic. Its SIL Open Font License and source notes ship beside the font under `src/reponpc/cards/fonts/`; preserve both files when redistributing a source or wheel build.
 
 ## 10. Updates, pinning, and rollback
 

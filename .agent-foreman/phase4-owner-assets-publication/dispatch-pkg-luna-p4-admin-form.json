@@ -1,0 +1,45 @@
+{
+  "schema_version": "agent-foreman/dispatch-package@1",
+  "campaign_id": "REPONPC-P4-OWNER-ASSETS-PUBLICATION-20260813",
+  "package_id": "PKG-LUNA-P4-ADMIN-FORM",
+  "worker": "luna_worker",
+  "reasoning_effort": "max",
+  "objective": "Implement one accessible, bilingual admin presentation leaf against the frozen Phase 4 API response shapes.",
+  "owned_paths": [
+    "apps/web/src/features/admin/AdminWorkspace.tsx",
+    "apps/web/src/features/admin/AdminWorkspace.test.tsx"
+  ],
+  "prohibited_paths": [
+    "apps/web/src/app/**",
+    "apps/web/src/i18n/**",
+    "apps/web/src/styles.css",
+    "apps/web/package.json",
+    "src/**",
+    "docs/**",
+    ".agent-foreman/**"
+  ],
+  "frozen_contract": {
+    "props": "locale, draft, validation, preview, status, snippet, conflict, busy, authenticated and callbacks for draft/validate/preview/save/copy/dispatch/logout",
+    "states": [
+      "editable raw YAML draft",
+      "field-level validation errors and warnings",
+      "profile/card/character preview clearly marked unsaved",
+      "conflict disables save",
+      "publication status",
+      "copy-ready snippet",
+      "logout clears visible draft through callback ownership"
+    ],
+    "locales": ["zh-TW", "en"],
+    "accessibility": "semantic headings, labels, status/alert roles, keyboard buttons, focusable controls, no color-only state"
+  },
+  "tests": [
+    "rtk proxy pnpm --filter @reponpc/web test -- AdminWorkspace.test.tsx",
+    "rtk proxy pnpm --filter @reponpc/web typecheck",
+    "rtk proxy pnpm --filter @reponpc/web lint"
+  ],
+  "stop_conditions": [
+    "Any API schema or session/CSRF/fetch-client decision is required",
+    "Any edit outside the two owned paths is required",
+    "A dependency change is required"
+  ]
+}

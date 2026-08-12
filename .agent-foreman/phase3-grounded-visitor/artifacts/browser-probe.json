@@ -1,0 +1,48 @@
+{
+  "checks": {
+    "desktop": {
+      "title": "RepoNPC",
+      "lang": "zh-TW",
+      "h1": "認識熟悉你程式碼的 NPC",
+      "projects": 1,
+      "status": [
+        "索引與模型已就緒"
+      ],
+      "textareaLabel": "你的問題"
+    },
+    "chat": {
+      "answerVisible": 4,
+      "citationHref": "https://github.com/owner/repo/blob/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/src/search.py#L10-L12",
+      "citationRel": "noopener noreferrer",
+      "characterState": "success"
+    },
+    "locale": {
+      "lang": "en",
+      "conversationBefore": 2,
+      "conversationAfter": 2,
+      "h1": "Meet the NPC who knows your code"
+    },
+    "mobile": {
+      "scrollWidth": 390,
+      "clientWidth": 390
+    },
+    "reducedMotion": {
+      "value": "true"
+    },
+    "accessibility": {
+      "unnamedButtons": 0,
+      "unnamedLinks": 0,
+      "headings": [
+        "認識熟悉你程式碼的 NPC",
+        "作品集導覽",
+        "Fixture Owner",
+        "精選專案",
+        "詢問作品集",
+        "建議問題"
+      ],
+      "liveRegions": 1
+    }
+  },
+  "consoleErrors": [],
+  "failedResponses": []
+}

@@ -1,0 +1,34 @@
+{
+  "schema_name": "agent-foreman/integration",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-P3-CLOSURE-20260812",
+  "phase_id": "PHASE-3-CLOSURE",
+  "actor_role": "main",
+  "packages": ["PKG-MAIN-P3-SEAMS", "PKG-TERRA-QUALITY", "PKG-MAIN-P3-CLOSURE"],
+  "delta_guard": {
+    "passed": false,
+    "artifact": ".agent-foreman/phase3-grounded-visitor/integrations/integration-foundations.json",
+    "limitation": "The historical character shared-workspace attribution guard failed and remains immutable. No claim of a passed worker delta guard is used for closure."
+  },
+  "focused_gates": ["GATE-QUALITY", "GATE-FRESH-BACKEND", "GATE-FRESH-BROWSER"],
+  "aggregate_gates": ["GATE-PYTHON-ALL", "GATE-WEB", "GATE-DOCKER", "GATE-HYGIENE", "GATE-FOREMAN"],
+  "runtime_evidence": [
+    {"gate_id": "GATE-PYTHON-ALL", "artifact": ".agent-foreman/phase3-closure/artifacts/gate-python-all-final.xml", "observed": "424 passed, 3 skipped, 0 failed/errors after documentation status updates; one third-party Starlette/httpx deprecation warning."},
+    {"gate_id": "GATE-FRESH-BACKEND", "artifact": ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-backend-probe.json", "observed": "Fresh backend 6/6 passed. Immediate disconnect completes the ASGI task and emits no response before or after evaluator release."},
+    {"gate_id": "GATE-FRESH-BROWSER", "artifact": ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-browser-probe.json", "observed": "Fresh Microsoft Edge 151 passed 6/6 including headers, desktop/mobile, citation, locale/history, character lifecycle, reduced motion, and clean console/network."},
+    {"gate_id": "GATE-DOCKER", "artifact": ".agent-foreman/phase3-grounded-visitor/artifacts/gate-docker-final.xml", "observed": "Current Compose image build, startup, health, restart, and runtime-volume persistence passed: 1 test in 34.69 seconds."}
+  ],
+  "deterministic_result": "passed",
+  "evaluator_recommendation": "pass",
+  "status": "verified",
+  "final_checks": {
+    "blocking_gates_passed": 8,
+    "missing_gate_artifacts": 0,
+    "plan_validation": "passed",
+    "git_diff_check": "passed",
+    "historical_delta_guard_preserved": true,
+    "v1_release_claimed": false
+  },
+  "rework": {"worker_changed_lines": 0, "main_changed_lines_in_worker_scope": 0, "note": "Line attribution is intentionally not reconstructed from the failed historical shared-workspace fingerprint."}
+}

@@ -1,31 +1,69 @@
 export const messages = {
   "zh-TW": {
-    title: "認識懂你程式碼的 NPC",
-    statusTitle: "目前正在設定 RepoNPC",
-    statusDetail: "作品集索引尚未啟用，因此聊天功能暫時無法使用。",
-    availabilityDetail: "完成設定後，這裡會提供可驗證的專案導覽與引用。",
+    title: "認識熟悉你程式碼的 NPC",
+    subtitle: "從可驗證的作品集證據探索專案，回答會附上固定版本的引用。",
+    profileTitle: "作品集導覽",
+    profileLoading: "正在載入作品集…",
+    profileUnavailable: "作品集目前無法載入，請稍後再試。",
+    projectsTitle: "精選專案",
+    linksTitle: "相關連結",
+    chatTitle: "詢問作品集",
+    statusReady: "索引與模型已就緒",
+    statusUnavailable: "聊天目前無法使用，作品集內容仍可瀏覽。",
+    inputLabel: "你的問題",
+    inputPlaceholder: "例如：哪些專案使用了混合檢索？",
+    send: "送出問題",
+    sending: "正在查找證據…",
+    citations: "引用證據",
+    suggested: "建議問題",
     languageLabel: "選擇語言",
     languageName: "繁體中文",
+    characterIdle: "角色待機中",
+    characterListen: "角色正在聆聽",
+    characterThink: "角色正在查找證據",
+    characterTalk: "角色正在回答",
+    characterSuccess: "回答完成",
+    characterOffline: "聊天目前離線",
+    genericError: "目前無法完成回答，請稍後再試。",
+    suggestionItems: [
+      "這些專案解決了哪些問題？",
+      "哪些證據顯示使用了 Python？",
+    ],
   },
   en: {
     title: "Meet the NPC who knows your code",
-    statusTitle: "RepoNPC is being set up",
-    statusDetail:
-      "The portfolio index is not active yet, so chat is unavailable for now.",
-    availabilityDetail:
-      "Once setup is complete, this page will offer verifiable project guidance and citations.",
+    subtitle:
+      "Explore projects through verifiable portfolio evidence with immutable citations.",
+    profileTitle: "Portfolio guide",
+    profileLoading: "Loading portfolio…",
+    profileUnavailable:
+      "The portfolio could not be loaded. Please try again later.",
+    projectsTitle: "Featured projects",
+    linksTitle: "Related links",
+    chatTitle: "Ask about the portfolio",
+    statusReady: "The index and model are ready",
+    statusUnavailable:
+      "Chat is unavailable. Portfolio content remains accessible.",
+    inputLabel: "Your question",
+    inputPlaceholder: "For example: Which projects use hybrid retrieval?",
+    send: "Ask question",
+    sending: "Finding evidence…",
+    citations: "Cited evidence",
+    suggested: "Suggested questions",
     languageLabel: "Choose language",
     languageName: "English",
+    characterIdle: "Character is idle",
+    characterListen: "Character is listening",
+    characterThink: "Character is finding evidence",
+    characterTalk: "Character is answering",
+    characterSuccess: "Answer complete",
+    characterOffline: "Chat is offline",
+    genericError: "The answer could not be completed. Please try again later.",
+    suggestionItems: [
+      "What problems do these projects solve?",
+      "What evidence shows Python use?",
+    ],
   },
 } as const;
 
 export type Locale = keyof typeof messages;
-
-const expectedKeys = Object.keys(messages["zh-TW"]).sort();
-
-if (
-  JSON.stringify(expectedKeys) !==
-  JSON.stringify(Object.keys(messages.en).sort())
-) {
-  throw new Error("RepoNPC locale message keys are not equivalent");
-}

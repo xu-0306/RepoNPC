@@ -108,6 +108,30 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             "CREATE INDEX rate_buckets_expiry_idx ON rate_buckets(expires_at)",
         ),
     ),
+    Migration(
+        version=2,
+        name="admin-auth-state",
+        statements=(
+            """
+            CREATE TABLE admin_state (
+                state_key TEXT PRIMARY KEY,
+                session_epoch INTEGER NOT NULL CHECK(session_epoch >= 0)
+            )
+            """,
+            "INSERT INTO admin_state(state_key, session_epoch) VALUES ('current', 0)",
+            """
+            CREATE TABLE admin_login_backoff (
+                identity_hmac TEXT PRIMARY KEY
+                    CHECK(length(identity_hmac) = 64
+                          AND identity_hmac NOT GLOB '*[^0-9a-f]*'),
+                failure_count INTEGER NOT NULL CHECK(failure_count >= 0),
+                next_allowed_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL
+            )
+            """,
+            "CREATE INDEX admin_login_backoff_expiry_idx ON admin_login_backoff(expires_at)",
+        ),
+    ),
 )
 
 

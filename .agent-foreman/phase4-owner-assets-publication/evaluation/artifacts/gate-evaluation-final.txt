@@ -1,0 +1,9 @@
+Fresh Phase 4 evaluation final result
+
+Python command: rtk proxy D:/RepoNPC/.venv/Scripts/python.exe -m pytest -p no:cacheprovider --basetemp D:/RepoNPC/.pytest-tmp/p4-eval-final9 .agent-foreman/phase4-owner-assets-publication/evaluation/probes/test_phase4_fresh.py -q
+Python result: exit 0; 7 passed; one upstream Starlette/httpx TestClient deprecation warning.
+
+Admin command: rtk proxy D:/RepoNPC/apps/web/node_modules/.bin/vitest.CMD run --root D:/RepoNPC --config apps/web/vite.config.ts .agent-foreman/phase4-owner-assets-publication/evaluation/probes/admin_workspace_fresh.test.tsx
+Admin result: exit 0; 1 test file passed; 1 test passed.
+
+Total: 8 fresh production-boundary probes passed. No production files were modified by the evaluator probes.

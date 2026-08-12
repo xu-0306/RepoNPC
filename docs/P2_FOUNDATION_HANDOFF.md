@@ -12,22 +12,21 @@
 
 ## 1. How to use this document
 
-This is the live handoff, execution checklist, evidence index, and review-request form for the next Agent. The receiving Agent should:
+This is the archived handoff, execution checklist, evidence index, and review-request form used to complete P2-00. It is retained for traceability and is not the current execution plan. An Agent auditing the historical campaign should:
 
 1. read every required source in section 3;
-2. verify the frozen campaign plan before editing;
-3. execute sections 6 through 14 in order;
-4. update the progress tables, evidence log, changed-file manifest, and blocker fields in this document after each step;
-5. request review at checkpoints `R1`, `R2`, and `R3` using the form in section 17;
-6. keep implementing until all blocking gates pass or a genuine owner/external blocker is recorded.
+2. inspect the frozen campaign plan and sections 6 through 14 only as historical execution evidence;
+3. treat the completed progress tables, evidence log, changed-file manifest, and blocker fields as historical records;
+4. use the review records at checkpoints `R1`, `R2`, and `R3` as evidence rather than reopening them;
+5. use `.agent-foreman/phase2-closure/plan.json` and commit `1b3d823` for the current verified Phase 2 state.
 
-The reviewer should inspect repository evidence and append a review record in section 18. The reviewer does not implement repairs unless the owner explicitly changes that role.
+Do not append new implementation progress to this archived handoff. A new phase or regression review must use a new campaign artifact.
 
 Do not use conversational memory as the source of truth. If a claim is not in the repository or a linked artifact, treat it as unverified.
 
-### 1.1 Fields the receiving Agent must maintain
+### 1.1 Historical fields maintained during execution
 
-The receiving Agent may update these live sections:
+During the completed P2-00 campaign, the receiving Agent maintained these sections:
 
 - section 2, `Current handoff state`;
 - section 5, `Changed-file manifest`;
@@ -36,7 +35,7 @@ The receiving Agent may update these live sections:
 - section 17, `Review request`;
 - section 19, `Blockers, risks, and decisions`.
 
-Do not silently rewrite the scope, source-of-truth order, frozen contract statements, gate oracles, or reviewer findings. A needed contract/gate change must be proposed in section 19 and reviewed before implementation continues.
+These fields are now immutable history. Do not rewrite the scope, source-of-truth order, frozen contract statements, gate oracles, or reviewer findings. Any new contract or gate change belongs in a new campaign.
 
 ### 1.2 Status vocabulary
 

@@ -1,0 +1,62 @@
+.character-renderer {
+  display: inline-block;
+  height: 32px;
+  line-height: 0;
+  vertical-align: middle;
+  width: 32px;
+}
+
+.character-renderer__viewport {
+  display: block;
+  height: 32px;
+  overflow: hidden;
+  width: 32px;
+}
+
+.character-renderer__sheet {
+  display: flex;
+  height: 224px;
+  transform: translate(
+    var(--character-frame-start-x),
+    var(--character-row-offset-y)
+  );
+  width: 256px;
+}
+
+.character-renderer[data-reduced-motion="false"] .character-renderer__sheet {
+  animation: character-renderer-frames var(--character-animation-duration)
+    steps(4, end) infinite;
+}
+
+.character-renderer__sheet-image {
+  display: block;
+  flex: 0 0 128px;
+  height: 224px;
+  image-rendering: pixelated;
+  max-width: none;
+  user-select: none;
+  width: 128px;
+}
+
+@keyframes character-renderer-frames {
+  from {
+    transform: translate(
+      var(--character-frame-start-x),
+      var(--character-row-offset-y)
+    );
+  }
+
+  to {
+    transform: translate(
+      var(--character-frame-end-x),
+      var(--character-row-offset-y)
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .character-renderer[data-reduced-motion="false"] .character-renderer__sheet {
+    animation: none;
+    transform: translate(0, var(--character-row-offset-y));
+  }
+}

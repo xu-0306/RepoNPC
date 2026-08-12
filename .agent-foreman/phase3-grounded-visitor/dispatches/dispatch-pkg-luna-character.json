@@ -1,0 +1,65 @@
+{
+  "schema_name": "agent-foreman/dispatch",
+  "schema_version": "1.0",
+  "profile": "full",
+  "plan_id": "REPONPC-P3-FOUNDATIONS-20260812",
+  "package_id": "PKG-LUNA-CHARACTER",
+  "authorization_source": "Owner explicitly requested Luna max subagent implementation for Phase 3 and Terra fallback if quality is poor; Luna exhausted the permitted pre-delta timeout retry, so Terra executed the frozen fallback package.",
+  "requested_selector": "gpt-5.6-terra",
+  "expected_model_verification": "verified",
+  "objective": "Implement only the frozen canonical seven-state accessible character renderer leaf and its focused tests.",
+  "frozen_contracts": [
+    "CharacterState is exactly idle|walk|listen|think|talk|success|offline mapped in that order to rows 0-6 of a 128x224 sheet containing 32x32 frames in four columns.",
+    "CharacterRenderer receives assetUrl, state, stateLabel, reducedMotion, optional frame 0-3, optional frameDurationMs 80-1000, and optional className; it makes no lifecycle decisions and performs no fetch.",
+    "Reduced motion always renders column zero and disables animation. Normal motion begins deterministically at the supplied frame and uses pixelated nearest-neighbor rendering.",
+    "Rendered output has an accessible state label while decorative internal crop markup is hidden from duplicate accessibility exposure. CSS must not contain remote URLs or smoothing.",
+    "Invalid frame/duration values are rejected by exported pure helpers or normalized deterministically as specified by tests; no public API or i18n contract is changed."
+  ],
+  "owned_paths": [
+    "apps/web/src/features/character/CharacterRenderer.tsx",
+    "apps/web/src/features/character/CharacterRenderer.css",
+    "apps/web/src/features/character/CharacterRenderer.test.tsx"
+  ],
+  "prohibited_paths": [
+    "apps/web/src/app/App.tsx",
+    "apps/web/src/app/App.test.ts",
+    "apps/web/src/i18n/messages.ts",
+    "apps/web/src/styles.css",
+    "apps/web/package.json",
+    "package.json",
+    "pnpm-lock.yaml",
+    "src/**",
+    "docs/**",
+    "README.md",
+    "reponpc.example.yml",
+    ".env.example",
+    ".agent-foreman/phase3-grounded-visitor/plan.json"
+  ],
+  "read_first": [
+    "AGENTS.md",
+    "docs/TECHNICAL_SPEC.md sections 12.1 and 16",
+    "docs/ACCEPTANCE_CRITERIA.md AC-019, AC-020, and AC-023",
+    "docs/DECISIONS.md ADR-014",
+    "docs/SPRITE_FORMAT.md sections 1, 2, and 5",
+    "apps/web/tsconfig.json",
+    "apps/web/src/app/App.tsx"
+  ],
+  "invariant_ids": ["INV-CHARACTER-RENDERER", "INV-ATTRIBUTION"],
+  "gate_ids": ["GATE-CHARACTER-LEAF", "GATE-DELTA"],
+  "commands": [
+    "rtk proxy pnpm --dir apps/web exec prettier --check src/features/character/CharacterRenderer.tsx src/features/character/CharacterRenderer.css src/features/character/CharacterRenderer.test.tsx",
+    "rtk proxy pnpm --dir apps/web exec eslint src/features/character/CharacterRenderer.tsx src/features/character/CharacterRenderer.test.tsx",
+    "rtk proxy pnpm --dir apps/web exec tsc --noEmit",
+    "rtk proxy pnpm --dir apps/web exec vitest run src/features/character/CharacterRenderer.test.tsx"
+  ],
+  "expected_artifacts": [
+    "Worker final handoff with exact changed paths, commands, exit codes, observations, and implemented or blocked status",
+    ".agent-foreman/phase3-grounded-visitor/artifacts/gate-character-leaf.txt"
+  ],
+  "stop_conditions": [
+    "Stop as blocked if any unowned path, dependency, lifecycle decision, shared i18n/API contract, or public behavior change is required.",
+    "Do not modify existing user changes or campaign control artifacts.",
+    "Report implemented only after every focused command exits zero."
+  ],
+  "allowed_statuses": ["implemented", "blocked"]
+}

@@ -1,0 +1,194 @@
+{
+  "schema_version": 1,
+  "command": "rtk proxy uv --cache-dir D:\\RepoNPC\\.uv-cache run --python C:\\Python314\\python.exe --no-managed-python .agent-foreman/phase3-grounded-visitor/evaluation/fresh/fresh_backend_probe.py",
+  "probes": [
+    {
+      "id": "sse_terminal_contract",
+      "setup": "Production create_app + public chat route with fresh deterministic service",
+      "fault_injection": "Success, abstention, pre-stream ProviderError(TIMEOUT), and exception after metadata",
+      "production_trigger": "POST /api/public/chat/stream through TestClient",
+      "oracle": "Exact success/abstention order; timeout is JSON 504; post-start has exactly one error and no complete; request IDs correlate",
+      "anti_oracle": "Any unvalidated token, duplicate/missing terminal, complete after error, secret canary, or mismatched request ID",
+      "passed": true,
+      "observed": {
+        "success": {
+          "status": 200,
+          "events": [
+            "metadata",
+            "token",
+            "citations",
+            "complete"
+          ],
+          "terminal": [
+            "complete"
+          ],
+          "header_request_id": "11111111-1111-4111-8111-111111111111",
+          "metadata_request_ids": [
+            "11111111-1111-4111-8111-111111111111"
+          ],
+          "secret_visible": false
+        },
+        "abstention": {
+          "status": 200,
+          "events": [
+            "metadata",
+            "token",
+            "complete"
+          ],
+          "terminal": [
+            "complete"
+          ],
+          "header_request_id": "11111111-1111-4111-8111-111111111111",
+          "metadata_request_ids": [
+            "11111111-1111-4111-8111-111111111111"
+          ],
+          "secret_visible": false
+        },
+        "prestream_timeout": {
+          "status": 504,
+          "events": [],
+          "terminal": [],
+          "header_request_id": "11111111-1111-4111-8111-111111111111",
+          "metadata_request_ids": [],
+          "secret_visible": false
+        },
+        "post_start_internal": {
+          "status": 200,
+          "events": [
+            "metadata",
+            "error"
+          ],
+          "error_request_ids": [
+            "22222222-2222-4222-8222-222222222222"
+          ],
+          "header_request_id": "22222222-2222-4222-8222-222222222222",
+          "secret_visible": false
+        }
+      }
+    },
+    {
+      "id": "client_disconnect_cancellation",
+      "setup": "Production FastAPI ASGI app with accepted chat service blocked before validated delivery",
+      "fault_injection": "ASGI receive returns http.disconnect immediately after request body",
+      "production_trigger": "Direct production ASGI call through middleware/router while service.answer runs in asyncio.to_thread",
+      "oracle": "Disconnect cancels/bounds accepted work and does not attempt a response after the client is gone",
+      "anti_oracle": "Provider/service thread continues until externally released and app emits a response after disconnect",
+      "passed": true,
+      "observed": {
+        "service_started": true,
+        "service_finished": false,
+        "app_task_done": true,
+        "messages_sent": [],
+        "service_finished_after_release": false,
+        "messages_sent_after_release": []
+      }
+    },
+    {
+      "id": "grounding_injection_and_person_claims",
+      "setup": "Real GroundedChatService producer-to-consumer with retrieved adversarial evidence",
+      "fault_injection": "Forged source/URL, active HTML, named person claim on REPOSITORY_FACT, and unrelated OWNER_ASSERTION",
+      "production_trigger": "GroundedChatService.answer -> validate_answer -> ChatDelivery",
+      "oracle": "All malicious/person-claim cases become citation-free abstentions; evidence remains delimited",
+      "anti_oracle": "Canary/URL/HTML leak or any person claim accepted without a matching OWNER_ASSERTION",
+      "passed": true,
+      "observed": {
+        "forged_id_url": {
+          "insufficient_evidence": true,
+          "citations": 0,
+          "answer": "The available portfolio evidence is insufficient to confirm this.",
+          "canary_visible": false,
+          "untrusted_delimiters": true
+        },
+        "html": {
+          "insufficient_evidence": true,
+          "citations": 0,
+          "answer": "The available portfolio evidence is insufficient to confirm this.",
+          "canary_visible": false,
+          "untrusted_delimiters": true
+        },
+        "uncited_person": {
+          "insufficient_evidence": true,
+          "citations": 0,
+          "answer": "The available portfolio evidence is insufficient to confirm this.",
+          "canary_visible": false,
+          "untrusted_delimiters": true
+        },
+        "mismatched_owner_assertion": {
+          "insufficient_evidence": true,
+          "citations": 0,
+          "answer": "The available portfolio evidence is insufficient to confirm this."
+        }
+      }
+    },
+    {
+      "id": "provider_selection_local_degraded_limits",
+      "setup": "Production assembly with explicit Ollama/local settings plus public route configured limits",
+      "fault_injection": "Cloud constructors booby-trapped; local embedding delegate raises secret canary; oversized request",
+      "production_trigger": "_configure_provider_lifecycle, ProviderRuntime.poll_health, POST chat route",
+      "oracle": "Only Ollama constructed, local failure degrades safely, configured request rejected before service/provider",
+      "anti_oracle": "Cloud construction/call, ready local failure, secret exposure, or any service call for oversized request",
+      "passed": true,
+      "observed": {
+        "ollama": {
+          "cloud_constructions": [],
+          "chat_class": "OllamaChatProvider",
+          "embedding_class": "OllamaEmbeddingProvider"
+        },
+        "local_down": {
+          "ready": false,
+          "failure_code": "unavailable",
+          "cloud_constructions": []
+        },
+        "configured_limits": {
+          "status": 413,
+          "code": "PAYLOAD_TOO_LARGE",
+          "service_calls": 0
+        }
+      }
+    },
+    {
+      "id": "overall_public_request_deadline",
+      "setup": "Real GroundedChatService with configured 0.5s timeout",
+      "fault_injection": "Embedding consumes 0.35s and chat consumes another 0.35s",
+      "production_trigger": "GroundedChatService.answer with ProviderRuntime for both stages",
+      "oracle": "One shared deadline stops before roughly 0.6s or chat receives only remaining time",
+      "anti_oracle": "Each provider stage receives a fresh 0.5s budget and total exceeds the overall deadline",
+      "passed": true,
+      "observed": {
+        "elapsed_seconds": 0.701,
+        "chat_timeouts": [
+          0.14972359999956097
+        ],
+        "error": null
+      }
+    },
+    {
+      "id": "quality_scorer_negative_controls",
+      "setup": "Production validator result scored by committed deterministic quality scorer",
+      "fault_injection": "Duplicate extra citation, wrong evidence ID, and extra unreviewed material claim",
+      "production_trigger": "_score_citations and _score_factual_entailment",
+      "oracle": "Extra/wrong citations fail exact match; wrong citation is unresolved; factual denominator remains reviewed supported claims only",
+      "anti_oracle": "Perfect result despite extra/wrong citation or denominator inflation with unreviewed generated text",
+      "passed": true,
+      "observed": {
+        "extra": {
+          "resolved_emitted": 2,
+          "emitted": 2,
+          "exact_reviewed_match": false
+        },
+        "wrong": {
+          "resolved_emitted": 0,
+          "emitted": 1,
+          "exact_reviewed_match": false
+        },
+        "factual": {
+          "entailed_reviewed_claims": 1,
+          "reviewed_claims": 1,
+          "exact_reviewed_match": false
+        }
+      }
+    }
+  ],
+  "runner_errors": [],
+  "passed": true
+}

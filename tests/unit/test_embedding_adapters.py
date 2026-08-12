@@ -1,0 +1,148 @@
+"""Concrete network embedding adapters obey the frozen runtime contract."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+
+import numpy as np
+import pytest
+
+from reponpc.indexing.sources import EmbeddingIdentity
+from reponpc.providers import ProviderError, ProviderFailureCode
+from reponpc.providers.http_transport import ProviderHttpResponse
+from reponpc.providers.ollama_embeddings import OllamaEmbeddingProvider
+from reponpc.providers.openai_embeddings import OpenAICompatibleEmbeddingProvider
+
+
+@dataclass
+class Request:
+    method: str
+    url: str
+    body: bytes | None
+
+
+@dataclass
+class Transport:
+    responses: list[ProviderHttpResponse]
+    requests: list[Request] = field(default_factory=list)
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        body: bytes | None,
+        timeout: float,
+    ) -> ProviderHttpResponse:
+        del headers, timeout
+        self.requests.append(Request(method, url, body))
+        return self.responses.pop(0)
+
+
+def response(status: int, payload: object) -> ProviderHttpResponse:
+    return ProviderHttpResponse(status, {}, json.dumps(payload).encode())
+
+
+def identity(adapter: str) -> EmbeddingIdentity:
+    return EmbeddingIdentity(adapter, "fixture", 2, True, "query: ", "passage: ")
+
+
+def test_openai_success_preserves_order_prefixes_once_and_float32() -> None:
+    transport = Transport(
+        [
+            response(
+                200,
+                {
+                    "data": [
+                        {"index": 0, "embedding": [1, 0]},
+                        {"index": 1, "embedding": [0, 1]},
+                    ]
+                },
+            )
+        ]
+    )
+    provider = OpenAICompatibleEmbeddingProvider(
+        "https://models.example.test/v1", "fixture", identity("openai_compatible"), transport
+    )
+
+    output = provider.embed_query(["question", "query: existing"])
+
+    assert output.dtype == np.float32
+    assert output.shape == (2, 2)
+    assert transport.requests[0].body is not None
+    payload = json.loads(transport.requests[0].body.decode())
+    assert payload["input"] == ["query: question", "query: existing"]
+    assert payload["encoding_format"] == "float"
+
+
+def test_ollama_success_and_empty_input_do_not_leak_or_call_twice() -> None:
+    transport = Transport([response(200, {"embeddings": [[1.0, 0.0]]})])
+    provider = OllamaEmbeddingProvider(
+        "http://ollama:11434", "fixture", identity("ollama"), transport
+    )
+
+    empty = provider.embed_query([])
+    output = provider.embed_passages(["document"])
+
+    assert empty.shape == (0, 2) and empty.dtype == np.float32
+    assert output.shape == (1, 2)
+    assert len(transport.requests) == 1
+    assert "ollama:11434" not in repr(provider)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"data": [{"index": 1, "embedding": [1, 0]}]},
+        {"data": [{"index": 0, "embedding": [True, 0]}]},
+        {"data": [{"index": 0, "embedding": [2, 0]}]},
+        {"data": [{"index": 0, "embedding": [float("nan"), 0]}]},
+    ],
+)
+def test_openai_rejects_bad_order_values_and_normalization(payload: object) -> None:
+    provider = OpenAICompatibleEmbeddingProvider(
+        "https://models.example.test/v1",
+        "fixture",
+        identity("openai_compatible"),
+        Transport([response(200, payload)]),
+    )
+
+    with pytest.raises(ProviderError) as raised:
+        provider.embed_query(["question"])
+    assert raised.value.code is ProviderFailureCode.INVALID_RESPONSE
+
+
+def test_status_mapping_and_safe_repr_do_not_reflect_secret_or_url() -> None:
+    provider = OpenAICompatibleEmbeddingProvider(
+        "https://private.example.test/v1",
+        "fixture",
+        identity("openai_compatible"),
+        Transport([response(429, {"error": "private"})]),
+        api_key="fixture-secret-key",
+    )
+
+    with pytest.raises(ProviderError) as raised:
+        provider.embed_query(["question"])
+    assert raised.value.code is ProviderFailureCode.RATE_LIMIT
+    assert "fixture-secret-key" not in repr(provider)
+    assert "private.example.test" not in repr(provider)
+
+
+def test_health_and_origin_policy_are_safe() -> None:
+    provider = OllamaEmbeddingProvider(
+        "http://ollama:11434",
+        "fixture",
+        identity("ollama"),
+        Transport([response(503, {"error": "private"})]),
+    )
+
+    health = provider.health()
+
+    assert health.ready is False
+    assert health.failure_code is ProviderFailureCode.UNAVAILABLE
+    assert "ollama" not in repr(health).casefold()
+    with pytest.raises(ValueError):
+        OllamaEmbeddingProvider("http://public.example.test", "fixture", identity("ollama"))

@@ -51,4 +51,4 @@ def test_phase_and_operations_documents_keep_runtime_provider_work_in_phase3() -
     assert "no oracle access" in implementation
     assert "reponpc index publish-manifest --bundle-dir dist" in operations
     assert "cannot update the remote pointer" in operations
-    assert "Delivery Phase 2 closure in progress" in readme
+    assert "Delivery Phases 1 through 4 verified; Phase 5 remains" in readme

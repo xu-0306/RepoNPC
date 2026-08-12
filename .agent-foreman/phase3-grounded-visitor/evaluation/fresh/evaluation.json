@@ -1,0 +1,70 @@
+{
+  "schema_version": 2,
+  "evaluation": "phase3-post-repair-fresh-closure",
+  "recommendation": "PASS",
+  "deterministic_result": "PASSED",
+  "scope": "Fresh Phase 3 closure invariants only; not a full repository release verification",
+  "finding_count": {"P0": 0, "P1": 0, "P2": 0},
+  "resolved_counterexample": {
+    "id": "client_disconnect_cancellation",
+    "symbols": [
+      "src/reponpc/api/public.py:chat_stream",
+      "src/reponpc/chat/service.py:GroundedChatService.answer",
+      "src/reponpc/chat/limits.py:ChatLimits.acquire"
+    ],
+    "observed": {
+      "service_started": true,
+      "service_finished_at_disconnect_observation": false,
+      "app_task_done": true,
+      "messages_sent": [],
+      "service_finished_after_evaluator_release": false,
+      "messages_sent_after_evaluator_release": []
+    },
+    "result": "PASS: disconnect ended the ASGI task and no response was emitted before or after evaluator release"
+  },
+  "commands": [
+    {
+      "command": "rtk proxy uv --cache-dir D:\\RepoNPC\\.uv-cache run --python C:\\Python314\\python.exe --no-managed-python .agent-foreman/phase3-grounded-visitor/evaluation/fresh/fresh_backend_probe.py",
+      "exit_code": 0,
+      "result": "6 of 6 fresh backend probes passed"
+    },
+    {
+      "command": "rtk proxy pnpm --dir apps/web run build",
+      "exit_code": 0,
+      "result": "Vite production build passed; 32 modules transformed"
+    },
+    {
+      "command": "rtk proxy D:\\RepoNPC\\.venv\\Scripts\\uvicorn.exe --app-dir .agent-foreman/phase3-grounded-visitor/evaluation/fresh fresh_browser_fixture_app:app --host 127.0.0.1 --port 8876",
+      "exit_code": null,
+      "result": "Long-running fixture served successfully and was explicitly terminated after browser completion"
+    },
+    {
+      "command": "rtk proxy node .agent-foreman/phase3-grounded-visitor/evaluation/fresh/fresh_browser_probe.mjs",
+      "exit_code": 0,
+      "result": "Microsoft Edge 151.0.4129.78; 6 of 6 probes passed, including pure-ASGI headers"
+    }
+  ],
+  "backend_probes": {
+    "sse_terminal_contract": "PASS",
+    "client_disconnect_cancellation": "PASS",
+    "grounding_injection_and_person_claims": "PASS",
+    "provider_selection_local_degraded_limits": "PASS",
+    "overall_public_request_deadline": "PASS",
+    "quality_scorer_negative_controls": "PASS"
+  },
+  "edge_probes": {
+    "edge_pure_asgi_headers": "PASS",
+    "edge_desktop_semantics_layout": "PASS",
+    "edge_chat_citation_character": "PASS",
+    "edge_locale_history": "PASS",
+    "edge_mobile_overflow": "PASS",
+    "edge_reduced_motion": "PASS"
+  },
+  "artifacts": [
+    ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-backend-probe.json",
+    ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-browser-probe.json",
+    ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-browser-mobile.png",
+    ".agent-foreman/phase3-grounded-visitor/artifacts/fresh-evaluation-summary.json",
+    ".agent-foreman/phase3-grounded-visitor/evaluation/fresh/evaluation.md"
+  ]
+}

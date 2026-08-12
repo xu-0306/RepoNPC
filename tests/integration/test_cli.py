@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
@@ -166,6 +167,22 @@ def test_config_and_index_commands_do_not_start_server(tmp_path: Path, monkeypat
     assert server_calls == []
     assert [item[0] for item in command_calls] == ["build", "publish", "publish-manifest"]
     assert "fixture-bundle" in capsys.readouterr().out
+
+
+def test_admin_hash_password_reads_twice_and_emits_only_argon2id_hash(monkeypatch, capsys) -> None:
+    prompts: list[str] = []
+
+    def password_input(prompt: str) -> str:
+        prompts.append(prompt)
+        return "correct horse battery staple"
+
+    monkeypatch.setattr(cli, "getpass", password_input)
+
+    assert cli.main(["admin", "hash-password"]) == 0
+    output = capsys.readouterr().out.strip()
+    assert prompts == ["Password: ", "Confirm password: "]
+    assert re.fullmatch(r"\$argon2id\$.*", output)
+    assert "correct horse battery staple" not in output
 
 
 def test_cli_failure_is_nonzero_safe_and_does_not_echo_internal_text(

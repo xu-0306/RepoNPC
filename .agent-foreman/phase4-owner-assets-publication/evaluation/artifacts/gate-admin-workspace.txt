@@ -1,0 +1,5 @@
+Fresh Phase 4 AdminWorkspace probe
+Command: rtk proxy D:/RepoNPC/apps/web/node_modules/.bin/vitest.CMD run --root D:/RepoNPC --config apps/web/vite.config.ts .agent-foreman/phase4-owner-assets-publication/evaluation/probes/admin_workspace_fresh.test.tsx
+Exit code: 0
+Observed: 1 test file passed; 1 test passed.
+Oracle: zh-TW preview did not cross-fallback en content; validation-null and conflict states disabled save; logged-out state exposed an alert and disabled the editor.

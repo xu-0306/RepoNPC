@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import logging
 import re
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,9 +14,16 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from reponpc.bundles.manager import BundleActivationError
+from reponpc.chat.limits import ChatLimitError
+from reponpc.chat.service import (
+    ChatHistoryMessage,
+    GroundedChatService,
+    delivery_events,
+)
 from reponpc.i18n.catalog import SUPPORTED_LOCALES, translate
 from reponpc.indexing.public_profile import (
     PublicProfileError,
@@ -21,10 +31,20 @@ from reponpc.indexing.public_profile import (
     parse_public_profile_bytes,
     validate_public_profile_metadata,
 )
+from reponpc.observability import get_safe_logger
+from reponpc.providers import ProviderError, ProviderFailureCode
 
 DEFAULT_LOCALE = "zh-TW"
 _PUBLIC_INDEX_VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
 _PUBLIC_MODEL_PROVIDERS = frozenset({"ollama", "openai_compatible"})
+_LOGGER = get_safe_logger(__name__)
+
+
+class _DisconnectedResponse(Response):
+    """Finish an already-disconnected ASGI request without writing a response."""
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        del scope, receive, send
 
 
 def _public_index_version(value: str | None) -> str | None:
@@ -85,6 +105,27 @@ class ErrorDetail(StrictResponseModel):
 
 class ErrorEnvelope(StrictResponseModel):
     error: ErrorDetail
+
+
+class PublicChatHistory(StrictResponseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
+class PublicChatRequest(StrictResponseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    locale: Literal["zh-TW", "en"]
+    history: tuple[PublicChatHistory, ...] = Field(default=(), max_length=10)
+
+    @model_validator(mode="after")
+    def validate_history(self) -> PublicChatRequest:
+        if sum(len(item.content) for item in self.history) > 12000:
+            raise ValueError("history is too large")
+        for position, item in enumerate(self.history):
+            expected = "user" if position % 2 == 0 else "assistant"
+            if item.role != expected:
+                raise ValueError("history roles must alternate starting with user")
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -208,11 +249,18 @@ def create_public_router(
     state: SetupState,
     *,
     state_supplier: Callable[[], SetupState] | None = None,
+    chat_service: GroundedChatService | None = None,
+    chat_service_supplier: Callable[[], GroundedChatService | None] | None = None,
+    max_message_characters: int = 2000,
+    max_history_messages: int = 6,
+    max_history_characters: int = 6000,
+    chat_request_limits_supplier: Callable[[], tuple[int, int, int]] | None = None,
 ) -> APIRouter:
     """Create routes bound to one immutable setup/readiness snapshot."""
 
     router = APIRouter()
     current_state = state_supplier or (lambda: state)
+    current_chat_service = chat_service_supplier or (lambda: chat_service)
 
     def public_directory() -> Path | None:
         directory = current_state().public_directory
@@ -247,6 +295,165 @@ def create_public_router(
     @router.get("/api/public/status", response_model=PublicStatus)
     async def status() -> PublicStatus:
         return current_state().public_status()
+
+    @router.post("/api/public/chat/stream")
+    async def chat_stream(request: Request, body: PublicChatRequest) -> Response:
+        message_limit, history_count_limit, history_character_limit = (
+            chat_request_limits_supplier()
+            if chat_request_limits_supplier is not None
+            else (max_message_characters, max_history_messages, max_history_characters)
+        )
+        if (
+            len(body.message) > message_limit
+            or len(body.history) > history_count_limit
+            or sum(len(item.content) for item in body.history) > history_character_limit
+        ):
+            return error_response(
+                request,
+                status_code=413,
+                code="PAYLOAD_TOO_LARGE",
+                message=translate(
+                    body.locale,
+                    "validation_error",
+                    field="request",
+                    reason="too large",
+                ),
+            )
+        current = current_state()
+        service = current_chat_service()
+        if not current.index_ready:
+            return error_response(
+                request,
+                status_code=503,
+                code="INDEX_UNAVAILABLE",
+                message=translate(body.locale, "index_unavailable"),
+            )
+        if not current.model_ready or service is None:
+            return error_response(
+                request,
+                status_code=503,
+                code="MODEL_UNAVAILABLE",
+                message=_public_chat_message(body.locale, "model_unavailable"),
+            )
+        client_ip = request.client.host if request.client is not None else "unknown"
+        cancel_requested = threading.Event()
+        try:
+            import asyncio
+
+            answer_task = asyncio.create_task(
+                asyncio.to_thread(
+                    service.answer,
+                    message=body.message,
+                    locale=body.locale,
+                    history=tuple(
+                        ChatHistoryMessage(item.role, item.content) for item in body.history
+                    ),
+                    client_ip=client_ip,
+                    cancel_requested=cancel_requested,
+                )
+            )
+            disconnect_task = asyncio.create_task(_wait_for_disconnect(request))
+            done, _pending = await asyncio.wait(
+                {answer_task, disconnect_task},
+                timeout=getattr(service, "timeout_seconds", 45.0),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if disconnect_task in done and disconnect_task.result():
+                cancel_requested.set()
+                answer_task.cancel()
+                return _DisconnectedResponse()
+            disconnect_task.cancel()
+            if answer_task not in done:
+                cancel_requested.set()
+                answer_task.cancel()
+                raise TimeoutError
+            delivery = answer_task.result()
+        except TimeoutError:
+            return error_response(
+                request,
+                status_code=504,
+                code="PROVIDER_TIMEOUT",
+                message=_public_chat_message(body.locale, "provider_timeout"),
+            )
+        except ChatLimitError as exc:
+            return error_response(
+                request,
+                status_code=429,
+                code=exc.code,
+                message=_public_chat_message(body.locale, exc.code.casefold()),
+                retry_after_seconds=exc.retry_after_seconds,
+            )
+        except BundleActivationError:
+            return error_response(
+                request,
+                status_code=503,
+                code="INDEX_UNAVAILABLE",
+                message=translate(body.locale, "index_unavailable"),
+            )
+        except ProviderError as exc:
+            status_code, code = _provider_public_error(exc.code)
+            return error_response(
+                request,
+                status_code=status_code,
+                code=code,
+                message=_public_chat_message(body.locale, code.casefold()),
+            )
+        except Exception:
+            return error_response(
+                request,
+                status_code=502,
+                code="PROVIDER_ERROR",
+                message=_public_chat_message(body.locale, "provider_error"),
+            )
+
+        async def stream() -> Any:
+            correlation_id = request_id(request)
+            terminal_emitted = False
+            try:
+                for event, payload in delivery_events(delivery, correlation_id):
+                    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+                    yield f"event: {event}\ndata: {serialized}\n\n"
+                    if event == "complete":
+                        terminal_emitted = True
+                        _LOGGER.emit(
+                            logging.INFO,
+                            "chat.stream.complete",
+                            request_id=correlation_id,
+                            route_template="/api/public/chat/stream",
+                            status=200,
+                            retrieval_count=delivery.evidence_count,
+                        )
+                        return
+            except Exception:
+                if not terminal_emitted:
+                    error = ErrorEnvelope(
+                        error=ErrorDetail(
+                            code="PROVIDER_ERROR",
+                            message=_public_chat_message(body.locale, "provider_error"),
+                            request_id=correlation_id,
+                            details={},
+                        )
+                    ).model_dump(mode="json")
+                    serialized = json.dumps(error, ensure_ascii=False, separators=(",", ":"))
+                    yield f"event: error\ndata: {serialized}\n\n"
+                    _LOGGER.emit(
+                        logging.ERROR,
+                        "chat.stream.error",
+                        request_id=correlation_id,
+                        route_template="/api/public/chat/stream",
+                        status=502,
+                        error_category="internal",
+                    )
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-store",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @router.get("/api/public/profile")
     async def profile(request: Request) -> Response:
@@ -304,6 +511,45 @@ def create_public_router(
         ) or unavailable(request, locale)
 
     return router
+
+
+async def _wait_for_disconnect(request: Request) -> bool:
+    import asyncio
+
+    while not await request.is_disconnected():
+        await asyncio.sleep(0.01)
+    return True
+
+
+def _provider_public_error(code: ProviderFailureCode) -> tuple[int, str]:
+    if code is ProviderFailureCode.TIMEOUT:
+        return 504, "PROVIDER_TIMEOUT"
+    if code is ProviderFailureCode.UNAVAILABLE:
+        return 503, "MODEL_UNAVAILABLE"
+    return 502, "PROVIDER_ERROR"
+
+
+def _public_chat_message(locale: str, code: str) -> str:
+    messages = {
+        "zh-TW": {
+            "model_unavailable": "模型目前無法使用。",
+            "provider_timeout": "模型回應逾時。",
+            "provider_error": "模型服務暫時失敗。",
+            "rate_limited": "請稍後再試。",
+            "daily_budget_exhausted": "今日聊天額度已用完。",
+            "concurrency_limit": "目前聊天使用量已滿。請稍後再試。",
+        },
+        "en": {
+            "model_unavailable": "The model is currently unavailable.",
+            "provider_timeout": "The model response timed out.",
+            "provider_error": "The model service failed safely.",
+            "rate_limited": "Please try again later.",
+            "daily_budget_exhausted": "Today's chat budget is exhausted.",
+            "concurrency_limit": "Chat capacity is currently full. Please try again later.",
+        },
+    }
+    locale_messages = messages.get(locale, messages["en"])
+    return locale_messages.get(code, locale_messages["provider_error"])
 
 
 def _etag(version: str, variant: str, payload: bytes) -> str:

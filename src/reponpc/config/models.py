@@ -400,7 +400,12 @@ def load_public_config(path: str | Path, *, max_bytes: int = MAX_CONFIG_BYTES) -
     """Load bounded UTF-8 YAML without accepting aliases or custom objects."""
 
     config_path = Path(path)
-    raw = config_path.read_bytes()
+    return parse_public_config_bytes(config_path.read_bytes(), max_bytes=max_bytes)
+
+
+def parse_public_config_bytes(raw: bytes, *, max_bytes: int = MAX_CONFIG_BYTES) -> PublicConfig:
+    """Parse bounded untrusted configuration bytes without filesystem side effects."""
+
     if len(raw) > max_bytes:
         raise ConfigValidationError(
             [

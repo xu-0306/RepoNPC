@@ -28,6 +28,7 @@ from reponpc.bundles.manifest import (
     embedding_as_dict,
     parse_stable_manifest,
 )
+from reponpc.cards.production import build_public_card_assets
 from reponpc.config.models import PublicConfig, load_public_config
 from reponpc.domain.evidence import COMMIT_RE
 from reponpc.indexing.github import GitHubSourceResolver
@@ -140,10 +141,10 @@ def build_index_bundle(
         repositories=snapshots,
         output_path=output / "index.sqlite",
     )
-    assets = _load_public_assets(
-        Path(public_directory).resolve()
+    assets = (
+        _load_public_assets(Path(public_directory).resolve())
         if public_directory is not None
-        else config_path.parent / "public"
+        else build_public_card_assets(config, config_directory=config_path.parent)
     )
     assets["public/profile.json"] = build_public_profile_bytes(
         config=config,
