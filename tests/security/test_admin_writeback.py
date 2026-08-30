@@ -19,6 +19,25 @@ from reponpc.runtime.database import RuntimeDatabase
 ORIGIN = "https://portfolio.example.com"
 PASSWORD = "correct horse battery staple"
 CONFIG = Path("tests/fixtures/phase2/reponpc.yml").read_bytes()
+CUSTOM_CONFIG = CONFIG.decode().replace(
+    """  mode: builtin
+  revision: 0
+  builtin:
+    body: standard
+    skin: medium
+    hair: short
+    hair_color: '#2b1d14'
+    outfit: engineer
+    primary_color: '#6d5dfc'
+    secondary_color: '#f2c14e'
+    accessory: glasses
+""",
+    """  mode: custom
+  revision: 0
+  custom:
+    sprite_path: assets/character/hero.png
+""",
+)
 
 
 class RecordingTransport:
@@ -94,6 +113,24 @@ def _application(tmp_path: Path):
         admin_operations=operations,
     )
     return app, database, transport
+
+
+def _application_without_github(tmp_path: Path):
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    auth = AdminSessionService(
+        database=database,
+        username="admin",
+        password_hash=PasswordHasher(type=Type.ID).hash(PASSWORD),
+        identity_hmac_key=b"k" * 32,
+        now=lambda: datetime(2026, 8, 13, tzinfo=UTC),
+    )
+    operations = AdminOperations(None, database, ORIGIN)
+    return create_app(
+        admin_session_service=auth,
+        admin_origins=(ORIGIN,),
+        admin_operations=operations,
+    )
 
 
 def _login(client: TestClient) -> str:
@@ -212,3 +249,71 @@ def test_snippet_dispatch_and_status_use_fixed_server_configuration(tmp_path: Pa
             "SELECT action, outcome FROM admin_audit ORDER BY audit_id DESC LIMIT 1"
         ).fetchone()
     assert tuple(outcome) == ("index.dispatch", "succeeded")
+
+
+def test_github_token_only_gates_github_backed_admin_endpoints(tmp_path: Path) -> None:
+    app = _application_without_github(tmp_path)
+    with TestClient(app, base_url=ORIGIN) as client:
+        csrf = _login(client)
+        local_responses = {
+            "validate": client.post(
+                "/api/admin/config/validate", json={"content": CONFIG.decode()}
+            ),
+            "preview": client.post("/api/admin/config/preview", json={"content": CONFIG.decode()}),
+            "asset_validate": client.post(
+                "/api/admin/assets/character/validate",
+                files={"file": ("hero.png", _sprite(), "image/png")},
+            ),
+            "snippet": client.get(
+                "/api/admin/readme-snippet",
+                params={
+                    "locale": "en",
+                    "theme": "light",
+                    "extension": "svg",
+                    "revision": 0,
+                },
+            ),
+            "status": client.get("/api/admin/index/status"),
+        }
+        custom_preview = client.post("/api/admin/config/preview", json={"content": CUSTOM_CONFIG})
+        github_responses = {
+            "read": client.get("/api/admin/config"),
+            "write": client.put(
+                "/api/admin/config",
+                headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
+                json={
+                    "content": CONFIG.decode(),
+                    "expected_blob_sha": "a" * 40,
+                    "commit_message": "save",
+                },
+            ),
+            "asset_write": client.put(
+                "/api/admin/assets/character/hero.png",
+                headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
+                files={"file": ("hero.png", _sprite(), "image/png")},
+                data={"expected_blob_sha": "e" * 40, "commit_message": "save"},
+            ),
+            "dispatch": client.post(
+                "/api/admin/index/dispatch",
+                headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
+            ),
+        }
+
+    assert {name: response.status_code for name, response in local_responses.items()} == {
+        "validate": 200,
+        "preview": 200,
+        "asset_validate": 200,
+        "snippet": 200,
+        "status": 200,
+    }
+    assert {name: response.status_code for name, response in github_responses.items()} == {
+        "read": 503,
+        "write": 503,
+        "asset_write": 503,
+        "dispatch": 503,
+    }
+    assert all(
+        response.json()["error"]["code"] == "SERVICE_NOT_READY"
+        for response in [*github_responses.values(), custom_preview]
+    )
+    assert custom_preview.status_code == 503

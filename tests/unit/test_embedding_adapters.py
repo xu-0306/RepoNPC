@@ -131,6 +131,29 @@ def test_status_mapping_and_safe_repr_do_not_reflect_secret_or_url() -> None:
     assert "private.example.test" not in repr(provider)
 
 
+@pytest.mark.parametrize(
+    "code,expected",
+    [
+        ("unsupported_parameter", ProviderFailureCode.INVALID_RESPONSE),
+        ("context_length_exceeded", ProviderFailureCode.CONTEXT_OVERFLOW),
+    ],
+)
+def test_openai_embedding_maps_only_allowlisted_context_errors(
+    code: str, expected: ProviderFailureCode
+) -> None:
+    provider = OpenAICompatibleEmbeddingProvider(
+        "https://models.example.test/v1",
+        "fixture",
+        identity("openai_compatible"),
+        Transport([response(400, {"error": {"code": code}})]),
+    )
+
+    with pytest.raises(ProviderError) as raised:
+        provider.embed_query(["question"])
+
+    assert raised.value.code is expected
+
+
 def test_health_and_origin_policy_are_safe() -> None:
     provider = OllamaEmbeddingProvider(
         "http://ollama:11434",
@@ -146,3 +169,48 @@ def test_health_and_origin_policy_are_safe() -> None:
     assert "ollama" not in repr(health).casefold()
     with pytest.raises(ValueError):
         OllamaEmbeddingProvider("http://public.example.test", "fixture", identity("ollama"))
+
+
+@pytest.mark.parametrize(
+    "provider",
+    [
+        OpenAICompatibleEmbeddingProvider(
+            "https://models.example.test/v1",
+            "fixture",
+            identity("openai_compatible"),
+            Transport([response(200, {"data": [{"id": "other-model"}]})]),
+        ),
+        OllamaEmbeddingProvider(
+            "http://ollama:11434",
+            "fixture",
+            identity("ollama"),
+            Transport([response(200, {"models": [{"name": "other-model"}]})]),
+        ),
+    ],
+)
+def test_embedding_health_requires_the_explicitly_selected_model(provider: object) -> None:
+    health = provider.health()  # type: ignore[attr-defined]
+
+    assert health.ready is False
+    assert health.failure_code is ProviderFailureCode.UNAVAILABLE
+
+
+@pytest.mark.parametrize(
+    "provider",
+    [
+        OpenAICompatibleEmbeddingProvider(
+            "https://models.example.test/v1",
+            "fixture",
+            identity("openai_compatible"),
+            Transport([response(200, {"data": [{"id": "fixture"}]})]),
+        ),
+        OllamaEmbeddingProvider(
+            "http://ollama:11434",
+            "fixture",
+            identity("ollama"),
+            Transport([response(200, {"models": [{"model": "fixture:latest"}]})]),
+        ),
+    ],
+)
+def test_embedding_health_accepts_the_selected_model(provider: object) -> None:
+    assert provider.health().ready is True  # type: ignore[attr-defined]

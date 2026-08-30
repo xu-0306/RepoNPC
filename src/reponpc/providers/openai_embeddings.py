@@ -28,6 +28,8 @@ from reponpc.providers.http_transport import (
     UrllibProviderHttpTransport,
     failure_for_status,
 )
+from reponpc.providers.model_catalog import openai_model_available
+from reponpc.providers.openai_compatible import _failure_for_response
 
 _NORMALIZATION_ATOL = 1e-5
 _NORMALIZATION_RTOL = 1e-4
@@ -124,8 +126,8 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
             )
         try:
             payload = _json_object(response.body)
-            if not isinstance(payload.get("data"), list):
-                raise ValueError
+            if not openai_model_available(payload, self._model):
+                return ProviderHealth(False, _checked_at(), ProviderFailureCode.UNAVAILABLE)
         except (UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
             return ProviderHealth(
                 False,
@@ -158,7 +160,7 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
         except Exception:
             raise ProviderError(ProviderFailureCode.UNAVAILABLE) from None
         if response.status != 200:
-            raise ProviderError(failure_for_status(response.status))
+            raise ProviderError(_failure_for_response(response.status, response.body))
         try:
             payload = _json_object(response.body)
             records = payload["data"]

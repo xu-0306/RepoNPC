@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import re
+import secrets
 import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
 from reponpc import cli
+from reponpc.admin.auth import AdminSessionService
 from reponpc.indexing.pipeline import (
     PENDING_MANIFEST_NAME,
     IndexPipelineError,
@@ -183,6 +185,67 @@ def test_admin_hash_password_reads_twice_and_emits_only_argon2id_hash(monkeypatc
     assert prompts == ["Password: ", "Confirm password: "]
     assert re.fullmatch(r"\$argon2id\$.*", output)
     assert "correct horse battery staple" not in output
+
+
+def test_admin_setup_code_uses_runtime_database_and_emits_raw_code_once(
+    tmp_path: Path, capsys
+) -> None:
+    data_dir = tmp_path / "runtime"
+
+    assert cli.main(["admin", "setup-code", "--data-dir", str(data_dir)]) == 0
+    first = capsys.readouterr().out.strip()
+    assert re.fullmatch(r"[A-Za-z0-9_-]{43}", first)
+
+    database = cli.RuntimeDatabase(data_dir)
+    with database.connection() as connection:
+        first_hash = connection.execute("SELECT code_hash FROM admin_setup").fetchone()[0]
+    assert first_hash == hashlib.sha256(first.encode()).hexdigest()
+    assert first != first_hash
+
+    assert cli.main(["admin", "setup-code", "--data-dir", str(data_dir)]) == 0
+    second = capsys.readouterr().out.strip()
+    with database.connection() as connection:
+        second_hash = connection.execute("SELECT code_hash FROM admin_setup").fetchone()[0]
+    assert second != first
+    assert second_hash == hashlib.sha256(second.encode()).hexdigest()
+    assert second_hash != first_hash
+
+
+def test_admin_setup_code_uses_data_dir_environment(tmp_path: Path, monkeypatch, capsys) -> None:
+    data_dir = tmp_path / "configured-runtime"
+    monkeypatch.setenv("REPONPC_DATA_DIR", str(data_dir))
+
+    assert cli.main(["admin", "setup-code"]) == 0
+
+    output = capsys.readouterr().out.strip()
+    assert output
+    assert (data_dir / "runtime.sqlite").is_file()
+
+
+def test_admin_setup_code_fails_safely_after_owner_exists(tmp_path: Path, capsys) -> None:
+    data_dir = tmp_path / "runtime"
+    database = cli.RuntimeDatabase(data_dir)
+    database.initialize()
+    service = AdminSessionService(database=database, identity_hmac_key=b"k" * 32)
+    setup_code = secrets.token_urlsafe(32)
+    with database.connection() as connection:
+        connection.execute(
+            "INSERT INTO admin_setup VALUES ('current', ?, '2026-08-13T00:00:00Z', "
+            "'2099-08-13T00:15:00Z')",
+            (hashlib.sha256(setup_code.encode()).hexdigest(),),
+        )
+    service.setup_owner(
+        setup_code=setup_code,
+        username="owner",
+        password="correct horse battery staple",
+        password_confirmation="correct horse battery staple",
+    )
+
+    assert cli.main(["admin", "setup-code", "--data-dir", str(data_dir)]) == 1
+
+    captured = capsys.readouterr()
+    assert "setup_already_complete" in captured.err
+    assert setup_code not in captured.err
 
 
 def test_cli_failure_is_nonzero_safe_and_does_not_echo_internal_text(

@@ -16,6 +16,7 @@ from reponpc.config.environment import (
     SecretValue,
     load_environment,
 )
+from reponpc.runtime.database import RuntimeDatabase
 
 
 def deployment_environment(**overrides: str) -> dict[str, str]:
@@ -26,7 +27,6 @@ def deployment_environment(**overrides: str) -> dict[str, str]:
         "REPONPC_CHAT_MODEL": "test-model",
         "REPONPC_CHAT_BASE_URL": "http://ollama:11434",
         "REPONPC_EMBEDDING_MODEL": "intfloat/multilingual-e5-small",
-        "REPONPC_ADMIN_USERNAME": "admin",
     }
     values.update(overrides)
     return values
@@ -53,6 +53,166 @@ def test_load_environment_uses_typed_defaults_and_redacts_direct_secrets(tmp_pat
     assert repr(settings.secrets["github_token"]) == "SecretValue(<redacted>)"
     assert canary not in repr(settings)
     assert canary not in str(settings.secrets["github_token"])
+
+
+def test_vllm_is_an_explicit_openai_compatible_provider_preset(tmp_path: Path) -> None:
+    private_chat_url = "http://127.0.0.1:8000/v1"
+    private_embedding_url = "http://127.0.0.1:8001/v1"
+    settings = load_environment(
+        deployment_environment(
+            REPONPC_CHAT_PROVIDER="vllm",
+            REPONPC_CHAT_BASE_URL=private_chat_url,
+            REPONPC_EMBEDDING_PROVIDER="vllm",
+            REPONPC_EMBEDDING_BASE_URL=private_embedding_url,
+        ),
+        secret_roots=(tmp_path,),
+    )
+
+    assert settings.chat_provider == "vllm"
+    assert settings.embedding_provider == "vllm"
+    assert private_chat_url not in repr(settings)
+    assert private_embedding_url not in repr(settings)
+
+
+def test_first_owner_mode_needs_no_default_username_or_github_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    values = deployment_environment(REPONPC_IP_HASH_KEY="ip-hmac-canary")
+    settings = load_environment(values, secret_roots=(tmp_path,))
+    database = RuntimeDatabase(tmp_path / "runtime")
+    database.initialize()
+
+    monkeypatch.setattr(
+        main.app.state, "admin_session_service", main.app.state.admin_session_service
+    )
+    monkeypatch.setattr(main.app.state, "admin_operations", main.app.state.admin_operations)
+    monkeypatch.setattr(main.app.state, "admin_origins", main.app.state.admin_origins)
+    main._configure_admin(settings, database)
+
+    assert settings.admin_username == ""
+    assert settings.admin_password_hash is None
+    assert main.app.state.admin_session_service is not None
+    assert main.app.state.admin_session_service.setup_status().setup_required is True
+    assert main.app.state.admin_operations is not None
+    assert main.app.state.admin_operations.github is None
+
+
+def test_github_oauth_requires_complete_same_origin_encrypted_configuration(tmp_path: Path) -> None:
+    credential_key = "credential-encryption-key-canary-material"
+    client_secret = "oauth-client-secret-canary"
+    settings = load_environment(
+        deployment_environment(
+            REPONPC_GITHUB_OAUTH_CLIENT_ID="oauth-client-id",
+            REPONPC_GITHUB_OAUTH_CLIENT_SECRET=client_secret,
+            REPONPC_GITHUB_OAUTH_CALLBACK_URL=(
+                "https://portfolio.example.com/api/admin/github/callback"
+            ),
+            REPONPC_CREDENTIAL_ENCRYPTION_KEY=credential_key,
+            REPONPC_GITHUB_OWNER_RECOVERY_COMMAND="reponpc admin set-password",
+        ),
+        secret_roots=(tmp_path,),
+    )
+
+    assert settings.github_oauth_client_id == "oauth-client-id"
+    assert settings.github_oauth_callback_url.endswith("/api/admin/github/callback")
+    assert client_secret not in repr(settings)
+    assert credential_key not in repr(settings)
+
+    with pytest.raises(EnvironmentValidationError) as incomplete:
+        load_environment(
+            deployment_environment(REPONPC_GITHUB_OAUTH_CLIENT_ID="oauth-client-id"),
+            secret_roots=(tmp_path,),
+        )
+    assert "oauth_configuration_incomplete" in issue_codes(incomplete.value)
+
+    with pytest.raises(EnvironmentValidationError) as invalid_callback:
+        load_environment(
+            deployment_environment(
+                REPONPC_GITHUB_OAUTH_CLIENT_ID="oauth-client-id",
+                REPONPC_GITHUB_OAUTH_CLIENT_SECRET=client_secret,
+                REPONPC_GITHUB_OAUTH_CALLBACK_URL=(
+                    "https://portfolio.example.com/api/admin/session/github/callback"
+                ),
+                REPONPC_CREDENTIAL_ENCRYPTION_KEY=credential_key,
+            ),
+            secret_roots=(tmp_path,),
+        )
+    assert "invalid_oauth_callback" in issue_codes(invalid_callback.value)
+
+    with pytest.raises(EnvironmentValidationError) as malformed_callback:
+        load_environment(
+            deployment_environment(
+                REPONPC_GITHUB_OAUTH_CLIENT_ID="oauth-client-id",
+                REPONPC_GITHUB_OAUTH_CLIENT_SECRET=client_secret,
+                REPONPC_GITHUB_OAUTH_CALLBACK_URL=("https://[malformed/api/admin/github/callback"),
+                REPONPC_CREDENTIAL_ENCRYPTION_KEY=credential_key,
+            ),
+            secret_roots=(tmp_path,),
+        )
+    assert "invalid_oauth_callback" in issue_codes(malformed_callback.value)
+
+
+def test_credential_encryption_key_allows_pat_only_without_oauth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = load_environment(
+        deployment_environment(
+            REPONPC_CREDENTIAL_ENCRYPTION_KEY="credential-encryption-key-canary-material",
+            REPONPC_IP_HASH_KEY="ip-hmac-canary",
+        ),
+        secret_roots=(tmp_path,),
+    )
+    database = RuntimeDatabase(tmp_path / "runtime")
+    database.initialize()
+
+    monkeypatch.setattr(
+        main.app.state, "github_identity_service", main.app.state.github_identity_service
+    )
+    main._configure_admin(settings, database)
+
+    assert settings.secrets["credential_encryption_key"] is not None
+    assert settings.github_oauth_client_id == ""
+    assert settings.github_oauth_callback_url == ""
+    assert main.app.state.github_identity_service is not None
+    assert main.app.state.github_identity_service.oauth_available is False
+
+
+def test_admin_service_remains_unavailable_without_identity_hmac_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    values = deployment_environment()
+    settings = load_environment(values, secret_roots=(tmp_path,))
+    database = RuntimeDatabase(tmp_path / "runtime")
+    database.initialize()
+
+    monkeypatch.setattr(
+        main.app.state, "admin_session_service", main.app.state.admin_session_service
+    )
+    monkeypatch.setattr(main.app.state, "admin_operations", main.app.state.admin_operations)
+    monkeypatch.setattr(main.app.state, "admin_origins", main.app.state.admin_origins)
+    main._configure_admin(settings, database)
+
+    assert main.app.state.admin_session_service is None
+    assert main.app.state.admin_operations is None
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"REPONPC_ADMIN_USERNAME": "owner", "REPONPC_ADMIN_PASSWORD_HASH": ""},
+        {"REPONPC_ADMIN_USERNAME": "", "REPONPC_ADMIN_PASSWORD_HASH": "$argon2id$hash"},
+    ],
+)
+def test_preprovisioned_admin_credentials_require_an_explicit_pair(
+    tmp_path: Path, override: dict[str, str]
+) -> None:
+    with pytest.raises(EnvironmentValidationError) as raised:
+        load_environment(
+            deployment_environment(**override),
+            secret_roots=(tmp_path,),
+        )
+
+    assert "admin_credential_pair_required" in issue_codes(raised.value)
 
 
 def test_direct_and_file_secret_collision_is_safe(tmp_path: Path) -> None:

@@ -115,7 +115,7 @@
       "body_type": "json",
       "body": {
         "error": {
-          "code": "fixture-context-overflow",
+          "code": "context_length_exceeded",
           "message": "Fixture context limit exceeded"
         }
       }

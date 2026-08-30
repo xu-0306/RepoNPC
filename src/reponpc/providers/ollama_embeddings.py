@@ -21,6 +21,7 @@ from reponpc.providers.http_transport import (
     UrllibProviderHttpTransport,
     failure_for_status,
 )
+from reponpc.providers.model_catalog import ollama_model_available
 from reponpc.providers.openai_embeddings import (
     _checked_at,
     _json_bytes,
@@ -97,8 +98,8 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
             return ProviderHealth(False, _checked_at(), failure_for_status(response.status))
         try:
             payload = _json_object(response.body)
-            if not isinstance(payload.get("models"), list):
-                raise ValueError
+            if not ollama_model_available(payload, self._model):
+                return ProviderHealth(False, _checked_at(), ProviderFailureCode.UNAVAILABLE)
         except (UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
             return ProviderHealth(
                 False,

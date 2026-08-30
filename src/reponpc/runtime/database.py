@@ -132,6 +132,278 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             "CREATE INDEX admin_login_backoff_expiry_idx ON admin_login_backoff(expires_at)",
         ),
     ),
+    Migration(
+        version=3,
+        name="first-owner-onboarding",
+        statements=(
+            """
+            CREATE TABLE admin_owner (
+                state_key TEXT PRIMARY KEY CHECK(state_key = 'current'),
+                username TEXT NOT NULL CHECK(length(username) BETWEEN 1 AND 64),
+                password_hash TEXT NOT NULL CHECK(password_hash LIKE '$argon2id$%'),
+                created_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE admin_setup (
+                state_key TEXT PRIMARY KEY CHECK(state_key = 'current'),
+                code_hash TEXT NOT NULL
+                    CHECK(length(code_hash) = 64
+                          AND code_hash NOT GLOB '*[^0-9a-f]*'),
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL
+            )
+            """,
+        ),
+    ),
+    Migration(
+        version=4,
+        name="github-oauth-identity",
+        statements=(
+            "ALTER TABLE admin_sessions ADD COLUMN authenticated_at TEXT",
+            (
+                "UPDATE admin_sessions SET authenticated_at = created_at "
+                "WHERE authenticated_at IS NULL"
+            ),
+            """
+            CREATE TABLE admin_auth_methods (
+                method TEXT PRIMARY KEY CHECK(method IN ('local_password', 'github')),
+                github_user_id TEXT UNIQUE,
+                github_login TEXT,
+                created_at TEXT NOT NULL,
+                CHECK(
+                    (method = 'local_password' AND github_user_id IS NULL)
+                    OR (method = 'github' AND github_user_id IS NOT NULL)
+                )
+            )
+            """,
+            """
+            INSERT INTO admin_auth_methods(method, github_user_id, github_login, created_at)
+            SELECT 'local_password', NULL, NULL, created_at FROM admin_owner
+            WHERE state_key = 'current'
+            """,
+            """
+            CREATE TABLE admin_oauth_transactions (
+                state_hash TEXT PRIMARY KEY
+                    CHECK(length(state_hash) = 64 AND state_hash NOT GLOB '*[^0-9a-f]*'),
+                intent TEXT NOT NULL CHECK(intent IN ('login', 'setup', 'link')),
+                verifier_nonce BLOB NOT NULL,
+                verifier_ciphertext BLOB NOT NULL,
+                setup_code_hash TEXT
+                    CHECK(setup_code_hash IS NULL OR (
+                        length(setup_code_hash) = 64
+                        AND setup_code_hash NOT GLOB '*[^0-9a-f]*'
+                    )),
+                session_hash TEXT REFERENCES admin_sessions(session_hash),
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                consumed_at TEXT,
+                return_path TEXT NOT NULL CHECK(return_path = '/admin')
+            )
+            """,
+            (
+                "CREATE INDEX admin_oauth_transactions_expiry_idx "
+                "ON admin_oauth_transactions(expires_at)"
+            ),
+            """
+            CREATE TABLE admin_github_credentials (
+                credential_id INTEGER PRIMARY KEY,
+                purpose TEXT NOT NULL CHECK(purpose IN ('identity_public_read', 'public_read')),
+                token_nonce BLOB NOT NULL,
+                token_ciphertext BLOB NOT NULL,
+                key_version INTEGER NOT NULL CHECK(key_version >= 1),
+                github_user_id TEXT,
+                github_login TEXT,
+                expires_at TEXT,
+                last_validated_at TEXT,
+                status TEXT NOT NULL CHECK(status IN ('ready', 'connection_required', 'invalid')),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(purpose, github_user_id)
+            )
+            """,
+        ),
+    ),
+    Migration(
+        version=5,
+        name="github-oauth-csrf-handoff",
+        statements=(
+            """
+            CREATE TABLE admin_oauth_handoffs (
+                handoff_hash TEXT PRIMARY KEY
+                    CHECK(length(handoff_hash) = 64 AND handoff_hash NOT GLOB '*[^0-9a-f]*'),
+                session_hash TEXT NOT NULL REFERENCES admin_sessions(session_hash),
+                csrf_nonce BLOB NOT NULL,
+                csrf_ciphertext BLOB NOT NULL,
+                expires_at TEXT NOT NULL,
+                consumed_at TEXT
+            )
+            """,
+            "CREATE INDEX admin_oauth_handoffs_expiry_idx ON admin_oauth_handoffs(expires_at)",
+        ),
+    ),
+    Migration(
+        version=6,
+        name="bounded-analysis-batch-runtime",
+        statements=(
+            """
+            CREATE TABLE analysis_batches (
+                batch_id TEXT PRIMARY KEY
+                    CHECK(length(batch_id) BETWEEN 1 AND 64),
+                owner_scope TEXT NOT NULL DEFAULT 'singleton'
+                    CHECK(owner_scope = 'singleton'),
+                plan_id TEXT NOT NULL CHECK(length(plan_id) BETWEEN 1 AND 128),
+                selection_hash TEXT NOT NULL
+                    CHECK(length(selection_hash) = 64
+                          AND selection_hash NOT GLOB '*[^0-9a-f]*'),
+                idempotency_key_hash TEXT NOT NULL UNIQUE
+                    CHECK(length(idempotency_key_hash) = 64
+                          AND idempotency_key_hash NOT GLOB '*[^0-9a-f]*'),
+                state TEXT NOT NULL CHECK(state IN (
+                    'queued', 'running', 'paused', 'cancelling', 'cancelled',
+                    'completed', 'completed_with_errors', 'failed'
+                )),
+                maximum_generation_attempts INTEGER NOT NULL
+                    CHECK(maximum_generation_attempts BETWEEN 1 AND 10),
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                completed_at TEXT,
+                expires_at TEXT,
+                error_code TEXT,
+                updated_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE UNIQUE INDEX analysis_batches_one_active_idx
+            ON analysis_batches(owner_scope)
+            WHERE state IN ('queued', 'running', 'paused', 'cancelling')
+            """,
+            "CREATE INDEX analysis_batches_expiry_idx ON analysis_batches(expires_at)",
+            """
+            CREATE TABLE analysis_batch_items (
+                item_id TEXT PRIMARY KEY
+                    CHECK(length(item_id) BETWEEN 1 AND 64),
+                batch_id TEXT NOT NULL REFERENCES analysis_batches(batch_id)
+                    ON DELETE CASCADE,
+                position INTEGER NOT NULL CHECK(position >= 0),
+                repository_slug TEXT NOT NULL CHECK(length(repository_slug) BETWEEN 3 AND 200),
+                requested_ref TEXT CHECK(requested_ref IS NULL OR length(requested_ref) <= 256),
+                selection_hash TEXT NOT NULL
+                    CHECK(length(selection_hash) = 64
+                          AND selection_hash NOT GLOB '*[^0-9a-f]*'),
+                resolved_commit_sha TEXT
+                    CHECK(resolved_commit_sha IS NULL OR (
+                        length(resolved_commit_sha) = 40
+                        AND resolved_commit_sha NOT GLOB '*[^0-9a-f]*'
+                    )),
+                state TEXT NOT NULL CHECK(state IN (
+                    'queued', 'resolving_commit', 'fetching_source', 'filtering',
+                    'indexing', 'embedding', 'generating', 'validating', 'cleaning_up',
+                    'complete', 'waiting_rate_limit', 'waiting_reconnection',
+                    'needs_retry_confirmation', 'failed', 'cancelled'
+                )),
+                resume_state TEXT CHECK(resume_state IS NULL OR resume_state IN (
+                    'resolving_commit', 'fetching_source', 'filtering', 'indexing',
+                    'embedding', 'generating', 'validating', 'cleaning_up'
+                )),
+                lease_id TEXT,
+                execution_started_at TEXT,
+                execution_elapsed_seconds INTEGER NOT NULL DEFAULT 0
+                    CHECK(execution_elapsed_seconds >= 0),
+                execution_budget_seconds INTEGER NOT NULL DEFAULT 120
+                    CHECK(execution_budget_seconds BETWEEN 1 AND 600),
+                attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0),
+                generation_attempt_count INTEGER NOT NULL DEFAULT 0
+                    CHECK(generation_attempt_count >= 0),
+                result_json TEXT,
+                error_code TEXT,
+                retry_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(batch_id, position),
+                UNIQUE(batch_id, repository_slug)
+            )
+            """,
+            """
+            CREATE INDEX analysis_batch_items_schedule_idx
+            ON analysis_batch_items(batch_id, state, retry_at, position)
+            """,
+            """
+            CREATE TABLE analysis_batch_events (
+                event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                batch_id TEXT NOT NULL REFERENCES analysis_batches(batch_id)
+                    ON DELETE CASCADE,
+                item_id TEXT REFERENCES analysis_batch_items(item_id)
+                    ON DELETE CASCADE,
+                event_type TEXT NOT NULL CHECK(length(event_type) BETWEEN 1 AND 64),
+                payload_json TEXT NOT NULL,
+                occurred_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE INDEX analysis_batch_events_replay_idx
+            ON analysis_batch_events(batch_id, event_id)
+            """,
+            """
+            CREATE TABLE analysis_cache_entries (
+                cache_key TEXT PRIMARY KEY
+                    CHECK(length(cache_key) = 64
+                          AND cache_key NOT GLOB '*[^0-9a-f]*'),
+                cache_kind TEXT NOT NULL CHECK(cache_kind IN (
+                    'derived_index', 'validated_analysis'
+                )),
+                derived_index_key TEXT NOT NULL
+                    CHECK(length(derived_index_key) = 64
+                          AND derived_index_key NOT GLOB '*[^0-9a-f]*'),
+                metadata_json TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                payload_sha256 TEXT NOT NULL
+                    CHECK(length(payload_sha256) = 64
+                          AND payload_sha256 NOT GLOB '*[^0-9a-f]*'),
+                size_bytes INTEGER NOT NULL CHECK(size_bytes >= 0),
+                created_at TEXT NOT NULL,
+                last_accessed_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL
+            )
+            """,
+            "CREATE INDEX analysis_cache_entries_expiry_idx ON analysis_cache_entries(expires_at)",
+            """
+            CREATE INDEX analysis_cache_entries_lru_idx
+            ON analysis_cache_entries(last_accessed_at)
+            """,
+        ),
+    ),
+    Migration(
+        version=7,
+        name="analysis-batch-selection-policy",
+        statements=(
+            """
+            ALTER TABLE analysis_batch_items
+            ADD COLUMN selection_json TEXT NOT NULL DEFAULT '{}'
+            """,
+        ),
+    ),
+    Migration(
+        version=8,
+        name="analysis-batch-selected-credential",
+        statements=("ALTER TABLE analysis_batches ADD COLUMN selected_credential_id INTEGER",),
+    ),
+    Migration(
+        version=9,
+        name="github-rate-state",
+        statements=(
+            """
+            CREATE TABLE github_rate_state (
+                resource TEXT PRIMARY KEY CHECK(resource IN ('graphql', 'core', 'secondary')),
+                remaining INTEGER,
+                limit_value INTEGER,
+                reset_at TEXT,
+                retry_at TEXT,
+                updated_at TEXT NOT NULL
+            )
+            """,
+        ),
+    ),
 )
 
 

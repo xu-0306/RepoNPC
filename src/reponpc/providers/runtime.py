@@ -115,10 +115,30 @@ class ProviderRuntime:
             ),
         )
 
+    def generate_once(
+        self,
+        messages: tuple[ProviderMessage, ...],
+        response_schema: ResponseSchema,
+        max_output_tokens: int,
+        timeout: float,
+    ) -> ProviderResult:
+        """Call only the configured chat adapter once within the supplied sub-deadline."""
+
+        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+            raise ProviderError(ProviderFailureCode.TIMEOUT)
+        return self.chat.generate(messages, response_schema, max_output_tokens, float(timeout))
+
     def embed_query(self, texts: list[str], *, timeout: float) -> NDArray[np.float32]:
         """Embed a query batch with bounded same-adapter transient retries."""
 
         return self._within_deadline(timeout, lambda _remaining: self.embedding.embed_query(texts))
+
+    def embed_query_once(self, texts: list[str], *, timeout: float) -> NDArray[np.float32]:
+        """Call only the configured embedding adapter once for explicit no-retry flows."""
+
+        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+            raise ProviderError(ProviderFailureCode.TIMEOUT)
+        return self.embedding.embed_query(texts)
 
     def _within_deadline(self, timeout: float, operation: Callable[[float], T]) -> T:
         if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:

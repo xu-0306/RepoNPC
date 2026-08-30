@@ -6,12 +6,13 @@ import math
 import threading
 import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 from reponpc.bundles.manager import BundleManager
 from reponpc.chat.answers import Citation, validate_answer
-from reponpc.chat.limits import ChatLimits
+from reponpc.chat.limits import ChatLimits, ProviderLane
 from reponpc.providers import ProviderMessage, ProviderUsage
 from reponpc.providers.runtime import ProviderRuntime
 
@@ -67,14 +68,22 @@ class GroundedChatService:
         client_ip: str,
         cancel_requested: threading.Event | None = None,
     ) -> ChatDelivery:
-        """Acquire all limits before retrieval or either provider call."""
+        """Admit the request before retrieval; reserve provider only for calls."""
 
-        with self._limits.acquire(client_ip), self._bundles.acquire() as index:
+        admission = getattr(self._limits, "admit_public_chat", None)
+        admission_context: Any
+        if callable(admission):
+            admission(client_ip)
+            admission_context = nullcontext()
+        else:
+            admission_context = self._limits.acquire(client_ip)
+        with admission_context, self._bundles.acquire() as index:
             _raise_if_cancelled(cancel_requested)
             deadline = self._monotonic() + self._timeout_seconds
-            query_vector = self._providers.embed_query(
-                [message], timeout=self._remaining(deadline)
-            )[0]
+            with _public_provider_permit(self._limits):
+                query_vector = self._providers.embed_query(
+                    [message], timeout=self._remaining(deadline)
+                )[0]
             _raise_if_cancelled(cancel_requested)
             evidence_ids = index.hybrid_candidates(message, query_vector=query_vector)
             capabilities = self._providers.chat.capabilities()
@@ -122,12 +131,13 @@ class GroundedChatService:
                 packed.text,
                 system_role=capabilities.system_role,
             )
-            result = self._providers.generate(
-                provider_messages,
-                _ANSWER_SCHEMA,
-                self._max_output_tokens,
-                self._remaining(deadline),
-            )
+            with _public_provider_permit(self._limits):
+                result = self._providers.generate(
+                    provider_messages,
+                    _ANSWER_SCHEMA,
+                    self._max_output_tokens,
+                    self._remaining(deadline),
+                )
             _raise_if_cancelled(cancel_requested)
             validated = validate_answer(result.content, selected, locale)
             status = self._bundles.status()
@@ -155,6 +165,15 @@ class GroundedChatService:
         """Expose the configured overall public deadline to the HTTP boundary."""
 
         return self._timeout_seconds
+
+
+def _public_provider_permit(limits: ChatLimits):
+    acquire = getattr(limits, "acquire_generation", None)
+    if not callable(acquire):
+        # Compatibility for deliberately minimal test doubles. Production
+        # ChatLimits always provides the fair scheduler permit.
+        return nullcontext()
+    return acquire(ProviderLane.PUBLIC_CHAT)
 
 
 def _raise_if_cancelled(cancel_requested: threading.Event | None) -> None:

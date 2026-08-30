@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Active execution-routing guide |
 | Applies to | Remaining RepoNPC v1 work after Delivery Phase 1 |
-| Last updated | 2026-08-10 |
+| Last updated | 2026-08-30 |
 | Authority | Non-normative; it routes work to the approved specification |
 
 ## 1. Purpose and boundary
@@ -62,7 +62,7 @@ A dispatch may provide a smaller `read_first` list only after Main has completed
 
 ### 2.3 Specification gate
 
-Technical Specification 0.1.1 is approved as of 2026-08-10, including the owner-approved Phase 2 closure amendment from 2026-08-11, so implementation is authorized. If its status returns to `Draft`, or an owner decision reopens an affected contract, Main must block the affected campaign before production edits.
+Technical Specification 0.1.9 is approved through the owner-authorized 2026-08-30 OAuth setup-guidance and ENGD-001/002/003/006 amendments, so implementation inside its closed contracts is authorized. The recoverable-capability clarification strengthens existing requirements; UXD-001 through UXD-007 plus ENGD-004, ENGD-005, and ENGD-007 remain open. If the specification returns to `Draft`, or a package depends on one of those open decisions, Main must block that affected production work until the owner decision and all normative updates are recorded.
 
 ## 3. Current baseline and honest completion state
 
@@ -570,7 +570,7 @@ The following packages are routing defaults and completed-package history. Deliv
 
 **Implementation mapping:** Milestone 6 and every incomplete earlier exit gate.  
 **Primary requirements:** all FR/NFR.  
-**Acceptance focus:** AC-001–AC-037.  
+**Acceptance focus:** AC-001–AC-050.
 **Read first:** every repository instruction and source in section 2.2, especially Technical Spec 19, Acceptance Criteria 1, 9, 10, Security 12–13, Operations 7–16, and Sprite Format 8.
 
 | Package | Frozen input | Produced output | Stable failure boundary | Consumer |
@@ -605,7 +605,7 @@ The following packages are routing defaults and completed-package history. Deliv
 
 - **Do:** run the complete named trust-boundary matrix: secrets, prompt injection, FTS, XSS/Markdown/SVG/URL, SSRF/redirect, archive/path traversal, forged evidence, sessions/CSRF/backoff, GitHub allowlist/conflicts, provider leakage, logs, budgets/timeouts, image bombs, and last-known-good recovery.
 - **Exit:** every critical invariant has a real boundary probe and deterministic pass; dependency/secret/container scans are recorded.
-- **References:** Security 1–13; AC-004, AC-014, AC-016, AC-018, AC-021, AC-024, AC-027, AC-030, AC-033–AC-037.
+- **References:** Security 1–14; AC-004, AC-014, AC-016, AC-018, AC-021, AC-024, AC-027, AC-030, AC-033–AC-040.
 
 ### P5-04 — Live/manual compatibility (`MAIN; OWNER INPUT MAY BE REQUIRED`)
 
@@ -622,7 +622,7 @@ The following packages are routing defaults and completed-package history. Deliv
 ### P5-06 — Build and release closure (`MAIN`)
 
 - **Do:** produce locked production image, SBOM/scans/notices, clean-host Compose install, tagged MIT v1 release, application image, immutable sample bundle, release notes, and full acceptance report.
-- **Exit:** all 37 ACs pass or the owner explicitly changes the governing requirement before release. Only then may RepoNPC v1 be called complete.
+- **Exit:** all AC-001–AC-050 pass or the owner explicitly changes the governing requirement before release. Only then may RepoNPC v1 be called complete.
 
 ## 8. Gate design requirements
 
@@ -832,4 +832,4 @@ A worker package is done only when its owned delta and focused gates are accepte
 
 A phase is done only when Main integrates the real seams, all blocking aggregate/security gates pass, fresh falsification probes pass, documents/examples match, and the phase report preserves every limitation.
 
-RepoNPC v1 is done only when Phase 5 demonstrates AC-001 through AC-037 or the owner explicitly changes the governing requirements first.
+RepoNPC v1 is done only when Phase 5 demonstrates AC-001 through AC-050 or the owner explicitly changes the governing requirements first.

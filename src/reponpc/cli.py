@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from collections.abc import Sequence
@@ -11,6 +12,7 @@ from pathlib import Path
 
 from argon2 import PasswordHasher, Type
 
+from reponpc.admin.auth import AdminAuthError, issue_admin_setup_code, set_admin_recovery_password
 from reponpc.config.models import ConfigValidationError, load_public_config
 from reponpc.indexing.pipeline import (
     IndexPipelineError,
@@ -20,6 +22,7 @@ from reponpc.indexing.pipeline import (
 )
 from reponpc.indexing.publication import PublicationError
 from reponpc.main import run as run_server
+from reponpc.runtime.database import RuntimeDatabase
 
 _SAFE_ERROR_CODE_RE = re.compile(r"^[a-z][a-z0-9_]{2,63}$")
 
@@ -31,6 +34,15 @@ def _parser() -> argparse.ArgumentParser:
     admin = commands.add_parser("admin", help="administration commands")
     admin_commands = admin.add_subparsers(dest="admin_command", required=True)
     admin_commands.add_parser("hash-password", help="generate an Argon2id password hash")
+    setup_code = admin_commands.add_parser(
+        "setup-code", help="issue a short-lived one-time first-owner setup code"
+    )
+    setup_code.add_argument("--data-dir", type=Path)
+    set_password = admin_commands.add_parser(
+        "set-password", help="host-only recovery: restore local owner password sign-in"
+    )
+    set_password.add_argument("--data-dir", type=Path)
+    set_password.add_argument("--username", required=True)
 
     config = commands.add_parser("config", help="configuration commands")
     config_commands = config.add_subparsers(dest="config_command", required=True)
@@ -61,12 +73,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "serve":
             run_server()
         elif args.command == "admin":
-            password = getpass("Password: ")
-            confirmation = getpass("Confirm password: ")
-            if not password or password != confirmation:
-                print("reponpc: password_confirmation_failed", file=sys.stderr)
-                return 2
-            print(PasswordHasher(type=Type.ID).hash(password))
+            if args.admin_command == "hash-password":
+                password = getpass("Password: ")
+                confirmation = getpass("Confirm password: ")
+                if not password or password != confirmation:
+                    print("reponpc: password_confirmation_failed", file=sys.stderr)
+                    return 2
+                print(PasswordHasher(type=Type.ID).hash(password))
+            else:
+                data_dir = args.data_dir or Path(
+                    os.environ.get("REPONPC_DATA_DIR", "/var/lib/reponpc")
+                )
+                database = RuntimeDatabase(data_dir)
+                database.initialize()
+                if args.admin_command == "setup-code":
+                    print(issue_admin_setup_code(database))
+                else:
+                    password = getpass("New password: ")
+                    confirmation = getpass("Confirm new password: ")
+                    if not password or password != confirmation:
+                        print("reponpc: password_confirmation_failed", file=sys.stderr)
+                        return 2
+                    set_admin_recovery_password(
+                        database,
+                        username=args.username,
+                        password=password,
+                    )
+                    print("local password recovery completed")
         elif args.command == "config":
             load_public_config(args.path)
             print("configuration valid")
@@ -84,6 +117,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     except (IndexPipelineError, PublicationError) as exc:
         print(f"reponpc: {exc.code}", file=sys.stderr)
+        return 1
+    except AdminAuthError as exc:
+        print(f"reponpc: {exc.code.casefold()}", file=sys.stderr)
         return 1
     except OSError:
         print("reponpc: operation_failed", file=sys.stderr)

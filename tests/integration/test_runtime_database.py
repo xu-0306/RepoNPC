@@ -23,14 +23,25 @@ def test_runtime_database_is_idempotent_and_separate_from_index_data(tmp_path: P
 
     assert database.database_path == tmp_path / "runtime-data" / "runtime.sqlite"
     assert database.database_path.exists()
-    assert database.schema_version() == 2
+    assert database.schema_version() == 9
     assert {
         "runtime_schema_migrations",
         "admin_sessions",
         "rate_buckets",
         "daily_usage",
         "bundle_state",
+        "analysis_batches",
+        "analysis_batch_items",
+        "analysis_batch_events",
+        "analysis_cache_entries",
+        "github_rate_state",
         "admin_audit",
+        "admin_owner",
+        "admin_setup",
+        "admin_auth_methods",
+        "admin_oauth_transactions",
+        "admin_github_credentials",
+        "admin_oauth_handoffs",
     } <= table_names(database)
     with pytest.raises(RuntimeDatabaseError, match="runtime storage is unavailable"):
         RuntimeDatabase(tmp_path / "index.sqlite")
@@ -61,11 +72,11 @@ def test_concurrent_initialization_creates_one_versioned_schema(tmp_path: Path) 
     with ThreadPoolExecutor(max_workers=2) as executor:
         list(executor.map(lambda _unused: database.initialize(), range(2)))
 
-    assert database.schema_version() == 2
+    assert database.schema_version() == 9
     with database.connection() as connection:
         versions = connection.execute("SELECT version FROM runtime_schema_migrations").fetchall()
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()
-    assert [row[0] for row in versions] == [1, 2]
+    assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert foreign_keys is not None and foreign_keys[0] == 1
 
 
@@ -85,13 +96,13 @@ def test_concurrent_initialization_across_database_owners_is_safe(tmp_path: Path
 
         database = RuntimeDatabase(data_dir)
         database.initialize()
-        assert database.schema_version() == 2
+        assert database.schema_version() == 9
         with database.connection() as connection:
             versions = connection.execute(
                 "SELECT version FROM runtime_schema_migrations"
             ).fetchall()
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()
-        assert [row[0] for row in versions] == [1, 2]
+        assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
         assert journal_mode is not None and journal_mode[0] == "wal"
 
 
@@ -143,6 +154,16 @@ def test_runtime_schema_rejects_raw_session_csrf_and_ip_values(tmp_path: Path) -
                 ) VALUES (?, 'now', 10, 10, 'later')
                 """,
                 ("192.0.2.99",),
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO admin_setup VALUES ('current', ?, 'now', 'later')",
+                ("RAW_SETUP_CODE",),
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO admin_owner VALUES ('current', 'owner', ?, 'now')",
+                ("plaintext-password",),
             )
 
 

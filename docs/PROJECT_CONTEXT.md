@@ -1,6 +1,6 @@
 # RepoNPC Project Context
 
-**Document status:** Maintained product context; implementation status current through 2026-08-13
+**Document status:** Maintained product context; implementation/design-review status current through Technical Specification 0.1.9 on 2026-08-30
 **Audience:** product owner, implementation Agents, reviewers, contributors  
 **Canonical product name:** RepoNPC  
 **Tagline:** Meet the NPC who knows your code.
@@ -15,13 +15,36 @@ The product is not merely a decorative README widget and is not a general-purpos
 
 ## 2. Current project state
 
-As of the Phase 4 closure based on commit `1b3d823` on 2026-08-13:
+As of the recoverable-capability UX/specification review and ENGD-001/002/003/006 decisions on 2026-08-30:
 
-- `TECHNICAL_SPEC.md` 0.1.1 is approved and application implementation is authorized;
-- Delivery Phases 1 through 4 are implemented and verified, including the production index CLI, immutable bundle lifecycle, hybrid retrieval, runtime model adapters, grounded chat, immutable citations, cost controls, bilingual visitor experience, owner administration, character/card assets, GitHub writeback, and publication integration;
+- `TECHNICAL_SPEC.md` 0.1.9 is approved and application implementation is authorized;
+- Delivery Phases 1 through 4 have substantial local automated evidence for the production index CLI, immutable bundle lifecycle, hybrid retrieval, runtime model adapters, grounded chat, immutable citations, cost controls, bilingual visitor experience, owner administration, character/card assets, GitHub writeback, and publication integration. This is not a complete release claim, and the later P0 regressions listed below reopen their affected gates;
 - Delivery Phase 5 (release hardening, current Docker/clean-host evidence, and remaining manual checks) is the next implementation boundary;
+- the guided owner-onboarding amendment in version 0.1.4 was owner-approved, implemented, and verified on 2026-08-14; it replaces raw-YAML-first administration with a guided default while retaining raw YAML as advanced mode;
+- the version 0.1.5 vLLM amendment names vLLM as a private-network-capable OpenAI-compatible preset while preserving the existing transport, bundle identity, browser, secret, and no-fallback boundaries;
+- the version 0.1.6 amendment adds GitHub OAuth Web Flow with PKCE as an alternative sign-in/link method for the same sole owner, encrypted public-read credential records, and a dual-authentication admin surface; Milestones A–C were implemented and locally verified on 2026-08-16;
+- version 0.1.7 adds the exact-SHA archive resolver and durable bounded batch engine; D–E local automated verification is complete while external/live release evidence remains incomplete;
+- version 0.1.8 makes unconfigured OAuth entry points actionable through a safe host-side setup guide rather than leaving them disabled;
+- the 2026-08-30 implementation/specification walkthrough found that optional analysis could still become a mandatory gate, repository selection could be changed only through destructive reset, and several unavailable actions lacked a complete recovery/alternative path. Existing FR-025/FR-027/FR-028/NFR-003 and AC-019/AC-025/AC-032/AC-040 wording now explicitly forbids those dead ends; application regressions remain to be implemented and verified;
+- the same walkthrough found additional P0/P1/P2 engineering risks in the default embedding image/profile, production password policy, recovery-readiness signal, legacy analysis compatibility path, unimplemented operations commands, unused configuration contracts, oversized modules, and duplicated acceptance evidence. ENGD-001/002/003/006 are now owner-approved and their implementation gates are tracked in `SPEC_AND_ENGINEERING_REMEDIATION_PLAN.md`; UXD-001 through UXD-007 plus ENGD-004/005/007 remain open in `OWNER_REVIEW.md`;
 - v1 remains the complete product described here, not a reduced MVP;
 - milestones are delivery and verification boundaries, not permission to remove later v1 features.
+
+### 2.1 Handoff implementation ledger (working tree)
+
+This ledger records what is actually present after the previous Agent handoff. It is not a new requirement. The working tree contains substantial **uncommitted** changes from earlier work; documentation approval must not be mistaken for release completion.
+
+| Area | Implemented or partially implemented now | Still incomplete / must not be claimed as done |
+| --- | --- | --- |
+| Existing v1 baseline | Index/build and publish flows, immutable bundles, retrieval/chat/provider runtime adapters, citations, limits, owner/admin surfaces, assets, GitHub writeback, and batch-related code have local evidence from the existing test suite. | Phase 5 clean-host, Docker, live-provider, OAuth, browser/accessibility, and release evidence is not complete. |
+| Owner authentication | Setup-code flow, local-owner/session primitives, GitHub OAuth/link endpoints, and host-side password commands exist in code. | Local-first setup is not yet enforced end-to-end; GitHub-only compatibility branches remain; deployment-aware password policy, common-password blocking, and full recovery proof are missing. |
+| ENGD-001 embedding | Ollama/OpenAI-compatible (including vLLM preset) runtime adapters and identity/probe helpers exist. Examples default to an external Ollama profile. | Profile registry CRUD, one-active enforcement, provider-aware model center, database migration, and index-builder wiring are not complete. A local embedding default/fallback still exists in code and is not acceptable for the approved production contract. |
+| ENGD-006 operations | `serve`, `admin`, `config`, and `index` CLI groups exist; Web Admin is the intended daily interface. | The bounded `runtime` and `bundle` command groups are not all implemented or verified. No second public administration protocol has been added. |
+| Deployment boundary | Compose host mapping defaults to loopback while the container listener may bind internally; SSH/VPN guidance is documented. | Runtime enforcement and clean-host topology verification remain release gates; a non-standard port must not be treated as protection. |
+
+**Handoff rule:** use source code and test evidence for implementation status, and the approved specification/ADRs for intended behavior. In particular, do not report ENGD-001/002/003/006 as fully implemented until the gaps in the last column are closed. This section is the memory checkpoint for subsequent Agents and prevents a documentation-to-code drift from being hidden by optimistic status wording.
+
+**Verification snapshot:** the 2026-08-30 handoff audit updated the four stale 0.1.9/external-embedding contract expectations, extended release-audit coverage through AC-050, and recorded a non-Docker `pytest` run of **612 passed, 2 skipped**. The Docker health/restart smoke remains unavailable on this host because Docker Desktop engine access fails, so this is not a clean release gate.
 
 If `TECHNICAL_SPEC.md` returns to `Draft`, or an owner decision reopens an affected contract, implementation of that affected scope MUST stop until the project owner approves it again.
 
@@ -56,11 +79,12 @@ The person operating RepoNPC. In v1 this is normally the portfolio owner. The ma
 
 1. The owner forks or clones RepoNPC and creates a configuration repository or uses the deployment repository as the configuration source.
 2. The owner copies `reponpc.example.yml` to `reponpc.yml`, selects public repositories, and records owner-authored claims.
-3. The owner configures character appearance, locale, retrieval settings, model provider, admin authentication, and GitHub credentials.
+3. The owner configures character appearance, locale, retrieval settings, chat provider, and at least one external embedding profile. The model center recommends Ollama `qwen3-embedding:0.6b`; the owner may use Ollama pull/delete or connect a vLLM/OpenAI-compatible service. GitHub credentials are needed only for GitHub-backed admin operations.
 4. GitHub Actions validates the configuration, indexes the selected commits, and publishes an immutable index bundle.
-5. The owner starts the application with Docker Compose.
-6. The application verifies and activates the latest compatible bundle.
-7. The owner previews the visitor page and README card, then pastes the generated snippet into the GitHub Profile README.
+5. The owner starts the application with Docker Compose and runs `reponpc admin setup-code` on the deployment host.
+6. The owner opens `/admin` through loopback/SSH/VPN, enters the 15-minute one-time code, and creates a local administrator username/password. After signing in, the owner may optionally bind GitHub OAuth for alternative sign-in/public-read access. RepoNPC stores the local Argon2id hash, encrypted GitHub credential material where linked, and signs the sole owner into the same local session.
+7. The application verifies and activates the latest compatible bundle.
+8. The owner previews the visitor page and README card, then pastes the generated snippet into the GitHub Profile README.
 
 ### 4.3 Owner update journey
 
@@ -70,23 +94,43 @@ The person operating RepoNPC. In v1 this is normally the portfolio owner. The ma
 4. The running service discovers the stable manifest using an ETag, downloads the bundle, verifies it, and atomically activates it.
 5. If validation fails, the application keeps serving the last known-good bundle and reports the failure to the owner.
 
+### 4.3.1 Headless owner access and recovery
+
+Linux/headless operators use the same Web Admin through an SSH local-port tunnel, or a firewall-restricted private LAN/VPN. A high or unusual port is not a security boundary. Public visitor routes may be reverse-proxied separately, but admin routes remain private. If the owner forgets the password, the host-only `reponpc admin set-password --data-dir <dir>` command restores local access without reopening setup or changing the GitHub link; the local password is deliberately retained even when GitHub OAuth is enabled.
+
+### 4.4 Guided owner-onboarding journey (0.1.4, approved)
+
+This approved amendment replaces the blank raw-YAML-first post-login experience while preserving raw YAML as an advanced mode:
+
+1. The owner enters a GitHub username/profile URL or manually supplies a public `owner/name` slug.
+2. RepoNPC lists public repository metadata only; it does not download source or call a model yet.
+3. The owner explicitly selects repositories and confirms the selected set; Back/Edit selection preserves unaffected work and invalidates only changed selection-bound plans/results.
+4. The owner may immediately continue with manual contribution entry or explicitly analyze the confirmed set for suggestions under the existing indexing, provider, security, batch, and no-fallback boundaries. Model/GitHub readiness never makes manual authoring unavailable.
+5. The owner explains personal contribution in natural language. Generated role, responsibility, achievement, and context text remains an unconfirmed proposal until the owner accepts or edits it.
+6. The UI separates repository facts, model inferences, and proposed owner assertions, then generates a complete bilingual draft.
+7. Existing validation and side-effect-free preview run before optional GitHub save and index publication.
+8. Without GitHub public-read/writeback readiness, the owner may still author manually, validate, preview, copy, or download the generated YAML. Each unavailable integration states its cause, recovery, and unaffected alternative.
+
+The flow does not add private repositories, whole-account source analysis, broader writeback-token permissions, model tools, or silent provider fallback. OAuth is an identity/public-read connection only; it never changes the selected-only analysis boundary. Unsaved onboarding state may resume only within the current authenticated browser session; saved configuration resumes from `reponpc.yml`.
+
 ## 5. Product goals
 
 - Make a developer portfolio memorable through a polished pixel-RPG presentation.
 - Let non-expert visitors understand selected projects through natural-language questions.
 - Make factual answers verifiable with immutable repository citations.
 - Clearly distinguish owner statements, repository facts, and model inferences.
-- Support both hosted OpenAI-compatible models and privately reachable Ollama models.
-- Let one owner self-host and configure the complete experience without editing application source.
+- Support hosted OpenAI-compatible models plus privately reachable vLLM and Ollama models, with at least one external embedding profile and provider-aware model management.
+- Let one owner self-host and configure the complete experience without editing application source; daily settings live in Web Admin, while bootstrap/recovery/backup/rollback remain bounded host CLI tasks.
 - Treat security, prompt-injection resistance, cost control, accessibility, and bilingual behavior as v1 requirements.
 
 ## 6. Non-goals for v1
 
 - A multi-tenant hosted SaaS, team workspace, billing system, or marketplace.
 - Indexing private repositories.
-- GitHub OAuth onboarding or visitor accounts.
+- Visitor accounts, OAuth device flow, or multi-user GitHub onboarding.
 - Autonomous code execution, repository modification by the LLM, or tool use by the LLM.
 - A general repository coding assistant or replacement for source browsing.
+- A generic model marketplace/downloader; model installation is provider-owned, with only curated Ollama pull/delete exposed by the admin UI.
 - Multiple owners or multiple NPCs in one deployment.
 - A navigable RPG world, combat, inventory, quests, or keyboard-controlled gameplay.
 - Proving employment, authorship, seniority, or business impact from Git history alone.
@@ -104,6 +148,7 @@ The person operating RepoNPC. In v1 this is normally the portfolio owner. The ma
 8. **RPG style serves comprehension.** Animation and character design cannot replace accessible text, citations, or status feedback.
 9. **Chinese and English are equal product surfaces.** Traditional Chinese is not a partial translation layered on an English-only system.
 10. **Self-hosting must remain understandable.** Operators should not need a vector database cluster or several separately deployed services for one portfolio.
+11. **Optional capabilities cannot create dead ends.** An unavailable integration must explain why, offer recovery, and leave unrelated local/public work usable; owners must not trigger a failure to discover a fallback.
 
 ## 8. Why the README card and application are separate
 
@@ -139,6 +184,7 @@ When documents appear to conflict, use this precedence:
 4. `DECISIONS.md`;
 5. `SECURITY.md`, `OPERATIONS.md`, and `SPRITE_FORMAT.md` within their documented domains;
 6. `IMPLEMENTATION_PLAN.md`;
-7. `README.md` and examples.
+7. `SPEC_AND_ENGINEERING_REMEDIATION_PLAN.md` and `UX_SPEC_REVIEW.md` as non-normative review/execution guidance;
+8. `README.md` and examples.
 
 An implementation Agent must stop and ask the owner when a conflict would change externally visible behavior, security posture, data compatibility, or v1 scope. It may resolve purely internal and reversible details using the bounded-autonomy rules in the root `AGENTS.md`.

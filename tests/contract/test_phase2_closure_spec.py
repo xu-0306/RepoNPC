@@ -15,7 +15,8 @@ def test_technical_spec_freezes_phase2_closure_contracts() -> None:
     specification = _read("docs/TECHNICAL_SPEC.md")
 
     assert "| Status | **Approved** |" in specification
-    assert "| Version | 0.1.1 |" in specification
+    assert "| Version | 0.1.9 |" in specification
+    assert "Version 0.1.1 records the owner-approved Phase 2 closure boundary" in specification
     assert "reponpc index publish-manifest --bundle-dir <directory>" in specification
     assert "MUST NOT mutate the remote stable manifest" in specification
     assert '"locales": {' in specification
@@ -29,7 +30,7 @@ def test_acceptance_and_adr_require_derived_formal_evidence() -> None:
     acceptance = _read("docs/ACCEPTANCE_CRITERIA.md")
     decisions = _read("docs/DECISIONS.md")
 
-    assert "Technical Specification 0.1.1" in acceptance
+    assert "Technical Specification 0.1.9" in acceptance
     assert "Docker inspection and an access probe prove" in acceptance
     assert "host controller derives every pass/provenance boolean" in acceptance
     assert "## ADR-015:" in decisions
@@ -44,11 +45,26 @@ def test_phase_and_operations_documents_keep_runtime_provider_work_in_phase3() -
     operations = _read("docs/OPERATIONS.md")
     readme = _read("README.md")
 
-    assert "optional build-time production `local_sentence_transformers` adapter" in phases
-    assert "runtime query-provider health/readiness integration" in phases
+    assert "local sentence-transformers adapter is isolated to reproducibility benchmarks" in phases
+    assert "runtime external-profile health/readiness integration" in phases
     assert "host-only oracle/scoring" in phases
     assert "Technical Specification 0.1.1" in implementation
     assert "no oracle access" in implementation
     assert "reponpc index publish-manifest --bundle-dir dist" in operations
     assert "cannot update the remote pointer" in operations
-    assert "Delivery Phases 1 through 4 verified; Phase 5 remains" in readme
+    assert "Phase 5 remains the release-hardening boundary" in readme
+
+
+def test_vllm_preset_is_documented_without_expanding_browser_or_bundle_contracts() -> None:
+    specification = _read("docs/TECHNICAL_SPEC.md")
+    decisions = _read("docs/DECISIONS.md")
+    operations = _read("docs/OPERATIONS.md")
+    environment = _read(".env.example")
+
+    assert "Version 0.1.5 records the owner-approved vLLM provider-preset" in specification
+    assert "## ADR-019: Treat vLLM as a named OpenAI-compatible deployment preset" in decisions
+    assert "REPONPC_CHAT_PROVIDER=vllm" in environment
+    assert "REPONPC_EMBEDDING_PROVIDER=vllm" in environment
+    assert "GET /v1/models" in operations
+    assert "POST /v1/chat/completions" in operations
+    assert "POST /v1/embeddings" in operations

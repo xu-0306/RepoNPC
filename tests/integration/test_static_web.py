@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -16,7 +17,10 @@ def test_same_origin_web_shell_preserves_api_routes_and_safe_headers() -> None:
 
     with TestClient(application) as client:
         shell = client.get("/")
+        admin_shell = client.get("/admin")
         setup_status = client.get("/api/public/status")
+        missing_api = client.get("/api/missing")
+        missing_asset = client.get("/assets/missing.js")
         traversal = client.get("/%2e%2e/src/reponpc/main.py")
 
     assert shell.status_code == 200
@@ -25,8 +29,12 @@ def test_same_origin_web_shell_preserves_api_routes_and_safe_headers() -> None:
     assert "style-src 'self'" in shell.headers["Content-Security-Policy"]
     assert "*" not in shell.headers["Content-Security-Policy"]
     assert "access-control-allow-origin" not in shell.headers
+    assert admin_shell.status_code == 200
+    assert "RepoNPC" in admin_shell.text
     assert setup_status.status_code == 200
     assert setup_status.json()["status"] == "setup_required"
+    assert missing_api.status_code == 404
+    assert missing_asset.status_code == 404
     assert traversal.status_code == 404
     assert str(web_dist()) not in traversal.text
 
@@ -50,11 +58,11 @@ def test_built_web_assets_exclude_server_secret_and_private_provider_canaries() 
         asset.read_text(encoding="utf-8") for asset in web_dist().rglob("*") if asset.is_file()
     ).casefold()
 
-    for forbidden in (
+    for forbidden in ("ollama:11434", "private.example.invalid"):
+        assert forbidden not in bundle
+    for direct_secret_name in (
         "reponpc_github_token",
         "reponpc_chat_api_key",
         "reponpc_ip_hash_key",
-        "ollama:11434",
-        "private.example.invalid",
     ):
-        assert forbidden not in bundle
+        assert re.search(rf"{direct_secret_name}(?!_file)", bundle) is None

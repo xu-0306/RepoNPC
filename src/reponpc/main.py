@@ -16,10 +16,31 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import Headers, MutableHeaders
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from reponpc.admin.auth import AdminSessionService
+from reponpc.admin.batch_execution import PinnedBatchItemRunner
+from reponpc.admin.batch_resolver import (
+    ArchiveSafetyLimits,
+    BatchCapacity,
+    BatchPreflightPlanner,
+    GitHubArchiveSource,
+    GitHubGraphQLMetadataResolver,
+    GitHubRateLimiter,
+    UrllibGitHubArchiveTransport,
+    UrllibGitHubGraphQLTransport,
+)
+from reponpc.admin.batch_runtime import BatchRuntimeStore, SQLiteGitHubRateStateStore
+from reponpc.admin.batches import AnalysisBatchService, BatchStageGates
 from reponpc.admin.github import GitHubAdminClient, UrllibGitHubAdminTransport
+from reponpc.admin.oauth import (
+    CredentialCipher,
+    GitHubIdentityService,
+    GitHubOAuthClient,
+    UrllibOAuthTransport,
+)
+from reponpc.admin.onboarding import GuidedOnboardingService
 from reponpc.admin.operations import AdminOperations
 from reponpc.api.admin import create_admin_router
 from reponpc.api.public import SetupState, create_public_router, error_response
@@ -33,6 +54,7 @@ from reponpc.config.environment import (
     load_environment,
 )
 from reponpc.i18n.catalog import translate
+from reponpc.indexing.github import GitHubSourceResolver
 from reponpc.indexing.sources import EmbeddingIdentity
 from reponpc.providers import (
     ChatProvider,
@@ -95,17 +117,31 @@ class _BuiltWebFiles(StaticFiles):
     """Serve only bundled files and use index.html for extensionless SPA routes."""
 
     async def get_response(self, path: str, scope: Scope) -> Response:
-        response = await super().get_response(path, scope)
+        request_path = str(scope.get("path", path))
+        if request_path == "/api" or request_path.startswith("/api/"):
+            return await super().get_response(path, scope)
+        if not self._is_spa_route(path):
+            return await super().get_response(path, scope)
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            return FileResponse(Path(self.directory or "") / "index.html")
         if response.status_code != 404:
             return response
-        path_parts = Path(path).parts
-        is_extensionless_route = (
-            bool(path) and not Path(path).suffix and not path.startswith("assets/")
+        return FileResponse(Path(self.directory or "") / "index.html")
+
+    @staticmethod
+    def _is_spa_route(path: str) -> bool:
+        normalized_path = path.lstrip("/")
+        path_parts = Path(normalized_path).parts
+        return (
+            bool(normalized_path)
+            and not Path(normalized_path).suffix
+            and not normalized_path.startswith(("api/", "assets/"))
+            and not any(part in {".", ".."} for part in path_parts)
         )
-        if not is_extensionless_route or any(part in {".", ".."} for part in path_parts):
-            return response
-        index_file = Path(self.directory or "") / "index.html"
-        return FileResponse(index_file)
 
 
 def _default_web_dist() -> Path:
@@ -132,6 +168,7 @@ def create_app(
     provider_adapter: str | None = None,
     provider_health_seconds: int = 60,
     chat_service: GroundedChatService | None = None,
+    chat_limits: ChatLimits | None = None,
     max_message_characters: int = 2000,
     max_history_messages: int = 6,
     max_history_characters: int = 6000,
@@ -139,6 +176,8 @@ def create_app(
     admin_session_service: AdminSessionService | None = None,
     admin_origins: tuple[str, ...] = (),
     admin_operations: AdminOperations | None = None,
+    github_identity_service: GitHubIdentityService | None = None,
+    github_oauth_callback_url: str | None = None,
 ) -> FastAPI:
     """Construct the real application and its optional immutable-bundle lifecycle."""
 
@@ -279,12 +318,15 @@ def create_app(
     application.state.provider_adapter = provider_adapter
     application.state.provider_health_seconds = provider_health_seconds
     application.state.chat_service = chat_service
+    application.state.chat_limits = chat_limits
     application.state.max_message_characters = max_message_characters
     application.state.max_history_messages = max_history_messages
     application.state.max_history_characters = max_history_characters
     application.state.admin_session_service = admin_session_service
     application.state.admin_origins = admin_origins
     application.state.admin_operations = admin_operations
+    application.state.github_identity_service = github_identity_service
+    application.state.github_oauth_callback_url = github_oauth_callback_url
     application.include_router(
         create_public_router(
             state,
@@ -305,6 +347,8 @@ def create_app(
             service_supplier=lambda: application.state.admin_session_service,
             origins_supplier=lambda: application.state.admin_origins,
             operations_supplier=lambda: application.state.admin_operations,
+            github_identity_supplier=lambda: application.state.github_identity_service,
+            github_oauth_callback_supplier=lambda: application.state.github_oauth_callback_url,
         )
     )
     build_dir = web_dist or _default_web_dist()
@@ -335,6 +379,9 @@ def run() -> None:
         _configure_bundle_lifecycle(settings, runtime_database)
         if hasattr(settings, "chat_provider"):
             _configure_provider_lifecycle(settings, runtime_database)
+        batch_service = getattr(app.state, "analysis_batch_service", None)
+        if batch_service is not None:
+            batch_service.recover()
     except RuntimeDatabaseError:
         app.state.runtime_database = None
         app.state.runtime_storage_usable = False
@@ -346,31 +393,134 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
     secrets = getattr(settings, "secrets", {})
     identity_key = secrets.get("ip_hash_key")
     github_token = secrets.get("github_token")
-    if password_hash is None or identity_key is None or github_token is None:
+    oauth_client_secret = secrets.get("github_oauth_client_secret")
+    credential_key = secrets.get("credential_encryption_key")
+    configured_callback = getattr(settings, "github_oauth_callback_url", None)
+    public_base_url = getattr(settings, "public_base_url", None)
+    app.state.github_oauth_callback_url = configured_callback or (
+        f"{public_base_url.rstrip('/')}/api/admin/github/callback"
+        if isinstance(public_base_url, str)
+        else None
+    )
+    if identity_key is None:
         app.state.admin_session_service = None
         app.state.admin_origins = ()
         app.state.admin_operations = None
         return
     app.state.admin_session_service = AdminSessionService(
         database=runtime_database,
-        username=settings.admin_username,
-        password_hash=password_hash.reveal(),
+        username=settings.admin_username if password_hash is not None else None,
+        password_hash=password_hash.reveal() if password_hash is not None else None,
         identity_hmac_key=hashlib.sha256(identity_key.reveal().encode("utf-8")).digest(),
         idle_minutes=settings.admin_idle_minutes,
         absolute_hours=settings.admin_absolute_hours,
     )
     app.state.admin_origins = (settings.public_base_url,)
-    app.state.admin_operations = AdminOperations(
-        github=GitHubAdminClient(
+    # Public-read PAT management only needs the encrypted runtime key and the
+    # fixed GitHub API transport. OAuth Web Flow remains unavailable until all
+    # client credentials are configured, but local-password owners can still
+    # explicitly save/check/remove a PAT.
+    if credential_key is not None:
+        app.state.github_identity_service = GitHubIdentityService(
+            database=runtime_database,
+            sessions=app.state.admin_session_service,
+            oauth=GitHubOAuthClient(
+                client_id=settings.github_oauth_client_id,
+                client_secret=(
+                    oauth_client_secret.reveal() if oauth_client_secret is not None else None
+                ),
+                callback_url=settings.github_oauth_callback_url,
+                transport=UrllibOAuthTransport(),
+            ),
+            cipher=CredentialCipher(credential_key.reveal()),
+            recovery_available=bool(settings.github_owner_recovery_command),
+        )
+    else:
+        app.state.github_identity_service = None
+    github = None
+    if github_token is not None:
+        github = GitHubAdminClient(
             repository=settings.config_repository,
             branch=settings.config_branch,
             workflow=settings.index_workflow,
             token=github_token.reveal(),
             transport=UrllibGitHubAdminTransport(),
             api_url=settings.github_api_url,
+        )
+    onboarding = GuidedOnboardingService(
+        source_resolver=GitHubSourceResolver(api_base_url=settings.github_api_url),
+        providers_supplier=lambda: app.state.provider_runtime,
+        limits_supplier=lambda: app.state.chat_limits,
+        staging_root=settings.data_dir / "onboarding-staging",
+        provider_timeout_seconds=settings.chat_timeout_seconds,
+    )
+    capacity = BatchCapacity(
+        github_requests=1,
+        archive_staging=1,
+        index_work=2,
+        generation=max(1, settings.global_chat_concurrency),
+        whole_job_items=4,
+    )
+    rate_limiter = GitHubRateLimiter(
+        persistence=SQLiteGitHubRateStateStore(runtime_database),
+    )
+    stage_gates = BatchStageGates(capacity)
+
+    def public_read_credentials():
+        identity = app.state.github_identity_service
+        return identity.public_read_credentials() if identity is not None else ()
+
+    def mark_connection_required(credential_id: int) -> None:
+        identity = app.state.github_identity_service
+        if identity is not None:
+            identity.mark_connection_required(credential_id)
+
+    archive_source = GitHubArchiveSource(
+        transport=UrllibGitHubArchiveTransport(timeout_seconds=20.0),
+        limiter=rate_limiter,
+        staging_root=settings.data_dir / "analysis-archive-staging",
+        limits=ArchiveSafetyLimits(
+            max_compressed_bytes=50 * 1024 * 1024,
+            max_uncompressed_bytes=200 * 1024 * 1024,
+            max_entries=10_000,
+            max_single_file_bytes=2 * 1024 * 1024,
         ),
+    )
+    store = BatchRuntimeStore(runtime_database)
+    runner = PinnedBatchItemRunner(
+        store=store,
+        source=archive_source,
+        onboarding=onboarding,
+        credentials_supplier=public_read_credentials,
+        gates=stage_gates,
+    )
+    analysis_batches = AnalysisBatchService(
+        store=store,
+        planner=BatchPreflightPlanner(
+            resolver=GitHubGraphQLMetadataResolver(
+                transport=UrllibGitHubGraphQLTransport(timeout_seconds=20.0),
+                limiter=rate_limiter,
+            ),
+            limiter=rate_limiter,
+        ),
+        credentials_supplier=public_read_credentials,
+        mark_connection_required=mark_connection_required,
+        provider_ready_supplier=lambda: (
+            app.state.provider_runtime is not None and app.state.chat_limits is not None
+        ),
+        capacity=capacity,
+        stage_gates=stage_gates,
+        runner=runner,
+        embedding_identity=settings.embedding_model,
+        chat_model=settings.chat_model,
+    )
+    app.state.analysis_batch_service = analysis_batches
+    app.state.admin_operations = AdminOperations(
+        github=github,
         database=runtime_database,
         public_base_url=settings.public_base_url,
+        onboarding=onboarding,
+        analysis_batches=analysis_batches,
     )
 
 
@@ -386,7 +536,7 @@ def _configure_bundle_lifecycle(
     if not manifest_url:
         return
     embedding = EmbeddingIdentity(
-        adapter=settings.embedding_provider,
+        adapter=_provider_contract_adapter(settings.embedding_provider),
         model_id=settings.embedding_model,
         dimension=settings.embedding_dimension,
         normalized=settings.embedding_normalized,
@@ -421,7 +571,7 @@ def _configure_provider_lifecycle(
     """Attach exactly the selected chat/embedding adapters without fallback."""
 
     embedding_identity = EmbeddingIdentity(
-        adapter=settings.embedding_provider,
+        adapter=_provider_contract_adapter(settings.embedding_provider),
         model_id=settings.embedding_model,
         dimension=settings.embedding_dimension,
         normalized=settings.embedding_normalized,
@@ -451,6 +601,7 @@ def _configure_provider_lifecycle(
             settings.chat_model,
             capabilities,
             api_key=chat_key.reveal() if chat_key is not None else None,
+            allow_private_http=settings.chat_provider == "vllm",
         )
     if settings.embedding_provider == "ollama":
         embedding: RuntimeEmbeddingProvider = OllamaEmbeddingProvider(
@@ -458,12 +609,13 @@ def _configure_provider_lifecycle(
             settings.embedding_model,
             embedding_identity,
         )
-    elif settings.embedding_provider == "openai_compatible":
+    elif settings.embedding_provider in {"openai_compatible", "vllm"}:
         embedding = OpenAICompatibleEmbeddingProvider(
             settings.embedding_base_url,
             settings.embedding_model,
             embedding_identity,
             api_key=embedding_key.reveal() if embedding_key is not None else None,
+            allow_private_http=settings.embedding_provider == "vllm",
         )
     else:
         local = LocalSentenceTransformersEmbeddingProvider(
@@ -476,15 +628,16 @@ def _configure_provider_lifecycle(
         embedding = LocalRuntimeEmbeddingProvider(local)
     providers = ProviderRuntime(chat=chat, embedding=embedding)
     app.state.provider_runtime = providers
-    app.state.provider_adapter = settings.chat_provider
+    app.state.provider_adapter = _provider_contract_adapter(settings.chat_provider)
     app.state.provider_health_seconds = settings.provider_health_seconds
     app.state.max_message_characters = settings.max_message_characters
     app.state.max_history_messages = settings.max_history_messages
     app.state.max_history_characters = settings.max_history_characters
     manager = app.state.bundle_manager
     ip_hash_key = settings.secrets.get("ip_hash_key")
-    if manager is None or ip_hash_key is None:
+    if ip_hash_key is None:
         app.state.chat_service = None
+        app.state.chat_limits = None
         return
     limits = ChatLimits(
         runtime_database,
@@ -493,6 +646,10 @@ def _configure_provider_lifecycle(
         daily_budget=settings.daily_chat_request_budget,
         global_concurrency=settings.global_chat_concurrency,
     )
+    app.state.chat_limits = limits
+    if manager is None:
+        app.state.chat_service = None
+        return
     app.state.chat_service = GroundedChatService(
         bundles=manager,
         providers=providers,
@@ -500,3 +657,9 @@ def _configure_provider_lifecycle(
         max_output_tokens=settings.chat_max_output_tokens,
         timeout_seconds=settings.chat_timeout_seconds,
     )
+
+
+def _provider_contract_adapter(provider: str) -> str:
+    """Map a named transport preset to the stable public/bundle adapter contract."""
+
+    return "openai_compatible" if provider == "vllm" else provider

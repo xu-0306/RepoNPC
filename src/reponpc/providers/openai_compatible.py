@@ -24,13 +24,23 @@ from reponpc.providers.http_transport import (
     UrllibProviderHttpTransport,
     failure_for_status,
 )
+from reponpc.providers.model_catalog import openai_model_available
+
+_CONTEXT_OVERFLOW_CODES = frozenset(
+    {
+        "context_length_exceeded",
+        "context_window_exceeded",
+        "max_context_length_exceeded",
+        "prompt_too_long",
+    }
+)
 
 
 @dataclass(slots=True)
 class OpenAICompatibleChatProvider(ChatProvider):
     """Adapt one explicitly selected OpenAI-compatible model; never fall back."""
 
-    base_url: str
+    base_url: str = field(repr=False)
     model: str
     capabilities_config: ProviderCapabilities
     api_key: str | None = field(default=None, repr=False)
@@ -47,15 +57,18 @@ class OpenAICompatibleChatProvider(ChatProvider):
         return self.capabilities_config
 
     def health(self) -> ProviderHealth:
-        started = time.monotonic()
-        del started
-        response = self.transport.request(
-            "GET",
-            self._origin.endpoint("models"),
-            headers=self._headers(),
-            body=None,
-            timeout=5.0,
-        )
+        try:
+            response = self.transport.request(
+                "GET",
+                self._origin.endpoint("models"),
+                headers=self._headers(),
+                body=None,
+                timeout=5.0,
+            )
+        except ProviderError as exc:
+            return ProviderHealth(False, _checked_at(), exc.code)
+        except Exception:
+            return ProviderHealth(False, _checked_at(), ProviderFailureCode.UNAVAILABLE)
         if response.status != 200:
             return ProviderHealth(
                 ready=False,
@@ -64,8 +77,8 @@ class OpenAICompatibleChatProvider(ChatProvider):
             )
         try:
             payload = _json_object(response.body)
-            if not isinstance(payload.get("data"), list):
-                raise ValueError
+            if not openai_model_available(payload, self.model):
+                return ProviderHealth(False, _checked_at(), ProviderFailureCode.UNAVAILABLE)
         except ValueError:
             return ProviderHealth(
                 ready=False,
@@ -108,7 +121,7 @@ class OpenAICompatibleChatProvider(ChatProvider):
             timeout=timeout,
         )
         if response.status != 200:
-            raise ProviderError(failure_for_status(response.status))
+            raise ProviderError(_failure_for_response(response.status, response.body))
         try:
             payload = _json_object(response.body)
             choices = payload["choices"]
@@ -123,7 +136,9 @@ class OpenAICompatibleChatProvider(ChatProvider):
             finish_reason = choice.get("finish_reason")
             if not isinstance(finish_reason, str) or not finish_reason:
                 raise ValueError
-            usage = _usage(payload.get("usage"))
+            usage = (
+                _usage(payload.get("usage")) if self.capabilities_config.usage_reporting else None
+            )
             request_id = payload.get("id")
             if request_id is not None and not isinstance(request_id, str):
                 raise ValueError
@@ -175,6 +190,24 @@ def _usage(value: object) -> ProviderUsage | None:
     if not isinstance(completion, int) or isinstance(completion, bool):
         raise ValueError
     return ProviderUsage(prompt, completion)
+
+
+def _failure_for_response(status: int, body: bytes) -> ProviderFailureCode:
+    """Recognize only allowlisted structured context-limit errors."""
+
+    if status not in {400, 413, 422}:
+        return failure_for_status(status)
+    try:
+        payload = _json_object(body)
+        error = payload.get("error")
+        if not isinstance(error, dict):
+            raise ValueError
+        candidates = (error.get("code"), error.get("type"))
+        if any(value in _CONTEXT_OVERFLOW_CODES for value in candidates):
+            return ProviderFailureCode.CONTEXT_OVERFLOW
+    except (TypeError, ValueError):
+        pass
+    return ProviderFailureCode.INVALID_RESPONSE
 
 
 def _json_object(body: bytes) -> dict[str, Any]:

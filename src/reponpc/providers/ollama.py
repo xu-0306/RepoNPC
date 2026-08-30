@@ -23,6 +23,7 @@ from reponpc.providers.http_transport import (
     UrllibProviderHttpTransport,
     failure_for_status,
 )
+from reponpc.providers.model_catalog import ollama_model_available
 from reponpc.providers.openai_compatible import (
     _checked_at,
     _json_bytes,
@@ -35,7 +36,7 @@ from reponpc.providers.openai_compatible import (
 class OllamaChatProvider(ChatProvider):
     """Adapt one private Ollama model; failures never invoke another adapter."""
 
-    base_url: str
+    base_url: str = field(repr=False)
     model: str
     capabilities_config: ProviderCapabilities
     transport: ProviderHttpTransport = field(default_factory=UrllibProviderHttpTransport)
@@ -50,19 +51,24 @@ class OllamaChatProvider(ChatProvider):
         return self.capabilities_config
 
     def health(self) -> ProviderHealth:
-        response = self.transport.request(
-            "GET",
-            self._origin.endpoint("api/tags"),
-            headers={"Accept": "application/json", "User-Agent": "RepoNPC-provider"},
-            body=None,
-            timeout=5.0,
-        )
+        try:
+            response = self.transport.request(
+                "GET",
+                self._origin.endpoint("api/tags"),
+                headers={"Accept": "application/json", "User-Agent": "RepoNPC-provider"},
+                body=None,
+                timeout=5.0,
+            )
+        except ProviderError as exc:
+            return ProviderHealth(False, _checked_at(), exc.code)
+        except Exception:
+            return ProviderHealth(False, _checked_at(), ProviderFailureCode.UNAVAILABLE)
         if response.status != 200:
             return ProviderHealth(False, _checked_at(), failure_for_status(response.status))
         try:
             payload = _json_object(response.body)
-            if not isinstance(payload.get("models"), list):
-                raise ValueError
+            if not ollama_model_available(payload, self.model):
+                return ProviderHealth(False, _checked_at(), ProviderFailureCode.UNAVAILABLE)
         except ValueError:
             return ProviderHealth(False, _checked_at(), ProviderFailureCode.INVALID_RESPONSE)
         return ProviderHealth(True, _checked_at())
@@ -110,7 +116,7 @@ class OllamaChatProvider(ChatProvider):
             finish_reason = payload.get("done_reason", "stop")
             if not isinstance(finish_reason, str) or not finish_reason:
                 raise ValueError
-            usage = _ollama_usage(payload)
+            usage = _ollama_usage(payload) if self.capabilities_config.usage_reporting else None
         except (KeyError, ValueError, TypeError) as exc:
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from exc
         return ProviderResult(

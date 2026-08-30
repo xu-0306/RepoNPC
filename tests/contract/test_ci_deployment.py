@@ -35,6 +35,24 @@ def test_container_contract_is_non_root_single_service_and_locked() -> None:
     assert {".env", "secrets/", ".venv/", "node_modules/"} <= set(dockerignore.splitlines())
 
 
+def test_compose_forwards_the_documented_application_environment() -> None:
+    compose = read("compose.yml")
+    documented = {
+        match.group(1)
+        for match in re.finditer(r"^(REPONPC_[A-Z0-9_]+)=", read(".env.example"), re.MULTILINE)
+    }
+    forwarded = {
+        match.group(1)
+        for match in re.finditer(r"^      (REPONPC_[A-Z0-9_]+):", compose, re.MULTILINE)
+    }
+
+    assert forwarded == documented
+    assert "REPONPC_HOST_PORT" not in forwarded
+    assert "replace-with-an-argon2id-phc-hash" not in compose
+    assert "REPONPC_ADMIN_USERNAME: ${REPONPC_ADMIN_USERNAME:-}" in compose
+    assert "REPONPC_ADMIN_USERNAME:-admin" not in compose
+
+
 def test_ci_uses_least_privilege_pinned_actions_and_locked_gates() -> None:
     workflow = read(".github/workflows/ci.yml")
 

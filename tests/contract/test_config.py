@@ -28,7 +28,9 @@ def test_normative_example_is_sufficient() -> None:
     assert config.schema_version == 1
     assert config.locales.supported == ("zh-TW", "en")
     assert len(config.repositories) == 2
-    assert config.retrieval.embedding.dimension == 384
+    assert config.retrieval.embedding.adapter == "ollama"
+    assert config.retrieval.embedding.model == "qwen3-embedding:0.6b"
+    assert config.retrieval.embedding.dimension == 1024
 
 
 @pytest.mark.parametrize("key", ["api_key", "password", "github_token", "private_url"])

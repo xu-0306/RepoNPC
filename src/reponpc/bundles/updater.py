@@ -89,6 +89,8 @@ class UrllibBundleTransport:
             if exc.code == 304:
                 return HttpResponse(304, dict(exc.headers.items()), b"")
             raise BundleUpdateError("bundle_request_failed") from exc
+        except (URLError, OSError) as exc:
+            raise BundleUpdateError("bundle_request_failed") from exc
 
     def download_to(
         self, url: str, *, headers: Mapping[str, str], destination: Path, max_bytes: int

@@ -79,6 +79,27 @@ class IndexBuildResult:
     skipped_sources: tuple[SkippedSource, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class CollectedRepositorySource:
+    """One eligible decoded source plus its production evidence records."""
+
+    path: str
+    content: str
+    language: str
+    source_type: str
+    evidence: tuple[EvidenceRecord, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryEvidenceCollection:
+    """Reusable selected-repository output before database or provider work."""
+
+    sources: tuple[CollectedRepositorySource, ...]
+    evidence: tuple[EvidenceRecord, ...]
+    skipped_sources: tuple[SkippedSource, ...]
+    included_text_bytes: int
+
+
 def create_schema(connection: sqlite3.Connection) -> None:
     """Create exactly the required schema-v1 logical tables and FTS channels."""
 
@@ -271,7 +292,6 @@ class IndexDatabaseBuilder:
         configs = {
             repository.slug: repository for repository in config.repositories if repository.enabled
         }
-        repository_bytes = {snapshot.slug: 0 for snapshot in snapshots}
         corpus_bytes = 0
         source_count = 0
         evidence_rows: list[EvidenceRecord] = []
@@ -287,58 +307,24 @@ class IndexDatabaseBuilder:
                 summary_zh_tw=repository_config.summary["zh-TW"],
                 summary_en=repository_config.summary["en"],
             )
-            policy = ExclusionPolicy(
-                include_patterns=repository_config.include,
-                repository_exclude_patterns=repository_config.exclude,
-                global_exclude_patterns=(),
-                max_file_bytes=config.retrieval.limits.max_file_bytes,
-                max_repository_text_bytes=config.retrieval.limits.max_repository_text_bytes,
-                max_corpus_text_bytes=config.retrieval.limits.max_corpus_text_bytes,
+            collection = collect_repository_evidence(
+                config=config,
+                snapshot=snapshot,
+                corpus_text_bytes_before=corpus_bytes,
             )
-            for blob in sorted(snapshot.blobs, key=lambda item: item.path):
-                decoded = _decode_source(blob)
-                metadata = SourceMetadata(
-                    entry_kind=blob.entry_kind,
-                    size_bytes=blob.size_bytes,
-                    is_binary=_is_binary(blob.content),
-                    is_decodable=decoded is not None,
-                    has_high_confidence_secret=_has_high_confidence_secret(decoded),
-                    repository_text_bytes_before=repository_bytes[snapshot.slug],
-                    corpus_text_bytes_before=corpus_bytes,
-                )
-                decision = classify_source(blob.path, metadata, policy)
-                if not decision.include:
-                    skipped.append(
-                        SkippedSource(
-                            repository_slug=snapshot.slug,
-                            path=blob.path,
-                            reason_code=decision.reason_code.value,
-                            size_bytes=blob.size_bytes,
-                        )
-                    )
-                    continue
-                if decoded is None:
-                    raise IndexBuildError("source_decode_invariant_failed")
-                repository_bytes[snapshot.slug] += blob.size_bytes
-                corpus_bytes += blob.size_bytes
-                language = _language_for_path(blob.path)
+            corpus_bytes += collection.included_text_bytes
+            skipped.extend(collection.skipped_sources)
+            for source in collection.sources:
                 source_id = self._insert_source(
                     connection,
                     repo_id=repo_id,
-                    path=blob.path,
-                    content=decoded,
-                    language=language,
-                    source_type=_source_type(blob.path),
+                    path=source.path,
+                    content=source.content,
+                    language=source.language,
+                    source_type=source.source_type,
                 )
                 source_count += 1
-                for candidate in chunk_source(
-                    decoded,
-                    path=blob.path,
-                    max_lines=config.retrieval.chunking.max_lines,
-                    max_characters=config.retrieval.chunking.max_characters,
-                    overlap_lines=config.retrieval.chunking.fallback_overlap_lines,
-                ):
-                    evidence = _candidate_evidence(snapshot, blob.path, candidate)
+                for evidence in source.evidence:
                     self._insert_evidence(connection, source_id, evidence)
                     evidence_rows.append(evidence)
         return source_count, tuple(evidence_rows), skipped
@@ -606,6 +592,95 @@ class IndexDatabaseBuilder:
         row = connection.execute("PRAGMA quick_check").fetchone()
         if row is None or str(row[0]).casefold() != "ok":
             raise IndexBuildError("index_integrity_failed")
+
+
+def collect_repository_evidence(
+    *,
+    config: PublicConfig,
+    snapshot: ResolvedRepository,
+    corpus_text_bytes_before: int = 0,
+) -> RepositoryEvidenceCollection:
+    """Apply the production source policy and chunker without writing durable state."""
+
+    repository_config = next(
+        (
+            repository
+            for repository in config.repositories
+            if repository.enabled and repository.slug == snapshot.slug
+        ),
+        None,
+    )
+    if repository_config is None:
+        raise IndexBuildError("repository_snapshot_mismatch")
+    if isinstance(corpus_text_bytes_before, bool) or corpus_text_bytes_before < 0:
+        raise ValueError("corpus_text_bytes_before must be a non-negative integer")
+    policy = ExclusionPolicy(
+        include_patterns=repository_config.include,
+        repository_exclude_patterns=repository_config.exclude,
+        global_exclude_patterns=(),
+        max_file_bytes=config.retrieval.limits.max_file_bytes,
+        max_repository_text_bytes=config.retrieval.limits.max_repository_text_bytes,
+        max_corpus_text_bytes=config.retrieval.limits.max_corpus_text_bytes,
+    )
+    repository_bytes = 0
+    corpus_bytes = corpus_text_bytes_before
+    sources: list[CollectedRepositorySource] = []
+    evidence_rows: list[EvidenceRecord] = []
+    skipped: list[SkippedSource] = []
+    for blob in sorted(snapshot.blobs, key=lambda item: item.path):
+        decoded = _decode_source(blob)
+        metadata = SourceMetadata(
+            entry_kind=blob.entry_kind,
+            size_bytes=blob.size_bytes,
+            is_binary=_is_binary(blob.content),
+            is_decodable=decoded is not None,
+            has_high_confidence_secret=_has_high_confidence_secret(decoded),
+            repository_text_bytes_before=repository_bytes,
+            corpus_text_bytes_before=corpus_bytes,
+        )
+        decision = classify_source(blob.path, metadata, policy)
+        if not decision.include:
+            skipped.append(
+                SkippedSource(
+                    repository_slug=snapshot.slug,
+                    path=blob.path,
+                    reason_code=decision.reason_code.value,
+                    size_bytes=blob.size_bytes,
+                )
+            )
+            continue
+        if decoded is None:
+            raise IndexBuildError("source_decode_invariant_failed")
+        repository_bytes += blob.size_bytes
+        corpus_bytes += blob.size_bytes
+        language = _language_for_path(blob.path)
+        evidence = tuple(
+            _candidate_evidence(snapshot, blob.path, candidate)
+            for candidate in chunk_source(
+                decoded,
+                path=blob.path,
+                max_lines=config.retrieval.chunking.max_lines,
+                max_characters=config.retrieval.chunking.max_characters,
+                overlap_lines=config.retrieval.chunking.fallback_overlap_lines,
+            )
+        )
+        if len(evidence_rows) + len(evidence) > config.retrieval.limits.max_evidence_records:
+            raise IndexBuildError("index_evidence_limit_exceeded")
+        source = CollectedRepositorySource(
+            path=blob.path,
+            content=decoded,
+            language=language,
+            source_type=_source_type(blob.path),
+            evidence=evidence,
+        )
+        sources.append(source)
+        evidence_rows.extend(evidence)
+    return RepositoryEvidenceCollection(
+        sources=tuple(sources),
+        evidence=tuple(evidence_rows),
+        skipped_sources=tuple(skipped),
+        included_text_bytes=repository_bytes,
+    )
 
 
 def _candidate_evidence(

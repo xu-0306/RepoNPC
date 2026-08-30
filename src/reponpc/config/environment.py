@@ -12,10 +12,11 @@ import os
 import re
 import stat
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final
+from urllib.parse import urlsplit
 
 SECRET_MAX_BYTES: Final = 64 * 1024
 DEFAULT_SECRET_ROOTS: Final = (Path("/run/secrets"),)
@@ -27,6 +28,14 @@ _SECRET_PAIRS: Final = {
         "REPONPC_EMBEDDING_API_KEY_FILE",
     ),
     "ip_hash_key": ("REPONPC_IP_HASH_KEY", "REPONPC_IP_HASH_KEY_FILE"),
+    "github_oauth_client_secret": (
+        "REPONPC_GITHUB_OAUTH_CLIENT_SECRET",
+        "REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE",
+    ),
+    "credential_encryption_key": (
+        "REPONPC_CREDENTIAL_ENCRYPTION_KEY",
+        "REPONPC_CREDENTIAL_ENCRYPTION_KEY_FILE",
+    ),
 }
 _ENVIRONMENT_NAMES: Final = frozenset(
     {
@@ -50,6 +59,13 @@ _ENVIRONMENT_NAMES: Final = frozenset(
         "REPONPC_GITHUB_TOKEN_FILE",
         "REPONPC_GITHUB_API_URL",
         "REPONPC_INDEX_WORKFLOW",
+        "REPONPC_GITHUB_OAUTH_CLIENT_ID",
+        "REPONPC_GITHUB_OAUTH_CLIENT_SECRET",
+        "REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE",
+        "REPONPC_GITHUB_OAUTH_CALLBACK_URL",
+        "REPONPC_CREDENTIAL_ENCRYPTION_KEY",
+        "REPONPC_CREDENTIAL_ENCRYPTION_KEY_FILE",
+        "REPONPC_GITHUB_OWNER_RECOVERY_COMMAND",
         "REPONPC_CHAT_PROVIDER",
         "REPONPC_CHAT_MODEL",
         "REPONPC_CHAT_BASE_URL",
@@ -87,9 +103,9 @@ _ENVIRONMENT_NAMES: Final = frozenset(
     }
 )
 _LOG_LEVELS: Final = frozenset({"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"})
-_PROVIDERS: Final = frozenset({"ollama", "openai_compatible"})
+_PROVIDERS: Final = frozenset({"ollama", "openai_compatible", "vllm"})
 _EMBEDDING_PROVIDERS: Final = frozenset(
-    {"local_sentence_transformers", "ollama", "openai_compatible"}
+    {"local_sentence_transformers", "ollama", "openai_compatible", "vllm"}
 )
 _REPOSITORY_SLUG_RE: Final = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
@@ -162,9 +178,12 @@ class EnvironmentSettings:
     keep_valid_bundles: int
     github_api_url: str
     index_workflow: str
+    github_oauth_client_id: str
+    github_oauth_callback_url: str
+    github_owner_recovery_command: str
     chat_provider: str
     chat_model: str
-    chat_base_url: str
+    chat_base_url: str = field(repr=False)
     chat_max_context_tokens: int
     chat_max_output_tokens: int
     chat_timeout_seconds: int
@@ -172,7 +191,7 @@ class EnvironmentSettings:
     embedding_model: str
     embedding_dimension: int
     embedding_normalized: bool
-    embedding_base_url: str
+    embedding_base_url: str = field(repr=False)
     admin_username: str
     admin_password_hash: SecretValue | None
     admin_idle_minutes: int
@@ -535,6 +554,82 @@ def load_environment(
         )
 
     admin_hash = _present(source.get("REPONPC_ADMIN_PASSWORD_HASH"))
+    admin_username = _present(source.get("REPONPC_ADMIN_USERNAME"))
+    if admin_hash is not None and admin_username is None:
+        _issue(
+            issues,
+            "REPONPC_ADMIN_USERNAME",
+            "admin_credential_pair_required",
+            "admin username and password hash must be configured together",
+        )
+    if admin_hash is None and admin_username is not None:
+        _issue(
+            issues,
+            "REPONPC_ADMIN_PASSWORD_HASH",
+            "admin_credential_pair_required",
+            "admin username and password hash must be configured together",
+        )
+    oauth_client_id = _text(source, "REPONPC_GITHUB_OAUTH_CLIENT_ID", "", issues, allow_empty=True)
+    oauth_callback_url = _text(
+        source, "REPONPC_GITHUB_OAUTH_CALLBACK_URL", "", issues, allow_empty=True
+    )
+    oauth_secret = secrets.get("github_oauth_client_secret")
+    credential_key = secrets.get("credential_encryption_key")
+    # The encryption key also enables PAT-only public-read connections. It is
+    # therefore valid without OAuth Web Flow settings; OAuth validation should
+    # only run when one of the OAuth client values is present.
+    oauth_values_present = any(
+        value is not None and value != ""
+        for value in (oauth_client_id, oauth_callback_url, oauth_secret)
+    )
+    if oauth_values_present and (
+        not oauth_client_id
+        or not oauth_callback_url
+        or oauth_secret is None
+        or credential_key is None
+    ):
+        _issue(
+            issues,
+            "REPONPC_GITHUB_OAUTH_CLIENT_ID",
+            "oauth_configuration_incomplete",
+            "OAuth client ID, client secret, callback URL, and credential encryption key "
+            "are required together",
+        )
+    if oauth_callback_url:
+        try:
+            callback = urlsplit(oauth_callback_url)
+            public = urlsplit(_text(source, "REPONPC_PUBLIC_BASE_URL", "", issues))
+            valid_scheme = callback.scheme == "https" or (
+                callback.scheme == "http" and callback.hostname in {"localhost", "127.0.0.1"}
+            )
+            callback_is_valid = (
+                valid_scheme
+                and not callback.username
+                and not callback.password
+                and not callback.query
+                and not callback.fragment
+                and callback.netloc == public.netloc
+                and callback.scheme == public.scheme
+                and callback.path == "/api/admin/github/callback"
+            )
+        except ValueError:
+            # Treat malformed URL syntax as a normal validation failure rather
+            # than leaking a parser exception through startup.
+            callback_is_valid = False
+        if not callback_is_valid:
+            _issue(
+                issues,
+                "REPONPC_GITHUB_OAUTH_CALLBACK_URL",
+                "invalid_oauth_callback",
+                "the callback must be the same-origin fixed GitHub callback route",
+            )
+    if credential_key is not None and len(credential_key.reveal().encode("utf-8")) < 32:
+        _issue(
+            issues,
+            "REPONPC_CREDENTIAL_ENCRYPTION_KEY",
+            "credential_encryption_key_too_short",
+            "the credential encryption key must contain at least 32 bytes",
+        )
     settings = EnvironmentSettings(
         environment=environment,
         public_base_url=_text(source, "REPONPC_PUBLIC_BASE_URL", "", issues),
@@ -560,6 +655,15 @@ def load_environment(
         keep_valid_bundles=_integer(source, "REPONPC_KEEP_VALID_BUNDLES", 2, issues),
         github_api_url=_text(source, "REPONPC_GITHUB_API_URL", "https://api.github.com", issues),
         index_workflow=_text(source, "REPONPC_INDEX_WORKFLOW", "build-index.yml", issues),
+        github_oauth_client_id=oauth_client_id,
+        github_oauth_callback_url=oauth_callback_url,
+        github_owner_recovery_command=_text(
+            source,
+            "REPONPC_GITHUB_OWNER_RECOVERY_COMMAND",
+            "",
+            issues,
+            allow_empty=True,
+        ),
         chat_provider=chat_provider,
         chat_model=_text(source, "REPONPC_CHAT_MODEL", "", issues),
         chat_base_url=_text(source, "REPONPC_CHAT_BASE_URL", "", issues),
@@ -583,7 +687,13 @@ def load_environment(
             issues,
             allow_empty=True,
         ),
-        admin_username=_text(source, "REPONPC_ADMIN_USERNAME", "", issues),
+        admin_username=_text(
+            source,
+            "REPONPC_ADMIN_USERNAME",
+            "",
+            issues,
+            allow_empty=admin_hash is None,
+        ),
         admin_password_hash=SecretValue(admin_hash) if admin_hash is not None else None,
         admin_idle_minutes=_integer(source, "REPONPC_ADMIN_IDLE_MINUTES", 30, issues),
         admin_absolute_hours=_integer(source, "REPONPC_ADMIN_ABSOLUTE_HOURS", 12, issues),

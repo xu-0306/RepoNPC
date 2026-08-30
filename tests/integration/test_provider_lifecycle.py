@@ -14,6 +14,8 @@ from reponpc.config.environment import load_environment
 from reponpc.indexing.sources import EmbeddingIdentity
 from reponpc.main import _configure_provider_lifecycle, create_app
 from reponpc.providers import (
+    OpenAICompatibleChatProvider,
+    OpenAICompatibleEmbeddingProvider,
     ProviderCapabilities,
     ProviderFailureCode,
     ProviderHealth,
@@ -128,7 +130,6 @@ def test_production_assembly_wires_only_selected_ollama_adapters_and_configured_
             "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
             "REPONPC_CONFIG_REPOSITORY": "example/portfolio",
             "REPONPC_INDEX_MANIFEST_URL": "https://raw.githubusercontent.com/example/portfolio/main/stable-manifest.json",
-            "REPONPC_ADMIN_USERNAME": "admin",
             "REPONPC_CHAT_PROVIDER": "ollama",
             "REPONPC_CHAT_MODEL": "fixture-chat",
             "REPONPC_CHAT_BASE_URL": "http://127.0.0.1:11434",
@@ -173,6 +174,60 @@ def test_production_assembly_wires_only_selected_ollama_adapters_and_configured_
     assert application.state.max_history_characters == 12
 
 
+def test_production_assembly_maps_vllm_to_private_openai_compatible_transport(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    settings = load_environment(
+        {
+            "REPONPC_DATA_DIR": str(tmp_path),
+            "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
+            "REPONPC_CONFIG_REPOSITORY": "example/portfolio",
+            "REPONPC_INDEX_MANIFEST_URL": "https://raw.githubusercontent.com/example/portfolio/main/stable-manifest.json",
+            "REPONPC_CHAT_PROVIDER": "vllm",
+            "REPONPC_CHAT_MODEL": "fixture-chat",
+            "REPONPC_CHAT_BASE_URL": "http://127.0.0.1:8000/v1",
+            "REPONPC_CHAT_API_KEY": "VLLM_CHAT_KEY_CANARY",
+            "REPONPC_EMBEDDING_PROVIDER": "vllm",
+            "REPONPC_EMBEDDING_MODEL": "fixture-embed",
+            "REPONPC_EMBEDDING_BASE_URL": "http://127.0.0.1:8001/v1",
+            "REPONPC_EMBEDDING_API_KEY": "VLLM_EMBEDDING_KEY_CANARY",
+            "REPONPC_EMBEDDING_DIMENSION": "2",
+        },
+        secret_roots=(tmp_path,),
+    )
+    database = RuntimeDatabase(settings.data_dir)
+    database.initialize()
+    application = create_app(runtime_database=database)
+
+    def forbidden_ollama(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("vLLM must not construct an Ollama adapter")
+
+    monkeypatch.setattr("reponpc.main.app", application)  # type: ignore[attr-defined]
+    monkeypatch.setattr("reponpc.main.OllamaChatProvider", forbidden_ollama)  # type: ignore[attr-defined]
+    monkeypatch.setattr("reponpc.main.OllamaEmbeddingProvider", forbidden_ollama)  # type: ignore[attr-defined]
+    _configure_provider_lifecycle(settings, database)
+
+    assert application.state.provider_adapter == "openai_compatible"
+    assert isinstance(application.state.provider_runtime.chat, OpenAICompatibleChatProvider)
+    assert isinstance(
+        application.state.provider_runtime.embedding,
+        OpenAICompatibleEmbeddingProvider,
+    )
+    assert application.state.provider_runtime.chat._origin.allow_private_http is True
+    assert application.state.provider_runtime.embedding.identity().adapter == "openai_compatible"
+    assert (
+        application.state.provider_runtime.chat._origin.endpoint("chat/completions")
+        == "http://127.0.0.1:8000/v1/chat/completions"
+    )
+    assert (
+        application.state.provider_runtime.embedding._origin.endpoint("embeddings")
+        == "http://127.0.0.1:8001/v1/embeddings"
+    )
+    rendered = repr(settings) + repr(application.state.provider_runtime.chat)
+    assert "VLLM_CHAT_KEY_CANARY" not in rendered
+    assert "VLLM_EMBEDDING_KEY_CANARY" not in rendered
+
+
 def test_production_assembly_keeps_missing_local_dependency_degraded_without_cloud_fallback(
     tmp_path: Path, monkeypatch: object
 ) -> None:
@@ -182,7 +237,6 @@ def test_production_assembly_keeps_missing_local_dependency_degraded_without_clo
             "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
             "REPONPC_CONFIG_REPOSITORY": "example/portfolio",
             "REPONPC_INDEX_MANIFEST_URL": "https://raw.githubusercontent.com/example/portfolio/main/stable-manifest.json",
-            "REPONPC_ADMIN_USERNAME": "admin",
             "REPONPC_CHAT_PROVIDER": "ollama",
             "REPONPC_CHAT_MODEL": "fixture-chat",
             "REPONPC_CHAT_BASE_URL": "http://127.0.0.1:11434",

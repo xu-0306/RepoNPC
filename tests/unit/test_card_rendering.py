@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import xml.etree.ElementTree as ET
 
+import pytest
 from PIL import Image
 
 import reponpc.cards.render as card_render
@@ -10,6 +11,7 @@ from reponpc.cards.assets import validate_sprite
 from reponpc.cards.render import (
     CardCopy,
     CardPalette,
+    CardRenderError,
     render_card_assets,
     render_readme_snippet,
 )
@@ -66,6 +68,30 @@ def test_readme_snippet_uses_exact_https_target() -> None:
         "[![RepoNPC](https://portfolio.example.com/api/public/card.svg?"
         "theme=dark&locale=zh-TW&rev=7)](https://portfolio.example.com)"
     )
+
+
+def test_readme_snippet_allows_localhost_http_for_local_acceptance() -> None:
+    assert render_readme_snippet(
+        public_base_url="http://localhost:8000",
+        locale="en",
+        theme="light",
+        extension="png",
+        revision=0,
+    ) == (
+        "[![RepoNPC](http://localhost:8000/api/public/card.png?"
+        "theme=light&locale=en&rev=0)](http://localhost:8000)"
+    )
+
+
+def test_readme_snippet_rejects_nonlocal_plain_http() -> None:
+    with pytest.raises(CardRenderError, match="card output is invalid"):
+        render_readme_snippet(
+            public_base_url="http://portfolio.example.com",
+            locale="en",
+            theme="light",
+            extension="svg",
+            revision=0,
+        )
 
 
 def test_traditional_chinese_raster_text_is_real_and_deterministic() -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http.client import HTTPMessage
 from typing import IO, Protocol
 from urllib.error import HTTPError, URLError
@@ -107,7 +107,7 @@ class UrllibProviderHttpTransport:
 class ProviderOrigin:
     """One explicitly configured provider origin and optional fixed path prefix."""
 
-    base_url: str
+    base_url: str = field(repr=False)
     allow_private_http: bool
 
     def __post_init__(self) -> None:
@@ -165,8 +165,6 @@ def failure_for_status(status: int) -> ProviderFailureCode:
         return ProviderFailureCode.RATE_LIMIT
     if status in {408, 504}:
         return ProviderFailureCode.TIMEOUT
-    if status in {400, 413, 422}:
-        return ProviderFailureCode.CONTEXT_OVERFLOW
     if 500 <= status <= 599:
         return ProviderFailureCode.UNAVAILABLE
     return ProviderFailureCode.INVALID_RESPONSE

@@ -6,8 +6,11 @@ import hashlib
 import hmac
 import sqlite3
 import threading
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 
@@ -21,23 +24,101 @@ class ChatLimitError(RuntimeError):
         super().__init__("chat request limit exceeded")
 
 
+class ProviderLane(StrEnum):
+    """Fair provider-capacity lanes in descending default weight."""
+
+    PUBLIC_CHAT = "public_chat"
+    ADMIN_SINGLE = "admin_single"
+    ADMIN_BATCH = "admin_batch"
+
+
+DEFAULT_PROVIDER_LANE_WEIGHTS: Mapping[ProviderLane, int] = {
+    ProviderLane.PUBLIC_CHAT: 4,
+    ProviderLane.ADMIN_SINGLE: 2,
+    ProviderLane.ADMIN_BATCH: 1,
+}
+
+
 @dataclass(slots=True)
 class ChatPermit:
     """A concurrency permit that is released on completion or cancellation."""
 
-    _semaphore: threading.BoundedSemaphore
+    _release_callback: Callable[[], None]
     _released: bool = False
 
     def release(self) -> None:
         if not self._released:
             self._released = True
-            self._semaphore.release()
+            self._release_callback()
 
     def __enter__(self) -> ChatPermit:
         return self
 
     def __exit__(self, *_args: object) -> None:
         self.release()
+
+
+@dataclass(slots=True)
+class _ProviderWaiter:
+    lane: ProviderLane
+    granted: bool = False
+
+
+class _ProviderPermitScheduler:
+    """Bounded weighted-round-robin allocator for actual provider calls only."""
+
+    def __init__(self, *, capacity: int, weights: Mapping[ProviderLane, int]) -> None:
+        self._condition = threading.Condition()
+        self._available = capacity
+        self._waiters: list[_ProviderWaiter] = []
+        self._weights = dict(weights)
+        self._remaining = dict(weights)
+
+    def acquire(self, lane: ProviderLane, *, timeout_seconds: float) -> ChatPermit:
+        deadline = time.monotonic() + timeout_seconds
+        waiter = _ProviderWaiter(lane=lane)
+        with self._condition:
+            self._waiters.append(waiter)
+            self._grant_available_locked()
+            while not waiter.granted:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self._waiters.remove(waiter)
+                    self._grant_available_locked()
+                    raise ChatLimitError("CONCURRENCY_LIMIT", 1)
+                self._condition.wait(remaining)
+            return ChatPermit(self.release)
+
+    def release(self) -> None:
+        with self._condition:
+            self._available += 1
+            self._grant_available_locked()
+
+    def _grant_available_locked(self) -> None:
+        while self._available > 0 and self._waiters:
+            waiter = self._next_waiter_locked()
+            if waiter is None:
+                return
+            waiter.granted = True
+            self._available -= 1
+            self._condition.notify_all()
+
+    def _next_waiter_locked(self) -> _ProviderWaiter | None:
+        waiter = self._next_waiter_with_credit_locked()
+        if waiter is not None:
+            return waiter
+        self._remaining = dict(self._weights)
+        return self._next_waiter_with_credit_locked()
+
+    def _next_waiter_with_credit_locked(self) -> _ProviderWaiter | None:
+        for lane in ProviderLane:
+            if self._remaining[lane] <= 0:
+                continue
+            for index, waiter in enumerate(self._waiters):
+                if waiter.lane is lane:
+                    self._remaining[lane] -= 1
+                    return self._waiters.pop(index)
+        return None
 
 
 class ChatLimits:
@@ -51,6 +132,7 @@ class ChatLimits:
         requests_per_minute: int,
         daily_budget: int,
         global_concurrency: int,
+        provider_lane_weights: Mapping[ProviderLane | str, int] | None = None,
     ) -> None:
         if len(ip_hash_key) < 16:
             raise ValueError("IP hash key must contain at least 128 bits")
@@ -61,23 +143,65 @@ class ChatLimits:
         self._key = bytes(ip_hash_key)
         self._rate = requests_per_minute
         self._daily = daily_budget
-        self._concurrency = threading.BoundedSemaphore(global_concurrency)
+        self._provider_permits = _ProviderPermitScheduler(
+            capacity=global_concurrency,
+            weights=_provider_lane_weights(provider_lane_weights),
+        )
 
     def acquire(self, client_ip: str, *, now: datetime | None = None) -> ChatPermit:
-        """Reject exhausted limits before returning a model-generation permit."""
+        """Legacy public-chat admission plus one provider permit.
+
+        New callers that perform retrieval before a provider call should use
+        :meth:`admit_public_chat` at request admission, then acquire a
+        ``PUBLIC_CHAT`` provider permit immediately around each embedding or
+        generation call.
+        """
 
         if not client_ip:
             raise ChatLimitError("RATE_LIMITED", 60)
         instant = (now or datetime.now(UTC)).astimezone(UTC)
-        if not self._concurrency.acquire(blocking=False):
-            raise ChatLimitError("CONCURRENCY_LIMIT", 1)
-        permit = ChatPermit(self._concurrency)
+        permit = self.acquire_generation(ProviderLane.PUBLIC_CHAT)
         try:
             self._consume_persistent_limits(client_ip, instant)
         except Exception:
             permit.release()
             raise
         return permit
+
+    def admit_public_chat(self, client_ip: str, *, now: datetime | None = None) -> None:
+        """Atomically charge public request limits without reserving provider capacity."""
+
+        if not client_ip:
+            raise ChatLimitError("RATE_LIMITED", 60)
+        instant = (now or datetime.now(UTC)).astimezone(UTC)
+        self._consume_persistent_limits(client_ip, instant)
+
+    def acquire_generation(
+        self,
+        lane: ProviderLane | str = ProviderLane.ADMIN_SINGLE,
+        *,
+        timeout_seconds: float = 0,
+    ) -> ChatPermit:
+        """Acquire one fair provider permit without charging public counters.
+
+        The default remains the historic admin/onboarding behavior. Public
+        request admission uses :meth:`acquire` or explicitly passes
+        ``ProviderLane.PUBLIC_CHAT``. A zero timeout retains the prior
+        non-blocking ``CONCURRENCY_LIMIT`` outcome; batch workers may wait for
+        a bounded duration instead of polling or holding permits during local
+        archive/index work.
+        """
+
+        if isinstance(timeout_seconds, bool) or timeout_seconds < 0:
+            raise ValueError("provider permit timeout must be non-negative")
+        try:
+            selected_lane = ProviderLane(lane)
+        except ValueError as exc:
+            raise ValueError("provider permit lane is invalid") from exc
+        return self._provider_permits.acquire(
+            selected_lane,
+            timeout_seconds=float(timeout_seconds),
+        )
 
     def _consume_persistent_limits(self, client_ip: str, instant: datetime) -> None:
         ip_hmac = hmac.new(self._key, client_ip.encode(), hashlib.sha256).hexdigest()
@@ -147,6 +271,25 @@ class ChatLimits:
                 if connection.in_transaction:
                     connection.execute("ROLLBACK")
                 raise RuntimeDatabaseError("runtime_chat_limit_failed") from exc
+
+
+def _provider_lane_weights(
+    supplied: Mapping[ProviderLane | str, int] | None,
+) -> dict[ProviderLane, int]:
+    weights = dict(DEFAULT_PROVIDER_LANE_WEIGHTS)
+    if supplied is not None:
+        for lane, weight in supplied.items():
+            try:
+                normalized_lane = ProviderLane(lane)
+            except ValueError as exc:
+                raise ValueError("provider permit lane is invalid") from exc
+            weights[normalized_lane] = weight
+    if any(
+        not isinstance(weight, int) or isinstance(weight, bool) or weight <= 0
+        for weight in weights.values()
+    ):
+        raise ValueError("provider lane weights must be positive integers")
+    return weights
 
 
 def _timestamp(value: datetime) -> str:

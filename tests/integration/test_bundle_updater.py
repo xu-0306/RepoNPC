@@ -198,6 +198,28 @@ def test_production_download_opener_failure_cleans_destination(tmp_path: Path, m
     assert not target.exists()
 
 
+def test_production_manifest_request_failure_is_safe(tmp_path: Path, monkeypatch) -> None:
+    from urllib.error import URLError
+
+    private_canary = "CANARY private manifest path and URL"
+
+    class FailingOpener:
+        def open(self, request: object, timeout: float) -> object:
+            raise URLError(private_canary)
+
+    monkeypatch.setattr(updater_module, "build_opener", lambda *_: FailingOpener())
+    _, runtime, manager, updater = _updater(
+        tmp_path,
+        UrllibBundleTransport(allowed_hosts=frozenset({"example.test"})),
+    )
+
+    assert updater.poll_once() == "rejected"
+    state = runtime.bundle_state()
+    assert state.safe_update_error == "bundle_request_failed"
+    assert private_canary not in state.safe_update_error
+    assert manager.status().active_bundle_id is None
+
+
 def test_production_download_read_failure_cleans_partial_destination(
     tmp_path: Path, monkeypatch
 ) -> None:

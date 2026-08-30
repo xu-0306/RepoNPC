@@ -21,7 +21,7 @@ This phase proves the foundation and the setup/degraded public boundary. It is n
 
 - GitHub source/ref resolution and mandatory exclusions;
 - Tree-sitter adapters and text fallback;
-- SQLite FTS5 plus declared embedding contract, the optional build-time production `local_sentence_transformers` adapter, and NumPy vector search;
+- SQLite FTS5 plus declared external embedding-profile contract and NumPy vector search. The local sentence-transformers adapter is isolated to reproducibility benchmarks and is not a production default;
 - executable `reponpc config validate` and `reponpc index build|publish|publish-manifest` commands while no arguments/`serve` retain application startup;
 - line-addressable root manifest evidence classified as `repository_metadata` without conflating owner assertions;
 - one verified bilingual `public/profile.json` producer consumed by the bundle verifier and locale-selecting public route;
@@ -30,7 +30,7 @@ This phase proves the foundation and the setup/degraded public boundary. It is n
 
 ## Phase 3 — Grounded chat and visitor experience
 
-- OpenAI-compatible and Ollama chat/embedding adapters plus runtime query-provider health/readiness integration of the Phase 2 local adapter;
+- OpenAI-compatible, vLLM, and Ollama chat/embedding adapters plus runtime external-profile health/readiness integration;
 - buffered answer validation, owner-assertion policy, immutable citations, abstention, and exact SSE contract;
 - public limits, safe logging, model/index status, and no silent provider fallback;
 - responsive bilingual visitor UI, suggested questions, citations, keyboard/accessibility, and character lifecycle states.
@@ -43,11 +43,20 @@ This phase proves the foundation and the setup/degraded public boundary. It is n
 - canonical sprite composition and custom upload validation;
 - sanitized SVG/GIF/PNG cards, README snippets, and GitHub Actions publication.
 
+The owner-approved 0.1.4 guided-onboarding extension adds FR-025 through FR-028 and AC-038 through AC-040 to the complete v1 scope. Its original implementation and focused suite have local evidence, but the later recoverable-capability review found mandatory-analysis and destructive-reset regressions. The 10.4 no-dead-end correction is therefore a Phase 5 blocker, not a completed release claim.
+
+The owner-approved 0.1.6/0.1.7 GitHub extension adds FR-029 through FR-033 and AC-041 through AC-046. Milestones A–C were implemented and locally verified on 2026-08-16. Milestones D–E are implemented and their local automated suite passed on 2026-08-16: GraphQL/exact-SHA archive preflight, durable batches, safe event replay, caching, and fair provider permits are present. Milestone F remains in progress: an isolated current-source browser smoke passed, but real GitHub/OAuth, live-provider, full browser/accessibility, Docker/Compose, and clean-host evidence is still required.
+
+The owner-approved 0.1.8 amendment adds FR-034 and updates AC-043 so unconfigured OAuth entry points open a safe setup guide rather than remaining disabled. The shared GitHub button/icon, guide API, bilingual accessibility behavior, and Windows launcher mapping work must be verified before the release-hardening gate.
+
+The owner-approved 0.1.9 amendment adds FR-035 and FR-036 plus AC-047 through AC-050. It requires external embedding profile CRUD with one active profile, a provider-aware Ollama model center (vLLM/generic connect-only), deployment-aware password/private-admin access, local-password-first GitHub binding/recovery, and a bounded operations CLI. The local adapter, arbitrary model downloader, GitHub-only owner path, and public admin port remain outside the supported deployment path.
+
 ## Phase 5 — Release hardening
 
-- full AC-001 through AC-037 evidence;
+- full AC-001 through AC-050 evidence;
 - security, evaluation, browser, accessibility, Compose, upgrade, recovery, and rollback suites;
 - verified operations commands, clean-host deployment, provider compatibility, licensing, notices, and release artifacts.
+- every P0 item in `SPEC_AND_ENGINEERING_REMEDIATION_PLAN.md` closed with deterministic evidence; every P1 release blocker either closed or explicitly deferred by the owner; and no UXD/ENGD decision silently resolved by implementation.
 
 ## Phase completion rule
 

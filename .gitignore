@@ -15,7 +15,9 @@ runtime-data/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest-*/
 .pytest-tmp/
+.test-tmp/
 **/pytest-tmp*/
 .mypy_cache/
 .ruff_cache/
@@ -29,6 +31,25 @@ node_modules/
 apps/web/node_modules/
 dist/
 apps/web/dist/
+.npm-cache/
+.playwright-cli/
+.launcher-smoke/
+
+# Local agent working state
+.agent-foreman/
+.claude/skills/agent-memory/memories/
+
+# Internal product planning, reviews, and implementation handoffs
+docs/PROJECT_CONTEXT.md
+docs/OWNER_REVIEW.md
+docs/IMPLEMENTATION_PLAN.md
+docs/DELIVERY_PHASES.md
+docs/SUBAGENT_EXECUTION_PLAYBOOK.md
+docs/P2_FOUNDATION_HANDOFF.md
+docs/P4_OWNER_ASSETS_PUBLICATION_HANDOFF.md
+docs/GITHUB_LOGIN_AND_BATCH_ANALYSIS_PLAN.md
+docs/SPEC_AND_ENGINEERING_REMEDIATION_PLAN.md
+docs/UX_SPEC_REVIEW.md
 
 # Editor and operating-system noise
 .DS_Store

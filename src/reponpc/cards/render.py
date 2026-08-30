@@ -86,7 +86,9 @@ def render_readme_snippet(
     """Return one copy-ready Markdown link with exact revisioned public asset URL."""
 
     parsed = urlsplit(public_base_url)
-    if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+    localhost = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+    allowed_scheme = parsed.scheme == "https" or (parsed.scheme == "http" and localhost)
+    if not allowed_scheme or not parsed.netloc or parsed.username or parsed.password:
         raise CardRenderError("INVALID_PUBLIC_URL")
     if parsed.query or parsed.fragment:
         raise CardRenderError("INVALID_PUBLIC_URL")

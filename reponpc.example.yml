@@ -1,6 +1,8 @@
 # RepoNPC public configuration example.
 # Copy to reponpc.yml in the configured GitHub repository and replace examples.
 # Never put API keys, passwords, tokens, private URLs, or other secrets here.
+# GitHub OAuth client settings and public-read credentials are deployment-only
+# environment/secret-file values; they never belong in this public YAML file.
 
 schema_version: 1
 
@@ -175,13 +177,17 @@ retrieval:
     max_repository_text_bytes: 26214400
     max_corpus_text_bytes: 104857600
     max_evidence_records: 50000
+  # This is a public compatibility descriptor for the active external
+  # embedding profile. Keep provider URL/credentials in deployment secrets.
+  # The Web Admin model center probes the actual dimension/prefix values
+  # before activation; these values are illustrative for Ollama Qwen3.
   embedding:
-    adapter: local_sentence_transformers
-    model: intfloat/multilingual-e5-small
-    dimension: 384
+    adapter: ollama
+    model: qwen3-embedding:0.6b
+    dimension: 1024
     normalized: true
-    query_prefix: 'query: '
-    passage_prefix: 'passage: '
+    query_prefix: ''
+    passage_prefix: ''
   fusion:
     rrf_k: 60
     lexical_weight: 1.0
@@ -194,4 +200,3 @@ retrieval:
     repository_metadata: 0.9
     documentation: 1.0
     source_code: 1.0
-
