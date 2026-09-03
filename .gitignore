@@ -58,7 +58,8 @@ docs/UX_SPEC_REVIEW.md
 
 # Internal governance tests that depend on local-only planning artifacts
 tests/contract/test_foundation_scope.py
-
+evals/phase2/
+release-evidence/
 # Editor and operating-system noise
 .DS_Store
 Thumbs.db
