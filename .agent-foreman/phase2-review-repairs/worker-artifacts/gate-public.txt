@@ -1,1 +1,0 @@
-Main evidence summary (not raw stdout): public API gate reported 9 passed with one existing warning; Ruff, format, and mypy passed. Internal bilingual profile.json schema/producer remains unresolved.

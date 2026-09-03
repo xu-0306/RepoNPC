@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="0.654" timestamp="2026-08-12T01:06:12.312552+08:00" hostname="DESKTOP-M18GQTS"><testcase classname="" name="tests.integration.test_bundle_producer_consumer" time="0.000"><error message="collection failure">ImportError while importing test module 'D:\RepoNPC\tests\integration\test_bundle_producer_consumer.py'.
-Hint: make sure your test modules/packages have valid Python names.
-Traceback:
-C:\Python314\Lib\importlib\__init__.py:88: in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-tests\integration\test_bundle_producer_consumer.py:18: in &lt;module&gt;
-    from reponpc.indexing.public_profile import build_public_profile_bytes
-E   ModuleNotFoundError: No module named 'reponpc.indexing.public_profile'</error></testcase></testsuite></testsuites>

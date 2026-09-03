@@ -1,9 +1,0 @@
-Gate: supporting Python package build and content verification
-Build command: rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache build --offline --out-dir D:/RepoNPC/.agent-foreman/mvp/artifacts/dist
-Build exit code: 0
-Observed: Built reponpc-0.1.0.tar.gz (18,704 bytes) and reponpc-0.1.0-py3-none-any.whl (17,469 bytes).
-Content commands:
-- rtk tar -tf .agent-foreman/mvp/artifacts/dist/reponpc-0.1.0.tar.gz
-- rtk tar -tf .agent-foreman/mvp/artifacts/dist/reponpc-0.1.0-py3-none-any.whl
-Content exit codes: 0, 0
-Observed content: sdist has 17 entries limited to src/reponpc, tests, README.md, pyproject.toml, and generated PKG-INFO; wheel has 12 entries limited to the reponpc package and dist-info. The prior 19 MB sdist cache leakage is absent.

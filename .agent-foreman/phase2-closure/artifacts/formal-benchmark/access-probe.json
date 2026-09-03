@@ -1,9 +1,0 @@
-{
-  "input_files": [
-    "questions.json",
-    "reponpc.yml",
-    "repository"
-  ],
-  "oracle_named_files": [],
-  "oracle_paths_readable": false
-}

@@ -1,3 +1,0 @@
-Command: rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache lock --check --offline
-Exit: 0
-Result: Resolved 37 packages; pyproject.toml and uv.lock are synchronized.

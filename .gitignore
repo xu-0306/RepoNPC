@@ -40,6 +40,8 @@ apps/web/dist/
 # Local agent working state
 .agent-foreman/
 .claude/skills/agent-memory/memories/
+AGENTS.md
+.github/workflows/
 
 # Internal product planning, reviews, and implementation handoffs
 docs/PROJECT_CONTEXT.md
@@ -47,11 +49,15 @@ docs/OWNER_REVIEW.md
 docs/IMPLEMENTATION_PLAN.md
 docs/DELIVERY_PHASES.md
 docs/SUBAGENT_EXECUTION_PLAYBOOK.md
+docs/P1-04_REFACTOR_HANDOFF.md
 docs/P2_FOUNDATION_HANDOFF.md
 docs/P4_OWNER_ASSETS_PUBLICATION_HANDOFF.md
 docs/GITHUB_LOGIN_AND_BATCH_ANALYSIS_PLAN.md
 docs/SPEC_AND_ENGINEERING_REMEDIATION_PLAN.md
 docs/UX_SPEC_REVIEW.md
+
+# Internal governance tests that depend on local-only planning artifacts
+tests/contract/test_foundation_scope.py
 
 # Editor and operating-system noise
 .DS_Store

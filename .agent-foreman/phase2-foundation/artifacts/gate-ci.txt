@@ -1,3 +1,0 @@
-Command: rtk proxy uv ... pytest tests/contract/test_ci_deployment.py -q
-Exit: 0
-Result: 2 passed in 0.01s

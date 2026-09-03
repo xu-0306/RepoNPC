@@ -1,3 +1,0 @@
-Command: rtk proxy uv ... pytest tests/security/test_safe_logging.py -q
-Exit: 0
-Result: 4 passed in 0.02s

@@ -1,3 +1,0 @@
-Command: rtk proxy uv ... pytest tests/integration/test_runtime_database.py -q
-Exit: 0
-Result: 5 passed in 0.07s

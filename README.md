@@ -73,7 +73,7 @@ RepoNPC 不讓模型自由搜尋、執行程式或自行拼湊 GitHub 連結。�
 | --- | --- |
 | Windows 本機評估 | Git、PowerShell、[uv](https://docs.astral.sh/uv/)、Node.js 24／Corepack，以及正在執行的 Ollama 或其他已設定 provider。 |
 | 完整作品集 | 一個公開 GitHub 帳號、你要展示的公開 repositories、`reponpc.yml`、聊天 provider，以及至少一個外部 embedding provider。 |
-| 正式部署 | x86_64 Linux、Docker Engine、Compose v2、持久化磁碟、公開網域、HTTPS reverse proxy，以及 GitHub Actions／Releases。參考主機為 4 CPU、8 GB RAM，另加模型所需資源。 |
+| 正式部署 | x86_64 Linux、Docker Engine、Compose v2、持久化磁碟、公開網域、HTTPS reverse proxy，以及你在部署 repository 維護的 GitHub Actions／Releases。參考主機為 4 CPU、8 GB RAM，另加模型所需資源。 |
 
 RepoNPC 的 Compose 檔只啟動應用程式，不會順便啟動 Ollama 或 vLLM。模型服務必須由你另外部署，而且必須能從 `app` container 連線。
 
@@ -167,7 +167,7 @@ uv run reponpc index build --config reponpc.yml --output dist
 
 ### 4. 發布索引並啟動網站
 
-建議由 GitHub Actions 驗證並發布 bundle 到 GitHub Release，確認資產可讀與 checksum 正確後，最後才更新 `stable-manifest.json`。手動執行相同的兩階段發布命令為：
+建議在自己的部署 repository 建立 GitHub Actions workflow，驗證並發布 bundle 到 GitHub Release；確認資產可讀與 checksum 正確後，最後才更新 `stable-manifest.json`。公開 source 不附帶 `.github/workflows/`，手動執行相同兩階段發布的命令為：
 
 ```bash
 uv run reponpc index publish --bundle-dir dist
@@ -243,9 +243,8 @@ docker compose exec app reponpc admin setup-code
 | 威脅、秘密管理與管理介面限制 | [安全模型](docs/SECURITY.md) |
 | 重要架構選擇及其理由 | [架構決策](docs/DECISIONS.md) |
 | 自訂 NPC 圖片格式 | [Sprite 格式](docs/SPRITE_FORMAT.md) |
-| 產品目標、使用者旅程與 v1 邊界 | [專案背景](docs/PROJECT_CONTEXT.md) |
 
-要修改程式碼前，請先閱讀 [AGENTS.md](AGENTS.md)。當文件內容衝突時，以 `PROJECT_CONTEXT.md` 列出的 source-of-truth order 為準。
+要修改程式碼前，請先閱讀技術規格、驗收標準、安全模型與架構決策。公開文件發生衝突時，以已批准的技術規格與明確記錄的架構決策為準。
 
 ## 技術棧
 
@@ -263,7 +262,7 @@ RepoNPC v1 是單一擁有者、單一 NPC，只處理擁有者選定的公開 r
 
 ## 參與開發
 
-目前專案仍在 Phase 5 發布強化階段。請先閱讀 [AGENTS.md](AGENTS.md) 和受影響的規格，再使用鎖定的工具鏈安裝依賴：
+目前專案仍在 Phase 5 發布強化階段。請先閱讀受影響的規格，再使用鎖定的工具鏈安裝依賴：
 
 ```bash
 uv sync --frozen

@@ -1,8 +1,0 @@
-Command:
-rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-02-all -p no:cacheprovider -q
-
-Exit code: 1
-
-Actual: pytest imported tests/integration/test_fts_query.py as test_fts_query, then rejected collection of tests/unit/test_fts_query.py with an import-file mismatch.
-Expected: the unit and integration test modules have distinct import identities during full-suite collection.
-Repair: Main added package markers at tests/unit/__init__.py and tests/integration/__init__.py, then reran the complete suite successfully.

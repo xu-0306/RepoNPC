@@ -1,4 +1,0 @@
-Command: rtk proxy docker.exe compose -f D:/RepoNPC/compose.yml config --quiet
-Exit: 1
-Result: docker.exe program not found in this environment.
-Classification: NOT_RUN external Docker gate; static deployment contract is covered separately by GATE-CI.

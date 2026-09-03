@@ -39,22 +39,6 @@ def test_acceptance_and_adr_require_derived_formal_evidence() -> None:
     assert "prior failed delta evidence remains immutable history" in decisions
 
 
-def test_phase_and_operations_documents_keep_runtime_provider_work_in_phase3() -> None:
-    phases = _read("docs/DELIVERY_PHASES.md")
-    implementation = _read("docs/IMPLEMENTATION_PLAN.md")
-    operations = _read("docs/OPERATIONS.md")
-    readme = _read("README.md")
-
-    assert "local sentence-transformers adapter is isolated to reproducibility benchmarks" in phases
-    assert "runtime external-profile health/readiness integration" in phases
-    assert "host-only oracle/scoring" in phases
-    assert "Technical Specification 0.1.1" in implementation
-    assert "no oracle access" in implementation
-    assert "reponpc index publish-manifest --bundle-dir dist" in operations
-    assert "cannot update the remote pointer" in operations
-    assert "Phase 5 remains the release-hardening boundary" in readme
-
-
 def test_vllm_preset_is_documented_without_expanding_browser_or_bundle_contracts() -> None:
     specification = _read("docs/TECHNICAL_SPEC.md")
     decisions = _read("docs/DECISIONS.md")

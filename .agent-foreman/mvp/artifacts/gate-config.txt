@@ -1,7 +1,0 @@
-Gate: GATE-CONFIG
-Command: rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/config-final -p no:cacheprovider tests/contract/test_config.py -q
-Exit code: 0
-Observed: 12 configuration contract tests passed in 0.26 seconds, including unknown/secret/duplicate/path/URL/locale/non-finite/limit/encoding/size failures.
-Output:
-............                                                             [100%]
-12 passed in 0.26s

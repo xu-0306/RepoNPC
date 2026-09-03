@@ -1,4 +1,0 @@
-Command: rtk proxy uv ... pytest tests/smoke/test_container.py -q
-Exit: 0
-Result: 1 skipped because docker executable is unavailable.
-Classification: NOT_RUN external container smoke gate; a skip is not a passing container oracle.

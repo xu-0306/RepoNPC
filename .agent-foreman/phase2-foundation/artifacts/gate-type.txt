@@ -1,3 +1,0 @@
-Command: rtk proxy uv ... mypy src/reponpc
-Exit: 0
-Result: Success: no issues found in 13 source files

@@ -1,4 +1,0 @@
-Command: rtk proxy pnpm.cmd --dir D:/RepoNPC run web:check
-Exit: 0
-Result: Prettier, ESLint, TypeScript, Vitest (2 tests), and Vite production build all passed.
-Build: apps/web/dist contains same-origin index.html and hashed JS/CSS assets without source maps.

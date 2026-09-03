@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
-import yaml
 
 from reponpc.indexing.github_publication import (
     GitHubHttpResponse,
@@ -19,69 +16,6 @@ from reponpc.indexing.github_publication import (
 )
 from reponpc.indexing.publication import PublicationCoordinator, PublicationError
 from tests.integration.test_bundle_producer_consumer import _bundle
-
-
-def test_index_build_workflow_enforces_immutable_publication_order() -> None:
-    workflow_path = Path(".github/workflows/build-index.yml")
-    workflow_text = workflow_path.read_text(encoding="utf-8")
-    workflow = yaml.load(workflow_text, Loader=yaml.BaseLoader)
-
-    assert isinstance(workflow, dict)
-    assert workflow["permissions"] == {"contents": "write"}
-    triggers = workflow["on"]
-    assert isinstance(triggers, dict)
-    assert set(triggers) == {"workflow_dispatch", "push"}
-    push = triggers["push"]
-    assert isinstance(push, dict)
-    assert push["paths"] == ["reponpc.yml", "assets/character/**"]
-
-    jobs = workflow["jobs"]
-    assert isinstance(jobs, dict)
-    job = jobs["build-and-publish"]
-    assert isinstance(job, dict)
-    steps = job["steps"]
-    assert isinstance(steps, list)
-    names = [step["name"] for step in steps if isinstance(step, dict) and "name" in step]
-    required_names = [
-        "Validate configuration",
-        "Build immutable index bundle",
-        "Publish immutable release asset",
-        "Advance stable manifest last",
-    ]
-    assert [name for name in names if name in required_names] == required_names
-    assert names[-1] == "Advance stable manifest last"
-
-    checkout = next(step for step in steps if step.get("name") == "Check out configuration")
-    assert checkout["with"]["persist-credentials"] == "false"
-    assert (
-        next(step for step in steps if step.get("name") == "Install locked dependencies")["run"]
-        == "uv sync --locked --extra indexer"
-    )
-
-    for step in steps:
-        if "uses" in step:
-            assert re.fullmatch(r"[^@]+@[0-9a-f]{40}", step["uses"])
-
-    assert "continue-on-error" not in workflow_text
-    assert "|| true" not in workflow_text
-    assert "set +e" not in workflow_text
-    assert "always()" not in workflow_text
-
-    immutable_name = "Publish immutable release asset"
-    stable_name = "Advance stable manifest last"
-    immutable_index = names.index(immutable_name)
-    stable_index = names.index(stable_name)
-    assert immutable_index < stable_index
-    immutable_step = next(step for step in steps if step.get("name") == immutable_name)
-    stable_step = next(step for step in steps if step.get("name") == stable_name)
-    assert immutable_step["run"] == "uv run reponpc index publish --bundle-dir dist"
-    assert stable_step["run"] == "uv run reponpc index publish-manifest --bundle-dir dist"
-    assert immutable_step["run"] != stable_step["run"]
-    for step in steps:
-        if step.get("name") in {immutable_name, stable_name}:
-            assert step["env"] == {"GH_TOKEN": "${{ github.token }}"}
-        else:
-            assert "GH_TOKEN" not in step.get("env", {})
 
 
 @dataclass(slots=True)

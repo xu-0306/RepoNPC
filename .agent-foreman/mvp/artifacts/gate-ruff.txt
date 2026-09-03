@@ -1,6 +1,0 @@
-Gate: supporting Ruff verification
-Commands:
-- rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python ruff check src tests
-- rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python ruff format --check src tests
-Exit codes: 0, 0
-Observed: All lint checks passed; all 14 Python files are formatted.

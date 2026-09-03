@@ -1,8 +1,0 @@
-Command:
-rtk proxy uv --cache-dir D:/RepoNPC/.uv-cache run --offline --no-sync --python C:/Python314/python.exe --no-managed-python pytest --basetemp D:/RepoNPC/.pytest-tmp/p2-03-p2-04-evaluator-repair -p no:cacheprovider tests/unit/test_fts_query.py tests/integration/test_fts_query.py tests/unit/test_vector.py -q
-
-Exit code: 0
-
-Output:
-.............................................                            [100%]
-45 passed in 0.10s
