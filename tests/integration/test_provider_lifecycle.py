@@ -9,10 +9,15 @@ from typing import Any
 import numpy as np
 from fastapi.testclient import TestClient
 
+from reponpc.admin.embedding_profiles import EmbeddingProfileInput, EmbeddingProfileRegistry
 from reponpc.api.public import SetupState
 from reponpc.config.environment import load_environment
 from reponpc.indexing.sources import EmbeddingIdentity
-from reponpc.main import _configure_provider_lifecycle, create_app
+from reponpc.main import (
+    _configure_provider_lifecycle,
+    _environment_embedding_provider,
+    create_app,
+)
 from reponpc.providers import (
     OpenAICompatibleChatProvider,
     OpenAICompatibleEmbeddingProvider,
@@ -228,62 +233,46 @@ def test_production_assembly_maps_vllm_to_private_openai_compatible_transport(
     assert "VLLM_EMBEDDING_KEY_CANARY" not in rendered
 
 
-def test_production_assembly_keeps_missing_local_dependency_degraded_without_cloud_fallback(
-    tmp_path: Path, monkeypatch: object
+def test_environment_connection_resolves_changed_model_from_frozen_profile(
+    tmp_path: Path,
 ) -> None:
     settings = load_environment(
         {
-            "REPONPC_DATA_DIR": str(tmp_path),
+            "REPONPC_DATA_DIR": str(tmp_path / "data"),
             "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
             "REPONPC_CONFIG_REPOSITORY": "example/portfolio",
             "REPONPC_INDEX_MANIFEST_URL": "https://raw.githubusercontent.com/example/portfolio/main/stable-manifest.json",
             "REPONPC_CHAT_PROVIDER": "ollama",
             "REPONPC_CHAT_MODEL": "fixture-chat",
             "REPONPC_CHAT_BASE_URL": "http://127.0.0.1:11434",
-            "REPONPC_EMBEDDING_PROVIDER": "local_sentence_transformers",
-            "REPONPC_EMBEDDING_MODEL": "fixture-local",
+            "REPONPC_EMBEDDING_PROVIDER": "ollama",
+            "REPONPC_EMBEDDING_MODEL": "initial-model",
+            "REPONPC_EMBEDDING_BASE_URL": "http://127.0.0.1:11434",
             "REPONPC_EMBEDDING_DIMENSION": "2",
         },
         secret_roots=(tmp_path,),
     )
-    database = RuntimeDatabase(settings.data_dir)
+    database = RuntimeDatabase(tmp_path / "runtime")
     database.initialize()
-    application = create_app(
-        runtime_database=database,
-        setup_state=SetupState(index_ready=True, index_version="fixture-index"),
+    registry = EmbeddingProfileRegistry(
+        database=database,
+        provider_resolver=lambda _profile: None,
+        activation_compatible=lambda _profile: False,
     )
-    cloud_calls: list[str] = []
-
-    class UnavailableLocal:
-        def __init__(self, **_kwargs: object) -> None:
-            pass
-
-        def identity(self) -> EmbeddingIdentity:
-            return EmbeddingIdentity(
-                "local_sentence_transformers", "fixture-local", 2, True, "query: ", "passage: "
-            )
-
-        def embed_query(self, _texts: list[str]) -> object:
-            raise RuntimeError("private optional dependency diagnostic")
-
-        def embed_passages(self, _texts: list[str]) -> object:
-            raise RuntimeError("private optional dependency diagnostic")
-
-    def cloud_embedding(*_args: object, **_kwargs: object) -> object:
-        cloud_calls.append("embedding")
-        raise AssertionError("cloud fallback must not be constructed")
-
-    monkeypatch.setattr("reponpc.main.app", application)  # type: ignore[attr-defined]
-    monkeypatch.setattr("reponpc.main.LocalSentenceTransformersEmbeddingProvider", UnavailableLocal)  # type: ignore[attr-defined]
-    monkeypatch.setattr("reponpc.main.OpenAICompatibleEmbeddingProvider", cloud_embedding)  # type: ignore[attr-defined]
-
-    _configure_provider_lifecycle(settings, database)
-    status = application.state.provider_runtime.poll_health()
-
-    assert status.ready is False
-    assert status.failure_code is ProviderFailureCode.UNAVAILABLE
-    assert cloud_calls == []
-    assert (
-        application.state.provider_runtime.embedding.__class__.__name__
-        == "LocalRuntimeEmbeddingProvider"
+    profile = registry.create(
+        EmbeddingProfileInput(
+            provider="ollama",
+            model_id="replacement-model",
+            dimension=2,
+            normalized=True,
+            query_prefix="query: ",
+            passage_prefix="passage: ",
+            connection_reference="environment",
+        )
     )
+
+    provider = _environment_embedding_provider(settings, profile)
+
+    assert provider is not None
+    assert provider.identity() == profile.identity
+    assert provider.__class__.__name__ == "OllamaEmbeddingProvider"

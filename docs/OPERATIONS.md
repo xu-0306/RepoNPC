@@ -57,7 +57,7 @@ An authenticated new owner normally uses the guided flow instead of authoring YA
 6. Use Back/Edit selection when needed. Changing a repository/ref/include/exclude identity invalidates only its selection-bound plan/result; removed repositories lose only their own contribution data, while profile and unaffected repository input remain. `Start over` is a separate confirmed destructive action.
 7. Validate and preview with the existing model-free local operations. With no GitHub writeback token, copy or download `reponpc.yml`; with the token, review the exact configured repository/branch/path before saving and separately dispatching publication.
 
-Unsaved guided state is limited to the current authenticated browser session and clears on logout or successful save. Saving or downloading does not make private data safe: the resulting configuration is intended to become public. Raw repository bodies, provider prompts/outputs, credentials, tokens, and private provider URLs are never saved in browser storage.
+Existing saved configuration is loaded into the guided editor for return editing. Unsaved guided state is limited to the current authenticated browser session and clears on logout or successful save. Saving or downloading does not make private data safe: the resulting configuration is intended to become public. Raw repository bodies, provider prompts/outputs, credentials, tokens, and private provider URLs are never saved in browser storage; guided draft generation preserves configuration fields outside the guided surface.
 
 Version 0.1.7 supersedes the earlier synchronous one-repository execution lifecycle with one owner-scoped durable batch and bounded item stages. Each repository retains an active-execution deadline of 120 seconds and the configured provider deadline (45 seconds by default); queue, owner pause, and GitHub rate waiting do not spend active execution time. Analysis uses only the selected provider/model and explicit public-read connection, has no automatic credential/provider fallback, shares generation capacity fairly, and does not consume the anonymous public daily-chat counter. These constraints do not make analysis mandatory: manual authoring, validation, preview, copy, and download remain available.
 
@@ -287,9 +287,7 @@ The application polls the stable manifest with ETag at the configured interval. 
 
 Admin index status must show active/previous/pinned/candidate version, last check, publication time, and a safe failure reason. An owner can pin a locally retained compatible bundle by ID; while pinned, newer versions are reported but not activated. Unpinning resumes normal activation.
 
-Required v1 CLI equivalents for recovery (available after the ENGD-006 implementation gate):
-
-**Current-state warning (2026-08-30):** the checked-in `reponpc` CLI exposes `serve`, `admin`, `config`, and `index` command groups, but not the `bundle` group below. These are approved release contracts, not yet verified operator instructions. ENGD-006 remains an implementation/release gate; do not claim these commands work until bundle lifecycle tests pass.
+Required v1 CLI equivalents for recovery:
 
 ```bash
 docker compose exec app reponpc bundle status
@@ -310,9 +308,7 @@ Back up:
 
 For Web-created owners, `runtime.sqlite` contains the sole Argon2id owner credential record plus profile/connection metadata. Losing it removes local authentication and embedding-profile continuity; GitHub OAuth is not a replacement for this backup. v1 intentionally has no unauthenticated Web password reset or setup reopening path. Protect and test this backup.
 
-Before copying SQLite, use a verified online backup command or stop the application cleanly and back up the protected persistent data directory as one unit. The release is intended to provide and verify the commands below.
-
-**Current-state warning (2026-08-30):** the checked-in CLI does not yet expose the `runtime` group. Do not assume the following commands work until ENGD-006 is closed with clean-host backup/restore evidence.
+Before copying SQLite, use the verified online backup command or stop the application cleanly and back up the protected persistent data directory as one unit. The backup command refuses to overwrite an existing target and runs SQLite integrity verification before publishing the copy.
 
 ```bash
 docker compose exec app reponpc runtime backup /var/lib/reponpc/backups/runtime.sqlite

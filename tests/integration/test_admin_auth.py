@@ -13,6 +13,7 @@ from reponpc.admin.auth import (
     AdminSession,
     AdminSessionService,
     issue_admin_setup_code,
+    set_admin_recovery_password,
 )
 from reponpc.runtime.database import RuntimeDatabase
 
@@ -136,6 +137,69 @@ def test_setup_owner_is_durable_one_time_and_never_stores_plaintext(tmp_path: Pa
     with pytest.raises(AdminAuthError) as reissue:
         issue_admin_setup_code(database, now=clock())
     assert reissue.value.code == "SETUP_ALREADY_COMPLETE"
+
+
+def test_production_password_policy_blocks_short_and_common_but_accepts_unicode(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    service = AdminSessionService(
+        database=database,
+        identity_hmac_key=b"k" * 32,
+        deployment_profile="production",
+        now=clock,
+    )
+    setup_code = issue_admin_setup_code(database, now=clock())
+
+    for password in ("short-password", "password1234567"):
+        with pytest.raises(AdminAuthError) as denied:
+            service.setup_owner(
+                setup_code=setup_code,
+                username="owner",
+                password=password,
+                password_confirmation=password,
+            )
+        assert denied.value.code == "SETUP_DENIED"
+
+    password = "安全密碼" * 4
+    service.setup_owner(
+        setup_code=setup_code,
+        username="owner",
+        password=password,
+        password_confirmation=password,
+    )
+    service.login(username="owner", password=password, remote_identity="local")
+
+
+def test_host_recovery_changes_only_hash_and_accepts_optional_owner_selector(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    service, database = _dynamic_service(tmp_path, clock)
+    setup_code = issue_admin_setup_code(database, now=clock())
+    service.setup_owner(
+        setup_code=setup_code,
+        username="owner",
+        password="npcx",
+        password_confirmation="npcx",
+    )
+
+    replacement = "安全密碼" * 4
+    set_admin_recovery_password(
+        database,
+        username=None,
+        password=replacement,
+        deployment_profile="production",
+    )
+
+    with database.connection() as connection:
+        owner = connection.execute(
+            "SELECT username, password_hash FROM admin_owner WHERE state_key = 'current'"
+        ).fetchone()
+    assert owner is not None and owner["username"] == "owner"
+    assert PasswordHasher(type=Type.ID).verify(str(owner["password_hash"]), replacement)
 
 
 @pytest.mark.parametrize(

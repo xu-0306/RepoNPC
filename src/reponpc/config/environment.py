@@ -7,6 +7,7 @@ never includes supplied values or filesystem locations in its errors.
 
 from __future__ import annotations
 
+import ipaddress
 import math
 import os
 import re
@@ -40,6 +41,7 @@ _SECRET_PAIRS: Final = {
 _ENVIRONMENT_NAMES: Final = frozenset(
     {
         "REPONPC_ENV",
+        "REPONPC_DEPLOYMENT_PROFILE",
         "REPONPC_PUBLIC_BASE_URL",
         "REPONPC_HOST",
         "REPONPC_PORT",
@@ -65,7 +67,6 @@ _ENVIRONMENT_NAMES: Final = frozenset(
         "REPONPC_GITHUB_OAUTH_CALLBACK_URL",
         "REPONPC_CREDENTIAL_ENCRYPTION_KEY",
         "REPONPC_CREDENTIAL_ENCRYPTION_KEY_FILE",
-        "REPONPC_GITHUB_OWNER_RECOVERY_COMMAND",
         "REPONPC_CHAT_PROVIDER",
         "REPONPC_CHAT_MODEL",
         "REPONPC_CHAT_BASE_URL",
@@ -104,9 +105,7 @@ _ENVIRONMENT_NAMES: Final = frozenset(
 )
 _LOG_LEVELS: Final = frozenset({"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"})
 _PROVIDERS: Final = frozenset({"ollama", "openai_compatible", "vllm"})
-_EMBEDDING_PROVIDERS: Final = frozenset(
-    {"local_sentence_transformers", "ollama", "openai_compatible", "vllm"}
-)
+_EMBEDDING_PROVIDERS: Final = frozenset({"ollama", "openai_compatible", "vllm"})
 _REPOSITORY_SLUG_RE: Final = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 
@@ -161,6 +160,7 @@ class EnvironmentSettings:
     """Validated deployment settings used by the application foundation."""
 
     environment: str
+    deployment_profile: str
     public_base_url: str
     host: str
     port: int
@@ -180,7 +180,6 @@ class EnvironmentSettings:
     index_workflow: str
     github_oauth_client_id: str
     github_oauth_callback_url: str
-    github_owner_recovery_command: str
     chat_provider: str
     chat_model: str
     chat_base_url: str = field(repr=False)
@@ -221,6 +220,23 @@ def _present(value: str | None) -> str | None:
         return None
     normalized = value.strip()
     return normalized or None
+
+
+def _is_loopback_host(host: str) -> bool:
+    if host.casefold() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _url_has_loopback_host(value: str) -> bool:
+    try:
+        hostname = urlsplit(value).hostname
+    except ValueError:
+        return False
+    return hostname is not None and _is_loopback_host(hostname)
 
 
 def _text(
@@ -509,6 +525,25 @@ def load_environment(
             "invalid_choice",
             "development, production, or test is required",
         )
+    deployment_profile = _text(source, "REPONPC_DEPLOYMENT_PROFILE", "production", issues)
+    if deployment_profile not in {"loopback_evaluation", "production"}:
+        _issue(
+            issues,
+            "REPONPC_DEPLOYMENT_PROFILE",
+            "invalid_choice",
+            "loopback_evaluation or production is required",
+        )
+    host = _text(source, "REPONPC_HOST", "127.0.0.1", issues)
+    public_base_url = _text(source, "REPONPC_PUBLIC_BASE_URL", "", issues)
+    if deployment_profile == "loopback_evaluation" and not (
+        _is_loopback_host(host) and _url_has_loopback_host(public_base_url)
+    ):
+        _issue(
+            issues,
+            "REPONPC_DEPLOYMENT_PROFILE",
+            "loopback_profile_exposed",
+            "loopback_evaluation requires loopback bind and public URL hosts",
+        )
     log_level = _text(source, "REPONPC_LOG_LEVEL", "INFO", issues).upper()
     if log_level not in _LOG_LEVELS:
         _issue(issues, "REPONPC_LOG_LEVEL", "invalid_choice", "a supported log level is required")
@@ -526,7 +561,7 @@ def load_environment(
     embedding_provider = _text(
         source,
         "REPONPC_EMBEDDING_PROVIDER",
-        "local_sentence_transformers",
+        "ollama",
         issues,
     )
     if embedding_provider not in _EMBEDDING_PROVIDERS:
@@ -632,8 +667,9 @@ def load_environment(
         )
     settings = EnvironmentSettings(
         environment=environment,
-        public_base_url=_text(source, "REPONPC_PUBLIC_BASE_URL", "", issues),
-        host=_text(source, "REPONPC_HOST", "127.0.0.1", issues),
+        deployment_profile=deployment_profile,
+        public_base_url=public_base_url,
+        host=host,
         port=_integer(source, "REPONPC_PORT", 8000, issues, maximum=65535),
         data_dir=Path(_text(source, "REPONPC_DATA_DIR", "/var/lib/reponpc", issues)),
         log_level=log_level,
@@ -657,13 +693,6 @@ def load_environment(
         index_workflow=_text(source, "REPONPC_INDEX_WORKFLOW", "build-index.yml", issues),
         github_oauth_client_id=oauth_client_id,
         github_oauth_callback_url=oauth_callback_url,
-        github_owner_recovery_command=_text(
-            source,
-            "REPONPC_GITHUB_OWNER_RECOVERY_COMMAND",
-            "",
-            issues,
-            allow_empty=True,
-        ),
         chat_provider=chat_provider,
         chat_model=_text(source, "REPONPC_CHAT_MODEL", "", issues),
         chat_base_url=_text(source, "REPONPC_CHAT_BASE_URL", "", issues),
@@ -675,15 +704,15 @@ def load_environment(
             source, "REPONPC_CHAT_TIMEOUT_SECONDS", 45, issues, maximum=300
         ),
         embedding_provider=embedding_provider,
-        embedding_model=_text(source, "REPONPC_EMBEDDING_MODEL", "", issues),
+        embedding_model=_text(source, "REPONPC_EMBEDDING_MODEL", "qwen3-embedding:0.6b", issues),
         embedding_dimension=_integer(
-            source, "REPONPC_EMBEDDING_DIMENSION", 384, issues, maximum=65536
+            source, "REPONPC_EMBEDDING_DIMENSION", 1024, issues, maximum=65536
         ),
         embedding_normalized=embedding_normalized,
         embedding_base_url=_text(
             source,
             "REPONPC_EMBEDDING_BASE_URL",
-            "",
+            "http://127.0.0.1:11434",
             issues,
             allow_empty=True,
         ),

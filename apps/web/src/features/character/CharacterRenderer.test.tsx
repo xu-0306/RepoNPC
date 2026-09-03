@@ -6,6 +6,7 @@ import {
   CharacterRenderer,
   getCharacterStateRow,
   normalizeCharacterFrame,
+  normalizeCharacterMovement,
   normalizeFrameDurationMs,
 } from "./CharacterRenderer";
 
@@ -37,6 +38,9 @@ describe("CharacterRenderer", () => {
     expect(normalizeFrameDurationMs(160.4)).toBe(160);
     expect(normalizeFrameDurationMs(1001)).toBe(1000);
     expect(normalizeFrameDurationMs(Number.POSITIVE_INFINITY)).toBe(160);
+    expect(normalizeCharacterMovement()).toBe("subtle");
+    expect(normalizeCharacterMovement("none")).toBe("none");
+    expect(normalizeCharacterMovement("unexpected")).toBe("subtle");
   });
 
   it("renders an accessible label and hides the decorative sheet crop", () => {
@@ -55,6 +59,7 @@ describe("CharacterRenderer", () => {
     expect(markup).toContain('aria-label="Thinking"');
     expect(markup).toContain('role="img"');
     expect(markup).toContain('data-character-state="think"');
+    expect(markup).toContain('data-character-movement="none"');
     expect(markup).toContain('aria-hidden="true"');
     expect(markup).toContain(
       'class="character-renderer character-renderer--visitor"',
@@ -83,5 +88,30 @@ describe("CharacterRenderer", () => {
     expect(markup).toMatch(/--character-frame-end-x:-128px/);
     expect(markup).toMatch(/--character-row-offset-y:-192px/);
     expect(markup).toMatch(/--character-animation-duration:320ms/);
+  });
+
+  it("marks the walk state for bounded decorative movement", () => {
+    const markup = renderToStaticMarkup(
+      <CharacterRenderer
+        assetUrl="/assets/character.png"
+        reducedMotion={false}
+        state="walk"
+        stateLabel="Walking"
+      />,
+    );
+    expect(markup).toContain('data-character-movement="subtle"');
+  });
+
+  it("honors a configured movement mode for walk", () => {
+    const markup = renderToStaticMarkup(
+      <CharacterRenderer
+        assetUrl="/assets/character.png"
+        movement="none"
+        reducedMotion={false}
+        state="walk"
+        stateLabel="Walking"
+      />,
+    );
+    expect(markup).toContain('data-character-movement="none"');
   });
 });

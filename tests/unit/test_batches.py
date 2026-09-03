@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 
 import pytest
@@ -152,3 +153,39 @@ def test_runner_rate_waits_without_busy_loop_and_reconnect_requires_action(tmp_p
     assert attempts == 2
     assert snapshot.items[0].state == "waiting_reconnection"
     assert marked == [7]
+
+
+def test_compatibility_timeout_keeps_durable_batch_recoverable(tmp_path) -> None:
+    runner_started = threading.Event()
+    release_runner = threading.Event()
+
+    def runner(item, _cancelled):
+        runner_started.set()
+        release_runner.wait(timeout=2)
+        return {"repository": {"slug": item.input.slug}}
+
+    service, _marked = _service(tmp_path, runner=runner)
+    try:
+        with pytest.raises(BatchRuntimeError) as error:
+            service.analyze_one_compatibility(
+                selection=_selection(),
+                cancelled=lambda: False,
+                timeout_seconds=0.02,
+            )
+
+        assert error.value.code == "PROVIDER_TIMEOUT"
+        assert runner_started.wait(timeout=1)
+        active = service.active()
+        assert active.state in {"queued", "running"}
+        assert active.items[0].state not in {"cancelled", "failed"}
+    finally:
+        release_runner.set()
+
+    deadline = time.monotonic() + 2
+    snapshot = service.get(active.batch_id)
+    while time.monotonic() < deadline:
+        snapshot = service.get(snapshot.batch_id)
+        if snapshot.state == "completed":
+            break
+        time.sleep(0.01)
+    assert snapshot.state == "completed"

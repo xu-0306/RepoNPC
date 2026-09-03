@@ -1,7 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { AdminAccessPanel, GitHubConnectionPanel } from "./AdminPage";
+import {
+  AdminAccessPanel,
+  GitHubConnectionPanel,
+  safeDraftForSessionStorage,
+} from "./AdminPage";
 import { adminErrorStateReducer, initialAdminErrorState } from "./adminErrors";
 import {
   GitHubOAuthSetupGuideDialog,
@@ -37,9 +41,20 @@ function renderAccessPanel(
 }
 
 describe("AdminAccessPanel", () => {
+  it("keeps public drafts resumable while rejecting secret-bearing content", () => {
+    expect(
+      safeDraftForSessionStorage("profile:\n  display_name: Demo\n"),
+    ).toContain("display_name");
+    expect(
+      safeDraftForSessionStorage("provider:\n  api_key: do-not-store\n"),
+    ).toBeNull();
+  });
   it("shows the complete first-owner form immediately on a fresh runtime", () => {
     const markup = renderAccessPanel({
-      setupStatus: { setup_required: true, setup_code_available: true },
+      setupStatus: {
+        setup_required: true,
+        setup_code_available: true,
+      },
     });
 
     expect(markup).toContain('data-mode="setup"');
@@ -47,17 +62,22 @@ describe("AdminAccessPanel", () => {
     expect(markup).toContain('id="admin-setup-code"');
     expect(markup).toContain('id="admin-setup-username"');
     expect(markup).toContain('id="admin-setup-password"');
-    expect(markup).toContain('minLength="4"');
+    expect(markup).toContain('maxLength="128"');
+    expect(markup).toContain("production 至少 15 個字元");
     expect(markup).toContain("不限制大小寫、數字或符號");
     expect(markup).toContain("建立我的管理員");
     expect(markup).toContain("不會寫入 GitHub");
+    expect(markup).not.toContain("使用 GitHub 建立管理員");
     expect(markup).not.toContain('id="admin-username"');
   });
 
   it("keeps an initialized runtime in sign-in mode without reopening setup", () => {
     const markup = renderAccessPanel({
       locale: "en",
-      setupStatus: { setup_required: false, setup_code_available: false },
+      setupStatus: {
+        setup_required: false,
+        setup_code_available: false,
+      },
     });
 
     expect(markup).toContain('data-mode="login"');
@@ -71,7 +91,10 @@ describe("AdminAccessPanel", () => {
     const markup = renderAccessPanel({
       githubAvailable: true,
       locale: "en",
-      setupStatus: { setup_required: false, setup_code_available: false },
+      setupStatus: {
+        setup_required: false,
+        setup_code_available: false,
+      },
     });
 
     expect(markup).toContain('action="/api/admin/session/github/start"');
@@ -87,7 +110,10 @@ describe("AdminAccessPanel", () => {
   it("keeps an unconfigured GitHub entry point operable for setup guidance", () => {
     const markup = renderAccessPanel({
       locale: "en",
-      setupStatus: { setup_required: false, setup_code_available: false },
+      setupStatus: {
+        setup_required: false,
+        setup_code_available: false,
+      },
     });
 
     expect(markup).toContain("Sign in with GitHub");
@@ -103,7 +129,10 @@ describe("AdminAccessPanel", () => {
       githubAvailable: true,
       githubPending: true,
       locale: "en",
-      setupStatus: { setup_required: false, setup_code_available: false },
+      setupStatus: {
+        setup_required: false,
+        setup_code_available: false,
+      },
     });
 
     expect(markup).toContain('id="admin-access-heading"');

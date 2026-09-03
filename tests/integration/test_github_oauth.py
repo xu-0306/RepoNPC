@@ -11,7 +11,7 @@ import pytest
 from argon2 import PasswordHasher, Type
 from fastapi.testclient import TestClient
 
-from reponpc.admin.auth import AdminAuthError, AdminSessionService, issue_admin_setup_code
+from reponpc.admin.auth import AdminSessionService
 from reponpc.admin.oauth import (
     GITHUB_GRAPHQL_URL,
     GITHUB_TOKEN_URL,
@@ -131,12 +131,16 @@ def _identity_service(
 
 def test_oauth_pkce_state_is_server_bound_one_use_and_secret_free(tmp_path: Path) -> None:
     clock = Clock()
-    sessions, database = _service(tmp_path, clock=clock, local_password=False)
+    sessions, database = _service(tmp_path, clock=clock)
     transport = FakeGitHubOAuthTransport()
     identity, cipher = _identity_service(database, sessions, transport, clock=clock)
 
-    setup_code = issue_admin_setup_code(database, now=clock())
-    started = identity.start(intent="setup", setup_code=setup_code)
+    local_session = sessions.login(
+        username="owner",
+        password="npcx",
+        remote_identity="local",
+    )
+    started = identity.start(intent="link", session_token=local_session.session_token)
     query = parse_qs(urlsplit(started.authorization_url).query)
     assert query["state"] == [started.state]
     assert query["code_challenge_method"] == ["S256"]
@@ -161,7 +165,7 @@ def test_oauth_pkce_state_is_server_bound_one_use_and_secret_free(tmp_path: Path
     completed = identity.complete(
         state=started.state, cookie_state=started.state, code="oauth-code"
     )
-    assert completed.session is not None and completed.handoff is not None
+    assert completed.session is None and completed.handoff is None
     with pytest.raises(GitHubOAuthError) as replay:
         identity.complete(state=started.state, cookie_state=started.state, code="oauth-code")
     assert replay.value.code == "OAUTH_TRANSACTION_EXPIRED"
@@ -187,33 +191,18 @@ def test_oauth_rejects_cross_transaction_and_expired_state_before_exchange(tmp_p
     assert transport.requests == []
 
 
-def test_setup_requires_host_proof_and_recovery_before_github_only_owner(tmp_path: Path) -> None:
+def test_github_setup_intent_is_rejected_until_a_local_owner_can_link(tmp_path: Path) -> None:
     clock = Clock()
     sessions, database = _service(tmp_path, clock=clock, local_password=False)
-    setup_code = issue_admin_setup_code(database, now=clock())
     transport = FakeGitHubOAuthTransport()
-    unavailable, _ = _identity_service(
-        database, sessions, transport, clock=clock, recovery_available=False
-    )
-    with pytest.raises(GitHubOAuthError) as rejected:
-        unavailable.start(intent="setup", setup_code=setup_code)
-    assert rejected.value.code == "GITHUB_LOGIN_UNAVAILABLE"
-
     identity, _ = _identity_service(database, sessions, transport, clock=clock)
-    started = identity.start(intent="setup", setup_code=setup_code)
-    completed = identity.complete(
-        state=started.state, cookie_state=started.state, code="oauth-code"
-    )
-    assert completed.session is not None
-    assert sessions.setup_status().setup_required is False
+    with pytest.raises(GitHubOAuthError) as rejected:
+        identity.start(intent="setup")
+    assert rejected.value.code == "OAUTH_TRANSACTION_INVALID"
+    assert sessions.setup_status().setup_required is True
     with database.connection() as connection:
-        methods = connection.execute(
-            "SELECT method, github_user_id FROM admin_auth_methods"
-        ).fetchall()
-    assert [(row["method"], row["github_user_id"]) for row in methods] == [("github", "42")]
-    with pytest.raises(AdminAuthError) as final_method:
-        sessions.unlink_github(session_token=completed.session.session_token)
-    assert final_method.value.code == "LAST_AUTH_METHOD_REQUIRED"
+        transaction = connection.execute("SELECT 1 FROM admin_oauth_transactions").fetchone()
+    assert transaction is None
 
 
 def test_broad_scope_rejects_before_token_persistence(tmp_path: Path) -> None:
@@ -634,31 +623,27 @@ def test_link_completion_accepts_the_current_recent_session(tmp_path: Path) -> N
     )
 
 
-def test_github_only_logout_all_requires_fresh_github_session(tmp_path: Path) -> None:
+def test_linking_and_unlinking_github_preserves_local_password_recovery(tmp_path: Path) -> None:
     clock = Clock()
-    sessions, database = _service(tmp_path, clock=clock, local_password=False)
-    setup_code = issue_admin_setup_code(database, now=clock())
+    sessions, database = _service(tmp_path, clock=clock)
     transport = FakeGitHubOAuthTransport()
     identity, _ = _identity_service(database, sessions, transport, clock=clock)
-    started = identity.start(intent="setup", setup_code=setup_code)
-    session = identity.complete(
-        state=started.state, cookie_state=started.state, code="oauth-code"
-    ).session
-    assert session is not None
-    clock.advance(minutes=6)
-    with pytest.raises(AdminAuthError) as stale:
-        sessions.logout_all(
-            session_token=session.session_token, csrf_token=session.csrf_token, password=None
-        )
-    assert stale.value.code == "RECENT_AUTHENTICATION_REQUIRED"
-    # A fresh GitHub login is the required reauthentication for a GitHub-only owner.
-    login_started = identity.start(intent="login")
-    fresh = identity.complete(
-        state=login_started.state, cookie_state=login_started.state, code="oauth-code"
-    ).session
-    assert fresh is not None
-    sessions.logout_all(
-        session_token=fresh.session_token, csrf_token=fresh.csrf_token, password=None
+    local_session = sessions.login(
+        username="owner",
+        password="npcx",
+        remote_identity="local",
     )
-    with pytest.raises(AdminAuthError):
-        sessions.authorize(session_token=fresh.session_token)
+    started = identity.start(intent="link", session_token=local_session.session_token)
+    assert (
+        identity.complete(
+            state=started.state, cookie_state=started.state, code="oauth-code"
+        ).session
+        is None
+    )
+    sessions.unlink_github(session_token=local_session.session_token)
+    recovered = sessions.login(
+        username="owner",
+        password="npcx",
+        remote_identity="local",
+    )
+    sessions.authorize(session_token=recovered.session_token)

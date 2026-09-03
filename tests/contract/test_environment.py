@@ -27,6 +27,7 @@ def deployment_environment(**overrides: str) -> dict[str, str]:
         "REPONPC_CHAT_MODEL": "test-model",
         "REPONPC_CHAT_BASE_URL": "http://ollama:11434",
         "REPONPC_EMBEDDING_MODEL": "intfloat/multilingual-e5-small",
+        "REPONPC_EMBEDDING_BASE_URL": "http://ollama:11434",
     }
     values.update(overrides)
     return values
@@ -53,6 +54,53 @@ def test_load_environment_uses_typed_defaults_and_redacts_direct_secrets(tmp_pat
     assert repr(settings.secrets["github_token"]) == "SecretValue(<redacted>)"
     assert canary not in repr(settings)
     assert canary not in str(settings.secrets["github_token"])
+
+
+def test_deployment_profile_is_explicit_and_loopback_cannot_bind_publicly(
+    tmp_path: Path,
+) -> None:
+    production = load_environment(deployment_environment(), secret_roots=(tmp_path,))
+    assert production.deployment_profile == "production"
+
+    loopback = load_environment(
+        deployment_environment(
+            REPONPC_DEPLOYMENT_PROFILE="loopback_evaluation",
+            REPONPC_HOST="127.0.0.1",
+            REPONPC_PUBLIC_BASE_URL="http://localhost:8000",
+        ),
+        secret_roots=(tmp_path,),
+    )
+    assert loopback.deployment_profile == "loopback_evaluation"
+
+    with pytest.raises(EnvironmentValidationError) as exposed:
+        load_environment(
+            deployment_environment(
+                REPONPC_DEPLOYMENT_PROFILE="loopback_evaluation",
+                REPONPC_HOST="0.0.0.0",
+            ),
+            secret_roots=(tmp_path,),
+        )
+    assert "loopback_profile_exposed" in issue_codes(exposed.value)
+
+
+def test_legacy_recovery_command_and_local_production_embedding_are_rejected(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(EnvironmentValidationError) as legacy:
+        load_environment(
+            deployment_environment(
+                REPONPC_GITHUB_OWNER_RECOVERY_COMMAND="unsafe free-form command"
+            ),
+            secret_roots=(tmp_path,),
+        )
+    assert "unknown_variable" in issue_codes(legacy.value)
+
+    with pytest.raises(EnvironmentValidationError) as local_embedding:
+        load_environment(
+            deployment_environment(REPONPC_EMBEDDING_PROVIDER="local_sentence_transformers"),
+            secret_roots=(tmp_path,),
+        )
+    assert "invalid_choice" in issue_codes(local_embedding.value)
 
 
 def test_vllm_is_an_explicit_openai_compatible_provider_preset(tmp_path: Path) -> None:
@@ -108,7 +156,6 @@ def test_github_oauth_requires_complete_same_origin_encrypted_configuration(tmp_
                 "https://portfolio.example.com/api/admin/github/callback"
             ),
             REPONPC_CREDENTIAL_ENCRYPTION_KEY=credential_key,
-            REPONPC_GITHUB_OWNER_RECOVERY_COMMAND="reponpc admin set-password",
         ),
         secret_roots=(tmp_path,),
     )

@@ -30,7 +30,14 @@ from reponpc.admin.batch_resolver import (
     normalize_repository_slug,
 )
 from reponpc.admin.batch_runtime import BatchRuntimeError, BatchSnapshot
+from reponpc.admin.embedding_profiles import (
+    EmbeddingProfile,
+    EmbeddingProfileError,
+    EmbeddingProfileInput,
+    embedding_model_catalog,
+)
 from reponpc.admin.github import GitHubAdminError
+from reponpc.admin.model_operations import OllamaModelOperation
 from reponpc.admin.oauth import GitHubIdentityService, GitHubOAuthError
 from reponpc.admin.onboarding import (
     GuidedOnboardingError,
@@ -79,12 +86,28 @@ class LogoutAllRequest(_StrictRequest):
     password: str | None = Field(default=None, min_length=1, max_length=1024)
 
 
-class OAuthSetupStartRequest(_StrictRequest):
-    setup_code: str = Field(min_length=1, max_length=256)
-
-
 class GitHubPatRequest(_StrictRequest):
     token: str = Field(min_length=1, max_length=1024)
+
+
+class EmbeddingProfileRequest(_StrictRequest):
+    provider: Literal["ollama", "openai_compatible", "vllm"]
+    model_id: str = Field(min_length=1, max_length=256)
+    dimension: int = Field(ge=1, le=65536)
+    normalized: bool = True
+    query_prefix: str = Field(default="query: ", max_length=128)
+    passage_prefix: str = Field(default="passage: ", max_length=128)
+    connection_reference: str = Field(
+        default="environment", pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    )
+
+    def profile_input(self) -> EmbeddingProfileInput:
+        return EmbeddingProfileInput(**self.model_dump())
+
+
+class ConfirmedModelActionRequest(_StrictRequest):
+    profile_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+    confirmed: Literal[True]
 
 
 class ConfigContentRequest(_StrictRequest):
@@ -319,6 +342,284 @@ def create_admin_router(
             }
         )
 
+    @router.get("/embedding-profiles")
+    async def list_embedding_profiles(
+        request: Request,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        boundary = protected(request, session_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            profiles = await asyncio.to_thread(configured.list_embedding_profiles)
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        return _embedding_profile_response(
+            {"profiles": [_embedding_profile_payload(profile) for profile in profiles]}
+        )
+
+    @router.get("/embedding-models/catalog")
+    async def list_embedding_model_catalog(
+        request: Request,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        boundary = protected(request, session_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        return _embedding_profile_response({"models": embedding_model_catalog()})
+
+    @router.get("/embedding-models/installed")
+    async def list_installed_embedding_models(
+        request: Request,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        boundary = protected(request, session_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            models = await asyncio.to_thread(configured.installed_ollama_embedding_models)
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        return _embedding_profile_response({"provider": "ollama", "models": models})
+
+    @router.post("/embedding-profiles")
+    async def create_embedding_profile(
+        request: Request,
+        body: EmbeddingProfileRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            profile = await asyncio.to_thread(
+                configured.create_embedding_profile, body.profile_input()
+            )
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        return _embedding_profile_response(_embedding_profile_payload(profile), status_code=201)
+
+    @router.get("/embedding-profiles/{profile_id}")
+    async def get_embedding_profile(
+        request: Request,
+        profile_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        boundary = protected(request, session_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            profile = await asyncio.to_thread(configured.get_embedding_profile, profile_id)
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        return _embedding_profile_response(_embedding_profile_payload(profile))
+
+    @router.put("/embedding-profiles/{profile_id}")
+    async def update_embedding_profile(
+        request: Request,
+        body: EmbeddingProfileRequest,
+        profile_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            profile = await asyncio.to_thread(
+                configured.update_embedding_profile, profile_id, body.profile_input()
+            )
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        return _embedding_profile_response(_embedding_profile_payload(profile))
+
+    @router.delete("/embedding-profiles/{profile_id}")
+    async def delete_embedding_profile(
+        request: Request,
+        profile_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            await asyncio.to_thread(configured.delete_embedding_profile, profile_id)
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        return Response(status_code=204)
+
+    @router.post("/embedding-profiles/{profile_id}/probe")
+    async def probe_embedding_profile(
+        request: Request,
+        profile_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            profile = await asyncio.to_thread(configured.probe_embedding_profile, profile_id)
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        return _embedding_profile_response(_embedding_profile_payload(profile))
+
+    @router.post("/embedding-profiles/{profile_id}/activate")
+    async def activate_embedding_profile(
+        request: Request,
+        profile_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            profile = await asyncio.to_thread(configured.activate_embedding_profile, profile_id)
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        return _embedding_profile_response(_embedding_profile_payload(profile))
+
+    @router.post("/embedding-models/ollama/pull")
+    async def pull_ollama_embedding_model(
+        request: Request,
+        body: ConfirmedModelActionRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            operation = await asyncio.to_thread(
+                configured.start_ollama_embedding_model_pull,
+                body.profile_id,
+                confirmed=body.confirmed,
+            )
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        if operation is None:
+            profile = await asyncio.to_thread(configured.get_embedding_profile, body.profile_id)
+            return _embedding_profile_response(_embedding_profile_payload(profile))
+        return JSONResponse(
+            _ollama_model_operation_payload(operation),
+            status_code=202,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/embedding-model-operations/{operation_id}")
+    async def get_ollama_embedding_model_operation(
+        request: Request,
+        operation_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        boundary = protected(request, session_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            operation = await asyncio.to_thread(
+                configured.get_ollama_embedding_model_operation, operation_id
+            )
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        return _embedding_profile_response(_ollama_model_operation_payload(operation))
+
+    @router.delete("/embedding-model-operations/{operation_id}")
+    async def cancel_ollama_embedding_model_operation(
+        request: Request,
+        operation_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            operation = await asyncio.to_thread(
+                configured.cancel_ollama_embedding_model_operation, operation_id
+            )
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        return _embedding_profile_response(_ollama_model_operation_payload(operation))
+
+    @router.delete("/embedding-models/ollama/{model_id}")
+    async def delete_ollama_embedding_model(
+        request: Request,
+        body: ConfirmedModelActionRequest,
+        model_id: str = Path(min_length=1, max_length=256),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            profile = await asyncio.to_thread(configured.get_embedding_profile, body.profile_id)
+            if profile.model_id != model_id:
+                raise EmbeddingProfileError("VALIDATION_ERROR")
+            profile = await asyncio.to_thread(
+                configured.ollama_embedding_model_action,
+                body.profile_id,
+                action="delete",
+                confirmed=body.confirmed,
+            )
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        return _embedding_profile_response(_embedding_profile_payload(profile))
+
     @router.get("/github/oauth/setup-guide")
     async def github_oauth_setup_guide(request: Request) -> Response:
         callback_url = _setup_guide_callback_url(
@@ -364,35 +665,23 @@ def create_admin_router(
         return _oauth_redirect(started.authorization_url, started.state, oauth_cookie)
 
     @router.post("/setup/github/start")
-    async def start_github_setup(request: Request) -> Response:
+    async def reject_legacy_github_setup(request: Request) -> Response:
+        """Preserve the legacy route without creating GitHub-only ownership."""
+
         origin_error = same_origin(request)
         if origin_error is not None:
             return origin_error
-        try:
-            if request.headers.get("content-type", "").startswith(
-                "application/x-www-form-urlencoded"
-            ):
-                setup_code = str((await request.form()).get("setup_code", ""))
-            else:
-                payload = await request.json()
-                setup_code = str(payload.get("setup_code", "")) if isinstance(payload, dict) else ""
-        except Exception:
-            setup_code = ""
-        if not 1 <= len(setup_code) <= 256:
-            return error_response(
-                request,
-                status_code=400,
-                code="VALIDATION_ERROR",
-                message="GitHub setup request is invalid.",
-            )
-        identity = github_identity(request)
-        if isinstance(identity, JSONResponse):
-            return identity
-        try:
-            started = identity.start(intent="setup", setup_code=setup_code)
-        except (AdminAuthError, GitHubOAuthError) as exc:
-            return _oauth_or_auth_error(request, exc)
-        return _oauth_redirect(started.authorization_url, started.state, oauth_cookie)
+        configured = service(request)
+        if isinstance(configured, JSONResponse):
+            return configured
+        status = configured.setup_status()
+        code = "SETUP_DENIED" if status.setup_required else "SETUP_ALREADY_COMPLETE"
+        return error_response(
+            request,
+            status_code=403 if status.setup_required else 409,
+            code=code,
+            message="GitHub-only owner setup is not available.",
+        )
 
     @router.post("/identity/github/link/start")
     async def start_github_link(
@@ -1333,6 +1622,40 @@ def _batch_response(payload: dict[str, object]) -> JSONResponse:
     return JSONResponse(payload, headers={"Cache-Control": "no-store"})
 
 
+def _embedding_profile_response(
+    payload: dict[str, object], *, status_code: int = 200
+) -> JSONResponse:
+    return JSONResponse(
+        payload,
+        status_code=status_code,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+def _embedding_profile_error(request: Request, error: EmbeddingProfileError) -> JSONResponse:
+    status_code = {
+        "NOT_FOUND": 404,
+        "SERVICE_NOT_READY": 503,
+        "EMBEDDING_CONNECTION_REQUIRED": 409,
+        "EMBEDDING_PROFILE_ACTIVE_IMMUTABLE": 409,
+        "EMBEDDING_PROFILE_ACTIVE_REQUIRED": 409,
+        "EMBEDDING_REINDEX_REQUIRED": 409,
+        "EMBEDDING_PROBE_REQUIRED": 409,
+        "EMBEDDING_REINDEX_ACTIVE": 409,
+        "EMBEDDING_REINDEX_STALE": 409,
+        "EMBEDDING_MODEL_OPERATION_ACTIVE": 409,
+        "EMBEDDING_MODEL_OPERATION_FAILED": 502,
+    }.get(error.code, 400)
+    response = error_response(
+        request,
+        status_code=status_code,
+        code=error.code,
+        message="Embedding profile operation failed.",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 def _batch_error(request: Request, error: Exception) -> JSONResponse:
     code = error.code if isinstance(error, BatchRuntimeError) else "VALIDATION_ERROR"
     statuses = {
@@ -1457,6 +1780,51 @@ def _batch_snapshot_payload(snapshot: BatchSnapshot) -> dict[str, object]:
             }
             for item in snapshot.items
         ],
+    }
+
+
+def _embedding_profile_payload(profile: EmbeddingProfile) -> dict[str, object]:
+    return {
+        "profile_id": profile.profile_id,
+        "provider": profile.provider,
+        "model_id": profile.model_id,
+        "dimension": profile.dimension,
+        "normalized": profile.normalized,
+        "query_prefix": profile.query_prefix,
+        "passage_prefix": profile.passage_prefix,
+        "connection_reference": profile.connection_reference,
+        "status": profile.status,
+        "active": profile.active,
+        "observed_identity": (
+            {
+                "adapter": profile.observed_adapter,
+                "model_id": profile.observed_model_id,
+                "dimension": profile.observed_dimension,
+            }
+            if profile.observed_adapter is not None
+            else None
+        ),
+        "last_error_code": profile.last_error_code,
+        "created_at": profile.created_at,
+        "updated_at": profile.updated_at,
+        "last_probed_at": profile.last_probed_at,
+        "reindex_generation": profile.reindex_generation,
+        "reindex_started_at": profile.reindex_started_at,
+        "reindex_completed_at": profile.reindex_completed_at,
+        "bundle_id": profile.bundle_id,
+    }
+
+
+def _ollama_model_operation_payload(operation: OllamaModelOperation) -> dict[str, object]:
+    return {
+        "operation_id": operation.operation_id,
+        "profile_id": operation.profile_id,
+        "model_id": operation.model_id,
+        "status": operation.status,
+        "completed": operation.completed,
+        "total": operation.total,
+        "error_code": operation.error_code,
+        "updated_at": operation.updated_at,
     }
 
 

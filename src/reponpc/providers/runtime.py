@@ -60,7 +60,10 @@ class ProviderRuntime:
         if retry_base_seconds < 0:
             raise ValueError("retry delay must be non-negative")
         self.chat = chat
-        self.embedding = embedding
+        self._embedding = embedding
+        self._embeddings: dict[EmbeddingIdentity, RuntimeEmbeddingProvider] = {
+            embedding.identity(): embedding
+        }
         self._max_attempts = max_attempts
         self._retry_base_seconds = retry_base_seconds
         self._sleep = sleep
@@ -76,6 +79,33 @@ class ProviderRuntime:
         with self._lock:
             return self._status
 
+    @property
+    def embedding(self) -> RuntimeEmbeddingProvider:
+        """Return the active embedding adapter as one atomic snapshot."""
+
+        with self._lock:
+            return self._embedding
+
+    def replace_embedding(self, embedding: RuntimeEmbeddingProvider) -> RuntimeEmbeddingProvider:
+        """Atomically select one probed adapter while retaining leased identities.
+
+        Old adapters remain addressable for requests which already leased an old
+        immutable index.  They are lightweight HTTP clients, and the bundle
+        manager bounds live index generations independently.
+        """
+
+        identity = embedding.identity()
+        with self._lock:
+            previous = self._embedding
+            self._embedding = embedding
+            self._embeddings[identity] = embedding
+            self._status = RuntimeProviderStatus(
+                ready=False,
+                checked_at=_checked_at(),
+                failure_code=ProviderFailureCode.UNAVAILABLE,
+            )
+            return previous
+
     def poll_health(self) -> RuntimeProviderStatus:
         """Poll both selected providers once and publish one safe snapshot."""
 
@@ -83,8 +113,9 @@ class ProviderRuntime:
             chat_health = self.chat.health()
         except Exception:
             chat_health = ProviderHealth(False, _checked_at(), ProviderFailureCode.UNAVAILABLE)
+        embedding = self.embedding
         try:
-            embedding_health = self.embedding.health()
+            embedding_health = embedding.health()
         except Exception:
             embedding_health = ProviderHealth(False, _checked_at(), ProviderFailureCode.UNAVAILABLE)
         ready = chat_health.ready and embedding_health.ready
@@ -131,14 +162,31 @@ class ProviderRuntime:
     def embed_query(self, texts: list[str], *, timeout: float) -> NDArray[np.float32]:
         """Embed a query batch with bounded same-adapter transient retries."""
 
-        return self._within_deadline(timeout, lambda _remaining: self.embedding.embed_query(texts))
+        embedding = self.embedding
+        return self._within_deadline(timeout, lambda _remaining: embedding.embed_query(texts))
+
+    def embed_query_for(
+        self,
+        identity: EmbeddingIdentity,
+        texts: list[str],
+        *,
+        timeout: float,
+    ) -> NDArray[np.float32]:
+        """Embed with the adapter matching one already-leased immutable index."""
+
+        with self._lock:
+            embedding = self._embeddings.get(identity)
+        if embedding is None:
+            raise ProviderError(ProviderFailureCode.UNAVAILABLE)
+        return self._within_deadline(timeout, lambda _remaining: embedding.embed_query(texts))
 
     def embed_query_once(self, texts: list[str], *, timeout: float) -> NDArray[np.float32]:
         """Call only the configured embedding adapter once for explicit no-retry flows."""
 
         if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
             raise ProviderError(ProviderFailureCode.TIMEOUT)
-        return self.embedding.embed_query(texts)
+        embedding = self.embedding
+        return embedding.embed_query(texts)
 
     def _within_deadline(self, timeout: float, operation: Callable[[float], T]) -> T:
         if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:

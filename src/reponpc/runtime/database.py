@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+import uuid
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -404,6 +405,73 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             """,
         ),
     ),
+    Migration(
+        version=10,
+        name="embedding-profile-registry",
+        statements=(
+            """
+            CREATE TABLE embedding_profiles (
+                profile_id TEXT PRIMARY KEY
+                    CHECK(length(profile_id) BETWEEN 1 AND 64),
+                provider TEXT NOT NULL
+                    CHECK(provider IN ('ollama', 'openai_compatible', 'vllm')),
+                model_id TEXT NOT NULL CHECK(length(model_id) BETWEEN 1 AND 256),
+                dimension INTEGER NOT NULL CHECK(dimension BETWEEN 1 AND 65536),
+                normalized INTEGER NOT NULL CHECK(normalized IN (0, 1)),
+                query_prefix TEXT NOT NULL CHECK(length(query_prefix) <= 128),
+                passage_prefix TEXT NOT NULL CHECK(length(passage_prefix) <= 128),
+                connection_reference TEXT NOT NULL
+                    CHECK(length(connection_reference) BETWEEN 1 AND 64),
+                status TEXT NOT NULL CHECK(status IN (
+                    'probe', 'reindex_required', 'reindexing', 'ready',
+                    'last_known_good', 'probe_failed'
+                )),
+                active INTEGER NOT NULL CHECK(active IN (0, 1)),
+                observed_adapter TEXT,
+                observed_model_id TEXT,
+                observed_dimension INTEGER,
+                last_error_code TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_probed_at TEXT
+            )
+            """,
+            """
+            CREATE UNIQUE INDEX embedding_profiles_one_active_idx
+            ON embedding_profiles(active) WHERE active = 1
+            """,
+        ),
+    ),
+    Migration(
+        version=11,
+        name="embedding-profile-reindex-lifecycle",
+        statements=(
+            (
+                "ALTER TABLE embedding_profiles ADD COLUMN "
+                "reindex_generation INTEGER NOT NULL DEFAULT 0"
+            ),
+            "ALTER TABLE embedding_profiles ADD COLUMN reindex_started_at TEXT",
+            "ALTER TABLE embedding_profiles ADD COLUMN reindex_completed_at TEXT",
+            "ALTER TABLE embedding_profiles ADD COLUMN bundle_id TEXT",
+        ),
+    ),
+    Migration(
+        version=12,
+        name="embedding-switch-intent",
+        statements=(
+            """
+            CREATE TABLE embedding_switch_intent (
+                state_key TEXT PRIMARY KEY CHECK(state_key = 'current'),
+                generation INTEGER NOT NULL CHECK(generation >= 1),
+                from_profile_id TEXT REFERENCES embedding_profiles(profile_id),
+                from_bundle_id TEXT,
+                to_profile_id TEXT NOT NULL REFERENCES embedding_profiles(profile_id),
+                to_bundle_id TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """,
+        ),
+    ),
 )
 
 
@@ -473,6 +541,41 @@ class RuntimeDatabase:
                 "SELECT COALESCE(MAX(version), 0) FROM runtime_schema_migrations"
             ).fetchone()
             return int(row[0])
+
+    def check_integrity(self) -> None:
+        """Run the same bounded SQLite integrity check used at startup."""
+
+        if not self.database_path.is_file():
+            raise RuntimeDatabaseError("runtime_database_missing")
+        with self.connection() as connection:
+            self._check_integrity(connection)
+
+    def backup_to(self, destination: Path) -> Path:
+        """Create and verify one online SQLite backup without overwriting files."""
+
+        target = destination.resolve()
+        source = self.database_path.resolve()
+        if not source.is_file():
+            raise RuntimeDatabaseError("runtime_database_missing")
+        if target == source or target.exists() or not target.parent.is_dir():
+            raise RuntimeDatabaseError("runtime_backup_target_invalid")
+        temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            with self.connection() as connection:
+                backup = sqlite3.connect(temporary)
+                try:
+                    connection.backup(backup)
+                    self._check_integrity(backup)
+                finally:
+                    backup.close()
+            temporary.replace(target)
+        except RuntimeDatabaseError:
+            temporary.unlink(missing_ok=True)
+            raise
+        except (OSError, sqlite3.Error) as exc:
+            temporary.unlink(missing_ok=True)
+            raise RuntimeDatabaseError("runtime_backup_failed") from exc
+        return target
 
     def bundle_state(self) -> BundleRuntimeState:
         """Return the one safe runtime bundle-state row, creating no index data."""

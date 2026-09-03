@@ -410,6 +410,10 @@ def test_draft_requires_confirmation_and_round_trips_schema_v1(tmp_path: Path) -
         exclude=(),
         identity=providers.embedding.identity(),
     )
+    existing_repository = config.repositories[0].model_copy(
+        update={"tags": ("Python",), "demo_url": "https://example.com/demo"}
+    )
+    config = config.model_copy(update={"repositories": (existing_repository,)})
     profile = GuidedProfileDraft.model_validate(
         {
             "display_name": "Example Developer",
@@ -442,6 +446,10 @@ def test_draft_requires_confirmation_and_round_trips_schema_v1(tmp_path: Path) -
     )
     assert draft["content"].startswith("schema_version: 1")
     assert draft["validation"]["valid"] is True  # type: ignore[index]
+    content = str(draft["content"])
+    assert "tags:" in content
+    assert "demo_url:" in content
+    assert "Python" in content
 
 
 def test_draft_without_provider_or_github_uses_safe_documented_defaults(

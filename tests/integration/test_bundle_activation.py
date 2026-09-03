@@ -100,6 +100,9 @@ def test_atomic_activation_retains_inflight_handle_and_rolls_back_on_pre_swap_fa
     assert manager.status().active_bundle_id != candidate_c.manifest.bundle_id
     assert runtime.bundle_state().active_bundle_id == manager.status().active_bundle_id
 
+    verified_manifest = manager.verify(active_a)
+    assert verified_manifest.bundle_id == active_a
+
     manager.pin(active_a)
     assert manager.status().active_bundle_id == active_a
     assert manager.status().pinned_bundle_id == active_a

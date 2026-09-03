@@ -13,6 +13,7 @@ export const CHARACTER_STATES = [
 ] as const;
 
 export type CharacterState = (typeof CHARACTER_STATES)[number];
+export type CharacterMovement = "none" | "subtle";
 
 export const CHARACTER_FRAME_SIZE = 32;
 export const CHARACTER_FRAME_COUNT = 4;
@@ -37,6 +38,7 @@ export interface CharacterRendererProps {
   reducedMotion: boolean;
   frame?: number;
   frameDurationMs?: number;
+  movement?: CharacterMovement;
   className?: string;
 }
 
@@ -64,6 +66,13 @@ export function normalizeFrameDurationMs(frameDurationMs?: number): number {
   );
 }
 
+/** Keeps public bundle animation metadata within the supported movement contract. */
+export function normalizeCharacterMovement(
+  movement?: unknown,
+): CharacterMovement {
+  return movement === "none" ? "none" : "subtle";
+}
+
 export function getCharacterStateRow(state: CharacterState): number {
   return CHARACTER_STATE_ROWS[state];
 }
@@ -75,11 +84,13 @@ export function CharacterRenderer({
   reducedMotion,
   frame,
   frameDurationMs,
+  movement = "subtle",
   className,
 }: CharacterRendererProps) {
   const initialFrame = reducedMotion ? 0 : normalizeCharacterFrame(frame);
   const row = getCharacterStateRow(state);
   const frameDuration = normalizeFrameDurationMs(frameDurationMs);
+  const configuredMovement = normalizeCharacterMovement(movement);
   const rendererClassName = ["character-renderer", className]
     .filter(Boolean)
     .join(" ");
@@ -99,6 +110,7 @@ export function CharacterRenderer({
       aria-label={stateLabel}
       className={rendererClassName}
       data-character-state={state}
+      data-character-movement={state === "walk" ? configuredMovement : "none"}
       data-reduced-motion={reducedMotion ? "true" : "false"}
       role="img"
     >

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -21,7 +22,7 @@ from reponpc.providers.http_transport import (
     UrllibProviderHttpTransport,
     failure_for_status,
 )
-from reponpc.providers.model_catalog import ollama_model_available
+from reponpc.providers.model_catalog import ollama_model_available, ollama_model_ids
 from reponpc.providers.openai_embeddings import (
     _checked_at,
     _json_bytes,
@@ -32,6 +33,10 @@ from reponpc.providers.openai_embeddings import (
 )
 
 _REQUEST_TIMEOUT_SECONDS = 30.0
+
+
+class OllamaPullCancelled(RuntimeError):
+    """Internal cooperative-cancellation signal without provider detail."""
 
 
 class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
@@ -107,6 +112,129 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
                 ProviderFailureCode.INVALID_RESPONSE,
             )
         return ProviderHealth(True, _checked_at())
+
+    def pull_model(
+        self,
+        *,
+        cancelled: Callable[[], bool] | None = None,
+        on_progress: Callable[[int | None, int | None], None] | None = None,
+    ) -> None:
+        """Use Ollama's provider-owned model lifecycle for the configured model."""
+
+        is_cancelled = cancelled or (lambda: False)
+        progress = on_progress or (lambda _completed, _total: None)
+        stream_lines = getattr(self._transport, "stream_lines", None)
+        if callable(stream_lines):
+            if is_cancelled():
+                raise OllamaPullCancelled
+
+            def consume(line: bytes) -> None:
+                if is_cancelled():
+                    raise OllamaPullCancelled
+                try:
+                    payload = _json_object(line)
+                    completed = payload.get("completed")
+                    total = payload.get("total")
+                    if completed is not None and (
+                        isinstance(completed, bool) or not isinstance(completed, int)
+                    ):
+                        raise ValueError
+                    if total is not None and (
+                        isinstance(total, bool) or not isinstance(total, int)
+                    ):
+                        raise ValueError
+                    progress(completed, total)
+                except (UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
+                    raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
+
+            try:
+                status = stream_lines(
+                    "POST",
+                    self._origin.endpoint("api/pull"),
+                    headers={
+                        "Accept": "application/x-ndjson",
+                        "Content-Type": "application/json",
+                        "User-Agent": "RepoNPC-provider",
+                    },
+                    body=_json_bytes({"model": self._model, "stream": True}),
+                    timeout=300.0,
+                    cancelled=is_cancelled,
+                    on_line=consume,
+                )
+            except InterruptedError:
+                raise OllamaPullCancelled from None
+            if status != 200:
+                raise ProviderError(failure_for_status(status))
+            return
+
+        progress(None, None)
+        self._model_action(
+            "POST",
+            "api/pull",
+            {"model": self._model, "stream": False},
+            timeout=300.0,
+        )
+        if is_cancelled():
+            raise OllamaPullCancelled
+
+    def installed_models(self) -> tuple[str, ...]:
+        """Return validated provider model IDs without exposing the provider origin."""
+
+        try:
+            response = self._transport.request(
+                "GET",
+                self._origin.endpoint("api/tags"),
+                headers={"Accept": "application/json", "User-Agent": "RepoNPC-provider"},
+                body=None,
+                timeout=5.0,
+            )
+        except ProviderError:
+            raise
+        except Exception:
+            raise ProviderError(ProviderFailureCode.UNAVAILABLE) from None
+        if response.status != 200:
+            raise ProviderError(failure_for_status(response.status))
+        try:
+            return ollama_model_ids(_json_object(response.body))
+        except (UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
+            raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
+
+    def delete_model(self) -> None:
+        """Delete only the explicitly configured Ollama model."""
+
+        self._model_action(
+            "DELETE",
+            "api/delete",
+            {"model": self._model},
+            timeout=30.0,
+        )
+
+    def _model_action(
+        self,
+        method: str,
+        endpoint: str,
+        payload: dict[str, object],
+        *,
+        timeout: float,
+    ) -> None:
+        try:
+            response = self._transport.request(
+                method,
+                self._origin.endpoint(endpoint),
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "User-Agent": "RepoNPC-provider",
+                },
+                body=_json_bytes(payload),
+                timeout=timeout,
+            )
+        except ProviderError:
+            raise
+        except Exception:
+            raise ProviderError(ProviderFailureCode.UNAVAILABLE) from None
+        if response.status != 200:
+            raise ProviderError(failure_for_status(response.status))
 
     def _embed(self, texts: list[str], prefix: str) -> NDArray[np.float32]:
         if not isinstance(texts, list) or any(not isinstance(text, str) for text in texts):

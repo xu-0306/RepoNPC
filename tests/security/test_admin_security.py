@@ -71,10 +71,33 @@ def test_setup_status_exposes_only_safe_booleans(tmp_path: Path) -> None:
         response = client.get("/api/admin/setup")
 
     assert response.status_code == 200
-    assert response.json() == {"setup_required": True, "setup_code_available": True}
+    assert response.json() == {
+        "setup_required": True,
+        "setup_code_available": True,
+    }
     assert setup_code not in response.text
     assert "code_hash" not in response.text
     assert "expires_at" not in response.text
+
+
+def test_legacy_github_setup_route_cannot_consume_code_or_create_owner(
+    tmp_path: Path,
+) -> None:
+    app, database, service = _setup_app(tmp_path)
+    setup_code = issue_admin_setup_code(database, now=datetime(2026, 8, 13, tzinfo=UTC))
+
+    with TestClient(app, base_url=ORIGIN) as client:
+        rejected = client.post(
+            "/api/admin/setup/github/start",
+            headers={"Origin": ORIGIN},
+            json={"setup_code": setup_code},
+        )
+
+    assert rejected.status_code == 403
+    assert rejected.json()["error"]["code"] == "SETUP_DENIED"
+    assert setup_code not in rejected.text
+    assert service.setup_status().setup_required is True
+    assert service.setup_status().setup_code_available is True
 
 
 def test_github_oauth_setup_guide_has_no_secret_or_identity_material(tmp_path: Path) -> None:

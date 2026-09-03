@@ -224,19 +224,19 @@ The admin surface MUST NOT be made safe by choosing an unusual port. The support
 
 The owner clarified that predesigned specifications are hypotheses and must be corrected when actual use shows an unreasonable workflow. The compatible no-dead-end corrections are recorded in FR-025/FR-027/FR-028/NFR-003 and AC-019/AC-025/AC-032/AC-040: optional analysis has an immediate manual path, guided navigation is reversible with selective invalidation, and unavailable integrations cannot disable unrelated local work without a reason/recovery/alternative.
 
-The audit also identified higher-impact choices that are **not approved or changed yet** because they affect security, API/state, persistence, schema/validation, asset compatibility, or hosting topology. `docs/UX_SPEC_REVIEW.md` records the evidence, alternatives, and recommendations for UXD-001 through UXD-007: anonymous small-batch public analysis, batch/scheduler simplification, optional local publication transport, primary-locale preview gating, password recovery/durable drafts, returning-owner guided editing, and the unused `walk` asset state. The owner may approve/change these independently by ID.
+The audit also identified higher-impact choices that are **not approved or changed yet** because they affect security, API/state, persistence, schema/validation, asset compatibility, or hosting topology. `docs/UX_SPEC_REVIEW.md` records the evidence, alternatives, and recommendations for the remaining UXD-001 through UXD-005 and UXD-007 items. UXD-006 (returning-owner guided editing) is approved by the owner's 2026-09-03 instruction and is implemented as a structured return editor; durable server-side drafts remain outside that decision.
 
-The full-stack audit adds the following independent decisions. ENGD-001, ENGD-002, ENGD-003, and ENGD-006 are now closed above; only the remaining items below require a later owner decision. Their evidence, exit gates, and sequencing are in `docs/SPEC_AND_ENGINEERING_REMEDIATION_PLAN.md`.
+The full-stack audit adds the following independent decisions. ENGD-001, ENGD-002, ENGD-003, ENGD-004, ENGD-005, and ENGD-006 are now closed above; only the remaining items below require a later owner decision. Their evidence, exit gates, and sequencing are in `docs/SPEC_AND_ENGINEERING_REMEDIATION_PLAN.md`.
 
 | ID | Decision required | Recommendation | Contract/implementation impact |
 | --- | --- | --- | --- |
-| ENGD-004 | For `profile.greeting`, `avatar_url`, character animation timing/movement, and `walk`, should v1 wire each field to a visible consumer or remove/deprecate it? | Do not require configuration that has no observable effect. Wire only fields with a committed user outcome; deprecate the rest through a compatible schema plan. | Public config/profile/bundle, CSP, visitor/admin UI, sprite compatibility, examples. |
-| ENGD-005 | Should release evidence move to one machine-readable acceptance ledger? | Yes; make one AC/FR ledger authoritative for current evidence and have narrative documents link to it instead of copying pass totals. | Release governance and documentation; no runtime behavior change. |
+| ENGD-004 | **Closed by owner approval:** wire the configured public profile and character fields to visible visitor consumers. | Keep the additive schema-v1 fields and bounded animation behavior; measure walk usage before any simplification. | Public config/profile/bundle, CSP, visitor/admin UI, sprite compatibility, examples. |
+| ENGD-005 | **Closed by owner approval (2026-09-03):** Should release evidence move to one machine-readable acceptance ledger? | Use `release-evidence/acceptance-ledger.json` as the authoritative AC-001–AC-050 status record; keep unsupported checks explicitly `not-run`/`blocked`. | Release governance and documentation; no runtime behavior change. |
 | ENGD-007 | What capacity baseline governs scheduler/cache complexity and release SLOs? | Record deployment cadence, year-one p50/p99 traffic, monthly cloud/SaaS ceiling, and availability target before adding or deleting scheduler/cache behavior. | Performance plan, capacity tests, possible FR-033 simplification; no silent API change. |
 
 ## 3. How to respond
 
-OR-010 was approved on 2026-08-14, OR-011 on 2026-08-15, OR-013 and ENGD-001/002/003/006 on 2026-08-30. Any later incompatible change requires an explicit owner decision and matching updates to the normative specification, acceptance criteria, and relevant ADR.
+OR-010 was approved on 2026-08-14, OR-011 on 2026-08-15, OR-013 and ENGD-001/002/003/006 on 2026-08-30, ENGD-004 by the owner's 2026-09-02 instruction, and UXD-006/ENGD-005 by the owner's 2026-09-03 instruction. Any later incompatible change requires an explicit owner decision and matching updates to the normative specification, acceptance criteria, and relevant ADR.
 
 For the historical closed decisions, the owner may reply either:
 

@@ -81,8 +81,10 @@ class GroundedChatService:
             _raise_if_cancelled(cancel_requested)
             deadline = self._monotonic() + self._timeout_seconds
             with _public_provider_permit(self._limits):
-                query_vector = self._providers.embed_query(
-                    [message], timeout=self._remaining(deadline)
+                query_vector = self._providers.embed_query_for(
+                    getattr(index, "embedding", self._providers.embedding.identity()),
+                    [message],
+                    timeout=self._remaining(deadline),
                 )[0]
             _raise_if_cancelled(cancel_requested)
             evidence_ids = index.hybrid_candidates(message, query_vector=query_vector)

@@ -74,6 +74,7 @@ export interface GuidedRepository {
   include: string[];
   exclude: string[];
   selected: boolean;
+  confirmedSelectionFingerprint: string | null;
   analysisStatus: AnalysisStatus;
   analysis: RepositoryAnalysis | null;
   ownerStatement: string;
@@ -122,6 +123,8 @@ export type GuidedOnboardingAction =
       exclude: string[];
     }
   | { type: "CONFIRM_SELECTION" }
+  | { type: "EDIT_SELECTION" }
+  | { type: "GO_BACK" }
   | { type: "ANALYSIS_STARTED"; slug: string }
   | { type: "ANALYSIS_COMPLETED"; slug: string; analysis: RepositoryAnalysis }
   | { type: "ANALYSIS_UNAVAILABLE"; slug: string }
@@ -155,6 +158,7 @@ export interface GuidedOnboardingViewProps {
   errorCode: string;
   batchAnalysisView?: ReactNode;
   batchAnalysisTerminal?: boolean;
+  batchAnalysisActive?: boolean;
   batchCanCreate?: boolean;
   batchCreatePending?: boolean;
   providerStatus: GuidedProviderStatus | null;
@@ -163,6 +167,7 @@ export interface GuidedOnboardingViewProps {
   onDiscover: (account: string, page: number) => void;
   onResolve: (repository: string, ref: string | null) => void;
   onAnalyze: (slug: string) => void;
+  onPrepareBatch?: () => void;
   onCreateBatch?: () => void;
   onRefreshProviderStatus: () => void;
   onSuggestContribution: (slug: string) => void;
@@ -227,6 +232,80 @@ export function initialGuidedOnboardingState(
   };
 }
 
+/** Maps a validated public config into the editable guided journey. */
+export function guidedOnboardingFromConfig(
+  value: unknown,
+): GuidedOnboardingState | null {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.profile) ||
+    !Array.isArray(value.repositories)
+  ) {
+    return null;
+  }
+  const profileValue = value.profile;
+  if (typeof profileValue.display_name !== "string") return null;
+  const headline = localizedText(profileValue.headline);
+  const bio = localizedText(profileValue.bio);
+  const greeting = localizedText(profileValue.greeting);
+  if (!headline || !bio || !greeting) return null;
+
+  const repositories: GuidedRepository[] = [];
+  for (const item of value.repositories) {
+    if (!isRecord(item) || typeof item.slug !== "string") return null;
+    if (item.enabled === false) continue;
+    const metadata = metadataFromConfig(item.slug);
+    const role = localizedText(item.role);
+    const summary = localizedText(item.summary);
+    const claims = parseConfigClaims(item.claims);
+    const include = stringArray(item.include);
+    const exclude = stringArray(item.exclude);
+    if (!role || !summary || !claims || !include || !exclude) return null;
+    const ref = item.ref === null || item.ref === undefined ? null : item.ref;
+    if (typeof ref !== "string" && ref !== null) return null;
+    repositories.push({
+      metadata,
+      ref,
+      include,
+      exclude,
+      selected: true,
+      confirmedSelectionFingerprint: selectionFingerprint({
+        ref,
+        include,
+        exclude,
+      }),
+      analysisStatus: "idle",
+      analysis: null,
+      ownerStatement: summary["zh-TW"],
+      proposal: null,
+      confirmedContribution: {
+        evidence_class: "OWNER_ASSERTION",
+        role,
+        summary,
+        claims,
+      },
+    });
+  }
+  if (repositories.length === 0) return null;
+  return {
+    step: "profile",
+    mode: "guided",
+    githubAccount: "",
+    discoveryPage: 0,
+    discoveryHasMore: false,
+    repositories,
+    selectionConfirmed: true,
+    profile: {
+      displayName: profileValue.display_name,
+      headline,
+      bio,
+      greeting,
+    },
+    profileConfirmed: false,
+    rawYamlHasUnmappedChanges: false,
+  };
+}
+
 export function selectedRepositories(
   state: GuidedOnboardingState,
 ): GuidedRepository[] {
@@ -282,7 +361,60 @@ export function guidedOnboardingReducer(
       if (selectedRepositories(state).length === 0) {
         throw new Error("ONBOARDING_SELECTION_REQUIRED");
       }
-      return { ...state, step: "analysis", selectionConfirmed: true };
+      return {
+        ...state,
+        step: "analysis",
+        selectionConfirmed: true,
+        repositories: state.repositories.map((repository) => {
+          const nextFingerprint = repository.selected
+            ? selectionFingerprint(repository)
+            : null;
+          if (nextFingerprint === repository.confirmedSelectionFingerprint) {
+            return repository;
+          }
+          return {
+            ...repository,
+            confirmedSelectionFingerprint: nextFingerprint,
+            analysisStatus: "idle",
+            analysis: null,
+            ownerStatement: "",
+            proposal: null,
+            confirmedContribution: null,
+          };
+        }),
+      };
+    case "EDIT_SELECTION":
+      if (state.step === "intro" || state.step === "repositories") {
+        throw new Error("ONBOARDING_ILLEGAL_TRANSITION");
+      }
+      return {
+        ...state,
+        step: "repositories",
+        mode: "guided",
+        selectionConfirmed: false,
+      };
+    case "GO_BACK":
+      switch (state.step) {
+        case "repositories":
+          return { ...state, step: "intro" };
+        case "analysis":
+          return {
+            ...state,
+            step: "repositories",
+            selectionConfirmed: false,
+          };
+        case "contributions":
+          return { ...state, step: "analysis" };
+        case "profile":
+          return { ...state, step: "contributions", profileConfirmed: false };
+        case "review":
+          return { ...state, step: "profile", profileConfirmed: false };
+        case "draft":
+          return { ...state, step: "review" };
+        case "intro":
+          throw new Error("ONBOARDING_ILLEGAL_TRANSITION");
+      }
+      throw new Error("ONBOARDING_ILLEGAL_TRANSITION");
     case "ANALYSIS_STARTED":
       requireStep(state, "analysis");
       return updateSelectedRepository(state, action.slug, (repository) => ({
@@ -315,13 +447,6 @@ export function guidedOnboardingReducer(
         )
       ) {
         throw new Error("ONBOARDING_ANALYSIS_IN_PROGRESS");
-      }
-      if (
-        selectedRepositories(state).some(
-          (repository) => repository.analysisStatus === "idle",
-        )
-      ) {
-        throw new Error("ONBOARDING_ANALYSIS_REQUIRED");
       }
       return { ...state, step: "contributions" };
     case "SET_OWNER_STATEMENT":
@@ -494,6 +619,11 @@ export function parseGuidedOnboarding(
         include: persisted.include,
         exclude: persisted.exclude,
         selected: true,
+        confirmedSelectionFingerprint: selectionFingerprint({
+          ref: persisted.ref,
+          include: persisted.include,
+          exclude: persisted.exclude,
+        }),
         analysisStatus: "idle",
         analysis: null,
         ownerStatement: persisted.ownerStatement,
@@ -579,12 +709,23 @@ function newGuidedRepository(metadata: RepositoryMetadata): GuidedRepository {
     include: [],
     exclude: [],
     selected: false,
+    confirmedSelectionFingerprint: null,
     analysisStatus: "idle",
     analysis: null,
     ownerStatement: "",
     proposal: null,
     confirmedContribution: null,
   };
+}
+
+function selectionFingerprint(
+  repository: Pick<GuidedRepository, "ref" | "include" | "exclude">,
+): string {
+  return JSON.stringify([
+    repository.ref,
+    [...repository.include],
+    [...repository.exclude],
+  ]);
 }
 
 function mergeRepositories(
@@ -730,6 +871,45 @@ function parseProfile(value: unknown): GuidedProfile | null {
   const greeting = localizedText(value.greeting);
   if (!headline || !bio || !greeting) return null;
   return { displayName: value.displayName, headline, bio, greeting };
+}
+
+function metadataFromConfig(slug: string): RepositoryMetadata {
+  const name = slug.split("/", 2)[1] ?? slug;
+  return {
+    slug,
+    name: name ?? slug,
+    description: null,
+    primary_language: null,
+    default_branch: "main",
+    is_fork: false,
+    is_archived: false,
+    updated_at: null,
+    html_url: `https://github.com/${slug}`,
+  };
+}
+
+function parseConfigClaims(value: unknown): SuggestedClaim[] | null {
+  if (!Array.isArray(value)) return null;
+  const claims: SuggestedClaim[] = [];
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.id !== "string") return null;
+    if (
+      item.kind !== "role" &&
+      item.kind !== "responsibility" &&
+      item.kind !== "achievement" &&
+      item.kind !== "context"
+    ) {
+      return null;
+    }
+    const statement = localizedText(item.statement);
+    if (!statement) return null;
+    claims.push({
+      id: item.id,
+      kind: item.kind as SuggestedClaim["kind"],
+      statement,
+    });
+  }
+  return claims;
 }
 
 function parseConfirmedContribution(

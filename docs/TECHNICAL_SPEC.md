@@ -547,6 +547,7 @@ Success `200`:
     "display_name": "Example Developer",
     "headline": "...",
     "bio": "...",
+    "greeting": "歡迎探索我的作品集。",
     "location": null,
     "avatar_url": null,
     "links": [{"label": "GitHub", "url": "https://github.com/example"}]
@@ -559,7 +560,13 @@ Success `200`:
     "demo_url": null
   }],
   "suggested_questions": ["這個專案解決什麼問題？"],
-  "character": {"mode": "builtin", "asset_url": "/api/public/character.png", "revision": 1},
+  "character": {
+    "mode": "builtin",
+    "asset_url": "/api/public/character.png",
+    "revision": 1,
+    "frame_duration_ms": 160,
+    "movement": "subtle"
+  },
   "index": {"version": "...", "built_at": "...", "repository_count": 1}
 }
 ```
@@ -588,7 +595,7 @@ The immutable bundle stores one internal `public/profile.json` with this schema-
 }
 ```
 
-The locale keys MUST be exactly `zh-TW` and `en`; both locale objects MUST contain every field needed for the existing public response. The bundle producer derives them from the validated configuration and built index metadata. The verifier validates both locales before activation. The route selects only the requested locale and constructs the existing response shape with `locale` added at the top level. Missing or invalid locale data fails closed; the route MUST NOT cross-fallback to the other required locale.
+The locale keys MUST be exactly `zh-TW` and `en`; both locale objects MUST contain every field needed for the public response, including the localized `profile.greeting`. Character metadata MUST include the configured `frame_duration_ms` (80–1000 ms) and `movement` (`none` or `subtle`). The bundle producer derives these values from the validated configuration and built index metadata. The verifier validates both locales before activation. The route selects only the requested locale and constructs the response with `locale` added at the top level. Missing or invalid locale data fails closed; the route MUST NOT cross-fallback to the other required locale.
 
 ### 9.2 `POST /api/public/chat/stream`
 
@@ -744,7 +751,7 @@ JSON failures use:
 | `POST /api/admin/session/github/start` | Same-origin OAuth login start -> redirect response and short-lived transaction cookie. |
 | `POST /api/admin/setup/github/start` | Deprecated compatibility route; returns a safe setup-denied/already-complete error and never creates a GitHub-only owner or consumes setup proof. |
 | `POST /api/admin/identity/github/link/start` | Authenticated recent-auth identity-link transaction -> redirect response. |
-| `GET /api/admin/github/callback` | Single fixed registered callback validates state/cookie/intent then completes login, setup, or link and redirects to a fixed `/admin` result. |
+| `GET /api/admin/github/callback` | Single fixed registered callback validates state/cookie/intent then completes login or link and redirects to a fixed `/admin` result. |
 | `DELETE /api/admin/identity/github` | Authenticated recent-auth unlink; rejects removal of the final usable method. |
 | `GET`/`PUT`/`POST`/`DELETE /api/admin/github/connections...` | Authenticated public-read connection metadata, PAT submission/check, and removal without returning token material. |
 | `POST /api/admin/session/refresh` | Auth + CSRF -> rotated session and CSRF token. |
@@ -810,9 +817,9 @@ All routes below are authenticated same-origin admin routes with `Cache-Control:
 
 #### Draft, resume, validation, and export
 
-- `POST /api/admin/onboarding/draft` accepts confirmed guided fields only and returns `{content,validation}` containing a complete UTF-8 schema-v1 YAML draft plus the existing normalized validation result. It performs no model, GitHub, or publication call.
+- `POST /api/admin/onboarding/draft` accepts confirmed guided fields only and returns `{content,validation}` containing a complete UTF-8 schema-v1 YAML draft plus the existing normalized validation result. When `base_config` is supplied, fields outside the guided surface (including links, avatar, tags, demo URLs, card, character, and retrieval settings) are retained. It performs no model, GitHub, or publication call.
 - Every non-terminal guided stage provides Back or an equivalent Edit action. Editing selection invalidates a preflight plan and analysis result only when its repository, ref, include, or exclude identity changed. Removing a repository removes only that repository's contribution state. Profile fields and unaffected repository statements/results MUST remain. A separate destructive Start over action requires confirmation.
-- Guided fields and advanced raw YAML must round-trip without silently deleting unknown draft text; a raw edit that cannot map safely back to guided fields remains in advanced mode with an actionable validation message.
+- Existing validated configuration MUST hydrate the guided editor with its profile and selected repositories, including localized headline/bio/greeting, ref/include/exclude, role/summary, and claims. Guided draft generation MUST preserve validated fields outside the guided surface. Because the public configuration schema rejects unknown keys, a raw edit containing unmappable/unknown YAML remains in advanced mode with an actionable validation message rather than being silently discarded.
 - Unsaved selections, owner-entered public statements, and confirmed suggestions MAY be stored in browser `sessionStorage` for reload/resume within the authenticated browser session. Logout and successful GitHub save MUST clear them. Session/CSRF tokens, credentials, raw repository bodies, raw prompts/outputs, and private URLs MUST NOT enter Web Storage.
 - Copy and download of the generated `reponpc.yml` are local browser operations and remain available without a GitHub token. They do not mark the draft saved, mutate GitHub, or dispatch indexing.
 - Existing `/config/validate` and `/config/preview` remain model-free and mutation-free. GitHub save, workflow dispatch, publication, and activation remain distinct explicit actions with existing conflict and last-known-good behavior.

@@ -86,6 +86,7 @@ function repository(
     include: [],
     exclude: [],
     selected: true,
+    confirmedSelectionFingerprint: JSON.stringify([null, [], []]),
     analysisStatus: "complete",
     analysis,
     ownerStatement: "I maintained the parser with another contributor.",
@@ -287,6 +288,15 @@ describe("GuidedOnboardingView", () => {
     expect(activeMarkup).toMatch(
       /<button[^>]*disabled[^>]*>Review facts and describe contribution<\/button>/,
     );
+    expect(activeMarkup).toMatch(/<button[^>]*disabled[^>]*>Back<\/button>/);
+    expect(activeMarkup).toMatch(
+      /<button[^>]*disabled[^>]*>Start over<\/button>/,
+    );
+    expect(activeMarkup).toContain('id="guided-navigation-batch-reason"');
+    expect(activeMarkup).toContain("Cancel it below");
+    expect(activeMarkup).toContain(
+      'aria-describedby="guided-navigation-batch-reason"',
+    );
 
     const terminalMarkup = renderToStaticMarkup(
       <GuidedOnboardingView
@@ -304,6 +314,7 @@ describe("GuidedOnboardingView", () => {
     expect(terminalMarkup).not.toMatch(
       /<button[^>]*disabled[^>]*>Review facts and describe contribution<\/button>/,
     );
+    expect(terminalMarkup).toMatch(/<button[^>]*>Back<\/button>/);
   });
 
   it("renders explicit proposal edit, accept, and reject controls", () => {

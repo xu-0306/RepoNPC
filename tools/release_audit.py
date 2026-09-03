@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any
 
 _ALLOWED_STATUSES = frozenset({"pass", "fail", "not-run", "blocked"})
+_LEDGER_SCHEMA_NAME = "reponpc/acceptance-ledger"
+_LEDGER_SCHEMA_VERSION = 1
 _EXTERNAL_CHECKS = (
     ("browser", "release-evidence/browser.json", "real browser evidence"),
     ("clean-host", "release-evidence/clean-host.json", "clean-host evidence"),
@@ -333,4 +335,48 @@ def audit_repository(root: str | Path) -> list[dict[str, Any]]:
     return sorted(records, key=lambda record: record["id"])
 
 
-__all__ = ["audit_repository"]
+def validate_acceptance_ledger(payload: object) -> list[str]:
+    """Validate a machine-readable AC ledger without performing external checks.
+
+    The validator is intentionally pure and returns bounded diagnostics suitable
+    for CI. Every AC-001..AC-050 entry must be present exactly once with an
+    explicit status; source identity and environment metadata are mandatory.
+    """
+
+    errors: list[str] = []
+    if not isinstance(payload, dict):
+        return ["ledger must be an object"]
+    if payload.get("schema_name") != _LEDGER_SCHEMA_NAME:
+        errors.append("ledger schema_name is invalid")
+    if payload.get("schema_version") != _LEDGER_SCHEMA_VERSION:
+        errors.append("ledger schema_version is invalid")
+    for field in ("source_identity", "environment"):
+        value = _non_secret_text(payload.get(field))
+        if value is None:
+            errors.append(f"ledger {field} is missing or unsafe")
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        return [*errors, "ledger entries must be a list"]
+    seen: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            errors.append("ledger entry must be an object")
+            continue
+        entry_id = entry.get("id")
+        if not isinstance(entry_id, str) or not re.fullmatch(r"AC-\d{3}", entry_id):
+            errors.append("ledger entry id is invalid")
+            continue
+        if entry_id in seen:
+            errors.append(f"duplicate ledger entry: {entry_id}")
+        seen.add(entry_id)
+        if entry.get("status") not in _ALLOWED_STATUSES:
+            errors.append(f"ledger status is invalid: {entry_id}")
+        if not isinstance(entry.get("reason"), str) or not entry["reason"].strip():
+            errors.append(f"ledger reason is missing: {entry_id}")
+    required = {f"AC-{index:03d}" for index in range(1, 51)}
+    for missing in sorted(required - seen):
+        errors.append(f"missing ledger entry: {missing}")
+    return errors
+
+
+__all__ = ["audit_repository", "validate_acceptance_ledger"]

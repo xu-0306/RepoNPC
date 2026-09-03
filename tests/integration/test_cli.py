@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from reponpc import cli
 from reponpc.admin.auth import AdminSessionService
 from reponpc.indexing.pipeline import (
@@ -246,6 +248,128 @@ def test_admin_setup_code_fails_safely_after_owner_exists(tmp_path: Path, capsys
     captured = capsys.readouterr()
     assert "setup_already_complete" in captured.err
     assert setup_code not in captured.err
+
+
+def test_set_password_uses_optional_owner_selector_and_preserves_username(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    data_dir = tmp_path / "runtime"
+    database = cli.RuntimeDatabase(data_dir)
+    database.initialize()
+    service = AdminSessionService(database=database, identity_hmac_key=b"k" * 32)
+    setup_code = secrets.token_urlsafe(32)
+    with database.connection() as connection:
+        connection.execute(
+            "INSERT INTO admin_setup VALUES ('current', ?, '2026-08-13T00:00:00Z', "
+            "'2099-08-13T00:15:00Z')",
+            (hashlib.sha256(setup_code.encode()).hexdigest(),),
+        )
+    service.setup_owner(
+        setup_code=setup_code,
+        username="owner",
+        password="npcx",
+        password_confirmation="npcx",
+    )
+    replacement = "安全密碼" * 4
+    prompts = iter((replacement, replacement))
+    monkeypatch.setattr(cli, "getpass", lambda _prompt: next(prompts))
+    monkeypatch.setenv("REPONPC_DEPLOYMENT_PROFILE", "production")
+
+    assert cli.main(["admin", "set-password", "--data-dir", str(data_dir)]) == 0
+    assert "completed" in capsys.readouterr().out
+    restarted = AdminSessionService(database=database, identity_hmac_key=b"k" * 32)
+    restarted.login(username="owner", password=replacement, remote_identity="host")
+
+
+def test_runtime_check_and_online_backup_are_verified_and_non_overwriting(
+    tmp_path: Path, capsys
+) -> None:
+    data_dir = tmp_path / "runtime"
+    database = cli.RuntimeDatabase(data_dir)
+    database.initialize()
+    destination = tmp_path / "backups" / "runtime.sqlite"
+    destination.parent.mkdir()
+
+    assert cli.main(["runtime", "check", "--data-dir", str(data_dir)]) == 0
+    assert "integrity ok" in capsys.readouterr().out
+    assert (
+        cli.main(
+            [
+                "runtime",
+                "backup",
+                str(destination),
+                "--data-dir",
+                str(data_dir),
+            ]
+        )
+        == 0
+    )
+    assert destination.is_file()
+    copied = cli.RuntimeDatabase(destination.parent)
+    copied.check_integrity()
+
+    assert (
+        cli.main(
+            [
+                "runtime",
+                "backup",
+                str(destination),
+                "--data-dir",
+                str(data_dir),
+            ]
+        )
+        == 1
+    )
+    assert "runtime_backup_target_invalid" in capsys.readouterr().err
+
+
+def test_cli_help_exposes_bounded_bundle_and_runtime_groups(capsys) -> None:
+    with pytest.raises(SystemExit) as stopped:
+        cli.main(["--help"])
+    assert stopped.value.code == 0
+    help_text = capsys.readouterr().out
+    assert "bundle" in help_text
+    assert "runtime" in help_text
+
+
+def test_bundle_commands_dispatch_explicit_ids_and_persisted_actions(monkeypatch, capsys) -> None:
+    calls: list[tuple[str, str | None]] = []
+
+    class Manager:
+        def status(self):
+            calls.append(("status", None))
+            return SimpleNamespace(
+                active_bundle_id="bundle-active",
+                previous_bundle_id="bundle-previous",
+                pinned_bundle_id=None,
+            )
+
+        def verify(self, bundle_id: str) -> None:
+            calls.append(("verify", bundle_id))
+
+        def pin(self, bundle_id: str) -> None:
+            calls.append(("pin", bundle_id))
+
+        def unpin(self) -> None:
+            calls.append(("unpin", None))
+
+    monkeypatch.setattr(cli, "_bundle_manager", lambda _data_dir: Manager())
+
+    assert cli.main(["bundle", "status"]) == 0
+    assert '"active_bundle_id": "bundle-active"' in capsys.readouterr().out
+    assert cli.main(["bundle", "verify", "bundle-1"]) == 0
+    assert cli.main(["bundle", "pin", "bundle-1"]) == 0
+    assert cli.main(["bundle", "unpin"]) == 0
+    assert calls == [
+        ("status", None),
+        ("verify", "bundle-1"),
+        ("pin", "bundle-1"),
+        ("unpin", None),
+    ]
+
+    with pytest.raises(SystemExit) as missing_id:
+        cli.main(["bundle", "verify"])
+    assert missing_id.value.code == 2
 
 
 def test_cli_failure_is_nonzero_safe_and_does_not_echo_internal_text(

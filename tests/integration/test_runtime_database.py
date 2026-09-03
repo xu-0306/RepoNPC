@@ -23,7 +23,7 @@ def test_runtime_database_is_idempotent_and_separate_from_index_data(tmp_path: P
 
     assert database.database_path == tmp_path / "runtime-data" / "runtime.sqlite"
     assert database.database_path.exists()
-    assert database.schema_version() == 9
+    assert database.schema_version() == 12
     assert {
         "runtime_schema_migrations",
         "admin_sessions",
@@ -35,6 +35,8 @@ def test_runtime_database_is_idempotent_and_separate_from_index_data(tmp_path: P
         "analysis_batch_events",
         "analysis_cache_entries",
         "github_rate_state",
+        "embedding_profiles",
+        "embedding_switch_intent",
         "admin_audit",
         "admin_owner",
         "admin_setup",
@@ -72,11 +74,11 @@ def test_concurrent_initialization_creates_one_versioned_schema(tmp_path: Path) 
     with ThreadPoolExecutor(max_workers=2) as executor:
         list(executor.map(lambda _unused: database.initialize(), range(2)))
 
-    assert database.schema_version() == 9
+    assert database.schema_version() == 12
     with database.connection() as connection:
         versions = connection.execute("SELECT version FROM runtime_schema_migrations").fetchall()
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()
-    assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     assert foreign_keys is not None and foreign_keys[0] == 1
 
 
@@ -96,13 +98,13 @@ def test_concurrent_initialization_across_database_owners_is_safe(tmp_path: Path
 
         database = RuntimeDatabase(data_dir)
         database.initialize()
-        assert database.schema_version() == 9
+        assert database.schema_version() == 12
         with database.connection() as connection:
             versions = connection.execute(
                 "SELECT version FROM runtime_schema_migrations"
             ).fetchall()
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()
-        assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
         assert journal_mode is not None and journal_mode[0] == "wal"
 
 

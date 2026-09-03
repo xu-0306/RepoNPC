@@ -30,6 +30,12 @@ import {
   type BatchSseState,
 } from "./BatchAnalysisPanel";
 import { adminErrorStateReducer, initialAdminErrorState } from "./adminErrors";
+import {
+  EmbeddingProfilePanel,
+  type EmbeddingModelCatalogEntry,
+  type EmbeddingProfileDraft,
+  type EmbeddingProfileView,
+} from "./EmbeddingProfilePanel";
 import { GitHubButton } from "./GitHubButton";
 import {
   GitHubOAuthSetupGuideDialog,
@@ -38,6 +44,7 @@ import {
 import { GuidedOnboardingView } from "./GuidedOnboardingView";
 import {
   guidedOnboardingReducer,
+  guidedOnboardingFromConfig,
   initialGuidedOnboardingState,
   parseGuidedOnboarding,
   selectedRepositories,
@@ -290,8 +297,20 @@ interface GitHubConnectionPanelProps {
   onGitHubSetupGuide?: (trigger: HTMLButtonElement) => void;
 }
 
-const MIN_ADMIN_PASSWORD_LENGTH = 4;
 const GUIDED_ONBOARDING_STORAGE_KEY = "reponpc.guided-onboarding.v1";
+export const GUIDED_DRAFT_STORAGE_KEY = "reponpc.guided-draft.v1";
+
+export function safeDraftForSessionStorage(content: string): string | null {
+  if (!content || content.length > 128 * 1024) return null;
+  if (
+    /(^|\n)\s*(?:api[_ -]?key|password|secret|token|credential|private[_ -]?url)\s*:/i.test(
+      content,
+    )
+  ) {
+    return null;
+  }
+  return content;
+}
 
 function copyFor(locale: Locale, chinese: string, english: string): string {
   return locale === "zh-TW" ? chinese : english;
@@ -599,6 +618,29 @@ export function adminDataErrorMessage(locale: Locale, error: unknown): string {
   );
 }
 
+function embeddingProfileErrorMessage(locale: Locale, error: unknown): string {
+  const code = error instanceof Error ? error.message : "REQUEST_FAILED";
+  if (code === "EMBEDDING_REINDEX_REQUIRED") {
+    return copyFor(
+      locale,
+      "此 profile 尚未通過 probe 或與目前 bundle 不相容；已保留上一個可用 profile。",
+      "This profile has not passed its probe or is incompatible with the current bundle. The last known-good profile was preserved.",
+    );
+  }
+  if (code === "EMBEDDING_CONNECTION_REQUIRED") {
+    return copyFor(
+      locale,
+      "此連線參照尚未由伺服器設定；RepoNPC 不會自動改用其他 provider。",
+      "This connection reference is not configured by the server. RepoNPC will not switch providers automatically.",
+    );
+  }
+  return copyFor(
+    locale,
+    "Embedding profile 操作失敗；請檢查安全狀態碼後再試一次。",
+    "The embedding profile operation failed. Check the safe status code and try again.",
+  );
+}
+
 export function AdminAccessPanel({
   locale,
   busy,
@@ -775,8 +817,7 @@ export function AdminAccessPanel({
                   aria-describedby="admin-password-requirements"
                   autoComplete="new-password"
                   id="admin-setup-password"
-                  maxLength={1024}
-                  minLength={MIN_ADMIN_PASSWORD_LENGTH}
+                  maxLength={128}
                   onChange={(event) =>
                     onSetupPasswordChange(event.target.value)
                   }
@@ -790,8 +831,8 @@ export function AdminAccessPanel({
                 >
                   {copyFor(
                     locale,
-                    "至少 4 個字元，不限制大小寫、數字或符號；密碼只會以 Argon2id 雜湊保存在本機。",
-                    "Use at least 4 characters; uppercase, numbers, and symbols are optional. Only an Argon2id hash is stored locally.",
+                    "僅限 loopback evaluation 時至少 4 個字元；production 至少 15 個字元，兩者上限皆為 128。不限制大小寫、數字或符號，常見密碼會被拒絕。",
+                    "Loopback evaluation accepts 4–128 characters; production requires 15–128. Character composition is optional and common passwords are blocked.",
                   )}
                 </small>
               </div>
@@ -802,8 +843,7 @@ export function AdminAccessPanel({
                 <input
                   autoComplete="new-password"
                   id="admin-setup-password-confirmation"
-                  maxLength={1024}
-                  minLength={MIN_ADMIN_PASSWORD_LENGTH}
+                  maxLength={128}
                   onChange={(event) =>
                     onSetupPasswordConfirmationChange(event.target.value)
                   }
@@ -821,32 +861,6 @@ export function AdminAccessPanel({
                       "Create my administrator",
                     )}
               </button>
-            </form>
-            <form
-              action="/api/admin/setup/github/start"
-              className="admin-auth__oauth-form"
-              method="post"
-              onSubmit={handleGitHubFormSubmit}
-            >
-              <input name="setup_code" type="hidden" value={setupCode} />
-              <GitHubButton
-                available={githubAvailable}
-                className="admin-auth__github-button"
-                disabled={!setupCode || githubPending}
-                label={copyFor(
-                  locale,
-                  "使用 GitHub 建立管理員",
-                  "Create admin with GitHub",
-                )}
-                onOpenSetupGuide={onGitHubSetupGuide}
-                pending={githubPending}
-                pendingLabel={copyFor(
-                  locale,
-                  "正在前往 GitHub…",
-                  "Redirecting to GitHub…",
-                )}
-                type="submit"
-              />
             </form>
             <p className="admin-auth__privacy-note">
               {copyFor(
@@ -1164,6 +1178,18 @@ export function AdminPage({ locale }: { locale: Locale }) {
   const [providerStatus, setProviderStatus] =
     useState<GuidedProviderStatus | null>(null);
   const [providerStatusPending, setProviderStatusPending] = useState(true);
+  const [embeddingProfiles, setEmbeddingProfiles] = useState<
+    EmbeddingProfileView[]
+  >([]);
+  const [embeddingModelCatalog, setEmbeddingModelCatalog] = useState<
+    EmbeddingModelCatalogEntry[]
+  >([]);
+  const [installedEmbeddingModels, setInstalledEmbeddingModels] = useState<
+    string[]
+  >([]);
+  const [embeddingProfilesPending, setEmbeddingProfilesPending] =
+    useState(false);
+  const [embeddingProfilesError, setEmbeddingProfilesError] = useState("");
   const [snippet, setSnippet] = useState<SnippetBody | null>(null);
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1180,6 +1206,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
   );
   const [guidedResumeReady, setGuidedResumeReady] = useState(false);
   const guidedResumeFound = useRef(false);
+  const draftHydrated = useRef(false);
   const [batchPreflight, setBatchPreflight] = useState<BatchPreflightState>({
     status: "idle",
   });
@@ -1209,6 +1236,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
     announcedAt: number;
   } | null>(null);
   const batchIdempotency = useRef<{ planId: string; key: string } | null>(null);
+  const batchPreflightGeneration = useRef(0);
   const githubSetupGuideTrigger = useRef<HTMLElement | null>(null);
   const authenticated = Boolean(csrfToken);
 
@@ -1440,6 +1468,38 @@ export function AdminPage({ locale }: { locale: Locale }) {
     }
   }, [locale, request]);
 
+  const refreshEmbeddingProfiles = useCallback(async () => {
+    setEmbeddingProfilesPending(true);
+    try {
+      const [profilesResult, catalogResult, installedResult] =
+        await Promise.all([
+          request<{ profiles: EmbeddingProfileView[] }>(
+            "/api/admin/embedding-profiles",
+          ),
+          request<{ models: EmbeddingModelCatalogEntry[] }>(
+            "/api/admin/embedding-models/catalog",
+          ),
+          request<{ provider: "ollama"; models: string[] }>(
+            "/api/admin/embedding-models/installed",
+          ).catch(() => ({ provider: "ollama" as const, models: [] })),
+        ]);
+      setEmbeddingProfiles(profilesResult.profiles);
+      setEmbeddingModelCatalog(catalogResult.models);
+      setInstalledEmbeddingModels(installedResult.models);
+      setEmbeddingProfilesError("");
+    } catch {
+      setEmbeddingProfilesError(
+        copyFor(
+          locale,
+          "無法讀取 embedding profiles。請確認 runtime database 與模型設定後再試一次。",
+          "Embedding profiles could not be loaded. Check the runtime database and model configuration, then try again.",
+        ),
+      );
+    } finally {
+      setEmbeddingProfilesPending(false);
+    }
+  }, [locale, request]);
+
   const refreshProviderStatus = useCallback(async () => {
     setProviderStatusPending(true);
     try {
@@ -1523,6 +1583,11 @@ export function AdminPage({ locale }: { locale: Locale }) {
   }, [authenticated, refreshGitHubConnections]);
 
   useEffect(() => {
+    if (!authenticated) return;
+    void refreshEmbeddingProfiles();
+  }, [authenticated, refreshEmbeddingProfiles]);
+
+  useEffect(() => {
     if (!authenticated) {
       batchEventSource.current?.close();
       batchEventSource.current = null;
@@ -1565,58 +1630,6 @@ export function AdminPage({ locale }: { locale: Locale }) {
       cancelled = true;
     };
   }, [applyBatchSnapshot, authenticated, request]);
-
-  useEffect(() => {
-    if (
-      !authenticated ||
-      !activeBatchLoaded ||
-      guidedState.step !== "analysis" ||
-      !guidedState.selectionConfirmed ||
-      batchSnapshot !== null
-    ) {
-      return;
-    }
-
-    let cancelled = false;
-    setBatchPreflight({ status: "loading" });
-    setBatchPlan(null);
-    batchPlanRef.current = null;
-    setBatchActions({ pending: null, error: null });
-    batchIdempotency.current = null;
-    void request<BatchPreflightBody>(
-      "/api/admin/onboarding/analysis-batches/preflight",
-      {
-        method: "POST",
-        body: JSON.stringify({ selections: batchSelections }),
-      },
-    )
-      .then((plan) => {
-        if (cancelled) return;
-        setBatchPlan(plan);
-        batchPlanRef.current = plan;
-        setBatchPreflight(preflightState(plan));
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setBatchPreflight({
-            status: "failed",
-            error: batchOperationError(error, "preflight"),
-          });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeBatchLoaded,
-    authenticated,
-    batchSelections,
-    batchSnapshot,
-    guidedState.selectionConfirmed,
-    guidedState.step,
-    request,
-  ]);
 
   useEffect(() => {
     if (!authenticated || !batchStreamBatchId || batchStreamTerminal) {
@@ -1721,6 +1734,20 @@ export function AdminPage({ locale }: { locale: Locale }) {
   }, [authenticated, guidedResumeReady, guidedState]);
 
   useEffect(() => {
+    if (!authenticated || !draftHydrated.current) return;
+    const safeDraft = safeDraftForSessionStorage(draft);
+    try {
+      if (safeDraft === null) {
+        window.sessionStorage.removeItem(GUIDED_DRAFT_STORAGE_KEY);
+      } else {
+        window.sessionStorage.setItem(GUIDED_DRAFT_STORAGE_KEY, safeDraft);
+      }
+    } catch {
+      // Draft continuity is best effort.
+    }
+  }, [authenticated, draft]);
+
+  useEffect(() => {
     if (!authenticated) return;
     void (async () => {
       setBusy(true);
@@ -1734,7 +1761,11 @@ export function AdminPage({ locale }: { locale: Locale }) {
           ),
         ]);
       if (configResult.status === "fulfilled") {
-        setDraft(configResult.value.content);
+        const resumedDraft = safeDraftForSessionStorage(
+          window.sessionStorage.getItem(GUIDED_DRAFT_STORAGE_KEY) ?? "",
+        );
+        draftHydrated.current = true;
+        setDraft(resumedDraft ?? configResult.value.content);
         setBlobSha(configResult.value.blob_sha);
         setGitHubOperationsReady(true);
         try {
@@ -1746,11 +1777,14 @@ export function AdminPage({ locale }: { locale: Locale }) {
             },
           );
           setBaseConfig(parsed.parsed ?? null);
+          if (!guidedResumeFound.current) {
+            setGuidedState(
+              guidedOnboardingFromConfig(parsed.parsed) ??
+                initialGuidedOnboardingState(true),
+            );
+          }
         } catch {
           setBaseConfig(null);
-        }
-        if (!guidedResumeFound.current) {
-          setGuidedState(initialGuidedOnboardingState(true));
         }
       } else {
         setGitHubOperationsReady(
@@ -1988,9 +2022,109 @@ export function AdminPage({ locale }: { locale: Locale }) {
     }
   }
 
+  async function createEmbeddingProfile(draft: EmbeddingProfileDraft) {
+    setEmbeddingProfilesPending(true);
+    setEmbeddingProfilesError("");
+    try {
+      await request<EmbeddingProfileView>("/api/admin/embedding-profiles", {
+        method: "POST",
+        body: JSON.stringify(draft),
+      });
+      await refreshEmbeddingProfiles();
+    } catch (error) {
+      setEmbeddingProfilesError(embeddingProfileErrorMessage(locale, error));
+    } finally {
+      setEmbeddingProfilesPending(false);
+    }
+  }
+
+  async function actOnEmbeddingProfile(
+    profileId: string,
+    action: "probe" | "activate" | "delete",
+  ) {
+    setEmbeddingProfilesPending(true);
+    setEmbeddingProfilesError("");
+    try {
+      await request<EmbeddingProfileView>(
+        `/api/admin/embedding-profiles/${encodeURIComponent(profileId)}${
+          action === "delete" ? "" : `/${action}`
+        }`,
+        { method: action === "delete" ? "DELETE" : "POST" },
+      );
+      await refreshEmbeddingProfiles();
+    } catch (error) {
+      setEmbeddingProfilesError(embeddingProfileErrorMessage(locale, error));
+    } finally {
+      setEmbeddingProfilesPending(false);
+    }
+  }
+
+  async function actOnOllamaEmbeddingModel(
+    profileId: string,
+    action: "pull" | "delete",
+  ) {
+    setEmbeddingProfilesPending(true);
+    setEmbeddingProfilesError("");
+    try {
+      const profile = embeddingProfiles.find(
+        (candidate) => candidate.profile_id === profileId,
+      );
+      if (!profile) throw new Error("NOT_FOUND");
+      const path =
+        action === "pull"
+          ? "/api/admin/embedding-models/ollama/pull"
+          : `/api/admin/embedding-models/ollama/${encodeURIComponent(profile.model_id)}`;
+      await request<EmbeddingProfileView>(path, {
+        method: action === "pull" ? "POST" : "DELETE",
+        body: JSON.stringify({ profile_id: profileId, confirmed: true }),
+      });
+      await refreshEmbeddingProfiles();
+    } catch (error) {
+      setEmbeddingProfilesError(embeddingProfileErrorMessage(locale, error));
+    } finally {
+      setEmbeddingProfilesPending(false);
+    }
+  }
+
   function applyGuidedAction(action: GuidedOnboardingAction) {
     try {
-      setGuidedState(guidedOnboardingReducer(guidedState, action));
+      const invalidatesBatch =
+        action.type === "CONFIRM_SELECTION" ||
+        action.type === "EDIT_SELECTION" ||
+        action.type === "RESET" ||
+        (action.type === "GO_BACK" && guidedState.step === "analysis");
+      if (
+        invalidatesBatch &&
+        batchSnapshot !== null &&
+        !isTerminalBatch(batchSnapshot.status)
+      ) {
+        dispatchAdminError({
+          type: "SET_GUIDED_ERROR",
+          code: "CONCURRENCY_LIMIT",
+        });
+        return;
+      }
+      const nextState = guidedOnboardingReducer(guidedState, action);
+      if (invalidatesBatch) {
+        batchEventSource.current?.close();
+        batchEventSource.current = null;
+        batchLastEventId.current = null;
+        batchAnnouncement.current = null;
+        batchPreflightGeneration.current += 1;
+        batchIdempotency.current = null;
+        batchPlanRef.current = null;
+        setBatchSnapshot(null);
+        setBatchProgressState(null);
+        setBatchStream({
+          connection: "idle",
+          reconnectAttempts: 0,
+          lastEventId: null,
+        });
+        setBatchPlan(null);
+        setBatchPreflight({ status: "idle" });
+        setBatchActions({ pending: null, error: null });
+      }
+      setGuidedState(nextState);
       dispatchAdminError({ type: "CLEAR_GUIDED_ERROR" });
     } catch (transitionError) {
       const code =
@@ -2055,6 +2189,45 @@ export function AdminPage({ locale }: { locale: Locale }) {
         current,
       );
     });
+  }
+
+  async function prepareAnalysisBatch() {
+    if (
+      !authenticated ||
+      !activeBatchLoaded ||
+      guidedState.step !== "analysis" ||
+      !guidedState.selectionConfirmed ||
+      batchSnapshot !== null
+    ) {
+      return;
+    }
+
+    const generation = batchPreflightGeneration.current + 1;
+    batchPreflightGeneration.current = generation;
+    setBatchPreflight({ status: "loading" });
+    setBatchPlan(null);
+    batchPlanRef.current = null;
+    setBatchActions({ pending: null, error: null });
+    batchIdempotency.current = null;
+    try {
+      const plan = await request<BatchPreflightBody>(
+        "/api/admin/onboarding/analysis-batches/preflight",
+        {
+          method: "POST",
+          body: JSON.stringify({ selections: batchSelections }),
+        },
+      );
+      if (batchPreflightGeneration.current !== generation) return;
+      setBatchPlan(plan);
+      batchPlanRef.current = plan;
+      setBatchPreflight(preflightState(plan));
+    } catch (error) {
+      if (batchPreflightGeneration.current !== generation) return;
+      setBatchPreflight({
+        status: "failed",
+        error: batchOperationError(error, "preflight"),
+      });
+    }
   }
 
   async function createAnalysisBatch() {
@@ -2296,6 +2469,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
       setBlobSha(result.blob_sha);
       setConflict(false);
       window.sessionStorage.removeItem(GUIDED_ONBOARDING_STORAGE_KEY);
+      window.sessionStorage.removeItem(GUIDED_DRAFT_STORAGE_KEY);
       guidedResumeFound.current = false;
       setGuidedResumeReady(false);
     });
@@ -2370,6 +2544,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
     setGuidedState(initialGuidedOnboardingState());
     guidedResumeFound.current = false;
     setGuidedResumeReady(false);
+    draftHydrated.current = false;
     batchEventSource.current?.close();
     batchEventSource.current = null;
     batchLastEventId.current = null;
@@ -2389,6 +2564,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
     setBatchCreatePending(false);
     setActiveBatchLoaded(false);
     window.sessionStorage.removeItem(GUIDED_ONBOARDING_STORAGE_KEY);
+    window.sessionStorage.removeItem(GUIDED_DRAFT_STORAGE_KEY);
   }
 
   if (!authenticated) {
@@ -2462,25 +2638,57 @@ export function AdminPage({ locale }: { locale: Locale }) {
             pending={githubConnectionsPending}
           />
         }
+        embeddingProfileView={
+          <EmbeddingProfilePanel
+            catalog={embeddingModelCatalog}
+            error={embeddingProfilesError}
+            installedModels={installedEmbeddingModels}
+            locale={locale}
+            onActivate={(profileId) =>
+              void actOnEmbeddingProfile(profileId, "activate")
+            }
+            onCreate={(profile) => void createEmbeddingProfile(profile)}
+            onDelete={(profileId) =>
+              void actOnEmbeddingProfile(profileId, "delete")
+            }
+            onOllamaDelete={(profileId) =>
+              void actOnOllamaEmbeddingModel(profileId, "delete")
+            }
+            onOllamaPull={(profileId) =>
+              void actOnOllamaEmbeddingModel(profileId, "pull")
+            }
+            onProbe={(profileId) =>
+              void actOnEmbeddingProfile(profileId, "probe")
+            }
+            onRefresh={() => void refreshEmbeddingProfiles()}
+            pending={embeddingProfilesPending}
+            profiles={embeddingProfiles}
+          />
+        }
         githubOperationsReady={githubOperationsReady}
         guidedView={
           <GuidedOnboardingView
+            batchAnalysisActive={
+              batchSnapshot !== null && !isTerminalBatch(batchSnapshot.status)
+            }
             batchAnalysisTerminal={
               batchSnapshot !== null && isTerminalBatch(batchSnapshot.status)
             }
             batchAnalysisView={
-              <BatchAnalysisPanel
-                actions={batchActions}
-                job={batchSnapshot}
-                locale={locale}
-                onCancel={(batchId) => void actOnBatch(batchId, "cancel")}
-                onPause={(batchId) => void actOnBatch(batchId, "pause")}
-                onResume={(batchId) => void actOnBatch(batchId, "resume")}
-                onRetry={(batchId) => void actOnBatch(batchId, "retry")}
-                preflight={batchPreflight}
-                progress={batchProgressState}
-                stream={batchStream}
-              />
+              batchPreflight.status !== "idle" || batchSnapshot !== null ? (
+                <BatchAnalysisPanel
+                  actions={batchActions}
+                  job={batchSnapshot}
+                  locale={locale}
+                  onCancel={(batchId) => void actOnBatch(batchId, "cancel")}
+                  onPause={(batchId) => void actOnBatch(batchId, "pause")}
+                  onResume={(batchId) => void actOnBatch(batchId, "resume")}
+                  onRetry={(batchId) => void actOnBatch(batchId, "retry")}
+                  preflight={batchPreflight}
+                  progress={batchProgressState}
+                  stream={batchStream}
+                />
+              ) : undefined
             }
             batchCanCreate={
               batchPlan !== null &&
@@ -2496,6 +2704,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
             providerStatusPending={providerStatusPending}
             onAction={applyGuidedAction}
             onAnalyze={(slug) => void analyzeRepository(slug)}
+            onPrepareBatch={() => void prepareAnalysisBatch()}
             onCreateBatch={() => void createAnalysisBatch()}
             onCopyDraft={() => void copyGuidedDraft()}
             onCreateDraft={() => void createGuidedDraft()}

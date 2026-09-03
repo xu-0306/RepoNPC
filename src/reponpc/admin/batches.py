@@ -15,7 +15,7 @@ import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
@@ -268,10 +268,10 @@ class AnalysisBatchService:
             if snapshot.state in {"cancelled", "completed_with_errors", "failed"}:
                 raise BatchRuntimeError(item.error_code or "ANALYSIS_FAILED")
             threading.Event().wait(0.05)
-        # The compatibility endpoint must leave a durable cancellation trail;
-        # otherwise its request timeout would orphan work in the background.
-        with suppress(BatchRuntimeError):
-            self.action(snapshot.batch_id, action="cancel")
+        # The HTTP compatibility wait is bounded independently from the durable
+        # batch.  A request timeout must not turn into an implicit owner cancel:
+        # the active batch remains observable and recoverable through the batch
+        # snapshot/event API until the owner explicitly cancels it.
         raise BatchRuntimeError("PROVIDER_TIMEOUT")
 
     def recover(self) -> tuple[str, ...]:

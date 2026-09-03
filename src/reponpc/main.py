@@ -33,7 +33,13 @@ from reponpc.admin.batch_resolver import (
 )
 from reponpc.admin.batch_runtime import BatchRuntimeStore, SQLiteGitHubRateStateStore
 from reponpc.admin.batches import AnalysisBatchService, BatchStageGates
+from reponpc.admin.embedding_profiles import EmbeddingProfile, EmbeddingProfileRegistry
+from reponpc.admin.embedding_reindex import (
+    EmbeddingReindexCoordinator,
+    ProductionFrozenProfileBuilder,
+)
 from reponpc.admin.github import GitHubAdminClient, UrllibGitHubAdminTransport
+from reponpc.admin.model_operations import OllamaModelOperationCoordinator
 from reponpc.admin.oauth import (
     CredentialCipher,
     GitHubIdentityService,
@@ -55,7 +61,7 @@ from reponpc.config.environment import (
 )
 from reponpc.i18n.catalog import translate
 from reponpc.indexing.github import GitHubSourceResolver
-from reponpc.indexing.sources import EmbeddingIdentity
+from reponpc.indexing.sources import EmbeddingIdentity, EmbeddingProvider
 from reponpc.providers import (
     ChatProvider,
     OllamaChatProvider,
@@ -65,10 +71,7 @@ from reponpc.providers import (
     ProviderCapabilities,
     RuntimeEmbeddingProvider,
 )
-from reponpc.providers.local_sentence_transformers import (
-    LocalSentenceTransformersEmbeddingProvider,
-)
-from reponpc.providers.runtime import LocalRuntimeEmbeddingProvider, ProviderRuntime
+from reponpc.providers.runtime import ProviderRuntime
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 
 
@@ -204,10 +207,14 @@ def create_app(
 
         def poll_and_publish_provider_state() -> None:
             provider_status = provider.poll_health()
+            registry = getattr(application.state, "embedding_profile_registry", None)
+            profile_ready = registry is None or registry.active_matches(
+                provider.embedding.identity()
+            )
             current_state = application.state.reponpc
             application.state.reponpc = replace(
                 current_state,
-                model_ready=provider_status.ready,
+                model_ready=provider_status.ready and profile_ready,
                 model_provider=application.state.provider_adapter,
                 model_last_checked_at=provider_status.checked_at,
             )
@@ -276,6 +283,12 @@ def create_app(
             for polling_task in polling_tasks:
                 with suppress(asyncio.CancelledError):
                     await polling_task
+            reindex = getattr(application.state, "embedding_reindex_coordinator", None)
+            if reindex is not None:
+                await asyncio.to_thread(reindex.shutdown)
+            model_operations = getattr(application.state, "ollama_model_operations", None)
+            if model_operations is not None:
+                await asyncio.to_thread(model_operations.shutdown)
 
     application = FastAPI(
         title="RepoNPC",
@@ -327,6 +340,10 @@ def create_app(
     application.state.admin_operations = admin_operations
     application.state.github_identity_service = github_identity_service
     application.state.github_oauth_callback_url = github_oauth_callback_url
+    application.state.embedding_reindex_coordinator = None
+    application.state.ollama_model_operations = (
+        admin_operations.ollama_model_operations if admin_operations is not None else None
+    )
     application.include_router(
         create_public_router(
             state,
@@ -379,6 +396,7 @@ def run() -> None:
         _configure_bundle_lifecycle(settings, runtime_database)
         if hasattr(settings, "chat_provider"):
             _configure_provider_lifecycle(settings, runtime_database)
+            _configure_embedding_reindex(settings)
         batch_service = getattr(app.state, "analysis_batch_service", None)
         if batch_service is not None:
             batch_service.recover()
@@ -414,6 +432,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         identity_hmac_key=hashlib.sha256(identity_key.reveal().encode("utf-8")).digest(),
         idle_minutes=settings.admin_idle_minutes,
         absolute_hours=settings.admin_absolute_hours,
+        deployment_profile=settings.deployment_profile,
     )
     app.state.admin_origins = (settings.public_base_url,)
     # Public-read PAT management only needs the encrypted runtime key and the
@@ -433,7 +452,6 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
                 transport=UrllibOAuthTransport(),
             ),
             cipher=CredentialCipher(credential_key.reveal()),
-            recovery_available=bool(settings.github_owner_recovery_command),
         )
     else:
         app.state.github_identity_service = None
@@ -515,12 +533,48 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         chat_model=settings.chat_model,
     )
     app.state.analysis_batch_service = analysis_batches
+    embedding_identity = EmbeddingIdentity(
+        adapter=_provider_contract_adapter(settings.embedding_provider),
+        model_id=settings.embedding_model,
+        dimension=settings.embedding_dimension,
+        normalized=settings.embedding_normalized,
+        query_prefix="query: ",
+        passage_prefix="passage: ",
+    )
+
+    def resolve_embedding_profile(
+        profile: EmbeddingProfile,
+    ) -> RuntimeEmbeddingProvider | None:
+        return _environment_embedding_provider(settings, profile)
+
+    def profile_bundle_compatible(profile: EmbeddingProfile) -> bool:
+        manager = app.state.bundle_manager
+        return (
+            manager is not None
+            and manager.status().active_bundle_id is not None
+            and manager.active_embedding_identity() == profile.identity
+        )
+
+    embedding_profiles = EmbeddingProfileRegistry(
+        database=runtime_database,
+        provider_resolver=resolve_embedding_profile,
+        activation_compatible=profile_bundle_compatible,
+    )
+    embedding_profiles.ensure_environment_profile(
+        provider=settings.embedding_provider,
+        identity=embedding_identity,
+    )
+    app.state.embedding_profile_registry = embedding_profiles
+    model_operations = OllamaModelOperationCoordinator(embedding_profiles)
+    app.state.ollama_model_operations = model_operations
     app.state.admin_operations = AdminOperations(
         github=github,
         database=runtime_database,
         public_base_url=settings.public_base_url,
         onboarding=onboarding,
         analysis_batches=analysis_batches,
+        embedding_profiles=embedding_profiles,
+        ollama_model_operations=model_operations,
     )
 
 
@@ -530,12 +584,9 @@ def _configure_bundle_lifecycle(
 ) -> None:
     """Attach the real polling owner only when immutable discovery is configured."""
 
-    # Keep the production startup path compatible with the smallest validated
-    # settings surface used when immutable bundle discovery is not configured.
-    manifest_url = getattr(settings, "index_manifest_url", None)
-    if not manifest_url:
+    if not hasattr(settings, "embedding_provider"):
         return
-    embedding = EmbeddingIdentity(
+    environment_embedding = EmbeddingIdentity(
         adapter=_provider_contract_adapter(settings.embedding_provider),
         model_id=settings.embedding_model,
         dimension=settings.embedding_dimension,
@@ -543,6 +594,9 @@ def _configure_bundle_lifecycle(
         query_prefix="query: ",
         passage_prefix="passage: ",
     )
+    registry = getattr(app.state, "embedding_profile_registry", None)
+    active_profile = registry.active() if registry is not None else None
+    embedding = active_profile.identity if active_profile is not None else environment_embedding
     allowed_hosts = frozenset({"api.github.com", "github.com", "raw.githubusercontent.com"})
     manager = BundleManager(
         data_directory=settings.data_dir,
@@ -551,12 +605,24 @@ def _configure_bundle_lifecycle(
         keep_valid_bundles=settings.keep_valid_bundles,
     )
     app.state.bundle_manager = manager
+    if registry is not None:
+        registry.reconcile_active_bundle(
+            manager.active_embedding_identity(),
+            manager.status().active_bundle_id,
+        )
+    manifest_url = getattr(settings, "index_manifest_url", None)
+    if not manifest_url:
+        app.state.bundle_updater = None
+        return
     app.state.bundle_updater = BundleUpdater(
         manifest_url=manifest_url,
         transport=UrllibBundleTransport(allowed_hosts=allowed_hosts),
         manager=manager,
         runtime_database=runtime_database,
         expected_embedding=embedding,
+        expected_embedding_supplier=lambda: (
+            manager.active_embedding_identity() or environment_embedding
+        ),
         max_bundle_bytes=settings.max_bundle_bytes,
         allowed_hosts=allowed_hosts,
         data_directory=settings.data_dir,
@@ -588,7 +654,6 @@ def _configure_provider_lifecycle(
         max_output_tokens=settings.chat_max_output_tokens,
     )
     chat_key = settings.secrets.get("chat_api_key")
-    embedding_key = settings.secrets.get("embedding_api_key")
     if settings.chat_provider == "ollama":
         chat: ChatProvider = OllamaChatProvider(
             settings.chat_base_url,
@@ -603,29 +668,18 @@ def _configure_provider_lifecycle(
             api_key=chat_key.reveal() if chat_key is not None else None,
             allow_private_http=settings.chat_provider == "vllm",
         )
-    if settings.embedding_provider == "ollama":
-        embedding: RuntimeEmbeddingProvider = OllamaEmbeddingProvider(
-            settings.embedding_base_url,
-            settings.embedding_model,
-            embedding_identity,
-        )
-    elif settings.embedding_provider in {"openai_compatible", "vllm"}:
-        embedding = OpenAICompatibleEmbeddingProvider(
-            settings.embedding_base_url,
-            settings.embedding_model,
-            embedding_identity,
-            api_key=embedding_key.reveal() if embedding_key is not None else None,
-            allow_private_http=settings.embedding_provider == "vllm",
-        )
-    else:
-        local = LocalSentenceTransformersEmbeddingProvider(
-            model_id=settings.embedding_model,
-            dimension=settings.embedding_dimension,
-            normalized=settings.embedding_normalized,
-            query_prefix=embedding_identity.query_prefix,
-            passage_prefix=embedding_identity.passage_prefix,
-        )
-        embedding = LocalRuntimeEmbeddingProvider(local)
+    registry = getattr(app.state, "embedding_profile_registry", None)
+    active_profile = registry.active() if registry is not None else None
+    embedding = (
+        _environment_embedding_provider(settings, active_profile)
+        if active_profile is not None
+        else _embedding_provider_from_settings(settings, embedding_identity)
+    )
+    if embedding is None:
+        app.state.provider_runtime = None
+        app.state.chat_service = None
+        app.state.chat_limits = None
+        return
     providers = ProviderRuntime(chat=chat, embedding=embedding)
     app.state.provider_runtime = providers
     app.state.provider_adapter = _provider_contract_adapter(settings.chat_provider)
@@ -657,6 +711,94 @@ def _configure_provider_lifecycle(
         max_output_tokens=settings.chat_max_output_tokens,
         timeout_seconds=settings.chat_timeout_seconds,
     )
+
+
+def _configure_embedding_reindex(settings: EnvironmentSettings) -> None:
+    registry: EmbeddingProfileRegistry | None = getattr(
+        app.state, "embedding_profile_registry", None
+    )
+    manager: BundleManager | None = app.state.bundle_manager
+    runtime: ProviderRuntime | None = app.state.provider_runtime
+    operations: AdminOperations | None = app.state.admin_operations
+    if registry is None or manager is None or runtime is None or operations is None:
+        return
+
+    def provider_transition(
+        profile: EmbeddingProfile,
+        provider: EmbeddingProvider,
+    ):
+        if not isinstance(provider, RuntimeEmbeddingProvider):
+            raise ValueError("runtime embedding provider is unavailable")
+        previous = runtime.replace_embedding(provider)
+
+        def rollback() -> None:
+            runtime.replace_embedding(previous)
+
+        return rollback
+
+    def publish_activation(profile: EmbeddingProfile, bundle_id: str) -> None:
+        provider_status = runtime.poll_health()
+        current = app.state.reponpc
+        app.state.reponpc = replace(
+            current,
+            index_ready=True,
+            index_version=bundle_id,
+            public_directory=manager.active_public_directory(),
+            model_ready=(provider_status.ready and registry.active_matches(profile.identity)),
+            model_last_checked_at=provider_status.checked_at,
+        )
+
+    coordinator = EmbeddingReindexCoordinator(
+        registry=registry,
+        manager=manager,
+        builder=ProductionFrozenProfileBuilder(
+            data_directory=settings.data_dir,
+            config_repository=settings.config_repository,
+            config_branch=settings.config_branch,
+            github_api_url=settings.github_api_url,
+            max_bundle_bytes=settings.max_bundle_bytes,
+        ),
+        provider_transition=provider_transition,
+        on_activated=publish_activation,
+    )
+    app.state.embedding_reindex_coordinator = coordinator
+    app.state.admin_operations = replace(operations, embedding_reindex=coordinator)
+
+
+def _environment_embedding_provider(
+    settings: EnvironmentSettings,
+    profile: EmbeddingProfile,
+) -> RuntimeEmbeddingProvider | None:
+    if (
+        profile.connection_reference != "environment"
+        or profile.provider != settings.embedding_provider
+    ):
+        return None
+    return _embedding_provider_from_settings(settings, profile.identity)
+
+
+def _embedding_provider_from_settings(
+    settings: EnvironmentSettings,
+    identity: EmbeddingIdentity,
+) -> RuntimeEmbeddingProvider | None:
+    if identity.adapter != _provider_contract_adapter(settings.embedding_provider):
+        return None
+    embedding_key = settings.secrets.get("embedding_api_key")
+    if settings.embedding_provider == "ollama":
+        return OllamaEmbeddingProvider(
+            settings.embedding_base_url,
+            identity.model_id,
+            identity,
+        )
+    if settings.embedding_provider in {"openai_compatible", "vllm"}:
+        return OpenAICompatibleEmbeddingProvider(
+            settings.embedding_base_url,
+            identity.model_id,
+            identity,
+            api_key=embedding_key.reveal() if embedding_key is not None else None,
+            allow_private_http=settings.embedding_provider == "vllm",
+        )
+    return None
 
 
 def _provider_contract_adapter(provider: str) -> str:

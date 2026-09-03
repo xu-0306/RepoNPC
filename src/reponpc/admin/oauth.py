@@ -299,14 +299,17 @@ class GitHubIdentityService:
         sessions: AdminSessionService,
         oauth: GitHubOAuthClient,
         cipher: CredentialCipher,
-        recovery_available: bool,
+        recovery_available: bool | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
+        # Retained as a source-compatible no-op for callers compiled against
+        # the pre-ADR-025 constructor. Recovery readiness is no longer inferred
+        # from configuration; local password ownership is mandatory.
+        del recovery_available
         self._database = database
         self._sessions = sessions
         self._oauth = oauth
         self._cipher = cipher
-        self._recovery_available = recovery_available
         self._now = now or (lambda: datetime.now(UTC))
 
     @property
@@ -319,20 +322,14 @@ class GitHubIdentityService:
         self,
         *,
         intent: str,
-        setup_code: str | None = None,
         session_token: str | None = None,
     ) -> OAuthStart:
-        if intent not in {"login", "setup", "link"}:
+        if intent not in {"login", "link"}:
             raise GitHubOAuthError("OAUTH_TRANSACTION_INVALID")
         if not self._oauth.oauth_available:
             raise GitHubOAuthError("GITHUB_LOGIN_UNAVAILABLE")
-        setup_hash: str | None = None
         session_hash: str | None = None
-        if intent == "setup":
-            if not self._recovery_available:
-                raise GitHubOAuthError("GITHUB_LOGIN_UNAVAILABLE")
-            setup_hash = self._sessions.verify_setup_proof(setup_code or "")
-        elif intent == "link":
+        if intent == "link":
             if not session_token:
                 raise AdminAuthError("AUTHENTICATION_REQUIRED")
             self._sessions.require_recent_auth(session_token)
@@ -362,7 +359,7 @@ class GitHubIdentityService:
                         intent,
                         nonce,
                         ciphertext,
-                        setup_hash,
+                        None,
                         session_hash,
                         _time(now),
                         _time(now + OAUTH_TRANSACTION_TTL),
@@ -405,28 +402,20 @@ class GitHubIdentityService:
             except sqlite3.Error as exc:
                 _rollback(connection)
                 raise RuntimeDatabaseError("runtime_oauth_transaction_failed") from exc
+        intent = str(row["intent"])
+        if intent not in {"login", "link"}:
+            raise GitHubOAuthError("OAUTH_TRANSACTION_INVALID")
         verifier = self._cipher.decrypt(
             bytes(row["verifier_nonce"]), bytes(row["verifier_ciphertext"]), purpose="oauth-pkce"
         )
         token = self._oauth.exchange_code(code=code, verifier=verifier)
         identity = self._oauth.identity(token)
-        intent = str(row["intent"])
         session: AdminSession | None
         if intent == "login":
             session = self._sessions.login_github(
                 github_user_id=identity.user_id,
                 github_login=identity.login,
                 remote_identity="github-oauth",
-            )
-        elif intent == "setup":
-            setup_hash = row["setup_code_hash"]
-            if not isinstance(setup_hash, str):
-                raise GitHubOAuthError("OAUTH_TRANSACTION_INVALID")
-            session = self._sessions.setup_github_owner(
-                setup_code_hash=setup_hash,
-                github_user_id=identity.user_id,
-                github_login=identity.login,
-                recovery_available=self._recovery_available,
             )
         else:
             session_hash = row["session_hash"]

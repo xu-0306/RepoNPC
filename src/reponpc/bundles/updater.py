@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import shutil
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -150,6 +150,7 @@ class BundleUpdater:
         manager: BundleManager,
         runtime_database: RuntimeDatabase,
         expected_embedding: EmbeddingIdentity,
+        expected_embedding_supplier: Callable[[], EmbeddingIdentity] | None = None,
         max_bundle_bytes: int,
         allowed_hosts: frozenset[str],
         data_directory: Path,
@@ -159,6 +160,7 @@ class BundleUpdater:
         self._manager = manager
         self._runtime = runtime_database
         self._embedding = expected_embedding
+        self._embedding_supplier = expected_embedding_supplier
         self._max_bundle_bytes = max_bundle_bytes
         self._allowed_hosts = {host.casefold() for host in allowed_hosts}
         self._staging_root = Path(data_directory) / "bundles" / "staging"
@@ -216,18 +218,26 @@ class BundleUpdater:
             if response.sha256 != stable.asset_sha256:
                 raise BundleUpdateError("bundle_outer_checksum_invalid")
             staging = self._staging_root / uuid.uuid4().hex
+            expected_embedding = (
+                self._embedding_supplier()
+                if self._embedding_supplier is not None
+                else self._embedding
+            )
             candidate = verify_bundle_archive(
                 archive_path=archive_path,
                 staging_directory=staging,
                 expected_outer_sha256=stable.asset_sha256,
-                expected_embedding=self._embedding,
+                expected_embedding=expected_embedding,
                 max_bundle_bytes=self._max_bundle_bytes,
             )
             if candidate.manifest.bundle_id != stable.bundle_id:
                 candidate.close()
                 shutil.rmtree(candidate.directory, ignore_errors=True)
                 raise BundleUpdateError("stable_bundle_id_mismatch")
-            self._manager.activate(candidate)
+            self._manager.activate(
+                candidate,
+                expected_embedding=expected_embedding,
+            )
         finally:
             _safe_unlink(archive_path)
 

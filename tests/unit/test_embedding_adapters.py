@@ -12,7 +12,7 @@ import pytest
 from reponpc.indexing.sources import EmbeddingIdentity
 from reponpc.providers import ProviderError, ProviderFailureCode
 from reponpc.providers.http_transport import ProviderHttpResponse
-from reponpc.providers.ollama_embeddings import OllamaEmbeddingProvider
+from reponpc.providers.ollama_embeddings import OllamaEmbeddingProvider, OllamaPullCancelled
 from reponpc.providers.openai_embeddings import OpenAICompatibleEmbeddingProvider
 
 
@@ -40,6 +40,24 @@ class Transport:
         del headers, timeout
         self.requests.append(Request(method, url, body))
         return self.responses.pop(0)
+
+
+@dataclass
+class StreamingTransport(Transport):
+    lines: list[bytes] = field(default_factory=list)
+
+    def stream_lines(self, method: str, url: str, **values: object) -> int:
+        body = values["body"]
+        assert isinstance(body, bytes)
+        self.requests.append(Request(method, url, body))
+        cancelled = values["cancelled"]
+        on_line = values["on_line"]
+        assert callable(cancelled) and callable(on_line)
+        for line in self.lines:
+            if cancelled():
+                raise InterruptedError
+            on_line(line)
+        return 200
 
 
 def response(status: int, payload: object) -> ProviderHttpResponse:
@@ -91,6 +109,77 @@ def test_ollama_success_and_empty_input_do_not_leak_or_call_twice() -> None:
     assert output.shape == (1, 2)
     assert len(transport.requests) == 1
     assert "ollama:11434" not in repr(provider)
+
+
+def test_ollama_model_lifecycle_uses_only_provider_owned_fixed_endpoints() -> None:
+    transport = Transport([response(200, {"status": "success"}), response(200, {})])
+    provider = OllamaEmbeddingProvider(
+        "http://ollama:11434", "fixture", identity("ollama"), transport
+    )
+
+    provider.pull_model()
+    provider.delete_model()
+
+    assert [(request.method, request.url) for request in transport.requests] == [
+        ("POST", "http://ollama:11434/api/pull"),
+        ("DELETE", "http://ollama:11434/api/delete"),
+    ]
+    assert json.loads(transport.requests[0].body or b"{}") == {
+        "model": "fixture",
+        "stream": False,
+    }
+    assert json.loads(transport.requests[1].body or b"{}") == {"model": "fixture"}
+
+
+def test_ollama_pull_stream_reports_bounded_progress_and_honors_cancel() -> None:
+    transport = StreamingTransport(
+        [],
+        lines=[
+            b'{"status":"pulling","completed":2,"total":10}\n',
+            b'{"status":"pulling","completed":10,"total":10}\n',
+        ],
+    )
+    provider = OllamaEmbeddingProvider(
+        "http://ollama:11434", "fixture", identity("ollama"), transport
+    )
+    progress: list[tuple[int | None, int | None]] = []
+
+    provider.pull_model(
+        cancelled=lambda: False, on_progress=lambda done, total: progress.append((done, total))
+    )
+
+    assert progress == [(2, 10), (10, 10)]
+    assert json.loads(transport.requests[0].body or b"{}") == {
+        "model": "fixture",
+        "stream": True,
+    }
+    with pytest.raises(OllamaPullCancelled):
+        provider.pull_model(cancelled=lambda: True)
+
+
+def test_ollama_installed_models_returns_only_validated_ids() -> None:
+    transport = Transport(
+        [
+            response(
+                200,
+                {
+                    "models": [
+                        {"name": "qwen3-embedding:0.6b"},
+                        {"model": "bge-m3:latest"},
+                    ]
+                },
+            )
+        ]
+    )
+    provider = OllamaEmbeddingProvider(
+        "http://ollama:11434", "fixture", identity("ollama"), transport
+    )
+
+    assert provider.installed_models() == (
+        "bge-m3:latest",
+        "qwen3-embedding:0.6b",
+    )
+    assert transport.requests[0].url == "http://ollama:11434/api/tags"
 
 
 @pytest.mark.parametrize(

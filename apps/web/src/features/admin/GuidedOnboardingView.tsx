@@ -75,10 +75,17 @@ type Copy = {
   analysisRunning: string;
   analysisComplete: string;
   retryAnalysis: string;
+  prepareAnalysis: string;
   createBatch: string;
   batchPreflightRequired: string;
   batchCreationPending: string;
   continueContributions: string;
+  continueManually: string;
+  back: string;
+  editSelection: string;
+  startOver: string;
+  startOverConfirm: string;
+  navigationBlockedByBatch: string;
   factsHeading: string;
   factsDescription: string;
   noFacts: string;
@@ -203,7 +210,7 @@ const COPY: Record<Locale, Copy> = {
     noRepositories: "目前沒有 repository metadata。請先探索或手動加入。",
     confirmSelection: "確認選取並繼續分析",
     selectionRequired: "至少勾選一個 repository 後才能繼續。",
-    selectionLocked: "選取已確認；若要變更，請重設引導流程。",
+    selectionLocked: "選取已確認；你可以在後續步驟返回編輯。",
     analysisHeading: "逐一分析已確認的 repositories",
     analysisDescription:
       "每次只分析一個已確認的公開 repository。facts 與 inference 會保留清楚的證據分類。",
@@ -225,10 +232,18 @@ const COPY: Record<Locale, Copy> = {
     analysisRunning: "此 repository 正在分析；完成後才可再次操作。",
     analysisComplete: "已取得分析結果；如需更新可明確重新分析。",
     retryAnalysis: "重新分析",
+    prepareAnalysis: "準備批次分析",
     createBatch: "開始批次分析",
     batchPreflightRequired: "請先完成可用的分析前檢查。",
     batchCreationPending: "正在建立批次分析。",
     continueContributions: "檢視 facts 並填寫貢獻",
+    continueManually: "略過分析，手動填寫貢獻",
+    back: "返回",
+    editSelection: "編輯 repository 選擇",
+    startOver: "重新開始",
+    startOverConfirm: "重新開始會清除目前尚未儲存的引導內容。確定繼續嗎？",
+    navigationBlockedByBatch:
+      "目前批次分析仍在執行。請先在下方取消批次，等待狀態更新後再返回、編輯選擇或重新開始。",
     factsHeading: "REPOSITORY_FACT｜repository facts",
     factsDescription:
       "直接來自已固定 commit 的 repository 內容；不代表個人貢獻。",
@@ -365,7 +380,7 @@ const COPY: Record<Locale, Copy> = {
     confirmSelection: "Confirm selection and continue to analysis",
     selectionRequired: "Select at least one repository before continuing.",
     selectionLocked:
-      "Selection is confirmed. Reset the guided flow to change it.",
+      "Selection is confirmed. You can return and edit it from later steps.",
     analysisHeading: "Analyze confirmed repositories one at a time",
     analysisDescription:
       "Each request analyzes one confirmed public repository. Facts and inferences remain visibly classified.",
@@ -389,10 +404,19 @@ const COPY: Record<Locale, Copy> = {
     analysisComplete:
       "Analysis is complete; explicitly retry if you want a fresh result.",
     retryAnalysis: "Analyze again",
+    prepareAnalysis: "Prepare batch analysis",
     createBatch: "Start batch analysis",
     batchPreflightRequired: "Complete an available preflight before starting.",
     batchCreationPending: "Creating the analysis batch.",
     continueContributions: "Review facts and describe contribution",
+    continueManually: "Skip analysis and enter contribution manually",
+    back: "Back",
+    editSelection: "Edit repository selection",
+    startOver: "Start over",
+    startOverConfirm:
+      "Starting over clears the unsaved guided setup. Continue?",
+    navigationBlockedByBatch:
+      "A batch analysis is still running. Cancel it below and wait for the status update before going back, editing the selection, or starting over.",
     factsHeading: "REPOSITORY_FACT | Repository facts",
     factsDescription:
       "Directly observed at the pinned commit; they do not prove personal contribution.",
@@ -1478,10 +1502,12 @@ function AnalysisStep({
   providerStatusPending,
   batchAnalysisView,
   batchAnalysisTerminal = false,
+  batchAnalysisActive,
   batchCanCreate = false,
   batchCreatePending = false,
   onAction,
   onAnalyze,
+  onPrepareBatch,
   onCreateBatch,
   onRefreshProviderStatus,
 }: {
@@ -1493,14 +1519,18 @@ function AnalysisStep({
   providerStatusPending: boolean;
   batchAnalysisView?: ReactNode;
   batchAnalysisTerminal?: boolean;
+  batchAnalysisActive?: boolean;
   batchCanCreate?: boolean;
   batchCreatePending?: boolean;
   onAction: GuidedOnboardingViewProps["onAction"];
   onAnalyze: GuidedOnboardingViewProps["onAnalyze"];
+  onPrepareBatch?: GuidedOnboardingViewProps["onPrepareBatch"];
   onCreateBatch?: GuidedOnboardingViewProps["onCreateBatch"];
   onRefreshProviderStatus: GuidedOnboardingViewProps["onRefreshProviderStatus"];
 }) {
   const hasBatchAnalysis = batchAnalysisView !== undefined;
+  const hasActiveBatch =
+    batchAnalysisActive ?? (hasBatchAnalysis && !batchAnalysisTerminal);
   const repositories = selectedRepositories(state);
   const hasRunning = repositories.some(
     (repository) => repository.analysisStatus === "running",
@@ -1514,13 +1544,9 @@ function AnalysisStep({
     );
   const continueReason = busy
     ? copy.disabledBusy
-    : hasBatchAnalysis && !batchAnalysisTerminal
-      ? copy.disabledNeedsAnalysis
-      : !hasBatchAnalysis && hasRunning
-        ? copy.disabledAnalysisRunning
-        : !hasBatchAnalysis && !allTerminal
-          ? copy.disabledNeedsAnalysis
-          : null;
+    : hasActiveBatch || hasRunning
+      ? copy.disabledAnalysisRunning
+      : null;
   return (
     <section
       aria-labelledby="guided-analysis-heading"
@@ -1588,6 +1614,11 @@ function AnalysisStep({
           ) : (
             <p>{copy.analysisRequired}</p>
           )}
+          {onPrepareBatch && repositories.length > 0 && (
+            <button disabled={busy} onClick={onPrepareBatch} type="button">
+              {copy.prepareAnalysis}
+            </button>
+          )}
         </>
       )}
       <button
@@ -1598,7 +1629,9 @@ function AnalysisStep({
         onClick={() => onAction({ type: "CONTINUE_TO_CONTRIBUTIONS" })}
         type="button"
       >
-        {copy.continueContributions}
+        {allTerminal || batchAnalysisTerminal
+          ? copy.continueContributions
+          : copy.continueManually}
       </button>
       {disabledReason(continueReason, "guided-analysis-continue-reason")}
     </section>
@@ -1920,6 +1953,7 @@ export function GuidedOnboardingView({
   errorCode,
   batchAnalysisView,
   batchAnalysisTerminal,
+  batchAnalysisActive,
   batchCanCreate,
   batchCreatePending,
   providerStatus,
@@ -1928,6 +1962,7 @@ export function GuidedOnboardingView({
   onDiscover,
   onResolve,
   onAnalyze,
+  onPrepareBatch,
   onCreateBatch,
   onRefreshProviderStatus,
   onSuggestContribution,
@@ -1937,6 +1972,9 @@ export function GuidedOnboardingView({
 }: GuidedOnboardingViewProps) {
   const copy = COPY[locale];
   const error = errorCode ? guidedErrorMessage(locale, errorCode) : "";
+  const navigationBatchActive =
+    batchAnalysisActive ??
+    (batchAnalysisView !== undefined && !batchAnalysisTerminal);
 
   return (
     <section
@@ -1951,6 +1989,60 @@ export function GuidedOnboardingView({
         <p className="guided-onboarding__eyebrow">{copy.product}</p>
         <h2 id="guided-onboarding-heading">{copy.title}</h2>
         {state.mode === "guided" && <Progress copy={copy} state={state} />}
+        {state.step !== "intro" && (
+          <div className="guided-onboarding__navigation-actions">
+            <button
+              aria-describedby={
+                navigationBatchActive
+                  ? "guided-navigation-batch-reason"
+                  : undefined
+              }
+              disabled={busy || navigationBatchActive}
+              onClick={() => onAction({ type: "GO_BACK" })}
+              type="button"
+            >
+              {copy.back}
+            </button>
+            {state.step !== "repositories" && state.step !== "analysis" && (
+              <button
+                aria-describedby={
+                  navigationBatchActive
+                    ? "guided-navigation-batch-reason"
+                    : undefined
+                }
+                disabled={busy || navigationBatchActive}
+                onClick={() => onAction({ type: "EDIT_SELECTION" })}
+                type="button"
+              >
+                {copy.editSelection}
+              </button>
+            )}
+            <button
+              aria-describedby={
+                navigationBatchActive
+                  ? "guided-navigation-batch-reason"
+                  : undefined
+              }
+              disabled={busy || navigationBatchActive}
+              onClick={() => {
+                if (window.confirm(copy.startOverConfirm)) {
+                  onAction({ type: "RESET" });
+                }
+              }}
+              type="button"
+            >
+              {copy.startOver}
+            </button>
+            {navigationBatchActive && (
+              <p
+                className="guided-onboarding__disabled-reason"
+                id="guided-navigation-batch-reason"
+              >
+                {copy.navigationBlockedByBatch}
+              </p>
+            )}
+          </div>
+        )}
       </header>
 
       {busy && (
@@ -2008,6 +2100,7 @@ export function GuidedOnboardingView({
           {state.step === "analysis" && (
             <AnalysisStep
               busy={busy}
+              batchAnalysisActive={batchAnalysisActive}
               batchAnalysisTerminal={batchAnalysisTerminal}
               batchAnalysisView={batchAnalysisView}
               batchCanCreate={batchCanCreate}
@@ -2016,6 +2109,7 @@ export function GuidedOnboardingView({
               locale={locale}
               onAction={onAction}
               onAnalyze={onAnalyze}
+              onPrepareBatch={onPrepareBatch}
               onCreateBatch={onCreateBatch}
               onRefreshProviderStatus={onRefreshProviderStatus}
               providerStatus={providerStatus}

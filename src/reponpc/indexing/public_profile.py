@@ -45,6 +45,7 @@ class PublicProfile(_StrictProfileModel):
     display_name: Annotated[str, Field(min_length=1, max_length=80)]
     headline: Annotated[str, Field(min_length=1, max_length=10_000)]
     bio: Annotated[str, Field(min_length=1, max_length=100_000)]
+    greeting: Annotated[str, Field(min_length=1, max_length=10_000)]
     location: Annotated[str | None, Field(max_length=120)] = None
     avatar_url: Annotated[str | None, Field(max_length=2048)] = None
     links: Annotated[list[PublicLink], Field(max_length=100)]
@@ -93,6 +94,8 @@ class CharacterMetadata(_StrictProfileModel):
     mode: Literal["builtin", "custom"]
     asset_url: Literal["/api/public/character.png"]
     revision: Annotated[int, Field(ge=0)]
+    frame_duration_ms: Annotated[int, Field(ge=80, le=1000)]
+    movement: Literal["none", "subtle"]
 
 
 class IndexMetadata(_StrictProfileModel):
@@ -174,6 +177,7 @@ def build_public_profile_bytes(
                     display_name=config.profile.display_name,
                     headline=config.profile.headline[locale],
                     bio=config.profile.bio[locale],
+                    greeting=config.profile.greeting[locale],
                     location=config.profile.location,
                     avatar_url=config.profile.avatar_url,
                     links=[
@@ -202,6 +206,8 @@ def build_public_profile_bytes(
                 mode=config.character.mode,
                 asset_url="/api/public/character.png",
                 revision=config.character.revision,
+                frame_duration_ms=config.character.animation.frame_duration_ms,
+                movement=config.character.animation.movement,
             ),
             index=IndexMetadata(
                 version=index_version,

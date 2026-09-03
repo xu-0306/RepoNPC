@@ -173,7 +173,7 @@
 
 - **Given** an active bundle with healthy, initially unavailable, and recovered model/status fixtures,
 - **When** a visitor opens the site on supported desktop/mobile viewports, selects or edits a suggested question, submits it, receives validated SSE token events, opens a citation, and retries or rechecks after failure,
-- **Then** profile/project context remains usable during model degradation; validated token events render progressively without waiting for stream completion; citation evidence class, safe source location, and immutable link are visible; and loading/error/retry, status announcement, and focus behavior work without layout loss.
+- **Then** profile/project context, including the localized greeting and configured character animation behavior, remains usable during model degradation; validated token events render progressively without waiting for stream completion; citation evidence class, safe source location, and immutable link are visible; and loading/error/retry, status announcement, and focus behavior work without layout loss.
 
 ### AC-020 — Custom and built-in characters share all states
 
@@ -181,7 +181,7 @@
 
 - **Given** a built-in selection, a valid `128x224` custom sheet, and invalid sheets with wrong dimensions/grid/content/size,
 - **When** preview/build/rendering runs,
-- **Then** both valid modes expose all seven four-frame states, invalid assets receive actionable errors and are not written, and reduced motion displays stable first frames.
+- **Then** both valid modes expose all seven four-frame states, configured frame duration and movement are honored within bounds, invalid assets receive actionable errors and are not written, and reduced motion displays stable first frames.
 
 ### AC-021 — Card outputs are static-safe and injection-safe
 
@@ -353,7 +353,7 @@ The following criteria are normative release requirements under the owner-approv
 
 - **Given** bilingual owner statements; model suggestions that omit or strengthen the statement; accept/edit/reject actions; provider-not-ready, missing public-read connection, preflight blocker, analysis failure, and missing GitHub writeback states; backward navigation and repository/ref/include/exclude edits; invalid generated YAML; reload/logout/save; keyboard-only use; and 375/768/1024/1440-pixel viewports,
 - **When** the owner completes guided setup,
-- **Then** the owner can skip analysis and enter contributions before any preflight or failed request; the original statement remains visible; unconfirmed proposals never become `OWNER_ASSERTION`; Back/Edit preserves profile and unaffected repository input while invalidating only changed selection-bound plans/results; destructive Start over requires confirmation; confirmed role/summary/claims produce valid schema-v1 YAML; ordinary validation/preview makes no model or GitHub call; copy/download works without a token; every blocked primary action exposes its cause, next action, and safe alternative; session resume stores only approved public draft state and clears it on logout/save; raw YAML remains an advanced path; both locales are materially equivalent; focus/error/status behavior is accessible; and no horizontal content loss occurs.
+- **Then** the owner can skip analysis and enter contributions before any preflight or failed request; loading an existing configuration hydrates the guided profile/repository fields for return editing; the original statement remains visible; unconfirmed proposals never become `OWNER_ASSERTION`; Back/Edit preserves profile and unaffected repository input while invalidating only changed selection-bound plans/results; destructive Start over requires confirmation; confirmed role/summary/claims produce valid schema-v1 YAML while validated non-guided fields are preserved; raw edits with unknown/unmappable YAML remain in advanced mode instead of being silently discarded; ordinary validation/preview makes no model or GitHub call; copy/download works without a token; every blocked primary action exposes its cause, next action, and safe alternative; resume stores only approved public draft state and clears it on logout/save; raw YAML remains an advanced path; both locales are materially equivalent; focus/error/status behavior is accessible; and no horizontal content loss occurs.
 
 ### AC-047 — External embedding profile CRUD and single-active lifecycle
 
@@ -526,3 +526,5 @@ Release acceptance MUST report:
 - remaining known limitations that are within the explicit v1 exclusions.
 
 No criterion may be marked passed merely because implementation exists; observable evidence is required.
+
+The current machine-readable evidence ledger is `release-evidence/acceptance-ledger.json`. It is the authoritative per-criterion status record; local implementation tests and external/manual evidence must be appended there with reproducible commands and artifact hashes.

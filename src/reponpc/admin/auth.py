@@ -23,7 +23,23 @@ SETUP_CODE_BYTES: Final = 32
 SETUP_CODE_TTL: Final = timedelta(minutes=15)
 RECENT_AUTH_TTL: Final = timedelta(minutes=5)
 MIN_ADMIN_PASSWORD_LENGTH: Final = 4
-MAX_ADMIN_PASSWORD_LENGTH: Final = 1024
+PRODUCTION_MIN_ADMIN_PASSWORD_LENGTH: Final = 15
+MAX_ADMIN_PASSWORD_LENGTH: Final = 128
+ADMIN_DEPLOYMENT_PROFILES: Final = frozenset({"loopback_evaluation", "production"})
+COMMON_ADMIN_PASSWORDS: Final = frozenset(
+    {
+        "123456",
+        "12345678",
+        "admin",
+        "changeme",
+        "letmein",
+        "password",
+        "password1",
+        "password123",
+        "password1234567",
+        "qwerty",
+    }
+)
 
 
 class AdminAuthError(RuntimeError):
@@ -53,6 +69,7 @@ class SessionAuthority:
 class AdminSetupStatus:
     setup_required: bool
     setup_code_available: bool
+    minimum_password_length: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +97,8 @@ class AdminSessionService:
         identity_hmac_key: bytes,
         idle_minutes: int = 30,
         absolute_hours: int = 12,
+        deployment_profile: str = "loopback_evaluation",
+        compromised_passwords: frozenset[str] = COMMON_ADMIN_PASSWORDS,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         if (username is None) != (password_hash is None) or len(identity_hmac_key) < 32:
@@ -88,12 +107,18 @@ class AdminSessionService:
             raise ValueError("admin authentication configuration is invalid")
         if idle_minutes <= 0 or absolute_hours <= 0:
             raise ValueError("admin session durations must be positive")
+        if deployment_profile not in ADMIN_DEPLOYMENT_PROFILES:
+            raise ValueError("admin deployment profile is invalid")
         self._database = database
         self._username = username
         self._password_hash = password_hash
         self._identity_hmac_key = identity_hmac_key
         self._idle = timedelta(minutes=idle_minutes)
         self._absolute = timedelta(hours=absolute_hours)
+        self._deployment_profile = deployment_profile
+        self._compromised_passwords = frozenset(
+            value.strip().casefold() for value in compromised_passwords if value.strip()
+        )
         self._now = now or (lambda: datetime.now(UTC))
         self._hasher = PasswordHasher(type=Type.ID)
         self._dummy_password_hash = self._hasher.hash(secrets.token_urlsafe(32))
@@ -102,7 +127,11 @@ class AdminSessionService:
         """Return only the safe public state needed by the first-owner UI."""
 
         if self._environment_credentials() is not None:
-            return AdminSetupStatus(setup_required=False, setup_code_available=False)
+            return AdminSetupStatus(
+                setup_required=False,
+                setup_code_available=False,
+                minimum_password_length=self.minimum_password_length,
+            )
         now = self._utc_now()
         try:
             with self._database.connection() as connection:
@@ -110,7 +139,7 @@ class AdminSessionService:
                     "SELECT 1 FROM admin_owner WHERE state_key = 'current'"
                 ).fetchone()
                 if owner is not None:
-                    return AdminSetupStatus(False, False)
+                    return AdminSetupStatus(False, False, self.minimum_password_length)
                 setup = connection.execute(
                     "SELECT expires_at FROM admin_setup WHERE state_key = 'current'"
                 ).fetchone()
@@ -121,6 +150,15 @@ class AdminSessionService:
             setup_code_available=(
                 setup is not None and now < _parse_time(str(setup["expires_at"]))
             ),
+            minimum_password_length=self.minimum_password_length,
+        )
+
+    @property
+    def minimum_password_length(self) -> int:
+        return (
+            MIN_ADMIN_PASSWORD_LENGTH
+            if self._deployment_profile == "loopback_evaluation"
+            else PRODUCTION_MIN_ADMIN_PASSWORD_LENGTH
         )
 
     def auth_methods(self, *, github_configured: bool) -> AdminAuthMethods:
@@ -138,30 +176,6 @@ class AdminSessionService:
             setup_required=setup.setup_required,
         )
 
-    def verify_setup_proof(self, setup_code: str) -> str:
-        """Check a current host proof without consuming it for OAuth setup."""
-
-        if self._environment_credentials() is not None or not setup_code:
-            raise AdminAuthError("SETUP_DENIED")
-        proof_hash = _token_hash(setup_code)
-        now = self._utc_now()
-        with self._database.connection() as connection:
-            owner = connection.execute(
-                "SELECT 1 FROM admin_owner WHERE state_key = 'current'"
-            ).fetchone()
-            setup = connection.execute(
-                "SELECT code_hash, expires_at FROM admin_setup WHERE state_key = 'current'"
-            ).fetchone()
-        if owner is not None:
-            raise AdminAuthError("SETUP_ALREADY_COMPLETE")
-        if (
-            setup is None
-            or now >= _parse_time(str(setup["expires_at"]))
-            or not hmac.compare_digest(str(setup["code_hash"]), proof_hash)
-        ):
-            raise AdminAuthError("SETUP_DENIED")
-        return proof_hash
-
     def setup_owner(
         self,
         *,
@@ -177,7 +191,11 @@ class AdminSessionService:
         normalized_username = username.strip()
         if (
             not 1 <= len(normalized_username) <= 64
-            or not MIN_ADMIN_PASSWORD_LENGTH <= len(password) <= MAX_ADMIN_PASSWORD_LENGTH
+            or not _new_password_is_allowed(
+                password,
+                deployment_profile=self._deployment_profile,
+                compromised_passwords=self._compromised_passwords,
+            )
             or password != password_confirmation
             or not setup_code
         ):
@@ -326,68 +344,6 @@ class AdminSessionService:
             except sqlite3.Error as exc:
                 self._rollback(connection)
                 raise RuntimeDatabaseError("runtime_admin_session_failed") from exc
-
-    def setup_github_owner(
-        self,
-        *,
-        setup_code_hash: str,
-        github_user_id: str,
-        github_login: str,
-        recovery_available: bool,
-    ) -> AdminSession:
-        """Atomically consume a prevalidated setup proof for one GitHub owner."""
-
-        if self._environment_credentials() is not None or not recovery_available:
-            raise AdminAuthError("SETUP_DENIED")
-        now = self._utc_now()
-        with self._database.connection() as connection:
-            try:
-                connection.execute("BEGIN IMMEDIATE")
-                owner = connection.execute(
-                    "SELECT 1 FROM admin_owner WHERE state_key = 'current'"
-                ).fetchone()
-                setup = connection.execute(
-                    "SELECT code_hash, expires_at FROM admin_setup WHERE state_key = 'current'"
-                ).fetchone()
-                if owner is not None:
-                    self._rollback(connection)
-                    raise AdminAuthError("SETUP_ALREADY_COMPLETE")
-                if (
-                    setup is None
-                    or now >= _parse_time(str(setup["expires_at"]))
-                    or not hmac.compare_digest(str(setup["code_hash"]), setup_code_hash)
-                ):
-                    self._rollback(connection)
-                    raise AdminAuthError("SETUP_DENIED")
-                # ``admin_owner`` is retained for migration compatibility. This
-                # high-entropy unusable hash is not a local auth method; only the
-                # explicit GitHub method below is valid until host recovery adds one.
-                recovery_hash = self._hasher.hash(secrets.token_urlsafe(48))
-                connection.execute(
-                    "INSERT INTO admin_owner(state_key, username, password_hash, created_at) "
-                    "VALUES ('current', ?, ?, ?)",
-                    (f"github-{github_user_id}"[:64], recovery_hash, _time(now)),
-                )
-                connection.execute(
-                    "INSERT INTO admin_auth_methods("
-                    "method, github_user_id, github_login, created_at"
-                    ") "
-                    "VALUES ('github', ?, ?, ?)",
-                    (github_user_id, github_login[:100], _time(now)),
-                )
-                connection.execute("DELETE FROM admin_setup WHERE state_key = 'current'")
-                session = self._insert_session(
-                    connection,
-                    epoch=self._current_epoch(connection),
-                    now=now,
-                )
-                connection.execute("COMMIT")
-                return session
-            except AdminAuthError:
-                raise
-            except sqlite3.Error as exc:
-                self._rollback(connection)
-                raise RuntimeDatabaseError("runtime_admin_setup_failed") from exc
 
     def link_github(
         self,
@@ -784,18 +740,59 @@ def issue_admin_setup_code(
     return code
 
 
+def _new_password_is_allowed(
+    password: str,
+    *,
+    deployment_profile: str,
+    compromised_passwords: frozenset[str],
+) -> bool:
+    if deployment_profile not in ADMIN_DEPLOYMENT_PROFILES:
+        return False
+    minimum = (
+        MIN_ADMIN_PASSWORD_LENGTH
+        if deployment_profile == "loopback_evaluation"
+        else PRODUCTION_MIN_ADMIN_PASSWORD_LENGTH
+    )
+    normalized = password.strip().casefold()
+    return (
+        minimum <= len(password) <= MAX_ADMIN_PASSWORD_LENGTH
+        and normalized not in compromised_passwords
+    )
+
+
+def validate_new_admin_password(
+    password: str,
+    *,
+    deployment_profile: str,
+    compromised_passwords: frozenset[str] = COMMON_ADMIN_PASSWORDS,
+) -> None:
+    """Apply the selected deployment policy without exposing password detail."""
+
+    if not _new_password_is_allowed(
+        password,
+        deployment_profile=deployment_profile,
+        compromised_passwords=compromised_passwords,
+    ):
+        raise AdminAuthError("SETUP_DENIED")
+
+
 def set_admin_recovery_password(
     database: RuntimeDatabase,
     *,
-    username: str,
+    username: str | None,
     password: str,
+    deployment_profile: str = "production",
+    compromised_passwords: frozenset[str] = COMMON_ADMIN_PASSWORDS,
 ) -> None:
     """Host-only recovery: restore a local password method for the sole owner."""
 
-    normalized_username = username.strip()
+    normalized_username = username.strip() if username is not None else None
     if (
-        not 1 <= len(normalized_username) <= 64
-        or not MIN_ADMIN_PASSWORD_LENGTH <= len(password) <= MAX_ADMIN_PASSWORD_LENGTH
+        normalized_username is not None and not 1 <= len(normalized_username) <= 64
+    ) or not _new_password_is_allowed(
+        password,
+        deployment_profile=deployment_profile,
+        compromised_passwords=compromised_passwords,
     ):
         raise AdminAuthError("SETUP_DENIED")
     password_hash = PasswordHasher(type=Type.ID).hash(password)
@@ -804,15 +801,16 @@ def set_admin_recovery_password(
         try:
             connection.execute("BEGIN IMMEDIATE")
             owner = connection.execute(
-                "SELECT 1 FROM admin_owner WHERE state_key = 'current'"
+                "SELECT username FROM admin_owner WHERE state_key = 'current'"
             ).fetchone()
-            if owner is None:
+            if owner is None or (
+                normalized_username is not None and normalized_username != str(owner["username"])
+            ):
                 AdminSessionService._rollback(connection)
                 raise AdminAuthError("SETUP_DENIED")
             connection.execute(
-                "UPDATE admin_owner SET username = ?, password_hash = ? "
-                "WHERE state_key = 'current'",
-                (normalized_username, password_hash),
+                "UPDATE admin_owner SET password_hash = ? WHERE state_key = 'current'",
+                (password_hash,),
             )
             connection.execute(
                 "INSERT OR IGNORE INTO admin_auth_methods("

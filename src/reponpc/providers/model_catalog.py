@@ -22,6 +22,15 @@ def openai_model_available(payload: dict[str, Any], selected_model: str) -> bool
 def ollama_model_available(payload: dict[str, Any], selected_model: str) -> bool:
     """Return whether an Ollama tag list contains the selected model name."""
 
+    model_ids = ollama_model_ids(payload)
+    if selected_model in model_ids:
+        return True
+    return ":" not in selected_model and f"{selected_model}:latest" in model_ids
+
+
+def ollama_model_ids(payload: dict[str, Any]) -> tuple[str, ...]:
+    """Return validated model IDs from an Ollama tag-list response."""
+
     records = payload.get("models")
     if not isinstance(records, list):
         raise ValueError("Ollama model catalog is invalid")
@@ -35,6 +44,4 @@ def ollama_model_available(payload: dict[str, Any], selected_model: str) -> bool
         if not any(isinstance(value, str) for value in values):
             raise ValueError("Ollama model catalog is invalid")
         model_ids.update(value for value in values if isinstance(value, str))
-    if selected_model in model_ids:
-        return True
-    return ":" not in selected_model and f"{selected_model}:latest" in model_ids
+    return tuple(sorted(model_ids))

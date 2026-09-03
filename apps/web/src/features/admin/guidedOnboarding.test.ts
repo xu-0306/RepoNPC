@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   guidedErrorMessage,
+  guidedOnboardingFromConfig,
   guidedOnboardingReducer,
   initialGuidedOnboardingState,
   parseGuidedOnboarding,
@@ -22,6 +23,37 @@ describe("guided onboarding errors", () => {
     expect(guidedErrorMessage("zh-TW", "VALIDATION_ERROR")).toContain(
       "格式無效",
     );
+  });
+});
+
+describe("guided onboarding config hydration", () => {
+  it("maps an existing validated config into editable profile and contributions", () => {
+    const state = guidedOnboardingFromConfig({
+      profile: {
+        display_name: "Existing owner",
+        headline: { "zh-TW": "既有標題", en: "Existing headline" },
+        bio: { "zh-TW": "既有簡介", en: "Existing bio" },
+        greeting: { "zh-TW": "你好", en: "Hello" },
+      },
+      repositories: [
+        {
+          slug: "octocat/demo",
+          enabled: true,
+          ref: "a".repeat(40),
+          include: ["src/**"],
+          exclude: ["node_modules/**"],
+          role: { "zh-TW": "維護者", en: "Maintainer" },
+          summary: { "zh-TW": "維護專案", en: "Maintained project" },
+          claims: [],
+        },
+      ],
+    });
+    expect(state?.step).toBe("profile");
+    expect(state?.profile.greeting.en).toBe("Hello");
+    expect(state?.repositories[0].confirmedContribution?.role.en).toBe(
+      "Maintainer",
+    );
+    expect(state?.repositories[0].include).toEqual(["src/**"]);
   });
 });
 
@@ -196,6 +228,127 @@ describe("guidedOnboardingReducer", () => {
       claims: [],
     });
     expect(state.repositories[0].confirmedContribution).toBeNull();
+  });
+
+  it("allows manual contribution before preflight or an analysis failure", () => {
+    let state = guidedOnboardingReducer(selectedState(), {
+      type: "CONFIRM_SELECTION",
+    });
+
+    state = guidedOnboardingReducer(state, {
+      type: "CONTINUE_TO_CONTRIBUTIONS",
+    });
+
+    expect(state.step).toBe("contributions");
+    expect(state.repositories[0].analysisStatus).toBe("idle");
+  });
+
+  it("edits selection without discarding unaffected owner work", () => {
+    const other: RepositoryMetadata = {
+      ...metadata,
+      slug: "octocat/other",
+      name: "other",
+      html_url: "https://github.com/octocat/other",
+    };
+    let state = selectedState();
+    state = guidedOnboardingReducer(state, {
+      type: "ADD_REPOSITORY",
+      repository: other,
+    });
+    state = guidedOnboardingReducer(state, {
+      type: "TOGGLE_REPOSITORY",
+      slug: other.slug,
+    });
+    state = guidedOnboardingReducer(state, { type: "CONFIRM_SELECTION" });
+    state = guidedOnboardingReducer(state, {
+      type: "CONTINUE_TO_CONTRIBUTIONS",
+    });
+    for (const repository of [metadata, other]) {
+      state = guidedOnboardingReducer(state, {
+        type: "SET_OWNER_STATEMENT",
+        slug: repository.slug,
+        statement: `Statement for ${repository.slug}`,
+      });
+      state = guidedOnboardingReducer(state, {
+        type: "CONFIRM_CONTRIBUTION",
+        slug: repository.slug,
+        contribution: proposal,
+      });
+    }
+
+    state = guidedOnboardingReducer(state, { type: "EDIT_SELECTION" });
+    state = guidedOnboardingReducer(state, {
+      type: "SET_REPOSITORY_OPTIONS",
+      slug: other.slug,
+      ref: "release",
+      include: [],
+      exclude: [],
+    });
+    state = guidedOnboardingReducer(state, { type: "CONFIRM_SELECTION" });
+
+    const unchanged = state.repositories.find(
+      (repository) => repository.metadata.slug === metadata.slug,
+    );
+    const changed = state.repositories.find(
+      (repository) => repository.metadata.slug === other.slug,
+    );
+    expect(unchanged?.ownerStatement).toBe(`Statement for ${metadata.slug}`);
+    expect(unchanged?.confirmedContribution).not.toBeNull();
+    expect(changed?.ownerStatement).toBe("");
+    expect(changed?.confirmedContribution).toBeNull();
+    expect(changed?.analysisStatus).toBe("idle");
+  });
+
+  it("does not restore stale work after a repository is removed and reselected", () => {
+    const other: RepositoryMetadata = {
+      ...metadata,
+      slug: "octocat/other",
+      name: "other",
+      html_url: "https://github.com/octocat/other",
+    };
+    let state = selectedState();
+    state = guidedOnboardingReducer(state, {
+      type: "ADD_REPOSITORY",
+      repository: other,
+    });
+    state = guidedOnboardingReducer(state, {
+      type: "TOGGLE_REPOSITORY",
+      slug: other.slug,
+    });
+    state = guidedOnboardingReducer(state, { type: "CONFIRM_SELECTION" });
+    state = guidedOnboardingReducer(state, {
+      type: "CONTINUE_TO_CONTRIBUTIONS",
+    });
+    state = guidedOnboardingReducer(state, {
+      type: "SET_OWNER_STATEMENT",
+      slug: other.slug,
+      statement: "Stale statement",
+    });
+    state = guidedOnboardingReducer(state, {
+      type: "CONFIRM_CONTRIBUTION",
+      slug: other.slug,
+      contribution: proposal,
+    });
+
+    state = guidedOnboardingReducer(state, { type: "EDIT_SELECTION" });
+    state = guidedOnboardingReducer(state, {
+      type: "TOGGLE_REPOSITORY",
+      slug: other.slug,
+    });
+    state = guidedOnboardingReducer(state, { type: "CONFIRM_SELECTION" });
+    state = guidedOnboardingReducer(state, { type: "EDIT_SELECTION" });
+    state = guidedOnboardingReducer(state, {
+      type: "TOGGLE_REPOSITORY",
+      slug: other.slug,
+    });
+    state = guidedOnboardingReducer(state, { type: "CONFIRM_SELECTION" });
+
+    const reselected = state.repositories.find(
+      (repository) => repository.metadata.slug === other.slug,
+    );
+    expect(reselected?.ownerStatement).toBe("");
+    expect(reselected?.confirmedContribution).toBeNull();
+    expect(reselected?.analysisStatus).toBe("idle");
   });
 
   it("keeps an unmapped raw YAML edit in advanced mode", () => {

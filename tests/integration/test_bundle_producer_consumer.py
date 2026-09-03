@@ -113,6 +113,9 @@ def test_production_bundle_bytes_are_accepted_by_the_real_read_only_consumer(
         assert zh_tw.json()["locale"] == "zh-TW"
         assert english.json()["locale"] == "en"
         assert zh_tw.json()["profile"]["headline"] != english.json()["profile"]["headline"]
+        assert zh_tw.json()["profile"]["greeting"] != english.json()["profile"]["greeting"]
+        assert zh_tw.json()["character"]["frame_duration_ms"] == 160
+        assert zh_tw.json()["character"]["movement"] == "subtle"
         assert "locales" not in zh_tw.json()
         assert zh_tw.json()["index"]["version"] == bundle.manifest.bundle_id
     finally:

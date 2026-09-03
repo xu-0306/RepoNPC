@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from argon2 import PasswordHasher, Type
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reponpc.admin.auth import AdminSessionService
@@ -52,7 +53,7 @@ class GraphQLTransport:
         )
 
 
-def _application(tmp_path: Path):
+def _application(tmp_path: Path) -> tuple[FastAPI, RuntimeDatabase]:
     database = RuntimeDatabase(tmp_path / "runtime")
     database.initialize()
     auth = AdminSessionService(
@@ -92,10 +93,13 @@ def _application(tmp_path: Path):
         public_base_url=ORIGIN,
         analysis_batches=batches,
     )
-    return create_app(
-        admin_session_service=auth,
-        admin_origins=(ORIGIN,),
-        admin_operations=operations,
+    return (
+        create_app(
+            admin_session_service=auth,
+            admin_origins=(ORIGIN,),
+            admin_operations=operations,
+        ),
+        database,
     )
 
 
@@ -114,7 +118,7 @@ def _selection() -> dict[str, object]:
 
 
 def test_batch_api_requires_csrf_and_replays_safe_snapshot(tmp_path: Path) -> None:
-    app = _application(tmp_path)
+    app, _database = _application(tmp_path)
     with TestClient(app, base_url=ORIGIN) as client:
         csrf = _login(client)
         forbidden = client.post(
@@ -159,3 +163,48 @@ def test_batch_api_requires_csrf_and_replays_safe_snapshot(tmp_path: Path) -> No
     assert events.status_code == 200
     assert "id: 1" in event_body
     assert "event: batch_created" in event_body
+
+
+def test_legacy_analysis_is_projected_from_the_durable_batch_event_store(
+    tmp_path: Path,
+) -> None:
+    app, database = _application(tmp_path)
+    with TestClient(app, base_url=ORIGIN) as client:
+        csrf = _login(client)
+        legacy = client.post(
+            "/api/admin/onboarding/repositories/analyze",
+            headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
+            json={
+                "slug": "octocat/demo",
+                "ref": None,
+                "include": [],
+                "exclude": [],
+            },
+        )
+        assert legacy.status_code == 200, legacy.text
+        with database.connection() as connection:
+            row = connection.execute(
+                "SELECT batch_id FROM analysis_batches ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+        assert row is not None
+        batch_id = str(row["batch_id"])
+        snapshot_response = client.get(
+            f"/api/admin/onboarding/analysis-batches/{batch_id}",
+            headers={"Origin": ORIGIN},
+        )
+        with client.stream(
+            "GET",
+            f"/api/admin/onboarding/analysis-batches/{batch_id}/events",
+            headers={"Origin": ORIGIN},
+        ) as event_stream:
+            event_body = event_stream.read().decode()
+
+    assert legacy.json()["repository"]["slug"] == "octocat/demo"
+    assert snapshot_response.status_code == 200
+    snapshot = snapshot_response.json()
+    assert snapshot["state"] == "completed"
+    assert len(snapshot["items"]) == 1
+    assert snapshot["items"][0]["slug"] == "octocat/demo"
+    assert event_stream.status_code == 200
+    assert "event: batch_created" in event_body
+    assert "event: item_terminal" in event_body

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.release_audit import audit_repository
+from tools.release_audit import audit_repository, validate_acceptance_ledger
 
 ALLOWED_STATUSES = {"pass", "fail", "not-run", "blocked"}
 EXTERNAL_IDS = {
@@ -332,3 +332,34 @@ def test_release_audit_requires_every_accepted_criterion_through_ac_050(tmp_path
     records = {record["id"]: record for record in audit_repository(tmp_path)}
     assert records["acceptance-coverage"]["status"] == "blocked"
     assert records["acceptance-coverage"]["evidence"]["missing"] == ["AC-050"]
+
+
+def test_acceptance_ledger_validator_requires_unique_complete_safe_entries() -> None:
+    entries = [
+        {"id": f"AC-{index:03d}", "status": "not-run", "reason": "external evidence unavailable"}
+        for index in range(1, 51)
+    ]
+    payload = {
+        "schema_name": "reponpc/acceptance-ledger",
+        "schema_version": 1,
+        "source_identity": "fixture commit abc123",
+        "environment": "local test",
+        "entries": entries,
+    }
+    assert validate_acceptance_ledger(payload) == []
+    payload["entries"] = [*entries[:-1], entries[-2]]
+    errors = validate_acceptance_ledger(payload)
+    assert any("duplicate" in error for error in errors)
+    assert any("missing ledger entry: AC-050" in error for error in errors)
+
+
+def test_acceptance_ledger_validator_rejects_secret_metadata() -> None:
+    payload = {
+        "schema_name": "reponpc/acceptance-ledger",
+        "schema_version": 1,
+        "source_identity": "api_key=secret",
+        "environment": "local",
+        "entries": [],
+    }
+    errors = validate_acceptance_ledger(payload)
+    assert "ledger source_identity is missing or unsafe" in errors

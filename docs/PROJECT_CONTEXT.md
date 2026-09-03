@@ -26,7 +26,7 @@ As of the recoverable-capability UX/specification review and ENGD-001/002/003/00
 - version 0.1.7 adds the exact-SHA archive resolver and durable bounded batch engine; D–E local automated verification is complete while external/live release evidence remains incomplete;
 - version 0.1.8 makes unconfigured OAuth entry points actionable through a safe host-side setup guide rather than leaving them disabled;
 - the 2026-08-30 implementation/specification walkthrough found that optional analysis could still become a mandatory gate, repository selection could be changed only through destructive reset, and several unavailable actions lacked a complete recovery/alternative path. Existing FR-025/FR-027/FR-028/NFR-003 and AC-019/AC-025/AC-032/AC-040 wording now explicitly forbids those dead ends; application regressions remain to be implemented and verified;
-- the same walkthrough found additional P0/P1/P2 engineering risks in the default embedding image/profile, production password policy, recovery-readiness signal, legacy analysis compatibility path, unimplemented operations commands, unused configuration contracts, oversized modules, and duplicated acceptance evidence. ENGD-001/002/003/006 are now owner-approved and their implementation gates are tracked in `SPEC_AND_ENGINEERING_REMEDIATION_PLAN.md`; UXD-001 through UXD-007 plus ENGD-004/005/007 remain open in `OWNER_REVIEW.md`;
+- the same walkthrough found additional P0/P1/P2 engineering risks in the default embedding image/profile, production password policy, recovery-readiness signal, legacy analysis compatibility path, unimplemented operations commands, unused configuration contracts, oversized modules, and duplicated acceptance evidence. ENGD-001/002/003/004/006 and UXD-006 are now owner-approved and their implementation gates are tracked in `SPEC_AND_ENGINEERING_REMEDIATION_PLAN.md`; the remaining UXD/ENGD decisions and release evidence work remain open in `OWNER_REVIEW.md`;
 - v1 remains the complete product described here, not a reduced MVP;
 - milestones are delivery and verification boundaries, not permission to remove later v1 features.
 
@@ -111,7 +111,7 @@ This approved amendment replaces the blank raw-YAML-first post-login experience 
 7. Existing validation and side-effect-free preview run before optional GitHub save and index publication.
 8. Without GitHub public-read/writeback readiness, the owner may still author manually, validate, preview, copy, or download the generated YAML. Each unavailable integration states its cause, recovery, and unaffected alternative.
 
-The flow does not add private repositories, whole-account source analysis, broader writeback-token permissions, model tools, or silent provider fallback. OAuth is an identity/public-read connection only; it never changes the selected-only analysis boundary. Unsaved onboarding state may resume only within the current authenticated browser session; saved configuration resumes from `reponpc.yml`.
+The flow does not add private repositories, whole-account source analysis, broader writeback-token permissions, model tools, or silent provider fallback. OAuth is an identity/public-read connection only; it never changes the selected-only analysis boundary. Existing saved configuration hydrates the guided editor for return editing, while unsaved onboarding state may resume only within the current authenticated browser session. Guided edits preserve fields outside the guided surface; saved configuration resumes from `reponpc.yml`.
 
 ## 5. Product goals
 

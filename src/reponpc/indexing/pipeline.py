@@ -105,6 +105,7 @@ def build_index_bundle(
     configuration_source: ResolvedConfiguration | None = None,
     built_at: datetime | None = None,
     public_directory: str | Path | None = None,
+    embedding_identity_override: EmbeddingIdentity | None = None,
 ) -> BuiltBundle:
     """Resolve, index, bundle, and verify the complete production build path."""
 
@@ -119,6 +120,25 @@ def build_index_bundle(
     content = config_path.read_text(encoding="utf-8")
     source = configuration_source or _resolve_configuration_source(config_path, content)
     provider = embedding_provider or _embedding_provider(config)
+    if embedding_identity_override is not None:
+        if provider.identity() != embedding_identity_override:
+            raise IndexPipelineError("embedding_identity_mismatch")
+        identity = embedding_identity_override
+        embedding_config = config.retrieval.embedding.model_copy(
+            update={
+                "adapter": identity.adapter,
+                "model": identity.model_id,
+                "dimension": identity.dimension,
+                "normalized": identity.normalized,
+                "query_prefix": identity.query_prefix,
+                "passage_prefix": identity.passage_prefix,
+            }
+        )
+        config = config.model_copy(
+            update={
+                "retrieval": config.retrieval.model_copy(update={"embedding": embedding_config})
+            }
+        )
     source_resolver = resolver or GitHubSourceResolver()
     snapshots = tuple(
         source_resolver.resolve(slug=repository.slug, ref=repository.ref)

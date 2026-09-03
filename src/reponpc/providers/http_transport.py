@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from http.client import HTTPMessage
 from typing import IO, Protocol
@@ -93,6 +93,51 @@ class UrllibProviderHttpTransport:
                 headers=dict(exc.headers.items()),
                 body=payload,
             )
+        except TimeoutError as exc:
+            raise ProviderError(ProviderFailureCode.TIMEOUT) from exc
+        except URLError as exc:
+            if isinstance(exc.reason, TimeoutError):
+                raise ProviderError(ProviderFailureCode.TIMEOUT) from exc
+            raise ProviderError(ProviderFailureCode.UNAVAILABLE) from exc
+        except OSError as exc:
+            raise ProviderError(ProviderFailureCode.UNAVAILABLE) from exc
+
+    def stream_lines(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        body: bytes | None,
+        timeout: float,
+        cancelled: Callable[[], bool],
+        on_line: Callable[[bytes], None],
+    ) -> int:
+        """Read a bounded NDJSON response while honoring cooperative cancellation."""
+
+        if not method or timeout <= 0:
+            raise ProviderError(ProviderFailureCode.TIMEOUT)
+        request = Request(url, data=body, headers=dict(headers), method=method)
+        consumed = 0
+        try:
+            with build_opener(_RejectRedirects()).open(request, timeout=timeout) as response:
+                while True:
+                    if cancelled():
+                        raise InterruptedError
+                    line = response.readline(min(64 * 1024, self._max_response_bytes) + 1)
+                    if not line:
+                        break
+                    consumed += len(line)
+                    if len(line) > 64 * 1024 or consumed > self._max_response_bytes:
+                        raise ProviderError(ProviderFailureCode.INVALID_RESPONSE)
+                    on_line(line)
+                return int(response.status)
+        except InterruptedError:
+            raise
+        except ProviderError:
+            raise
+        except HTTPError as exc:
+            return int(exc.code)
         except TimeoutError as exc:
             raise ProviderError(ProviderFailureCode.TIMEOUT) from exc
         except URLError as exc:

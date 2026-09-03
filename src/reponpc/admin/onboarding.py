@@ -591,15 +591,19 @@ class GuidedOnboardingService:
             "bio": profile.bio.public(),
             "greeting": profile.greeting.public(),
         }
+        existing_repositories = {
+            item["slug"]: item
+            for item in values.get("repositories", [])
+            if isinstance(item, dict) and isinstance(item.get("slug"), str)
+        }
         values["repositories"] = [
             {
+                **existing_repositories.get(repository.slug, {}),
                 "slug": repository.slug,
                 "enabled": True,
                 "ref": repository.ref,
                 "role": repository.role.public(),
                 "summary": repository.summary.public(),
-                "tags": [],
-                "demo_url": None,
                 "include": list(repository.include or _DEFAULT_INCLUDE_PATTERNS),
                 "exclude": list(repository.exclude),
                 "claims": [

@@ -1,29 +1,30 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   CharacterRenderer,
+  type CharacterMovement,
   type CharacterState,
 } from "../features/character/CharacterRenderer";
 import { messages, type Locale } from "../i18n/messages";
+import {
+  VisitorConversation,
+  type Citation,
+  type VisitorTurn,
+} from "./VisitorConversation";
 
 const AdminPage = lazy(() =>
   import("../features/admin/AdminPage").then((module) => ({
     default: module.AdminPage,
   })),
 );
-
-interface Citation {
-  id: string;
-  title: string;
-  excerpt: string;
-  url: string;
-}
-
-interface Turn {
-  role: "user" | "assistant";
-  content: string;
-  citations?: Citation[];
-}
 
 interface PublicStatus {
   chat_available: boolean;
@@ -34,7 +35,9 @@ interface PublicProfile {
     display_name: string;
     headline: string;
     bio: string;
+    greeting: string;
     location: string | null;
+    avatar_url: string | null;
     links: Array<{ label: string; url: string }>;
   };
   repositories: Array<{
@@ -45,17 +48,29 @@ interface PublicProfile {
     demo_url: string | null;
   }>;
   suggested_questions: string[];
+  character: {
+    mode: "builtin" | "custom";
+    asset_url: string;
+    revision: number;
+    frame_duration_ms: number;
+    movement: CharacterMovement;
+  };
 }
 
 export function App() {
   const [locale, setLocale] = useState<Locale>("zh-TW");
   const [question, setQuestion] = useState("");
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const [turns, setTurns] = useState<VisitorTurn[]>([]);
   const [chatAvailable, setChatAvailable] = useState(false);
   const [pending, setPending] = useState(false);
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [profileError, setProfileError] = useState(false);
+  const [profileReload, setProfileReload] = useState(0);
   const [characterState, setCharacterState] = useState<CharacterState>("idle");
+  const questionInput = useRef<HTMLTextAreaElement>(null);
+  const profileErrorAlert = useRef<HTMLParagraphElement>(null);
+  const chatStatus = useRef<HTMLParagraphElement>(null);
+  const statusController = useRef<AbortController | null>(null);
   const copy = messages[locale];
   const reducedMotion = useMemo(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -67,16 +82,41 @@ export function App() {
   }, [locale]);
 
   useEffect(() => {
+    if (reducedMotion) return;
+    setCharacterState("walk");
+    const timeout = window.setTimeout(() => setCharacterState("idle"), 900);
+    return () => window.clearTimeout(timeout);
+  }, [reducedMotion]);
+
+  const refreshStatus = useCallback(() => {
+    statusController.current?.abort();
     const controller = new AbortController();
+    statusController.current = controller;
     void fetch("/api/public/status", { signal: controller.signal })
-      .then((response) => response.json() as Promise<PublicStatus>)
+      .then((response) => {
+        if (!response.ok) throw new Error("status unavailable");
+        return response.json() as Promise<PublicStatus>;
+      })
       .then((status) => {
+        if (statusController.current !== controller) return;
         setChatAvailable(status.chat_available);
         setCharacterState(status.chat_available ? "idle" : "offline");
       })
-      .catch(() => setCharacterState("offline"));
-    return () => controller.abort();
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          if (statusController.current !== controller) return;
+          setChatAvailable(false);
+          setCharacterState("offline");
+          window.setTimeout(() => chatStatus.current?.focus(), 0);
+        }
+      });
+    return controller;
   }, []);
+
+  useEffect(() => {
+    const controller = refreshStatus();
+    return () => controller.abort();
+  }, [refreshStatus]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -93,14 +133,15 @@ export function App() {
       .catch((error: unknown) => {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
           setProfileError(true);
+          window.setTimeout(() => profileErrorAlert.current?.focus(), 0);
         }
       });
     return () => controller.abort();
-  }, [locale]);
+  }, [locale, profileReload]);
 
   if (window.location.pathname.startsWith("/admin")) {
     return (
-      <Suspense fallback={<p role="status">Loading admin…</p>}>
+      <Suspense fallback={<p role="status">{copy.adminLoading}</p>}>
         <AdminPage locale={locale} />
       </Suspense>
     );
@@ -109,8 +150,24 @@ export function App() {
   async function submit(questionText: string) {
     const trimmed = questionText.trim();
     if (!trimmed || pending || !chatAvailable) return;
-    const history = turns.map(({ role, content }) => ({ role, content }));
-    setTurns((current) => [...current, { role: "user", content: trimmed }]);
+    const history = turns
+      .filter((turn) => !turn.failed && turn.content.length > 0)
+      .map(({ role, content }) => ({ role, content }));
+    const requestId =
+      window.crypto?.randomUUID?.() ??
+      `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const assistantId = `${requestId}-assistant`;
+    setTurns((current) => [
+      ...current,
+      { id: `${requestId}-user`, role: "user", content: trimmed },
+      {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        citations: [],
+        retryQuestion: trimmed,
+      },
+    ]);
     setQuestion("");
     setPending(true);
     setCharacterState("think");
@@ -122,26 +179,46 @@ export function App() {
       });
       if (!response.ok || !response.body) throw new Error("chat unavailable");
       setCharacterState("talk");
-      const events = await readSse(response.body);
-      const answer = events
-        .filter((event) => event.name === "token")
-        .map((event) => String(event.data.delta ?? ""))
-        .join("");
-      const citationEvent = events.find((event) => event.name === "citations");
-      const citations = Array.isArray(citationEvent?.data.items)
-        ? (citationEvent.data.items as Citation[])
-        : [];
-      setTurns((current) => [
-        ...current,
-        { role: "assistant", content: answer, citations },
-      ]);
+      let completed = false;
+      await consumeSse(response.body, (event) => {
+        if (event.name === "token") {
+          const delta = String(event.data.delta ?? "");
+          setTurns((current) =>
+            current.map((turn) =>
+              turn.id === assistantId
+                ? { ...turn, content: turn.content + delta }
+                : turn,
+            ),
+          );
+        } else if (event.name === "citations") {
+          const citations = Array.isArray(event.data.items)
+            ? (event.data.items as Citation[])
+            : [];
+          setTurns((current) =>
+            current.map((turn) =>
+              turn.id === assistantId ? { ...turn, citations } : turn,
+            ),
+          );
+        } else if (event.name === "complete") {
+          completed = true;
+        }
+      });
+      if (!completed) throw new Error("chat stream incomplete");
       setCharacterState("success");
     } catch {
-      setTurns((current) => [
-        ...current,
-        { role: "assistant", content: copy.genericError },
-      ]);
+      setTurns((current) =>
+        current.map((turn) =>
+          turn.id === assistantId
+            ? {
+                ...turn,
+                content: turn.content || copy.genericError,
+                failed: true,
+              }
+            : turn,
+        ),
+      );
       setCharacterState("offline");
+      window.setTimeout(() => questionInput.current?.focus(), 0);
     } finally {
       setPending(false);
     }
@@ -156,7 +233,9 @@ export function App() {
           <p className="subtitle">{copy.subtitle}</p>
         </div>
         <CharacterRenderer
-          assetUrl="/api/public/character.png"
+          assetUrl={profile?.character.asset_url ?? "/api/public/character.png"}
+          frameDurationMs={profile?.character.frame_duration_ms}
+          movement={profile?.character.movement}
           reducedMotion={reducedMotion}
           state={characterState}
           stateLabel={
@@ -189,13 +268,37 @@ export function App() {
         {!profile && !profileError && (
           <p role="status">{copy.profileLoading}</p>
         )}
-        {profileError && <p role="alert">{copy.profileUnavailable}</p>}
+        {profileError && (
+          <div>
+            <p ref={profileErrorAlert} role="alert" tabIndex={-1}>
+              {copy.profileUnavailable}
+            </p>
+            <button
+              onClick={() => setProfileReload((value) => value + 1)}
+              type="button"
+            >
+              {copy.retryProfile}
+            </button>
+          </div>
+        )}
         {profile && (
           <>
             <h3>{profile.profile.display_name}</h3>
             <p className="profile-headline">{profile.profile.headline}</p>
+            <p className="profile-greeting">{profile.profile.greeting}</p>
             <p>{profile.profile.bio}</p>
             {profile.profile.location && <p>{profile.profile.location}</p>}
+            {profile.profile.avatar_url && (
+              <p>
+                <a
+                  href={profile.profile.avatar_url}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  {copy.avatarLink}
+                </a>
+              </p>
+            )}
             {profile.profile.links.length > 0 && (
               <nav aria-label={copy.linksTitle} className="profile-links">
                 {profile.profile.links.map((link) => (
@@ -217,7 +320,7 @@ export function App() {
                   <h4>{repository.slug}</h4>
                   <p>{repository.summary}</p>
                   <p>{repository.role}</p>
-                  <ul aria-label="Tags" className="tags">
+                  <ul aria-label={copy.tagsLabel} className="tags">
                     {repository.tags.map((tag) => (
                       <li key={tag}>{tag}</li>
                     ))}
@@ -228,7 +331,7 @@ export function App() {
                       rel="noopener noreferrer"
                       target="_blank"
                     >
-                      Demo
+                      {copy.demoLink}
                     </a>
                   )}
                 </li>
@@ -241,42 +344,32 @@ export function App() {
       <section aria-labelledby="chat-title" className="chat-panel">
         <div className="section-heading">
           <h2 id="chat-title">{copy.chatTitle}</h2>
-          <p role="status">
+          <p
+            ref={chatStatus}
+            role="status"
+            tabIndex={!chatAvailable ? -1 : undefined}
+          >
             {chatAvailable ? copy.statusReady : copy.statusUnavailable}
           </p>
+          {!chatAvailable && (
+            <button
+              onClick={() => {
+                refreshStatus();
+              }}
+              type="button"
+            >
+              {copy.recheckStatus}
+            </button>
+          )}
         </div>
 
-        {turns.length > 0 && (
-          <ol aria-live="polite" className="conversation">
-            {turns.map((turn, index) => (
-              <li
-                className={`turn turn--${turn.role}`}
-                key={`${turn.role}-${index}`}
-              >
-                <p>{turn.content}</p>
-                {turn.citations && turn.citations.length > 0 && (
-                  <aside aria-label={copy.citations} className="citations">
-                    <h3>{copy.citations}</h3>
-                    <ul>
-                      {turn.citations.map((citation) => (
-                        <li key={citation.id}>
-                          <a
-                            href={citation.url}
-                            rel="noopener noreferrer"
-                            target="_blank"
-                          >
-                            {citation.id}: {citation.title}
-                          </a>
-                          <p>{citation.excerpt}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  </aside>
-                )}
-              </li>
-            ))}
-          </ol>
-        )}
+        <VisitorConversation
+          chatAvailable={chatAvailable}
+          locale={locale}
+          onRetry={(retryQuestion) => void submit(retryQuestion)}
+          pending={pending}
+          turns={turns}
+        />
 
         <div className="suggestions">
           <h3>{copy.suggested}</h3>
@@ -306,6 +399,7 @@ export function App() {
           <textarea
             disabled={!chatAvailable || pending}
             id="portfolio-question"
+            ref={questionInput}
             maxLength={4000}
             onChange={(event) => {
               setQuestion(event.target.value);
@@ -335,33 +429,39 @@ export function syncDocumentLanguage(locale: Locale) {
   document.documentElement.lang = locale;
 }
 
-interface SseEvent {
+export interface SseEvent {
   name: string;
   data: Record<string, unknown>;
 }
 
-async function readSse(
+export async function consumeSse(
   stream: ReadableStream<Uint8Array>,
-): Promise<SseEvent[]> {
+  onEvent: (event: SseEvent) => void,
+): Promise<void> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  const events: SseEvent[] = [];
   while (true) {
     const { done, value } = await reader.read();
     buffer += decoder.decode(value, { stream: !done });
+    buffer = buffer.replace(/\r\n/g, "\n");
+    if (done && buffer.trim()) buffer += "\n\n";
     const blocks = buffer.split("\n\n");
     buffer = blocks.pop() ?? "";
     for (const block of blocks) {
       const name = block.match(/^event: (.+)$/m)?.[1];
       const data = block.match(/^data: (.+)$/m)?.[1];
-      if (name && data)
-        events.push({
+      if (name && data) {
+        const parsed = JSON.parse(data) as unknown;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("invalid SSE event");
+        }
+        onEvent({
           name,
-          data: JSON.parse(data) as Record<string, unknown>,
+          data: parsed as Record<string, unknown>,
         });
+      }
     }
     if (done) break;
   }
-  return events;
 }

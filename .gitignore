@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 secrets/
+compose.override.yml
 
 # Mutable runtime data
 runtime-data/
@@ -18,6 +19,7 @@ __pycache__/
 .pytest-*/
 .pytest-tmp/
 .test-tmp/
+.p0-audit-pytest/
 **/pytest-tmp*/
 .mypy_cache/
 .ruff_cache/

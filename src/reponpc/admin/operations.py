@@ -11,7 +11,18 @@ from typing import Any, cast
 from reponpc.admin.batch_resolver import BatchPreflightPlan, RepositorySelection
 from reponpc.admin.batch_runtime import BatchRuntimeError, BatchSnapshot
 from reponpc.admin.batches import AnalysisBatchService, BatchPreflightInput
+from reponpc.admin.embedding_profiles import (
+    EmbeddingProfile,
+    EmbeddingProfileError,
+    EmbeddingProfileInput,
+    EmbeddingProfileRegistry,
+)
+from reponpc.admin.embedding_reindex import EmbeddingReindexCoordinator
 from reponpc.admin.github import GitCommit, GitFile, GitHubAdminClient, GitHubAdminError
+from reponpc.admin.model_operations import (
+    OllamaModelOperation,
+    OllamaModelOperationCoordinator,
+)
 from reponpc.admin.onboarding import (
     GuidedOnboardingError,
     GuidedOnboardingService,
@@ -40,6 +51,9 @@ class AdminOperations:
     public_base_url: str
     onboarding: GuidedOnboardingService | None = None
     analysis_batches: AnalysisBatchService | None = None
+    embedding_profiles: EmbeddingProfileRegistry | None = None
+    embedding_reindex: EmbeddingReindexCoordinator | None = None
+    ollama_model_operations: OllamaModelOperationCoordinator | None = None
 
     def read_config(self) -> GitFile:
         return self._github().read_config()
@@ -181,6 +195,59 @@ class AdminOperations:
             "last_checked_at": state.last_checked_at,
             "update_error": state.safe_update_error,
         }
+
+    def list_embedding_profiles(self) -> tuple[EmbeddingProfile, ...]:
+        return self._embedding_profiles().list()
+
+    def get_embedding_profile(self, profile_id: str) -> EmbeddingProfile:
+        return self._embedding_profiles().get(profile_id)
+
+    def create_embedding_profile(self, values: EmbeddingProfileInput) -> EmbeddingProfile:
+        return self._embedding_profiles().create(values)
+
+    def update_embedding_profile(
+        self, profile_id: str, values: EmbeddingProfileInput
+    ) -> EmbeddingProfile:
+        return self._embedding_profiles().update(profile_id, values)
+
+    def delete_embedding_profile(self, profile_id: str) -> None:
+        self._embedding_profiles().delete(profile_id)
+
+    def probe_embedding_profile(self, profile_id: str) -> EmbeddingProfile:
+        return self._embedding_profiles().probe(profile_id)
+
+    def activate_embedding_profile(self, profile_id: str) -> EmbeddingProfile:
+        if self.embedding_reindex is not None:
+            return self.embedding_reindex.queue(profile_id)
+        return self._embedding_profiles().activate(profile_id)
+
+    def installed_ollama_embedding_models(self) -> tuple[str, ...]:
+        return self._embedding_profiles().installed_ollama_models()
+
+    def ollama_embedding_model_action(
+        self, profile_id: str, *, action: str, confirmed: bool
+    ) -> EmbeddingProfile:
+        return self._embedding_profiles().ollama_model_action(
+            profile_id, action=action, confirmed=confirmed
+        )
+
+    def start_ollama_embedding_model_pull(
+        self, profile_id: str, *, confirmed: bool
+    ) -> OllamaModelOperation | None:
+        if self.ollama_model_operations is None:
+            self.ollama_embedding_model_action(profile_id, action="pull", confirmed=confirmed)
+            return None
+        return self.ollama_model_operations.queue_pull(profile_id, confirmed=confirmed)
+
+    def get_ollama_embedding_model_operation(self, operation_id: str) -> OllamaModelOperation:
+        if self.ollama_model_operations is None:
+            raise EmbeddingProfileError("NOT_FOUND")
+        return self.ollama_model_operations.get(operation_id)
+
+    def cancel_ollama_embedding_model_operation(self, operation_id: str) -> OllamaModelOperation:
+        if self.ollama_model_operations is None:
+            raise EmbeddingProfileError("NOT_FOUND")
+        return self.ollama_model_operations.cancel(operation_id)
 
     def discover_repositories(self, *, account: str, page: int) -> dict[str, object]:
         return self._onboarding().discover_repositories(account=account, page=page)
@@ -343,6 +410,11 @@ class AdminOperations:
         if self.analysis_batches is None:
             raise BatchRuntimeError("SERVICE_NOT_READY")
         return self.analysis_batches
+
+    def _embedding_profiles(self) -> EmbeddingProfileRegistry:
+        if self.embedding_profiles is None:
+            raise EmbeddingProfileError("SERVICE_NOT_READY")
+        return self.embedding_profiles
 
     def _audit(
         self,

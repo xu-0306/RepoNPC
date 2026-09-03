@@ -137,3 +137,40 @@ def test_invalid_or_expired_deadline_does_not_call_provider() -> None:
 
     assert raised.value.code is ProviderFailureCode.TIMEOUT
     assert chat.calls == []
+
+
+def test_replaced_embedding_keeps_old_identity_for_inflight_index_lease() -> None:
+    old = FixtureEmbedding(READY)
+    replacement_identity = EmbeddingIdentity(
+        adapter="ollama",
+        model_id="replacement",
+        dimension=2,
+        normalized=True,
+        query_prefix="query: ",
+        passage_prefix="passage: ",
+    )
+
+    class ReplacementEmbedding(FixtureEmbedding):
+        def identity(self) -> EmbeddingIdentity:
+            return replacement_identity
+
+        def embed_query(self, texts: list[str]) -> np.ndarray[Any, np.dtype[np.float32]]:
+            self.calls += 1
+            return np.tile(np.array([[0.0, 1.0]], dtype=np.float32), (len(texts), 1))
+
+    replacement = ReplacementEmbedding(READY)
+    runtime = ProviderRuntime(
+        chat=FixtureChat(READY),  # type: ignore[arg-type]
+        embedding=old,  # type: ignore[arg-type]
+        max_attempts=1,
+    )
+
+    previous = runtime.replace_embedding(replacement)  # type: ignore[arg-type]
+    old_result = runtime.embed_query_for(IDENTITY, ["old"], timeout=1.0)
+    new_result = runtime.embed_query_for(replacement_identity, ["new"], timeout=1.0)
+
+    assert previous is old
+    assert old_result.tolist() == [[1.0, 0.0]]
+    assert new_result.tolist() == [[0.0, 1.0]]
+    assert old.calls == 1
+    assert replacement.calls == 1

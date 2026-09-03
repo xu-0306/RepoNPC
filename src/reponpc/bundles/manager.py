@@ -27,6 +27,14 @@ class BundleActivationError(RuntimeError):
         super().__init__("bundle activation failed")
 
 
+@dataclass(frozen=True, slots=True)
+class ActivationTransition:
+    """Rollback/commit hooks for one durable cross-owner activation intent."""
+
+    rollback: Callable[[], None]
+    commit: Callable[[], None]
+
+
 @dataclass(slots=True)
 class _LiveBundle:
     directory: Path
@@ -94,10 +102,18 @@ class BundleManager:
         candidate: VerifiedBundle,
         *,
         before_pointer_swap: Callable[[], None] | None = None,
+        expected_embedding: EmbeddingIdentity | None = None,
+        state_transition: Callable[[], ActivationTransition | Callable[[], None] | None]
+        | None = None,
     ) -> BundleStatus:
         """Promote a fully verified staged candidate in one pointer transition."""
 
         with self._lock:
+            selected_embedding = expected_embedding or self._embedding
+            if candidate.manifest.embedding != selected_embedding:
+                candidate.close()
+                shutil.rmtree(candidate.directory, ignore_errors=True)
+                raise BundleActivationError("bundle_embedding_incompatible")
             if self._pinned is not None and candidate.manifest.bundle_id != self._pinned:
                 candidate.close()
                 shutil.rmtree(candidate.directory, ignore_errors=True)
@@ -112,16 +128,20 @@ class BundleManager:
                 shutil.rmtree(candidate.directory, ignore_errors=True)
                 raise BundleActivationError("bundle_id_already_present")
             candidate.close()
+            transition_hooks: ActivationTransition | Callable[[], None] | None = None
             try:
                 os.replace(candidate.directory, final_directory)
                 index = ReadOnlyIndex.open(
-                    final_directory / "index.sqlite", expected_embedding=self._embedding
+                    final_directory / "index.sqlite", expected_embedding=selected_embedding
                 )
                 promoted = _LiveBundle(final_directory, candidate.manifest, index)
                 if before_pointer_swap is not None:
                     before_pointer_swap()
+                if state_transition is not None:
+                    transition_hooks = state_transition()
                 self._write_pointer(candidate.manifest.bundle_id)
             except Exception as exc:
+                _run_rollback(transition_hooks)
                 if "index" in locals():
                     index.close()
                 shutil.rmtree(final_directory, ignore_errors=True)
@@ -130,24 +150,32 @@ class BundleManager:
             old_previous = self._previous
             old_active_retired = old_active.retired if old_active is not None else False
             old_previous_retired = old_previous.retired if old_previous is not None else False
+            old_embedding = self._embedding
             self._active = promoted
             self._previous = old_active
+            self._embedding = selected_embedding
             if old_active is not None:
                 old_active.retired = True
             if old_previous is not None and old_previous is not old_active:
                 old_previous.retired = True
             try:
                 self._persist_state()
+                if isinstance(transition_hooks, ActivationTransition):
+                    transition_hooks.commit()
             except Exception as exc:
                 self._active = old_active
                 self._previous = old_previous
+                self._embedding = old_embedding
                 if old_active is not None:
                     old_active.retired = old_active_retired
                 if old_previous is not None:
                     old_previous.retired = old_previous_retired
+                with suppress(Exception):
+                    self._persist_state()
                 self._fail_closed_restore_pointer(
                     old_active.manifest.bundle_id if old_active else None
                 )
+                _run_rollback(transition_hooks)
                 promoted.index.close()
                 shutil.rmtree(final_directory, ignore_errors=True)
                 raise BundleActivationError("bundle_pointer_swap_failed") from exc
@@ -222,11 +250,42 @@ class BundleManager:
             return self.status()
 
     def status(self) -> BundleStatus:
-        return BundleStatus(
-            active_bundle_id=self._active.manifest.bundle_id if self._active else None,
-            previous_bundle_id=self._previous.manifest.bundle_id if self._previous else None,
-            pinned_bundle_id=self._pinned,
-        )
+        with self._lock:
+            return BundleStatus(
+                active_bundle_id=self._active.manifest.bundle_id if self._active else None,
+                previous_bundle_id=self._previous.manifest.bundle_id if self._previous else None,
+                pinned_bundle_id=self._pinned,
+            )
+
+    def active_embedding_identity(self) -> EmbeddingIdentity | None:
+        """Return the verified identity of the active immutable bundle."""
+
+        with self._lock:
+            return self._active.manifest.embedding if self._active is not None else None
+
+    def verify(self, bundle_id: str) -> BundleManifest:
+        """Verify one explicit retained bundle without changing activation state."""
+
+        with self._lock:
+            if not bundle_id or bundle_id not in self._retained_ids():
+                raise BundleActivationError("bundle_verify_target_unknown")
+            directory = self._bundles / bundle_id
+            try:
+                manifest = _load_manifest(directory / "manifest.json")
+                verified = verify_retained_bundle_directory(
+                    directory=directory,
+                    expected_embedding=manifest.embedding,
+                )
+                if verified.manifest.bundle_id != bundle_id:
+                    raise BundleActivationError("bundle_verify_target_incompatible")
+                return verified.manifest
+            except BundleActivationError:
+                raise
+            except Exception as exc:
+                raise BundleActivationError("bundle_verify_target_incompatible") from exc
+            finally:
+                if "verified" in locals():
+                    verified.close()
 
     def active_public_directory(self) -> Path | None:
         """Return the verified active bundle's immutable public directory."""
@@ -298,10 +357,12 @@ class BundleManager:
         )
         active: _LiveBundle | None = None
         for bundle_id in active_candidates:
-            active = self._open_retained(bundle_id)
+            active = self._open_retained(bundle_id, allow_manifest_identity=True)
             if active is not None:
                 break
         self._active = active
+        if active is not None:
+            self._embedding = active.manifest.embedding
 
         previous_candidates = tuple(
             bundle_id
@@ -309,7 +370,7 @@ class BundleManager:
             if bundle_id is not None and (active is None or bundle_id != active.manifest.bundle_id)
         )
         for bundle_id in previous_candidates:
-            previous = self._open_retained(bundle_id)
+            previous = self._open_retained(bundle_id, allow_manifest_identity=True)
             if previous is not None:
                 previous.retired = True
                 self._previous = previous
@@ -325,13 +386,18 @@ class BundleManager:
         bundle_id = payload.get("bundle_id")
         return bundle_id if isinstance(bundle_id, str) else None
 
-    def _open_retained(self, bundle_id: str) -> _LiveBundle | None:
+    def _open_retained(
+        self, bundle_id: str, *, allow_manifest_identity: bool = False
+    ) -> _LiveBundle | None:
         directory = self._bundles / bundle_id
         if directory.parent != self._bundles or not directory.is_dir():
             return None
         try:
+            expected_embedding = self._embedding
+            if allow_manifest_identity:
+                expected_embedding = _load_manifest(directory / "manifest.json").embedding
             verified = verify_retained_bundle_directory(
-                directory=directory, expected_embedding=self._embedding
+                directory=directory, expected_embedding=expected_embedding
             )
             if verified.manifest.bundle_id != bundle_id:
                 verified.close()
@@ -384,3 +450,15 @@ def _load_manifest(path: Path) -> BundleManifest:
     from reponpc.bundles.manifest import parse_bundle_manifest
 
     return parse_bundle_manifest(path.read_bytes())
+
+
+def _run_rollback(
+    transition: ActivationTransition | Callable[[], None] | None,
+) -> None:
+    if transition is None:
+        return
+    with suppress(Exception):
+        if isinstance(transition, ActivationTransition):
+            transition.rollback()
+        else:
+            transition()

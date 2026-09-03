@@ -150,7 +150,7 @@ Any delegated implementation work must also follow `SUBAGENT_EXECUTION_PLAYBOOK.
 - Implement lexical query safety, semantic lookup, metadata policy, overlap deduplication, RRF, context packing, and retrieval diagnostics.
 - Build the evaluation fixture repositories/questions and benchmark command early enough to tune with evidence.
 - Implement canonical bundle/card asset layout, canonical JSON manifests, checksums, safe `tar.zst` creation/extraction, database integrity checks, and smoke query.
-- Generate one complete bilingual `public/profile.json`, validate both locales before activation, and make the existing public route select the requested locale without fallback.
+- Generate one complete bilingual `public/profile.json`, including localized greetings and validated character animation metadata; validate both locales before activation, and make the existing public route select the requested locale without fallback.
 - Implement stable-manifest polling, ETag behavior, staging, validation, atomic activation, concurrent request handles, retention, pinning, and rollback.
 - Implement `build-index.yml`: validate, index, test, upload immutable GitHub Release asset, verify it, and update stable manifest last.
 - Run formal retrieval acceptance with a Docker candidate limited to four CPUs/8 GiB and no oracle access; score with a host-only controller and derive all formal booleans from inspection, provider identity, repeatability, measurements, and thresholds.
@@ -193,7 +193,7 @@ Any delegated implementation work must also follow `SUBAGENT_EXECUTION_PLAYBOOK.
 ### Deliverables
 
 - Implement responsive visitor layout, profile/projects, suggested quests, chat input/history, availability/setup states, and citation panel.
-- Connect lifecycle to idle/listen/think/talk/success/offline character states without putting semantic content only in animation/canvas.
+- Connect lifecycle to idle/listen/think/talk/success/offline character states, consuming bounded profile animation metadata, without putting semantic content only in animation/canvas.
 - Build the character composer with stable asset IDs and canonical `128x224` output.
 - Implement custom sheet decode/re-encode/validation and preview.
 - Implement keyboard/focus/screen-reader behavior, visible status announcements, contrast, touch targets, reduced motion, and error recovery.

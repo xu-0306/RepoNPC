@@ -28,6 +28,10 @@
     steps(4, end) infinite;
 }
 
+.character-renderer[data-reduced-motion="false"][data-character-movement="subtle"] {
+  animation: character-renderer-walk 900ms ease-in-out 1;
+}
+
 .character-renderer__sheet-image {
   display: block;
   flex: 0 0 128px;
@@ -54,7 +58,22 @@
   }
 }
 
+@keyframes character-renderer-walk {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(6px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .character-renderer[data-character-movement="subtle"] {
+    animation: none;
+  }
+
   .character-renderer[data-reduced-motion="false"] .character-renderer__sheet {
     animation: none;
     transform: translate(0, var(--character-row-offset-y));

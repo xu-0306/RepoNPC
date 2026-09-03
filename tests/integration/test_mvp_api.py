@@ -200,6 +200,7 @@ def _active_public_directory(tmp_path: Path) -> tuple[Path, dict[str, dict[str, 
                 "display_name": "Fixture Developer",
                 "headline": "Traditional headline" if locale == "zh-TW" else "English headline",
                 "bio": "Traditional bio" if locale == "zh-TW" else "English bio",
+                "greeting": "Traditional greeting" if locale == "zh-TW" else "English greeting",
                 "location": None,
                 "avatar_url": None,
                 "links": [],
@@ -219,7 +220,13 @@ def _active_public_directory(tmp_path: Path) -> tuple[Path, dict[str, dict[str, 
         }
         for locale in ("zh-TW", "en")
     }
-    character = {"mode": "builtin", "asset_url": "/api/public/character.png", "revision": 1}
+    character = {
+        "mode": "builtin",
+        "asset_url": "/api/public/character.png",
+        "revision": 1,
+        "frame_duration_ms": 160,
+        "movement": "subtle",
+    }
     index = {
         "version": "bundle-one",
         "built_at": "2026-08-10T12:00:00Z",
@@ -258,6 +265,9 @@ def test_degraded_active_public_assets_validate_variants_and_cache_identity(tmp_
         repeated_profile = client.get("/api/public/profile?locale=en")
         assert first_profile.status_code == repeated_profile.status_code == 200
         assert first_profile.json() == profiles["en"]
+        assert first_profile.json()["profile"]["greeting"] == "English greeting"
+        assert first_profile.json()["character"]["frame_duration_ms"] == 160
+        assert first_profile.json()["character"]["movement"] == "subtle"
         assert first_profile.headers["content-type"] == "application/json"
         assert first_profile.headers["ETag"] == repeated_profile.headers["ETag"]
         assert (
