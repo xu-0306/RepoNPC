@@ -24,13 +24,7 @@ RepoNPC 是一個開源、自託管的互動式 GitHub 作品集。你挑選想�
 
 RepoNPC 把這些資訊變成一段可對話、可驗證的作品集體驗：
 
-```mermaid
-flowchart LR
-    A["你挑選公開 repository<br/>並填寫自己的貢獻"] --> B["RepoNPC 建立<br/>不可變的證據索引"]
-    B --> C["訪客向像素 NPC<br/>詢問你的作品"]
-    C --> D["模型依證據回答"]
-    D --> E["後端驗證引用<br/>連到固定 GitHub commit"]
-```
+[![RepoNPC 運作流程：使用者選擇公開 GitHub repository 並補充個人貢獻，系統建立證據索引，訪客向 NPC 提問，模型依證據回答並附上固定 commit、檔案與行號引用](reponpc-how-it-works.png)](reponpc-how-it-works.png)
 
 最後你會得到兩個入口：
 
