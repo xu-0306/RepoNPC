@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import ipaddress
 import json
 from collections.abc import Callable
 from contextlib import suppress
@@ -12,9 +13,10 @@ from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Cookie, File, Form, Header, Path, Query, Request, UploadFile
-from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from reponpc.admin.analysis_selection import AnalysisSelectionError
 from reponpc.admin.auth import (
     MAX_ADMIN_PASSWORD_LENGTH,
     MIN_ADMIN_PASSWORD_LENGTH,
@@ -25,11 +27,13 @@ from reponpc.admin.auth import (
 )
 from reponpc.admin.batch_resolver import (
     BatchPreflightPlan,
+    BatchResolverError,
     RateBudget,
     RepositorySelection,
     normalize_repository_slug,
 )
 from reponpc.admin.batch_runtime import BatchRuntimeError, BatchSnapshot
+from reponpc.admin.chat_profiles import ChatProfileError, ChatProfileInput
 from reponpc.admin.embedding_profiles import (
     EmbeddingProfile,
     EmbeddingProfileError,
@@ -37,8 +41,11 @@ from reponpc.admin.embedding_profiles import (
     embedding_model_catalog,
 )
 from reponpc.admin.github import GitHubAdminError
+from reponpc.admin.model_connections import (
+    ModelConnectionError,
+    ModelConnectionInput,
+)
 from reponpc.admin.model_operations import OllamaModelOperation
-from reponpc.admin.oauth import GitHubIdentityService, GitHubOAuthError
 from reponpc.admin.onboarding import (
     GuidedOnboardingError,
     GuidedProfileDraft,
@@ -50,12 +57,6 @@ from reponpc.cards.assets import CanonicalSprite, SpriteValidationError
 from reponpc.cards.render import CardRenderError
 from reponpc.config.models import ConfigValidationError, PublicConfig
 
-OAUTH_TRANSACTION_COOKIE_TTL_SECONDS = 10 * 60
-GITHUB_OAUTH_SETUP_DOCUMENTATION_URL = (
-    "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app"
-)
-GITHUB_OAUTH_CALLBACK_PATH = "/api/admin/github/callback"
-
 
 class _StrictRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -64,6 +65,10 @@ class _StrictRequest(BaseModel):
 class LoginRequest(_StrictRequest):
     username: str = Field(min_length=1, max_length=256)
     password: str = Field(min_length=1, max_length=1024)
+
+
+class LocalLaunchRequest(_StrictRequest):
+    grant: str = Field(min_length=1, max_length=1024)
 
 
 class SetupRequest(_StrictRequest):
@@ -80,14 +85,8 @@ class SetupRequest(_StrictRequest):
 
 
 class LogoutAllRequest(_StrictRequest):
-    # A GitHub-only owner has no local password.  Its fresh GitHub session is
-    # the second factor for this operation; local-password owners still must
-    # supply their current password.
     password: str | None = Field(default=None, min_length=1, max_length=1024)
-
-
-class GitHubPatRequest(_StrictRequest):
-    token: str = Field(min_length=1, max_length=1024)
+    local_launch_grant: str | None = Field(default=None, min_length=1, max_length=1024)
 
 
 class EmbeddingProfileRequest(_StrictRequest):
@@ -100,9 +99,35 @@ class EmbeddingProfileRequest(_StrictRequest):
     connection_reference: str = Field(
         default="environment", pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
     )
+    connection_revision: int = Field(default=0, ge=0)
 
     def profile_input(self) -> EmbeddingProfileInput:
         return EmbeddingProfileInput(**self.model_dump())
+
+
+class ModelConnectionRequest(_StrictRequest):
+    display_name: str = Field(min_length=1, max_length=120)
+    provider: Literal["ollama", "openai_compatible", "vllm"]
+    base_url: str = Field(min_length=1, max_length=2048)
+    api_key: str | None = Field(default=None, max_length=4096)
+    credential_action: Literal["retain", "replace", "remove"] = "retain"
+
+    def connection_input(self) -> ModelConnectionInput:
+        return ModelConnectionInput(**self.model_dump())
+
+
+class ChatProfileRequest(_StrictRequest):
+    connection_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+    model_id: str = Field(min_length=1, max_length=256)
+
+    def profile_input(self) -> ChatProfileInput:
+        return ChatProfileInput(**self.model_dump())
+
+
+class AnalysisSelectionRequest(_StrictRequest):
+    chat_profile_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+    embedding_profile_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+    expected_generation: int | None = Field(default=None, ge=0)
 
 
 class ConfirmedModelActionRequest(_StrictRequest):
@@ -195,14 +220,10 @@ def create_admin_router(
     service_supplier: Callable[[], AdminSessionService | None],
     origins_supplier: Callable[[], tuple[str, ...]],
     operations_supplier: Callable[[], AdminOperations | None] = lambda: None,
-    github_identity_supplier: Callable[[], GitHubIdentityService | None] = lambda: None,
-    github_oauth_callback_supplier: Callable[[], str | None] = lambda: None,
 ) -> APIRouter:
     """Create auth routes whose production dependencies may attach after startup."""
 
     router = APIRouter(prefix="/api/admin")
-    oauth_cookie = "__Secure-reponpc_oauth_transaction"
-    oauth_handoff_cookie = "__Secure-reponpc_oauth_handoff"
 
     def service(request: Request) -> AdminSessionService | JSONResponse:
         configured = service_supplier()
@@ -226,17 +247,6 @@ def create_admin_router(
             message="The admin operation is not configured.",
         )
 
-    def github_identity(request: Request) -> GitHubIdentityService | JSONResponse:
-        configured = github_identity_supplier()
-        if configured is not None:
-            return configured
-        return error_response(
-            request,
-            status_code=503,
-            code="GITHUB_LOGIN_UNAVAILABLE",
-            message="GitHub sign-in is not configured.",
-        )
-
     def same_origin(request: Request) -> JSONResponse | None:
         allowed = frozenset(_normalized_origin(value) for value in origins_supplier())
         candidate = request.headers.get("origin")
@@ -251,6 +261,27 @@ def create_admin_router(
                 message="The request origin could not be verified.",
             )
         return None
+
+    def local_launch_boundary(request: Request, configured: AdminSessionService) -> bool:
+        if configured.deployment_profile != "loopback_evaluation":
+            return False
+        if request.client is None or not _is_loopback_host(request.client.host):
+            return False
+        if any(
+            name.lower() == b"forwarded" or name.lower().startswith(b"x-forwarded-")
+            for name, _value in request.headers.raw
+        ):
+            return False
+        allowed_origins = frozenset(
+            normalized
+            for value in origins_supplier()
+            if (normalized := _normalized_origin(value)) and _origin_is_loopback(normalized)
+        )
+        origin = request.headers.get("origin")
+        if origin is None or _normalized_origin(origin) not in allowed_origins:
+            return False
+        host = request.headers.get("host")
+        return host is not None and _host_is_allowed_loopback(host, allowed_origins)
 
     def authorize(
         request: Request,
@@ -325,22 +356,329 @@ def create_admin_router(
         _set_session_cookie(response, session.session_token)
         return response
 
+    @router.post("/session/local-launch")
+    async def local_launch(request: Request) -> Response:
+        configured = service(request)
+        if isinstance(configured, JSONResponse):
+            return configured
+        remote_identity = request.client.host if request.client is not None else "unknown"
+        body: LocalLaunchRequest | None = None
+        try:
+            body = LocalLaunchRequest.model_validate(await request.json())
+        except (TypeError, ValueError):
+            body = None
+        grant = (
+            body.grant if body is not None and local_launch_boundary(request, configured) else ""
+        )
+        try:
+            session = configured.consume_local_launch(grant=grant, remote_identity=remote_identity)
+        except AdminAuthError as exc:
+            return _local_launch_error(request, exc)
+        response = JSONResponse(_session_body(session))
+        _set_session_cookie(response, session.session_token)
+        return response
+
     @router.get("/auth/methods")
     async def auth_methods(request: Request) -> Response:
         configured = service(request)
         if isinstance(configured, JSONResponse):
             return configured
-        github_service = github_identity_supplier()
-        status = configured.auth_methods(
-            github_configured=(github_service is not None and github_service.oauth_available)
-        )
+        status = configured.auth_methods()
         return JSONResponse(
             {
+                "mode": status.mode,
                 "password": {"available": status.password_available},
-                "github": {"available": status.github_available},
                 "setup_required": status.setup_required,
             }
         )
+
+    @router.get("/model-connections")
+    async def list_model_connections(
+        request: Request,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        boundary = protected(request, session_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            connections = await asyncio.to_thread(configured.list_model_connections)
+        except ModelConnectionError as exc:
+            return _model_connection_error(request, exc)
+        return _model_connection_response(
+            {"connections": [connection.safe_dict() for connection in connections]}
+        )
+
+    @router.post("/model-connections")
+    async def create_model_connection(
+        request: Request,
+        body: ModelConnectionRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            connection = await asyncio.to_thread(
+                configured.create_model_connection, body.connection_input()
+            )
+        except ModelConnectionError as exc:
+            return _model_connection_error(request, exc)
+        return _model_connection_response(connection.safe_dict(), status_code=201)
+
+    @router.get("/model-connections/{connection_id}")
+    async def get_model_connection(
+        request: Request,
+        connection_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        boundary = protected(request, session_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            connection = await asyncio.to_thread(configured.get_model_connection, connection_id)
+        except ModelConnectionError as exc:
+            return _model_connection_error(request, exc)
+        return _model_connection_response(connection.safe_dict())
+
+    @router.put("/model-connections/{connection_id}")
+    async def update_model_connection(
+        request: Request,
+        body: ModelConnectionRequest,
+        connection_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            connection = await asyncio.to_thread(
+                configured.update_model_connection, connection_id, body.connection_input()
+            )
+        except ModelConnectionError as exc:
+            return _model_connection_error(request, exc)
+        return _model_connection_response(connection.safe_dict())
+
+    @router.delete("/model-connections/{connection_id}")
+    async def delete_model_connection(
+        request: Request,
+        connection_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            await asyncio.to_thread(configured.delete_model_connection, connection_id)
+        except ModelConnectionError as exc:
+            return _model_connection_error(request, exc)
+        return Response(status_code=204, headers={"Cache-Control": "no-store"})
+
+    @router.get("/chat-profiles")
+    async def list_chat_profiles(
+        request: Request,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        boundary = protected(request, session_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            profiles = await asyncio.to_thread(configured.list_chat_profiles)
+        except ChatProfileError as exc:
+            return _chat_profile_error(request, exc)
+        return _chat_profile_response({"profiles": [profile.safe_dict() for profile in profiles]})
+
+    @router.post("/chat-profiles")
+    async def create_chat_profile(
+        request: Request,
+        body: ChatProfileRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            profile = await asyncio.to_thread(configured.create_chat_profile, body.profile_input())
+        except ChatProfileError as exc:
+            return _chat_profile_error(request, exc)
+        return _chat_profile_response(profile.safe_dict(), status_code=201)
+
+    @router.get("/chat-profiles/{profile_id}")
+    async def get_chat_profile(
+        request: Request,
+        profile_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        boundary = protected(request, session_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            profile = await asyncio.to_thread(configured.get_chat_profile, profile_id)
+        except ChatProfileError as exc:
+            return _chat_profile_error(request, exc)
+        return _chat_profile_response(profile.safe_dict())
+
+    @router.put("/chat-profiles/{profile_id}")
+    async def update_chat_profile(
+        request: Request,
+        body: ChatProfileRequest,
+        profile_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            profile = await asyncio.to_thread(
+                configured.update_chat_profile, profile_id, body.profile_input()
+            )
+        except ChatProfileError as exc:
+            return _chat_profile_error(request, exc)
+        return _chat_profile_response(profile.safe_dict())
+
+    @router.delete("/chat-profiles/{profile_id}")
+    async def delete_chat_profile(
+        request: Request,
+        profile_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            await asyncio.to_thread(configured.delete_chat_profile, profile_id)
+        except ChatProfileError as exc:
+            return _chat_profile_error(request, exc)
+        return Response(status_code=204, headers={"Cache-Control": "no-store"})
+
+    @router.post("/chat-profiles/{profile_id}/probe")
+    async def probe_chat_profile(
+        request: Request,
+        profile_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            profile = await asyncio.to_thread(configured.probe_chat_profile, profile_id)
+        except ChatProfileError as exc:
+            return _chat_profile_error(request, exc)
+        return _chat_profile_response(profile.safe_dict())
+
+    @router.post("/chat-profiles/{profile_id}/activate")
+    async def activate_chat_profile(
+        request: Request,
+        profile_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            profile = await asyncio.to_thread(configured.activate_chat_profile, profile_id)
+        except ChatProfileError as exc:
+            return _chat_profile_error(request, exc)
+        return _chat_profile_response(profile.safe_dict())
+
+    @router.get("/analysis-selection")
+    async def get_analysis_selection(
+        request: Request,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        boundary = protected(request, session_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            view = await asyncio.to_thread(configured.analysis_selection_view)
+        except AnalysisSelectionError as exc:
+            return _analysis_selection_error(request, exc)
+        return _analysis_selection_response(view.safe_dict())
+
+    @router.put("/analysis-selection")
+    @router.post("/analysis-selection")
+    async def select_analysis_models(
+        request: Request,
+        body: AnalysisSelectionRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            view = await asyncio.to_thread(
+                configured.select_analysis_models,
+                chat_profile_id=body.chat_profile_id,
+                embedding_profile_id=body.embedding_profile_id,
+                expected_generation=body.expected_generation,
+            )
+        except AnalysisSelectionError as exc:
+            return _analysis_selection_error(request, exc)
+        return _analysis_selection_response(view.safe_dict())
 
     @router.get("/embedding-profiles")
     async def list_embedding_profiles(
@@ -622,158 +960,22 @@ def create_admin_router(
 
     @router.get("/github/oauth/setup-guide")
     async def github_oauth_setup_guide(request: Request) -> Response:
-        callback_url = _setup_guide_callback_url(
-            github_oauth_callback_supplier(), origins_supplier()
-        )
-        if callback_url is None:
-            response = error_response(
-                request,
-                status_code=503,
-                code="GITHUB_SETUP_GUIDE_UNAVAILABLE",
-                message="GitHub OAuth setup guidance is unavailable.",
-            )
-            response.headers["Cache-Control"] = "no-store"
-            return response
-        github_service = github_identity_supplier()
-        response = JSONResponse(
-            {
-                "configured": bool(github_service is not None and github_service.oauth_available),
-                "callback_url": callback_url,
-                "documentation_url": GITHUB_OAUTH_SETUP_DOCUMENTATION_URL,
-                "next_step": (
-                    "continue_with_github"
-                    if github_service is not None and github_service.oauth_available
-                    else "configure_host_secrets_restart_then_recheck"
-                ),
-            },
-            headers={"Cache-Control": "no-store"},
-        )
-        return response
+        return _github_public_read_removed(request)
 
     @router.post("/session/github/start")
-    async def start_github_login(request: Request) -> Response:
-        origin_error = same_origin(request)
-        if origin_error is not None:
-            return origin_error
-        identity = github_identity(request)
-        if isinstance(identity, JSONResponse):
-            return identity
-        try:
-            started = identity.start(intent="login")
-        except GitHubOAuthError as exc:
-            return _oauth_error(request, exc)
-        return _oauth_redirect(started.authorization_url, started.state, oauth_cookie)
-
     @router.post("/setup/github/start")
-    async def reject_legacy_github_setup(request: Request) -> Response:
-        """Preserve the legacy route without creating GitHub-only ownership."""
-
-        origin_error = same_origin(request)
-        if origin_error is not None:
-            return origin_error
-        configured = service(request)
-        if isinstance(configured, JSONResponse):
-            return configured
-        status = configured.setup_status()
-        code = "SETUP_DENIED" if status.setup_required else "SETUP_ALREADY_COMPLETE"
-        return error_response(
-            request,
-            status_code=403 if status.setup_required else 409,
-            code=code,
-            message="GitHub-only owner setup is not available.",
-        )
-
     @router.post("/identity/github/link/start")
-    async def start_github_link(
-        request: Request,
-        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
-    ) -> Response:
-        configured = service(request)
-        if isinstance(configured, JSONResponse):
-            return configured
-        denied = authorize(request, configured, session_token, csrf_token)
-        if denied is not None:
-            return denied
-        identity = github_identity(request)
-        if isinstance(identity, JSONResponse):
-            return identity
-        try:
-            started = identity.start(intent="link", session_token=session_token)
-        except (AdminAuthError, GitHubOAuthError) as exc:
-            return _oauth_or_auth_error(request, exc)
-        if "application/json" in request.headers.get("accept", ""):
-            response = JSONResponse({"authorization_url": started.authorization_url})
-            _set_oauth_transaction_cookie(response, started.state, oauth_cookie)
-            return response
-        return _oauth_redirect(started.authorization_url, started.state, oauth_cookie)
+    @router.delete("/identity/github")
+    async def reject_legacy_github_auth(request: Request) -> Response:
+        return _github_public_read_removed(request)
+
+    @router.post("/github/connections/oauth/start")
+    async def start_github_connection(request: Request) -> Response:
+        return _github_public_read_removed(request)
 
     @router.get("/github/callback")
-    async def github_callback(
-        request: Request,
-        state: Annotated[str | None, Query(max_length=512)] = None,
-        code: Annotated[str | None, Query(max_length=2048)] = None,
-        error: Annotated[str | None, Query(max_length=128)] = None,
-    ) -> Response:
-        identity = github_identity(request)
-        if isinstance(identity, JSONResponse):
-            return _oauth_callback_failure("GITHUB_LOGIN_UNAVAILABLE", oauth_cookie)
-        if error is not None or code is None:
-            return _oauth_callback_failure("OAUTH_AUTHORIZATION_DENIED", oauth_cookie)
-        try:
-            completion = identity.complete(
-                state=state or "",
-                cookie_state=request.cookies.get(oauth_cookie, ""),
-                code=code,
-            )
-        except AdminAuthError as exc:
-            callback_code = (
-                "INVALID_CREDENTIALS"
-                if exc.code == "INVALID_CREDENTIALS"
-                else "OAUTH_AUTHORIZATION_DENIED"
-            )
-            return _oauth_callback_failure(callback_code, oauth_cookie)
-        except GitHubOAuthError:
-            return _oauth_callback_failure("OAUTH_AUTHORIZATION_DENIED", oauth_cookie)
-        response = RedirectResponse("/admin?github_oauth=success", status_code=303)
-        response.delete_cookie(oauth_cookie, path="/api/admin/github", secure=True, httponly=True)
-        if completion.session is not None and completion.handoff is not None:
-            _set_session_cookie(response, completion.session.session_token)
-            response.set_cookie(
-                oauth_handoff_cookie,
-                completion.handoff,
-                max_age=120,
-                secure=True,
-                httponly=True,
-                samesite="strict",
-                path="/api/admin/session/github/result",
-            )
-        return response
-
-    @router.get("/session/github/result")
-    async def github_oauth_result(
-        request: Request,
-        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-    ) -> Response:
-        identity = github_identity(request)
-        if isinstance(identity, JSONResponse):
-            return identity
-        try:
-            csrf_token = identity.consume_handoff(
-                handoff=request.cookies.get(oauth_handoff_cookie, ""),
-                session_token=session_token or "",
-            )
-        except GitHubOAuthError as exc:
-            return _oauth_error(request, exc)
-        response = JSONResponse({"csrf_token": csrf_token})
-        response.delete_cookie(
-            oauth_handoff_cookie,
-            path="/api/admin/session/github/result",
-            secure=True,
-            httponly=True,
-            samesite="strict",
-        )
-        return response
+    async def github_callback(request: Request) -> Response:
+        return _github_public_read_removed(request)
 
     @router.post("/session/refresh")
     async def refresh(
@@ -835,6 +1037,7 @@ def create_admin_router(
                 session_token=session_token or "",
                 csrf_token=csrf_token or "",
                 password=body.password,
+                local_launch_grant=body.local_launch_grant,
             )
         except AdminAuthError as exc:
             return _auth_error(request, exc)
@@ -890,87 +1093,20 @@ def create_admin_router(
         return configured_service, authority.session_hash
 
     @router.get("/github/connections")
-    async def github_connections(
-        request: Request,
-        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-    ) -> Response:
-        boundary = authenticated_session(request, session_token)
-        if isinstance(boundary, JSONResponse):
-            return boundary
-        identity = github_identity(request)
-        if isinstance(identity, JSONResponse):
-            return identity
-        return JSONResponse({"connections": identity.connections()})
+    async def github_connections(request: Request) -> Response:
+        return _github_public_read_removed(request)
 
     @router.put("/github/connections/pat")
-    async def save_github_pat(
-        request: Request,
-        body: GitHubPatRequest,
-        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
-    ) -> Response:
-        boundary = authenticated_session(request, session_token, csrf_token or "")
-        if isinstance(boundary, JSONResponse):
-            return boundary
-        identity = github_identity(request)
-        if isinstance(identity, JSONResponse):
-            return identity
-        try:
-            result = identity.save_pat(body.token)
-        except GitHubOAuthError as exc:
-            return _oauth_error(request, exc)
-        return JSONResponse(result, status_code=201)
+    async def save_github_pat(request: Request) -> Response:
+        return _github_public_read_removed(request)
 
     @router.post("/github/connections/{credential_id}/check")
-    async def check_github_connection(
-        request: Request,
-        credential_id: Annotated[int, Path(ge=1)],
-        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
-    ) -> Response:
-        boundary = authenticated_session(request, session_token, csrf_token or "")
-        if isinstance(boundary, JSONResponse):
-            return boundary
-        identity = github_identity(request)
-        if isinstance(identity, JSONResponse):
-            return identity
-        try:
-            result = identity.check_credential(credential_id)
-        except GitHubOAuthError as exc:
-            return _oauth_error(request, exc)
-        return JSONResponse(result)
+    async def check_github_connection(request: Request) -> Response:
+        return _github_public_read_removed(request)
 
-    @router.delete("/github/connections/{credential_id}", status_code=204)
-    async def delete_github_connection(
-        request: Request,
-        credential_id: Annotated[int, Path(ge=1)],
-        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
-    ) -> Response:
-        boundary = authenticated_session(request, session_token, csrf_token or "")
-        if isinstance(boundary, JSONResponse):
-            return boundary
-        identity = github_identity(request)
-        if isinstance(identity, JSONResponse):
-            return identity
-        identity.delete_credential(credential_id)
-        return Response(status_code=204)
-
-    @router.delete("/identity/github", status_code=204)
-    async def unlink_github_identity(
-        request: Request,
-        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
-    ) -> Response:
-        boundary = authenticated_session(request, session_token, csrf_token or "")
-        if isinstance(boundary, JSONResponse):
-            return boundary
-        configured, _session_hash = boundary
-        try:
-            configured.unlink_github(session_token=session_token or "")
-        except AdminAuthError as exc:
-            return _auth_error(request, exc)
-        return Response(status_code=204)
+    @router.delete("/github/connections/{credential_id}")
+    async def delete_github_connection(request: Request) -> Response:
+        return _github_public_read_removed(request)
 
     @router.get("/config")
     async def read_config(
@@ -1288,7 +1424,7 @@ def create_admin_router(
                 configured.preflight_analysis_batch,
                 selections=body.resolved_selections(),
             )
-        except (BatchRuntimeError, ValueError) as exc:
+        except (BatchRuntimeError, BatchResolverError, ValueError) as exc:
             return _batch_error(request, exc)
         return _batch_response(_preflight_payload(plan))
 
@@ -1504,54 +1640,27 @@ def _auth_error(request: Request, error: AdminAuthError) -> JSONResponse:
     )
 
 
-def _oauth_error(request: Request, error: GitHubOAuthError) -> JSONResponse:
-    statuses = {
-        "GITHUB_LOGIN_UNAVAILABLE": 503,
-        "GITHUB_CONNECTION_REQUIRED": 401,
-        "GITHUB_CREDENTIAL_INVALID": 401,
-        "GITHUB_SCOPE_UNSAFE": 403,
-        "OAUTH_TRANSACTION_INVALID": 401,
-        "OAUTH_TRANSACTION_EXPIRED": 401,
-        "OAUTH_AUTHORIZATION_DENIED": 401,
-    }
+def _local_launch_error(request: Request, error: AdminAuthError | None = None) -> JSONResponse:
     return error_response(
         request,
-        status_code=statuses.get(error.code, 502),
-        code=error.code,
-        message="GitHub sign-in failed.",
+        status_code=401,
+        code="LOCAL_LAUNCH_DENIED",
+        message="Authentication failed.",
+        retry_after_seconds=error.retry_after_seconds if error is not None else None,
     )
 
 
-def _oauth_or_auth_error(
-    request: Request, error: AdminAuthError | GitHubOAuthError
-) -> JSONResponse:
-    if isinstance(error, AdminAuthError):
-        return _auth_error(request, error)
-    return _oauth_error(request, error)
+def _github_login_removed(request: Request) -> JSONResponse:
+    return _github_public_read_removed(request)
 
 
-def _oauth_redirect(authorization_url: str, state: str, cookie_name: str) -> RedirectResponse:
-    response = RedirectResponse(authorization_url, status_code=303)
-    _set_oauth_transaction_cookie(response, state, cookie_name)
-    return response
-
-
-def _set_oauth_transaction_cookie(response: Response, state: str, cookie_name: str) -> None:
-    response.set_cookie(
-        cookie_name,
-        state,
-        max_age=int(OAUTH_TRANSACTION_COOKIE_TTL_SECONDS),
-        secure=True,
-        httponly=True,
-        samesite="lax",
-        path="/api/admin/github",
+def _github_public_read_removed(request: Request) -> JSONResponse:
+    return error_response(
+        request,
+        status_code=410,
+        code="GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED",
+        message="GitHub OAuth and public-read credentials are no longer available.",
     )
-
-
-def _oauth_callback_failure(code: str, cookie_name: str) -> RedirectResponse:
-    response = RedirectResponse(f"/admin?github_oauth={code.casefold()}", status_code=303)
-    response.delete_cookie(cookie_name, path="/api/admin/github", secure=True, httponly=True)
-    return response
 
 
 def _config_error(request: Request, error: ConfigValidationError) -> JSONResponse:
@@ -1632,6 +1741,90 @@ def _embedding_profile_response(
     )
 
 
+def _model_connection_response(
+    payload: dict[str, object], *, status_code: int = 200
+) -> JSONResponse:
+    return JSONResponse(
+        payload,
+        status_code=status_code,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+def _model_connection_error(request: Request, error: ModelConnectionError) -> JSONResponse:
+    status_code = {
+        "NOT_FOUND": 404,
+        "CREDENTIAL_REPLACE_REQUIRED": 409,
+        "MODEL_CONNECTION_IN_USE": 409,
+        "MODEL_SECRET_STORAGE_UNAVAILABLE": 503,
+        "SERVICE_NOT_READY": 503,
+        "MODEL_CONNECTION_SAVE_FAILED": 503,
+        "MODEL_CONNECTION_DELETE_FAILED": 503,
+        "PROVIDER_NETWORK_BLOCKED": 422,
+        "PROVIDER_NETWORK_UNAVAILABLE": 503,
+        "INSECURE_PROVIDER_URL": 422,
+        "INVALID_PROVIDER_URL": 422,
+    }.get(error.code, 400)
+    response = error_response(
+        request,
+        status_code=status_code,
+        code=error.code,
+        message="Model connection operation failed.",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def _chat_profile_response(payload: dict[str, object], *, status_code: int = 200) -> JSONResponse:
+    return JSONResponse(payload, status_code=status_code, headers={"Cache-Control": "no-store"})
+
+
+def _chat_profile_error(request: Request, error: ChatProfileError) -> JSONResponse:
+    status_code = {
+        "NOT_FOUND": 404,
+        "SERVICE_NOT_READY": 503,
+        "CHAT_CONNECTION_REQUIRED": 409,
+        "CHAT_PROFILE_ACTIVE_IMMUTABLE": 409,
+        "CHAT_PROBE_REQUIRED": 409,
+        "CHAT_PROFILE_STALE": 409,
+        "CHAT_PROBE_FAILED": 502,
+        "CHAT_PROBE_INVALID_RESPONSE": 502,
+    }.get(error.code, 400)
+    response = error_response(
+        request,
+        status_code=status_code,
+        code=error.code,
+        message="Chat profile operation failed.",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def _analysis_selection_response(
+    payload: dict[str, object], *, status_code: int = 200
+) -> JSONResponse:
+    return JSONResponse(payload, status_code=status_code, headers={"Cache-Control": "no-store"})
+
+
+def _analysis_selection_error(request: Request, error: AnalysisSelectionError) -> JSONResponse:
+    status_code = {
+        "SERVICE_NOT_READY": 503,
+        "CHAT_PROFILE_NOT_FOUND": 404,
+        "EMBEDDING_PROFILE_NOT_FOUND": 404,
+        "CHAT_PROBE_REQUIRED": 409,
+        "EMBEDDING_PROBE_REQUIRED": 409,
+        "ANALYSIS_SELECTION_STALE": 409,
+    }.get(error.code, 400)
+    response = error_response(
+        request,
+        status_code=status_code,
+        code=error.code,
+        message="Analysis model selection failed.",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 def _embedding_profile_error(request: Request, error: EmbeddingProfileError) -> JSONResponse:
     status_code = {
         "NOT_FOUND": 404,
@@ -1657,7 +1850,11 @@ def _embedding_profile_error(request: Request, error: EmbeddingProfileError) -> 
 
 
 def _batch_error(request: Request, error: Exception) -> JSONResponse:
-    code = error.code if isinstance(error, BatchRuntimeError) else "VALIDATION_ERROR"
+    code = (
+        error.code
+        if isinstance(error, (BatchRuntimeError, BatchResolverError))
+        else "VALIDATION_ERROR"
+    )
     statuses = {
         "VALIDATION_ERROR": 400,
         "NOT_FOUND": 404,
@@ -1665,15 +1862,16 @@ def _batch_error(request: Request, error: Exception) -> JSONResponse:
         "ANALYSIS_PLAN_STALE": 409,
         "GITHUB_RATE_LIMITED": 429,
         "RATE_LIMITED": 429,
-        "GITHUB_CONNECTION_REQUIRED": 503,
         "MODEL_UNAVAILABLE": 503,
         "SERVICE_NOT_READY": 503,
     }
+    retry_after = error.retry_after_seconds if isinstance(error, BatchResolverError) else None
     return error_response(
         request,
         status_code=statuses.get(code, 502),
         code=code,
         message="Analysis batch operation failed.",
+        retry_after_seconds=retry_after,
     )
 
 
@@ -1689,20 +1887,11 @@ def _last_event_id(value: str | None) -> int | None:
 
 
 def _preflight_payload(plan: BatchPreflightPlan) -> dict[str, object]:
-    graphql, core, secondary = plan.graphql_budget, plan.core_budget, plan.secondary_retry_at
+    core, secondary = plan.core_budget, plan.secondary_retry_at
     return {
         "plan_id": plan.plan_id,
         "expires_at": plan.expires_at.isoformat(),
         "selection_hash": plan.selection_hash,
-        "selected_credential": (
-            {
-                "credential_id": plan.selected_credential.credential_id,
-                "purpose": plan.selected_credential.purpose,
-                "github_login": plan.selected_credential.github_login,
-            }
-            if plan.selected_credential is not None
-            else None
-        ),
         "repositories": [
             {
                 "slug": repository.slug,
@@ -1719,7 +1908,6 @@ def _preflight_payload(plan: BatchPreflightPlan) -> dict[str, object]:
             }
             for key, prediction in plan.cache_predictions.items()
         },
-        "graphql_budget": _rate_budget_payload(graphql),
         "core_budget": _rate_budget_payload(core),
         "secondary_retry_at": secondary.isoformat() if secondary is not None else None,
         "provider_ready": plan.provider_ready,
@@ -1793,6 +1981,7 @@ def _embedding_profile_payload(profile: EmbeddingProfile) -> dict[str, object]:
         "query_prefix": profile.query_prefix,
         "passage_prefix": profile.passage_prefix,
         "connection_reference": profile.connection_reference,
+        "connection_revision": profile.connection_revision,
         "status": profile.status,
         "active": profile.active,
         "observed_identity": (
@@ -1868,43 +2057,33 @@ def _normalized_origin(value: str) -> str:
     return f"{parsed.scheme.casefold()}://{parsed.netloc.casefold()}"
 
 
-def _setup_guide_callback_url(
-    configured_callback: str | None,
-    origins: tuple[str, ...],
-) -> str | None:
-    """Return the validated fixed callback without trusting request headers."""
+def _is_loopback_host(value: str) -> bool:
+    candidate = value.strip().removesuffix(".").casefold()
+    if candidate == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(candidate).is_loopback
+    except ValueError:
+        return False
 
-    allowed_origins = tuple(
-        dict.fromkeys(
-            normalized for origin in origins if (normalized := _normalized_origin(origin))
-        )
-    )
-    if configured_callback:
-        try:
-            parsed = urlsplit(configured_callback)
-            callback_origin = _normalized_origin(configured_callback)
-            allowed_scheme = parsed.scheme == "https" or (
-                parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1"}
-            )
-        except ValueError:
-            callback_origin = ""
-            allowed_scheme = False
-            parsed = None
-        if (
-            parsed is not None
-            and allowed_scheme
-            and callback_origin in allowed_origins
-            and parsed.path == GITHUB_OAUTH_CALLBACK_PATH
-            and not parsed.query
-            and not parsed.fragment
-            and not parsed.username
-            and not parsed.password
-        ):
-            return configured_callback
-    for normalized in allowed_origins:
-        if normalized:
-            return f"{normalized}{GITHUB_OAUTH_CALLBACK_PATH}"
-    return None
+
+def _origin_is_loopback(value: str) -> bool:
+    try:
+        host = urlsplit(value).hostname
+    except ValueError:
+        return False
+    return host is not None and _is_loopback_host(host)
+
+
+def _host_is_allowed_loopback(host: str, allowed_origins: frozenset[str]) -> bool:
+    try:
+        parsed_host = urlsplit(f"//{host}")
+    except ValueError:
+        return False
+    if parsed_host.hostname is None or not _is_loopback_host(parsed_host.hostname):
+        return False
+    candidate = parsed_host.netloc.casefold()
+    return any(urlsplit(origin).netloc.casefold() == candidate for origin in allowed_origins)
 
 
 def _origin_from_referer(value: str) -> str | None:

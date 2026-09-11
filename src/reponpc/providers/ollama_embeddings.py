@@ -33,6 +33,7 @@ from reponpc.providers.openai_embeddings import (
 )
 
 _REQUEST_TIMEOUT_SECONDS = 30.0
+_MODEL_LIST_UNSUPPORTED = frozenset({404, 405, 501})
 
 
 class OllamaPullCancelled(RuntimeError):
@@ -100,6 +101,9 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
         except Exception:
             return ProviderHealth(False, _checked_at(), ProviderFailureCode.UNAVAILABLE)
         if response.status != 200:
+            if response.status in _MODEL_LIST_UNSUPPORTED:
+                # Listing is optional; an embedding sample validates readiness.
+                return ProviderHealth(True, _checked_at())
             return ProviderHealth(False, _checked_at(), failure_for_status(response.status))
         try:
             payload = _json_object(response.body)

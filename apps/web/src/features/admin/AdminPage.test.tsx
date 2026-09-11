@@ -3,14 +3,57 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   AdminAccessPanel,
-  GitHubConnectionPanel,
+  AdminPage,
+  takeLocalLaunchGrant,
   safeDraftForSessionStorage,
 } from "./AdminPage";
 import { adminErrorStateReducer, initialAdminErrorState } from "./adminErrors";
-import {
-  GitHubOAuthSetupGuideDialog,
-  type GitHubOAuthSetupGuideBody,
-} from "./GitHubOAuthSetupGuideDialog";
+import { preflightState } from "./batchPreflight";
+
+describe("batch preflight mapping", () => {
+  it("preserves the longest safe retry time and transient GitHub state", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-09T00:00:00Z"));
+    try {
+      expect(
+        preflightState({
+          plan_id: "plan-safe-identifier",
+          expires_at: "2026-09-09T00:05:00Z",
+          selection_hash: "a".repeat(64),
+          repositories: [],
+          cache_predictions: {},
+          core_budget: {
+            remaining: 24,
+            limit: 60,
+            reset_at: "2026-09-09T00:01:00Z",
+          },
+          secondary_retry_at: "2026-09-09T00:01:30Z",
+          provider_ready: true,
+          capacity: {
+            github_requests: 1,
+            archive_staging: 1,
+            index_work: 1,
+            generation: 1,
+            whole_job_items: 1,
+          },
+          maximum_generation_attempts: 1,
+          duration: null,
+          blockers: [
+            { slug: "github", code: "GITHUB_RATE_LIMITED" },
+            { slug: "github", code: "GITHUB_TIMEOUT" },
+          ],
+          warnings: [],
+        }),
+      ).toEqual({
+        status: "blocked",
+        blockers: ["rate_limited", "github_unavailable"],
+        retryAfterSeconds: 90,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 function renderAccessPanel(
   overrides: Partial<React.ComponentProps<typeof AdminAccessPanel>> = {},
@@ -29,6 +72,7 @@ function renderAccessPanel(
       onSetupPasswordConfirmationChange={vi.fn()}
       onUsernameChange={vi.fn()}
       password=""
+      passwordAvailable
       setupCode=""
       setupPassword=""
       setupPasswordConfirmation=""
@@ -87,9 +131,8 @@ describe("AdminAccessPanel", () => {
     expect(markup).not.toContain('id="admin-setup-code"');
   });
 
-  it("renders a top-level GitHub OAuth form independently from password sign-in", () => {
+  it("keeps GitHub controls out of the unauthenticated password surface", () => {
     const markup = renderAccessPanel({
-      githubAvailable: true,
       locale: "en",
       setupStatus: {
         setup_required: false,
@@ -97,47 +140,29 @@ describe("AdminAccessPanel", () => {
       },
     });
 
-    expect(markup).toContain('action="/api/admin/session/github/start"');
-    expect(markup).toContain("Sign in with GitHub");
-    expect(markup).toContain('aria-label="or"');
     expect(markup).toContain('id="admin-password"');
-    expect(markup).toContain('class="github-button admin-auth__github-button"');
-    expect(markup).toContain('aria-hidden="true"');
-    expect(markup).toContain('focusable="false"');
-    expect(markup).not.toContain('aria-hidden="true">GitHub</span>');
+    expect(markup).not.toContain('class="github-button');
+    expect(markup).not.toContain("/api/admin/session/github/start");
   });
 
-  it("keeps an unconfigured GitHub entry point operable for setup guidance", () => {
+  it("shows the host recovery command instead of an unusable production login", () => {
     const markup = renderAccessPanel({
       locale: "en",
+      passwordAvailable: false,
       setupStatus: {
         setup_required: false,
         setup_code_available: false,
       },
     });
 
-    expect(markup).toContain("Sign in with GitHub");
-    expect(markup).toContain('class="github-button admin-auth__github-button"');
-    expect(markup).not.toMatch(
-      /class="github-button admin-auth__github-button"[^>]*disabled/,
+    expect(markup).toContain('data-mode="recovery"');
+    expect(markup).toContain(
+      "reponpc admin set-password --data-dir &lt;dir&gt;",
     );
-  });
-
-  it("exposes OAuth redirect progress and exactly one authentication alert", () => {
-    const markup = renderAccessPanel({
-      error: "GitHub sign-in did not complete. Try again.",
-      githubAvailable: true,
-      githubPending: true,
-      locale: "en",
-      setupStatus: {
-        setup_required: false,
-        setup_code_available: false,
-      },
-    });
-
-    expect(markup).toContain('id="admin-access-heading"');
-    expect(markup).toContain('aria-busy="true"');
-    expect(markup.match(/role="alert"/g)).toHaveLength(1);
+    expect(markup).toContain("Check after setting password");
+    expect(markup).not.toContain('id="admin-username"');
+    expect(markup).not.toContain('id="admin-password"');
+    expect(markup).not.toContain("GitHub sign-in");
   });
 
   it("does not flash the login form while setup status is pending", () => {
@@ -158,104 +183,31 @@ describe("AdminAccessPanel", () => {
   });
 });
 
-describe("GitHubConnectionPanel", () => {
-  it("uses a labeled password input for PATs without rendering a credential value", () => {
-    const markup = renderToStaticMarkup(
-      <GitHubConnectionPanel
-        connections={[
-          {
-            id: 7,
-            purpose: "identity_public_read",
-            github_login: "owner",
-            expires_at: null,
-            last_validated_at: "2026-08-16T00:00:00Z",
-            status: "ready",
-          },
-        ]}
-        error=""
-        linkPending={false}
-        locale="en"
-        oauthAvailable
-        onCheck={vi.fn()}
-        onDelete={vi.fn()}
-        onLink={vi.fn()}
-        onPatChange={vi.fn()}
-        onSavePat={vi.fn()}
-        onUnlink={vi.fn()}
-        patToken=""
-        pending={false}
-      />,
-    );
+describe("local-launch bootstrap", () => {
+  it("clears a fragment synchronously and accepts exactly one non-empty grant", () => {
+    const clear = vi.fn();
 
-    expect(markup).toContain('id="github-public-read-pat"');
-    expect(markup).toContain('type="password"');
-    expect(markup).toContain('autoComplete="off"');
-    expect(markup).toContain("Reauthenticate GitHub");
-    expect(markup).toContain("Unlink GitHub");
-    expect(markup).not.toContain("PAT_TOKEN_CANARY");
-    expect(markup).toContain('class="github-button"');
+    expect(takeLocalLaunchGrant("#local-launch=one-use-grant", clear)).toBe(
+      "one-use-grant",
+    );
+    expect(clear).toHaveBeenCalledOnce();
+
+    const clearInvalid = vi.fn();
+    expect(
+      takeLocalLaunchGrant(
+        "#local-launch=first&local-launch=second",
+        clearInvalid,
+      ),
+    ).toBeNull();
+    expect(clearInvalid).toHaveBeenCalledOnce();
   });
 
-  it("explains OAuth unavailability without hiding the connection surface", () => {
-    const markup = renderToStaticMarkup(
-      <GitHubConnectionPanel
-        connections={[]}
-        error=""
-        linkPending={false}
-        locale="en"
-        oauthAvailable={false}
-        onCheck={vi.fn()}
-        onDelete={vi.fn()}
-        onLink={vi.fn()}
-        onPatChange={vi.fn()}
-        onSavePat={vi.fn()}
-        onUnlink={vi.fn()}
-        patToken="pat-placeholder"
-        pending={false}
-      />,
-    );
+  it("renders only the secret-free checking state before bootstrap effects run", () => {
+    const markup = renderToStaticMarkup(<AdminPage locale="en" />);
 
-    expect(markup).toContain("GitHub connection");
-    expect(markup).toContain('role="status"');
-    expect(markup).toContain("GitHub OAuth is not configured yet");
-    expect(markup).not.toMatch(/id="github-public-read-pat"[^>]*disabled/);
-    expect(markup).toContain("Link GitHub");
-    expect(markup).not.toMatch(/class="github-button"[^>]*disabled/);
-  });
-});
-
-describe("GitHubOAuthSetupGuideDialog", () => {
-  const guide: GitHubOAuthSetupGuideBody = {
-    configured: false,
-    callback_url: "http://localhost:8090/api/admin/github/callback",
-    documentation_url:
-      "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app",
-    next_step: "configure_host_secrets_restart_then_recheck",
-  };
-
-  it("renders a bilingual-safe, labelled setup guide without credential fields", () => {
-    const markup = renderToStaticMarkup(
-      <GitHubOAuthSetupGuideDialog
-        error=""
-        guide={guide}
-        locale="en"
-        onClose={vi.fn()}
-        onRefresh={vi.fn()}
-        open
-        pending={false}
-        returnFocusRef={{ current: null }}
-      />,
-    );
-
-    expect(markup).toContain('role="dialog"');
-    expect(markup).toContain('aria-modal="true"');
-    expect(markup).toContain("host-side deployment step");
-    expect(markup).toContain(guide.callback_url);
-    expect(markup).toContain(guide.documentation_url);
-    expect(markup).toContain("Never paste a client secret");
-    expect(markup).toContain('target="_blank"');
-    expect(markup).not.toContain("CLIENT_SECRET_CANARY");
-    expect(markup).not.toContain("OAUTH_TOKEN_CANARY");
+    expect(markup).toContain("Checking the local admin session");
+    expect(markup).not.toMatch(/<(form|input|button|a)\b/i);
+    expect(markup).not.toMatch(/github|password|setup code|local-launch=/i);
   });
 });
 

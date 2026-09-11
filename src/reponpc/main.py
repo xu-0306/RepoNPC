@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from dataclasses import replace
 from pathlib import Path
@@ -19,6 +19,7 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from reponpc.admin.analysis_selection import AnalysisModelPair, AnalysisSelectionRegistry
 from reponpc.admin.auth import AdminSessionService
 from reponpc.admin.batch_execution import PinnedBatchItemRunner
 from reponpc.admin.batch_resolver import (
@@ -26,26 +27,30 @@ from reponpc.admin.batch_resolver import (
     BatchCapacity,
     BatchPreflightPlanner,
     GitHubArchiveSource,
-    GitHubGraphQLMetadataResolver,
     GitHubRateLimiter,
+    GitHubRESTMetadataResolver,
     UrllibGitHubArchiveTransport,
-    UrllibGitHubGraphQLTransport,
+    UrllibGitHubRESTTransport,
 )
-from reponpc.admin.batch_runtime import BatchRuntimeStore, SQLiteGitHubRateStateStore
+from reponpc.admin.batch_runtime import (
+    BatchRuntimeStore,
+    SQLiteGitHubRateStateStore,
+    SQLiteGitHubResolutionCache,
+)
 from reponpc.admin.batches import AnalysisBatchService, BatchStageGates
+from reponpc.admin.chat_profiles import ChatProfile, ChatProfileRegistry
 from reponpc.admin.embedding_profiles import EmbeddingProfile, EmbeddingProfileRegistry
 from reponpc.admin.embedding_reindex import (
     EmbeddingReindexCoordinator,
     ProductionFrozenProfileBuilder,
 )
 from reponpc.admin.github import GitHubAdminClient, UrllibGitHubAdminTransport
-from reponpc.admin.model_operations import OllamaModelOperationCoordinator
-from reponpc.admin.oauth import (
-    CredentialCipher,
-    GitHubIdentityService,
-    GitHubOAuthClient,
-    UrllibOAuthTransport,
+from reponpc.admin.model_connections import (
+    ModelConnectionError,
+    ModelConnectionRegistry,
+    ProtectedModelSecretStore,
 )
+from reponpc.admin.model_operations import OllamaModelOperationCoordinator
 from reponpc.admin.onboarding import GuidedOnboardingService
 from reponpc.admin.operations import AdminOperations
 from reponpc.api.admin import create_admin_router
@@ -179,8 +184,6 @@ def create_app(
     admin_session_service: AdminSessionService | None = None,
     admin_origins: tuple[str, ...] = (),
     admin_operations: AdminOperations | None = None,
-    github_identity_service: GitHubIdentityService | None = None,
-    github_oauth_callback_url: str | None = None,
 ) -> FastAPI:
     """Construct the real application and its optional immutable-bundle lifecycle."""
 
@@ -328,6 +331,7 @@ def create_app(
     application.state.bundle_updater = bundle_updater
     application.state.bundle_poll_seconds = bundle_poll_seconds
     application.state.provider_runtime = provider_runtime
+    application.state.analysis_runtime_supplier = lambda: application.state.provider_runtime
     application.state.provider_adapter = provider_adapter
     application.state.provider_health_seconds = provider_health_seconds
     application.state.chat_service = chat_service
@@ -338,8 +342,10 @@ def create_app(
     application.state.admin_session_service = admin_session_service
     application.state.admin_origins = admin_origins
     application.state.admin_operations = admin_operations
-    application.state.github_identity_service = github_identity_service
-    application.state.github_oauth_callback_url = github_oauth_callback_url
+    application.state.chat_profile_registry = (
+        admin_operations.chat_profiles if admin_operations is not None else None
+    )
+    application.state.github_rate_limiter = None
     application.state.embedding_reindex_coordinator = None
     application.state.ollama_model_operations = (
         admin_operations.ollama_model_operations if admin_operations is not None else None
@@ -364,8 +370,6 @@ def create_app(
             service_supplier=lambda: application.state.admin_session_service,
             origins_supplier=lambda: application.state.admin_origins,
             operations_supplier=lambda: application.state.admin_operations,
-            github_identity_supplier=lambda: application.state.github_identity_service,
-            github_oauth_callback_supplier=lambda: application.state.github_oauth_callback_url,
         )
     )
     build_dir = web_dist or _default_web_dist()
@@ -403,7 +407,13 @@ def run() -> None:
     except RuntimeDatabaseError:
         app.state.runtime_database = None
         app.state.runtime_storage_usable = False
-    uvicorn.run("reponpc.main:app", host=settings.host, port=settings.port, factory=False)
+    uvicorn.run(
+        "reponpc.main:app",
+        host=settings.host,
+        port=settings.port,
+        factory=False,
+        proxy_headers=settings.deployment_profile != "loopback_evaluation",
+    )
 
 
 def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDatabase) -> None:
@@ -411,19 +421,11 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
     secrets = getattr(settings, "secrets", {})
     identity_key = secrets.get("ip_hash_key")
     github_token = secrets.get("github_token")
-    oauth_client_secret = secrets.get("github_oauth_client_secret")
-    credential_key = secrets.get("credential_encryption_key")
-    configured_callback = getattr(settings, "github_oauth_callback_url", None)
-    public_base_url = getattr(settings, "public_base_url", None)
-    app.state.github_oauth_callback_url = configured_callback or (
-        f"{public_base_url.rstrip('/')}/api/admin/github/callback"
-        if isinstance(public_base_url, str)
-        else None
-    )
     if identity_key is None:
         app.state.admin_session_service = None
         app.state.admin_origins = ()
         app.state.admin_operations = None
+        app.state.github_rate_limiter = None
         return
     app.state.admin_session_service = AdminSessionService(
         database=runtime_database,
@@ -435,26 +437,13 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         deployment_profile=settings.deployment_profile,
     )
     app.state.admin_origins = (settings.public_base_url,)
-    # Public-read PAT management only needs the encrypted runtime key and the
-    # fixed GitHub API transport. OAuth Web Flow remains unavailable until all
-    # client credentials are configured, but local-password owners can still
-    # explicitly save/check/remove a PAT.
-    if credential_key is not None:
-        app.state.github_identity_service = GitHubIdentityService(
-            database=runtime_database,
-            sessions=app.state.admin_session_service,
-            oauth=GitHubOAuthClient(
-                client_id=settings.github_oauth_client_id,
-                client_secret=(
-                    oauth_client_secret.reveal() if oauth_client_secret is not None else None
-                ),
-                callback_url=settings.github_oauth_callback_url,
-                transport=UrllibOAuthTransport(),
-            ),
-            cipher=CredentialCipher(credential_key.reveal()),
-        )
-    else:
-        app.state.github_identity_service = None
+    app.state.chat_limits = ChatLimits(
+        runtime_database,
+        ip_hash_key=hashlib.sha256(identity_key.reveal().encode()).digest(),
+        requests_per_minute=settings.rate_limit_requests_per_minute,
+        daily_budget=settings.daily_chat_request_budget,
+        global_concurrency=settings.global_chat_concurrency,
+    )
     github = None
     if github_token is not None:
         github = GitHubAdminClient(
@@ -465,9 +454,17 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
             transport=UrllibGitHubAdminTransport(),
             api_url=settings.github_api_url,
         )
+    rate_limiter = GitHubRateLimiter(
+        persistence=SQLiteGitHubRateStateStore(runtime_database),
+    )
+    app.state.github_rate_limiter = rate_limiter
+    resolution_cache = SQLiteGitHubResolutionCache(runtime_database)
     onboarding = GuidedOnboardingService(
-        source_resolver=GitHubSourceResolver(api_base_url=settings.github_api_url),
-        providers_supplier=lambda: app.state.provider_runtime,
+        source_resolver=GitHubSourceResolver(
+            api_base_url=settings.github_api_url,
+            rate_limiter=rate_limiter,
+        ),
+        providers_supplier=lambda: app.state.analysis_runtime_supplier(),
         limits_supplier=lambda: app.state.chat_limits,
         staging_root=settings.data_dir / "onboarding-staging",
         provider_timeout_seconds=settings.chat_timeout_seconds,
@@ -479,19 +476,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         generation=max(1, settings.global_chat_concurrency),
         whole_job_items=4,
     )
-    rate_limiter = GitHubRateLimiter(
-        persistence=SQLiteGitHubRateStateStore(runtime_database),
-    )
     stage_gates = BatchStageGates(capacity)
-
-    def public_read_credentials():
-        identity = app.state.github_identity_service
-        return identity.public_read_credentials() if identity is not None else ()
-
-    def mark_connection_required(credential_id: int) -> None:
-        identity = app.state.github_identity_service
-        if identity is not None:
-            identity.mark_connection_required(credential_id)
 
     archive_source = GitHubArchiveSource(
         transport=UrllibGitHubArchiveTransport(timeout_seconds=20.0),
@@ -509,43 +494,55 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         store=store,
         source=archive_source,
         onboarding=onboarding,
-        credentials_supplier=public_read_credentials,
         gates=stage_gates,
+        runtime_resolver=lambda pair: app.state.analysis_frozen_runtime_resolver(pair),
     )
     analysis_batches = AnalysisBatchService(
         store=store,
         planner=BatchPreflightPlanner(
-            resolver=GitHubGraphQLMetadataResolver(
-                transport=UrllibGitHubGraphQLTransport(timeout_seconds=20.0),
+            resolver=GitHubRESTMetadataResolver(
+                transport=UrllibGitHubRESTTransport(timeout_seconds=20.0),
                 limiter=rate_limiter,
+                cache=resolution_cache,
             ),
             limiter=rate_limiter,
         ),
-        credentials_supplier=public_read_credentials,
-        mark_connection_required=mark_connection_required,
         provider_ready_supplier=lambda: (
-            app.state.provider_runtime is not None and app.state.chat_limits is not None
+            app.state.analysis_runtime_supplier() is not None and app.state.chat_limits is not None
         ),
         capacity=capacity,
         stage_gates=stage_gates,
         runner=runner,
+        analysis_pair_supplier=lambda: analysis_selection.frozen_pair(),
         embedding_identity=settings.embedding_model,
         chat_model=settings.chat_model,
     )
     app.state.analysis_batch_service = analysis_batches
-    embedding_identity = EmbeddingIdentity(
-        adapter=_provider_contract_adapter(settings.embedding_provider),
-        model_id=settings.embedding_model,
-        dimension=settings.embedding_dimension,
-        normalized=settings.embedding_normalized,
-        query_prefix="query: ",
-        passage_prefix="passage: ",
-    )
+    embedding_identity = _configured_embedding_identity(settings)
 
     def resolve_embedding_profile(
         profile: EmbeddingProfile,
     ) -> RuntimeEmbeddingProvider | None:
-        return _environment_embedding_provider(settings, profile)
+        environment_provider = _environment_embedding_provider(settings, profile)
+        if environment_provider is not None:
+            return environment_provider
+        if profile.connection_reference == "environment":
+            return None
+        try:
+            connection = model_connections.get(profile.connection_reference)
+            if connection.revision != profile.connection_revision:
+                return None
+            secret = model_connections.secret_for(
+                connection.connection_id, profile.connection_revision
+            )
+            return _embedding_provider_from_connection(
+                connection.provider,
+                secret.base_url,
+                secret.api_key,
+                profile.identity,
+            )
+        except ModelConnectionError:
+            return None
 
     def profile_bundle_compatible(profile: EmbeddingProfile) -> bool:
         manager = app.state.bundle_manager
@@ -560,11 +557,133 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         provider_resolver=resolve_embedding_profile,
         activation_compatible=profile_bundle_compatible,
     )
-    embedding_profiles.ensure_environment_profile(
-        provider=settings.embedding_provider,
-        identity=embedding_identity,
+    model_connections = ModelConnectionRegistry(
+        runtime_database,
+        ProtectedModelSecretStore(settings.data_dir / "model-secrets" / "master.key"),
     )
+    environment_embedding_connection = None
+    for role, provider, base_url, secret_name, model in (
+        (
+            "chat",
+            settings.chat_provider,
+            settings.chat_base_url,
+            "chat_api_key",
+            settings.chat_model,
+        ),
+        (
+            "embedding",
+            settings.embedding_provider,
+            settings.embedding_base_url,
+            "embedding_api_key",
+            settings.embedding_model,
+        ),
+    ):
+        if provider not in {"ollama", "openai_compatible", "vllm"} or not base_url or not model:
+            continue
+        secret = settings.secrets.get(secret_name)
+        connection = model_connections.ensure_host_managed(
+            f"environment-{role}",
+            display_name=f"Environment {role}",
+            provider=provider,
+            base_url=base_url,
+            api_key=secret.reveal() if secret is not None else None,
+        )
+        if role == "embedding":
+            environment_embedding_connection = connection
+    if settings.embedding_provider in {"ollama", "openai_compatible", "vllm"}:
+        embedding_profiles.ensure_environment_profile(
+            provider=settings.embedding_provider,
+            identity=embedding_identity,
+            connection_reference=(
+                environment_embedding_connection.connection_id
+                if environment_embedding_connection is not None
+                else "environment"
+            ),
+            connection_revision=(
+                environment_embedding_connection.revision
+                if environment_embedding_connection is not None
+                else 0
+            ),
+        )
+
+    def resolve_chat_profile(profile: ChatProfile) -> ChatProvider | None:
+        try:
+            connection = model_connections.get(profile.connection_id)
+            if connection.revision != profile.connection_revision:
+                return None
+            secret = model_connections.secret_for(
+                profile.connection_id, profile.connection_revision
+            )
+            return _chat_provider_from_connection(
+                settings, connection.provider, profile.model_id, secret.base_url, secret.api_key
+            )
+        except ModelConnectionError:
+            return None
+
+    chat_profiles = ChatProfileRegistry(
+        runtime_database,
+        model_connections,
+        resolve_chat_profile,
+        on_activated=lambda _profile, provider: _replace_runtime_chat(provider),
+    )
+    analysis_selection = AnalysisSelectionRegistry(
+        runtime_database, chat_profiles, embedding_profiles, model_connections
+    )
+
+    def analysis_runtime_supplier() -> ProviderRuntime | None:
+        """Resolve the explicitly selected pair without mutating public runtime."""
+
+        view = analysis_selection.view()
+        if not view.eligible:
+            return None
+        try:
+            chat_profile = chat_profiles.get(view.selection.chat_profile_id or "")
+            embedding_profile = embedding_profiles.get(view.selection.embedding_profile_id or "")
+            chat_provider = chat_profiles.resolve_provider(chat_profile)
+            embedding_provider = embedding_profiles.resolve_provider(embedding_profile)
+            if (
+                chat_provider is None
+                or embedding_provider is None
+                or not isinstance(embedding_provider, RuntimeEmbeddingProvider)
+            ):
+                return None
+            return ProviderRuntime(chat=chat_provider, embedding=embedding_provider)
+        except Exception:
+            return None
+
+    def frozen_analysis_runtime(pair: AnalysisModelPair) -> ProviderRuntime | None:
+        """Resolve only the connection revisions captured by a batch."""
+
+        try:
+            chat_secret = model_connections.secret_for(
+                pair.chat_connection_id, pair.chat_connection_revision
+            )
+            embedding_secret = model_connections.secret_for(
+                pair.embedding_connection_id, pair.embedding_connection_revision
+            )
+            return ProviderRuntime(
+                chat=_chat_provider_from_connection(
+                    settings,
+                    pair.chat_provider,
+                    pair.chat_model_id,
+                    chat_secret.base_url,
+                    chat_secret.api_key,
+                ),
+                embedding=_embedding_provider_from_connection(
+                    pair.embedding_provider,
+                    embedding_secret.base_url,
+                    embedding_secret.api_key,
+                    pair.embedding_identity,
+                ),
+            )
+        except (ModelConnectionError, ValueError):
+            return None
+
+    app.state.analysis_runtime_supplier = analysis_runtime_supplier
+    app.state.analysis_frozen_runtime_resolver = frozen_analysis_runtime
+    app.state.analysis_selection_registry = analysis_selection
     app.state.embedding_profile_registry = embedding_profiles
+    app.state.chat_profile_registry = chat_profiles
     model_operations = OllamaModelOperationCoordinator(embedding_profiles)
     app.state.ollama_model_operations = model_operations
     app.state.admin_operations = AdminOperations(
@@ -574,6 +693,9 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         onboarding=onboarding,
         analysis_batches=analysis_batches,
         embedding_profiles=embedding_profiles,
+        model_connections=model_connections,
+        chat_profiles=chat_profiles,
+        analysis_selection=analysis_selection,
         ollama_model_operations=model_operations,
     )
 
@@ -586,16 +708,20 @@ def _configure_bundle_lifecycle(
 
     if not hasattr(settings, "embedding_provider"):
         return
-    environment_embedding = EmbeddingIdentity(
-        adapter=_provider_contract_adapter(settings.embedding_provider),
-        model_id=settings.embedding_model,
-        dimension=settings.embedding_dimension,
-        normalized=settings.embedding_normalized,
-        query_prefix="query: ",
-        passage_prefix="passage: ",
-    )
     registry = getattr(app.state, "embedding_profile_registry", None)
     active_profile = registry.active() if registry is not None else None
+    environment_embedding = (
+        EmbeddingIdentity(
+            adapter=_provider_contract_adapter(settings.embedding_provider),
+            model_id=settings.embedding_model,
+            dimension=settings.embedding_dimension,
+            normalized=settings.embedding_normalized,
+            query_prefix="query: ",
+            passage_prefix="passage: ",
+        )
+        if settings.embedding_provider in {"ollama", "openai_compatible", "vllm"}
+        else EmbeddingIdentity("unconfigured", "unconfigured", 1, True, "", "")
+    )
     embedding = active_profile.identity if active_profile is not None else environment_embedding
     allowed_hosts = frozenset({"api.github.com", "github.com", "raw.githubusercontent.com"})
     manager = BundleManager(
@@ -636,14 +762,7 @@ def _configure_provider_lifecycle(
 ) -> None:
     """Attach exactly the selected chat/embedding adapters without fallback."""
 
-    embedding_identity = EmbeddingIdentity(
-        adapter=_provider_contract_adapter(settings.embedding_provider),
-        model_id=settings.embedding_model,
-        dimension=settings.embedding_dimension,
-        normalized=settings.embedding_normalized,
-        query_prefix="query: ",
-        passage_prefix="passage: ",
-    )
+    embedding_identity = _configured_embedding_identity(settings)
     capabilities = ProviderCapabilities(
         streaming=False,
         system_role=True,
@@ -653,32 +772,53 @@ def _configure_provider_lifecycle(
         max_context_tokens=settings.chat_max_context_tokens,
         max_output_tokens=settings.chat_max_output_tokens,
     )
-    chat_key = settings.secrets.get("chat_api_key")
-    if settings.chat_provider == "ollama":
-        chat: ChatProvider = OllamaChatProvider(
-            settings.chat_base_url,
-            settings.chat_model,
-            capabilities,
-        )
-    else:
-        chat = OpenAICompatibleChatProvider(
-            settings.chat_base_url,
-            settings.chat_model,
-            capabilities,
-            api_key=chat_key.reveal() if chat_key is not None else None,
-            allow_private_http=settings.chat_provider == "vllm",
-        )
+    chat: ChatProvider | None = None
+    chat_profiles: ChatProfileRegistry | None = (
+        app.state.chat_profile_registry
+        if isinstance(getattr(app.state, "chat_profile_registry", None), ChatProfileRegistry)
+        else None
+    )
+    active_chat = chat_profiles.active() if isinstance(chat_profiles, ChatProfileRegistry) else None
+    if active_chat is not None and chat_profiles is not None:
+        chat = chat_profiles.resolve_provider(active_chat)
+    elif (
+        settings.chat_provider in {"ollama", "openai_compatible", "vllm"}
+        and settings.chat_model
+        and settings.chat_base_url
+    ):
+        chat = _chat_provider_from_settings(settings, capabilities)
     registry = getattr(app.state, "embedding_profile_registry", None)
     active_profile = registry.active() if registry is not None else None
-    embedding = (
-        _environment_embedding_provider(settings, active_profile)
-        if active_profile is not None
-        else _embedding_provider_from_settings(settings, embedding_identity)
-    )
-    if embedding is None:
+    if active_profile is not None:
+        embedding = registry.resolve_provider(active_profile) if registry is not None else None
+    else:
+        embedding = (
+            _embedding_provider_from_settings(settings, embedding_identity)
+            if settings.embedding_provider in {"ollama", "openai_compatible", "vllm"}
+            and settings.embedding_model
+            and settings.embedding_base_url
+            else None
+        )
+    if embedding is None or chat is None:
         app.state.provider_runtime = None
+        app.state.provider_adapter = (
+            _provider_contract_adapter(settings.chat_provider)
+            if settings.chat_provider in {"ollama", "openai_compatible", "vllm"}
+            else None
+        )
         app.state.chat_service = None
-        app.state.chat_limits = None
+        # Admission controls remain available for later authenticated analysis
+        # setup even when public providers are not configured at boot.
+        if getattr(app.state, "chat_limits", None) is None:
+            ip_hash_key = settings.secrets.get("ip_hash_key")
+            if ip_hash_key is not None:
+                app.state.chat_limits = ChatLimits(
+                    runtime_database,
+                    ip_hash_key=ip_hash_key.reveal().encode(),
+                    requests_per_minute=settings.rate_limit_requests_per_minute,
+                    daily_budget=settings.daily_chat_request_budget,
+                    global_concurrency=settings.global_chat_concurrency,
+                )
         return
     providers = ProviderRuntime(chat=chat, embedding=embedding)
     app.state.provider_runtime = providers
@@ -720,7 +860,14 @@ def _configure_embedding_reindex(settings: EnvironmentSettings) -> None:
     manager: BundleManager | None = app.state.bundle_manager
     runtime: ProviderRuntime | None = app.state.provider_runtime
     operations: AdminOperations | None = app.state.admin_operations
-    if registry is None or manager is None or runtime is None or operations is None:
+    rate_limiter: GitHubRateLimiter | None = getattr(app.state, "github_rate_limiter", None)
+    if (
+        registry is None
+        or manager is None
+        or runtime is None
+        or operations is None
+        or rate_limiter is None
+    ):
         return
 
     def provider_transition(
@@ -757,6 +904,10 @@ def _configure_embedding_reindex(settings: EnvironmentSettings) -> None:
             config_branch=settings.config_branch,
             github_api_url=settings.github_api_url,
             max_bundle_bytes=settings.max_bundle_bytes,
+            source_resolver=GitHubSourceResolver(
+                api_base_url=settings.github_api_url,
+                rate_limiter=rate_limiter,
+            ),
         ),
         provider_transition=provider_transition,
         on_activated=publish_activation,
@@ -770,11 +921,91 @@ def _environment_embedding_provider(
     profile: EmbeddingProfile,
 ) -> RuntimeEmbeddingProvider | None:
     if (
-        profile.connection_reference != "environment"
+        profile.connection_reference not in {"environment", "environment-embedding"}
         or profile.provider != settings.embedding_provider
     ):
         return None
     return _embedding_provider_from_settings(settings, profile.identity)
+
+
+def _configured_embedding_identity(settings: EnvironmentSettings) -> EmbeddingIdentity:
+    if (
+        settings.embedding_provider not in {"ollama", "openai_compatible", "vllm"}
+        or not settings.embedding_model
+    ):
+        return EmbeddingIdentity("unconfigured", "unconfigured", 1, True, "", "")
+    return EmbeddingIdentity(
+        adapter=_provider_contract_adapter(settings.embedding_provider),
+        model_id=settings.embedding_model,
+        dimension=settings.embedding_dimension,
+        normalized=settings.embedding_normalized,
+        query_prefix="query: ",
+        passage_prefix="passage: ",
+    )
+
+
+def _chat_provider_from_settings(
+    settings: EnvironmentSettings, capabilities: ProviderCapabilities
+) -> ChatProvider:
+    key = settings.secrets.get("chat_api_key")
+    return _chat_provider_from_connection(
+        settings,
+        settings.chat_provider,
+        settings.chat_model,
+        settings.chat_base_url,
+        key.reveal() if key is not None else None,
+        capabilities=capabilities,
+    )
+
+
+def _chat_provider_from_connection(
+    settings: EnvironmentSettings,
+    provider: str,
+    model: str,
+    base_url: str,
+    api_key: str | None,
+    *,
+    capabilities: ProviderCapabilities | None = None,
+) -> ChatProvider:
+    selected_capabilities = capabilities or ProviderCapabilities(
+        streaming=False,
+        system_role=True,
+        structured_output=True,
+        usage_reporting=True,
+        health_check=True,
+        max_context_tokens=settings.chat_max_context_tokens,
+        max_output_tokens=settings.chat_max_output_tokens,
+    )
+    if provider == "ollama":
+        return OllamaChatProvider(base_url, model, selected_capabilities)
+    if provider in {"openai_compatible", "vllm"}:
+        return OpenAICompatibleChatProvider(
+            base_url,
+            model,
+            selected_capabilities,
+            api_key=api_key,
+            allow_private_http=provider == "vllm",
+        )
+    raise ValueError("unsupported chat provider")
+
+
+def _embedding_provider_from_connection(
+    provider: str,
+    base_url: str,
+    api_key: str | None,
+    identity: EmbeddingIdentity,
+) -> RuntimeEmbeddingProvider:
+    if provider == "ollama":
+        return OllamaEmbeddingProvider(base_url, identity.model_id, identity)
+    if provider in {"openai_compatible", "vllm"}:
+        return OpenAICompatibleEmbeddingProvider(
+            base_url,
+            identity.model_id,
+            identity,
+            api_key=api_key,
+            allow_private_http=provider == "vllm",
+        )
+    raise ValueError("unsupported embedding provider")
 
 
 def _embedding_provider_from_settings(
@@ -805,3 +1036,15 @@ def _provider_contract_adapter(provider: str) -> str:
     """Map a named transport preset to the stable public/bundle adapter contract."""
 
     return "openai_compatible" if provider == "vllm" else provider
+
+
+def _replace_runtime_chat(provider: ChatProvider) -> Callable[[], None] | None:
+    runtime = getattr(app.state, "provider_runtime", None)
+    if isinstance(runtime, ProviderRuntime):
+        previous = runtime.replace_chat(provider)
+
+        def restore() -> None:
+            runtime.replace_chat(previous)
+
+        return restore
+    return None

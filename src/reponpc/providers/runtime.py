@@ -106,6 +106,19 @@ class ProviderRuntime:
             )
             return previous
 
+    def replace_chat(self, chat: ChatProvider) -> ChatProvider:
+        """Atomically select a tested chat adapter for subsequent requests."""
+
+        with self._lock:
+            previous = self.chat
+            self.chat = chat
+            self._status = RuntimeProviderStatus(
+                ready=False,
+                checked_at=_checked_at(),
+                failure_code=ProviderFailureCode.UNAVAILABLE,
+            )
+            return previous
+
     def poll_health(self) -> RuntimeProviderStatus:
         """Poll both selected providers once and publish one safe snapshot."""
 

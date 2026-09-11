@@ -21,7 +21,8 @@ SESSION_BYTES: Final = 32
 CSRF_BYTES: Final = 32
 SETUP_CODE_BYTES: Final = 32
 SETUP_CODE_TTL: Final = timedelta(minutes=15)
-RECENT_AUTH_TTL: Final = timedelta(minutes=5)
+LOCAL_LAUNCH_GRANT_BYTES: Final = 32
+LOCAL_LAUNCH_GRANT_TTL: Final = timedelta(minutes=2)
 MIN_ADMIN_PASSWORD_LENGTH: Final = 4
 PRODUCTION_MIN_ADMIN_PASSWORD_LENGTH: Final = 15
 MAX_ADMIN_PASSWORD_LENGTH: Final = 128
@@ -74,8 +75,8 @@ class AdminSetupStatus:
 
 @dataclass(frozen=True, slots=True)
 class AdminAuthMethods:
+    mode: str
     password_available: bool
-    github_available: bool
     setup_required: bool
 
 
@@ -97,7 +98,7 @@ class AdminSessionService:
         identity_hmac_key: bytes,
         idle_minutes: int = 30,
         absolute_hours: int = 12,
-        deployment_profile: str = "loopback_evaluation",
+        deployment_profile: str = "production",
         compromised_passwords: frozenset[str] = COMMON_ADMIN_PASSWORDS,
         now: Callable[[], datetime] | None = None,
     ) -> None:
@@ -126,6 +127,12 @@ class AdminSessionService:
     def setup_status(self) -> AdminSetupStatus:
         """Return only the safe public state needed by the first-owner UI."""
 
+        if self._deployment_profile == "loopback_evaluation":
+            return AdminSetupStatus(
+                setup_required=False,
+                setup_code_available=False,
+                minimum_password_length=PRODUCTION_MIN_ADMIN_PASSWORD_LENGTH,
+            )
         if self._environment_credentials() is not None:
             return AdminSetupStatus(
                 setup_required=False,
@@ -161,7 +168,11 @@ class AdminSessionService:
             else PRODUCTION_MIN_ADMIN_PASSWORD_LENGTH
         )
 
-    def auth_methods(self, *, github_configured: bool) -> AdminAuthMethods:
+    @property
+    def deployment_profile(self) -> str:
+        return self._deployment_profile
+
+    def auth_methods(self) -> AdminAuthMethods:
         """Expose only safe method availability; never reveal linked identities."""
 
         setup = self.setup_status()
@@ -170,9 +181,11 @@ class AdminSessionService:
                 "SELECT 1 FROM admin_auth_methods WHERE method = 'local_password'"
             ).fetchone()
         return AdminAuthMethods(
+            mode=(
+                "local_launch" if self._deployment_profile == "loopback_evaluation" else "password"
+            ),
             password_available=self._environment_credentials() is not None
             or local_method is not None,
-            github_available=github_configured,
             setup_required=setup.setup_required,
         )
 
@@ -186,6 +199,8 @@ class AdminSessionService:
     ) -> AdminSession:
         """Atomically consume one host code, create the owner, and issue a session."""
 
+        if self._deployment_profile != "production":
+            raise AdminAuthError("SETUP_DENIED")
         if self._environment_credentials() is not None:
             raise AdminAuthError("SETUP_ALREADY_COMPLETE")
         normalized_username = username.strip()
@@ -251,10 +266,8 @@ class AdminSessionService:
                     (normalized_username, password_hash, _time(now)),
                 )
                 connection.execute(
-                    "INSERT INTO admin_auth_methods("
-                    "method, github_user_id, github_login, created_at"
-                    ") "
-                    "VALUES ('local_password', NULL, NULL, ?)",
+                    "INSERT INTO admin_auth_methods(method, created_at) "
+                    "VALUES ('local_password', ?)",
                     (_time(now),),
                 )
                 connection.execute("DELETE FROM admin_setup WHERE state_key = 'current'")
@@ -274,8 +287,10 @@ class AdminSessionService:
     def login(self, *, username: str, password: str, remote_identity: str) -> AdminSession:
         """Verify generically, apply durable exponential backoff, and create a session."""
 
+        if self._deployment_profile != "production":
+            raise AdminAuthError("INVALID_CREDENTIALS")
         now = self._utc_now()
-        identity = self._backoff_identity(username, remote_identity)
+        identity = self._backoff_identity("password", username, remote_identity)
         with self._database.connection() as connection:
             self._check_backoff(connection, identity, now)
             credentials = self._credentials(connection)
@@ -303,115 +318,56 @@ class AdminSessionService:
                 self._rollback(connection)
                 raise RuntimeDatabaseError("runtime_admin_session_failed") from exc
 
-    def login_github(
-        self,
-        *,
-        github_user_id: str,
-        github_login: str,
-        remote_identity: str,
-    ) -> AdminSession:
-        """Issue a normal local session only for the sole linked GitHub identity."""
+    def consume_local_launch(self, *, grant: str, remote_identity: str = "unknown") -> AdminSession:
+        """Atomically consume one local capability and issue a protected session."""
 
+        if self._deployment_profile != "loopback_evaluation":
+            raise AdminAuthError("LOCAL_LAUNCH_DENIED")
         now = self._utc_now()
-        identity = self._backoff_identity(f"github:{github_user_id}", remote_identity)
-        with self._database.connection() as connection:
-            self._check_backoff(connection, identity, now)
-            linked = connection.execute(
-                "SELECT github_login FROM admin_auth_methods "
-                "WHERE method = 'github' AND github_user_id = ?",
-                (github_user_id,),
-            ).fetchone()
-        if linked is None:
-            retry_after = self._record_failure(identity, now)
-            raise AdminAuthError("INVALID_CREDENTIALS", retry_after_seconds=retry_after)
+        identity = self._backoff_identity("local_launch", "grant", remote_identity)
+        supplied_hash = _token_hash(grant)
         with self._database.connection() as connection:
             try:
                 connection.execute("BEGIN IMMEDIATE")
-                connection.execute(
-                    "DELETE FROM admin_login_backoff WHERE identity_hmac = ?", (identity,)
+                self._check_backoff(
+                    connection,
+                    identity,
+                    now,
+                    error_code="LOCAL_LAUNCH_DENIED",
                 )
-                connection.execute(
-                    "UPDATE admin_auth_methods SET github_login = ? WHERE method = 'github'",
-                    (github_login[:100],),
-                )
+                self._consume_local_launch_grant(connection, supplied_hash, now)
+                owner = connection.execute(
+                    "SELECT 1 FROM admin_owner WHERE state_key = 'current'"
+                ).fetchone()
+                if owner is None:
+                    connection.execute(
+                        "INSERT INTO admin_owner("
+                        "state_key, username, password_hash, created_at"
+                        ") VALUES ('current', 'local-owner', NULL, ?)",
+                        (_time(now),),
+                    )
                 session = self._insert_session(
                     connection,
                     epoch=self._current_epoch(connection),
                     now=now,
                 )
+                connection.execute(
+                    "DELETE FROM admin_login_backoff WHERE identity_hmac = ?",
+                    (identity,),
+                )
                 connection.execute("COMMIT")
                 return session
+            except AdminAuthError as exc:
+                self._rollback(connection)
+                if exc.retry_after_seconds is not None:
+                    raise
+                retry_after = self._record_failure(identity, now)
+                raise AdminAuthError(
+                    "LOCAL_LAUNCH_DENIED", retry_after_seconds=retry_after
+                ) from None
             except sqlite3.Error as exc:
                 self._rollback(connection)
                 raise RuntimeDatabaseError("runtime_admin_session_failed") from exc
-
-    def link_github(
-        self,
-        *,
-        session_token: str,
-        github_user_id: str,
-        github_login: str,
-    ) -> None:
-        """Link the stable GitHub identity after a recent local authentication."""
-
-        self._authorize_recent(session_token)
-        now = self._utc_now()
-        with self._database.connection() as connection:
-            try:
-                connection.execute("BEGIN IMMEDIATE")
-                existing = connection.execute(
-                    "SELECT github_user_id FROM admin_auth_methods WHERE method = 'github'"
-                ).fetchone()
-                if existing is not None and str(existing["github_user_id"]) != github_user_id:
-                    self._rollback(connection)
-                    raise AdminAuthError("INVALID_CREDENTIALS")
-                connection.execute(
-                    "INSERT INTO admin_auth_methods("
-                    "method, github_user_id, github_login, created_at"
-                    ") "
-                    "VALUES ('github', ?, ?, ?) "
-                    "ON CONFLICT(method) DO UPDATE SET github_login = excluded.github_login",
-                    (github_user_id, github_login[:100], _time(now)),
-                )
-                connection.execute("COMMIT")
-            except AdminAuthError:
-                raise
-            except sqlite3.Error as exc:
-                self._rollback(connection)
-                raise RuntimeDatabaseError("runtime_admin_session_failed") from exc
-
-    def unlink_github(self, *, session_token: str) -> None:
-        """Remove GitHub only if a password method remains and auth is recent."""
-
-        self._authorize_recent(session_token)
-        with self._database.connection() as connection:
-            try:
-                connection.execute("BEGIN IMMEDIATE")
-                password = (
-                    self._environment_credentials() is not None
-                    or connection.execute(
-                        "SELECT 1 FROM admin_auth_methods WHERE method = 'local_password'"
-                    ).fetchone()
-                    is not None
-                )
-                if not password:
-                    self._rollback(connection)
-                    raise AdminAuthError("LAST_AUTH_METHOD_REQUIRED")
-                connection.execute("DELETE FROM admin_auth_methods WHERE method = 'github'")
-                connection.execute(
-                    "DELETE FROM admin_github_credentials WHERE purpose = 'identity_public_read'"
-                )
-                connection.execute("COMMIT")
-            except AdminAuthError:
-                raise
-            except sqlite3.Error as exc:
-                self._rollback(connection)
-                raise RuntimeDatabaseError("runtime_admin_session_failed") from exc
-
-    def require_recent_auth(self, session_token: str) -> None:
-        """Verify fresh local-session authentication for an identity mutation."""
-
-        self._authorize_recent(session_token)
 
     def authorize(self, *, session_token: str, csrf_token: str | None = None) -> SessionAuthority:
         """Validate current durable authority and optionally the CSRF token."""
@@ -490,20 +446,33 @@ class AdminSessionService:
                 (_time(self._utc_now()), authority.session_hash),
             )
 
-    def logout_all(self, *, session_token: str, csrf_token: str, password: str | None) -> None:
+    def logout_all(
+        self,
+        *,
+        session_token: str,
+        csrf_token: str,
+        password: str | None,
+        local_launch_grant: str | None = None,
+    ) -> None:
         self.authorize(session_token=session_token, csrf_token=csrf_token)
-        if self._has_local_password():
+        if self._deployment_profile == "loopback_evaluation":
+            if not local_launch_grant:
+                raise AdminAuthError("LOCAL_LAUNCH_DENIED")
+        elif self._has_local_password():
             if not password or not self._verify_password(password):
                 raise AdminAuthError("INVALID_CREDENTIALS")
         else:
-            # A GitHub-only owner cannot supply a local password.  A fresh
-            # GitHub login creates a local session with authenticated_at, which
-            # is the server-side proof required for this sensitive action.
-            self._authorize_recent(session_token)
+            raise AdminAuthError("INVALID_CREDENTIALS")
         now = self._utc_now()
         with self._database.connection() as connection:
             try:
                 connection.execute("BEGIN IMMEDIATE")
+                if self._deployment_profile == "loopback_evaluation":
+                    self._consume_local_launch_grant(
+                        connection,
+                        _token_hash(local_launch_grant or ""),
+                        now,
+                    )
                 connection.execute(
                     "UPDATE admin_state SET session_epoch = session_epoch + 1 "
                     "WHERE state_key = 'current'"
@@ -513,6 +482,9 @@ class AdminSessionService:
                     (_time(now),),
                 )
                 connection.execute("COMMIT")
+            except AdminAuthError:
+                self._rollback(connection)
+                raise
             except sqlite3.Error as exc:
                 self._rollback(connection)
                 raise RuntimeDatabaseError("runtime_admin_session_failed") from exc
@@ -545,6 +517,31 @@ class AdminSessionService:
         except (InvalidHashError, VerificationError, VerifyMismatchError):
             return False
 
+    @staticmethod
+    def _consume_local_launch_grant(
+        connection: sqlite3.Connection,
+        supplied_hash: str,
+        now: datetime,
+    ) -> None:
+        row = connection.execute(
+            "SELECT grant_hash, expires_at, consumed_at "
+            "FROM admin_local_launch_grants WHERE state_key = 'current'"
+        ).fetchone()
+        if (
+            row is None
+            or row["consumed_at"] is not None
+            or now >= _parse_time(str(row["expires_at"]))
+            or not hmac.compare_digest(str(row["grant_hash"]), supplied_hash)
+        ):
+            raise AdminAuthError("LOCAL_LAUNCH_DENIED")
+        consumed = connection.execute(
+            "UPDATE admin_local_launch_grants SET consumed_at = ? "
+            "WHERE state_key = 'current' AND consumed_at IS NULL",
+            (_time(now),),
+        ).rowcount
+        if consumed != 1:
+            raise AdminAuthError("LOCAL_LAUNCH_DENIED")
+
     def _environment_credentials(self) -> _AdminCredentials | None:
         if self._username is None or self._password_hash is None:
             return None
@@ -562,7 +559,7 @@ class AdminSessionService:
         row = connection.execute(
             "SELECT username, password_hash FROM admin_owner WHERE state_key = 'current'"
         ).fetchone()
-        if row is None:
+        if row is None or row["password_hash"] is None:
             return None
         return _AdminCredentials(str(row["username"]), str(row["password_hash"]))
 
@@ -637,7 +634,13 @@ class AdminSessionService:
                 raise RuntimeDatabaseError("runtime_admin_backoff_failed") from exc
 
     @staticmethod
-    def _check_backoff(connection: sqlite3.Connection, identity: str, now: datetime) -> None:
+    def _check_backoff(
+        connection: sqlite3.Connection,
+        identity: str,
+        now: datetime,
+        *,
+        error_code: str = "INVALID_CREDENTIALS",
+    ) -> None:
         row = connection.execute(
             "SELECT next_allowed_at FROM admin_login_backoff WHERE identity_hmac = ?",
             (identity,),
@@ -646,7 +649,7 @@ class AdminSessionService:
             return
         remaining = int((_parse_time(str(row[0])) - now).total_seconds())
         if remaining > 0:
-            raise AdminAuthError("INVALID_CREDENTIALS", retry_after_seconds=remaining)
+            raise AdminAuthError(error_code, retry_after_seconds=remaining)
 
     @staticmethod
     def _current_epoch(connection: sqlite3.Connection) -> int:
@@ -666,22 +669,9 @@ class AdminSessionService:
             and now < _parse_time(str(row["absolute_expires_at"]))
         )
 
-    def _backoff_identity(self, username: str, remote_identity: str) -> str:
-        payload = f"{username.casefold()}\x00{remote_identity}".encode()
+    def _backoff_identity(self, kind: str, subject: str, remote_identity: str) -> str:
+        payload = f"{kind.casefold()}\x00{subject.casefold()}\x00{remote_identity}".encode()
         return hmac.new(self._identity_hmac_key, payload, hashlib.sha256).hexdigest()
-
-    def _authorize_recent(self, session_token: str) -> None:
-        authority = self.authorize(session_token=session_token)
-        now = self._utc_now()
-        with self._database.connection() as connection:
-            row = connection.execute(
-                "SELECT authenticated_at FROM admin_sessions WHERE session_hash = ?",
-                (authority.session_hash,),
-            ).fetchone()
-        if row is None or row["authenticated_at"] is None:
-            raise AdminAuthError("RECENT_AUTHENTICATION_REQUIRED")
-        if now - _parse_time(str(row["authenticated_at"])) > RECENT_AUTH_TTL:
-            raise AdminAuthError("RECENT_AUTHENTICATION_REQUIRED")
 
     def _utc_now(self) -> datetime:
         value = self._now()
@@ -738,6 +728,46 @@ def issue_admin_setup_code(
             AdminSessionService._rollback(connection)
             raise RuntimeDatabaseError("runtime_admin_setup_failed") from exc
     return code
+
+
+def issue_admin_local_launch_grant(
+    database: RuntimeDatabase,
+    *,
+    deployment_profile: str,
+    now: datetime | None = None,
+    ttl: timedelta = LOCAL_LAUNCH_GRANT_TTL,
+) -> str:
+    """Replace the current local-launch capability and return its raw value once."""
+
+    if deployment_profile != "loopback_evaluation" or ttl <= timedelta(0):
+        raise AdminAuthError("LOCAL_LAUNCH_DENIED")
+    issued_at = (now or datetime.now(UTC)).astimezone(UTC)
+    grant = secrets.token_urlsafe(LOCAL_LAUNCH_GRANT_BYTES)
+    with database.connection() as connection:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                INSERT INTO admin_local_launch_grants(
+                    state_key, grant_hash, created_at, expires_at, consumed_at
+                ) VALUES ('current', ?, ?, ?, NULL)
+                ON CONFLICT(state_key) DO UPDATE SET
+                    grant_hash = excluded.grant_hash,
+                    created_at = excluded.created_at,
+                    expires_at = excluded.expires_at,
+                    consumed_at = NULL
+                """,
+                (
+                    _token_hash(grant),
+                    _time(issued_at),
+                    _time(issued_at + ttl),
+                ),
+            )
+            connection.execute("COMMIT")
+        except sqlite3.Error as exc:
+            AdminSessionService._rollback(connection)
+            raise RuntimeDatabaseError("runtime_admin_setup_failed") from exc
+    return grant
 
 
 def _new_password_is_allowed(
@@ -813,9 +843,8 @@ def set_admin_recovery_password(
                 (password_hash,),
             )
             connection.execute(
-                "INSERT OR IGNORE INTO admin_auth_methods("
-                "method, github_user_id, github_login, created_at"
-                ") VALUES ('local_password', NULL, NULL, ?)",
+                "INSERT OR IGNORE INTO admin_auth_methods(method, created_at) "
+                "VALUES ('local_password', ?)",
                 (_time(now),),
             )
             connection.execute(

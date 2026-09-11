@@ -243,6 +243,62 @@ describe("guidedOnboardingReducer", () => {
     expect(state.repositories[0].analysisStatus).toBe("idle");
   });
 
+  it("unlocks manual repository editing without discarding contribution data", () => {
+    let state = guidedOnboardingReducer(
+      { ...initialGuidedOnboardingState(), profile },
+      { type: "START_MANUAL" },
+    );
+    state = guidedOnboardingReducer(state, {
+      type: "MERGE_REPOSITORIES",
+      repositories: [metadata],
+      page: 1,
+      hasMore: false,
+    });
+    state = guidedOnboardingReducer(state, {
+      type: "TOGGLE_REPOSITORY",
+      slug: metadata.slug,
+    });
+    state = guidedOnboardingReducer(state, { type: "CONFIRM_SELECTION" });
+    state = guidedOnboardingReducer(state, {
+      type: "SET_OWNER_STATEMENT",
+      slug: metadata.slug,
+      statement: "I maintained the parser.",
+    });
+    state = guidedOnboardingReducer(state, {
+      type: "CONFIRM_CONTRIBUTION",
+      slug: metadata.slug,
+      contribution: proposal,
+    });
+    const beforeBack = state;
+
+    state = guidedOnboardingReducer(state, { type: "GO_BACK" });
+
+    expect(state.step).toBe("repositories");
+    expect(state.selectionConfirmed).toBe(false);
+    expect(state.profile).toEqual(beforeBack.profile);
+    expect(state.repositories).toEqual(beforeBack.repositories);
+    state = guidedOnboardingReducer(state, {
+      type: "TOGGLE_REPOSITORY",
+      slug: metadata.slug,
+    });
+    expect(state.repositories[0].selected).toBe(false);
+    state = guidedOnboardingReducer(state, {
+      type: "TOGGLE_REPOSITORY",
+      slug: metadata.slug,
+    });
+    state = guidedOnboardingReducer(state, {
+      type: "SET_REPOSITORY_OPTIONS",
+      slug: metadata.slug,
+      ref: "release",
+      include: [],
+      exclude: [],
+    });
+    state = guidedOnboardingReducer(state, { type: "CONFIRM_SELECTION" });
+
+    expect(state.repositories[0].ownerStatement).toBe("");
+    expect(state.repositories[0].confirmedContribution).toBeNull();
+  });
+
   it("edits selection without discarding unaffected owner work", () => {
     const other: RepositoryMetadata = {
       ...metadata,

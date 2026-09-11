@@ -347,16 +347,17 @@ class GuidedOnboardingService:
         stage_changed: Callable[[str], None] | None = None,
         index_permit: Callable[[], AbstractContextManager[object]] | None = None,
         execution_deadline: float | None = None,
+        providers: ProviderRuntime | None = None,
     ) -> dict[str, object]:
         """Analyze a server-resolved immutable archive for a durable batch.
 
         Batch callers are intentionally unable to provide a URL, ref, or raw
-        source.  They hand in only the GraphQL-pinned archive snapshot produced
+        source.  They hand in only the REST-resolved exact-SHA snapshot produced
         by ``GitHubArchiveSource``.  Its staging belongs to the resolver; this
         method owns and removes its separate local-index staging directory.
         """
 
-        providers, limits = self._provider_dependencies()
+        providers, limits = self._provider_dependencies(providers=providers)
         deadline = min(
             self._monotonic() + ANALYSIS_TIMEOUT_SECONDS,
             execution_deadline if execution_deadline is not None else float("inf"),
@@ -630,8 +631,10 @@ class GuidedOnboardingService:
             },
         }
 
-    def _provider_dependencies(self) -> tuple[ProviderRuntime, ChatLimits]:
-        providers = self._providers_supplier()
+    def _provider_dependencies(
+        self, *, providers: ProviderRuntime | None = None
+    ) -> tuple[ProviderRuntime, ChatLimits]:
+        providers = providers or self._providers_supplier()
         limits = self._limits_supplier()
         if providers is None or limits is None:
             raise GuidedOnboardingError("MODEL_UNAVAILABLE")

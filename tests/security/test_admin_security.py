@@ -11,7 +11,7 @@ from reponpc.main import create_app
 from reponpc.runtime.database import RuntimeDatabase
 
 ORIGIN = "https://portfolio.example.com"
-PASSWORD = "npcx"
+PASSWORD = "correct horse battery staple"
 
 
 def _app(tmp_path: Path):
@@ -22,6 +22,7 @@ def _app(tmp_path: Path):
         username="admin",
         password_hash=PasswordHasher(type=Type.ID).hash(PASSWORD),
         identity_hmac_key=b"i" * 32,
+        deployment_profile="production",
         now=lambda: datetime(2026, 8, 13, tzinfo=UTC),
     )
     return create_app(admin_session_service=service, admin_origins=(ORIGIN,)), database
@@ -33,6 +34,7 @@ def _setup_app(tmp_path: Path):
     service = AdminSessionService(
         database=database,
         identity_hmac_key=b"i" * 32,
+        deployment_profile="production",
         now=lambda: datetime(2026, 8, 13, tzinfo=UTC),
     )
     return create_app(admin_session_service=service, admin_origins=(ORIGIN,)), database, service
@@ -93,46 +95,33 @@ def test_legacy_github_setup_route_cannot_consume_code_or_create_owner(
             json={"setup_code": setup_code},
         )
 
-    assert rejected.status_code == 403
-    assert rejected.json()["error"]["code"] == "SETUP_DENIED"
+    assert rejected.status_code == 410
+    assert rejected.json()["error"]["code"] == "GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED"
     assert setup_code not in rejected.text
     assert service.setup_status().setup_required is True
     assert service.setup_status().setup_code_available is True
 
 
-def test_github_oauth_setup_guide_has_no_secret_or_identity_material(tmp_path: Path) -> None:
+def test_github_oauth_setup_guide_is_removed_without_auth_or_secret_material(
+    tmp_path: Path,
+) -> None:
     app, _database = _app(tmp_path)
-    app.state.github_oauth_callback_url = f"{ORIGIN}/api/admin/github/callback"
-
     with TestClient(app, base_url=ORIGIN) as client:
         response = client.get("/api/admin/github/oauth/setup-guide")
-
-    assert response.status_code == 200
-    assert response.headers["cache-control"] == "no-store"
-    assert set(response.json()) == {
-        "configured",
-        "callback_url",
-        "documentation_url",
-        "next_step",
-    }
+    assert response.status_code == 410
+    assert response.json()["error"]["code"] == "GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED"
     assert "REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE" not in response.text
     assert "REPONPC_CREDENTIAL_ENCRYPTION_KEY_FILE" not in response.text
-    assert "token" not in response.text.casefold()
-    assert "owner" not in response.text.casefold()
 
 
 def test_github_oauth_setup_guide_rejects_cross_origin_callback_configuration(
     tmp_path: Path,
 ) -> None:
     app, _database = _app(tmp_path)
-    app.state.github_oauth_callback_url = "https://evil.example/api/admin/github/callback"
-
     with TestClient(app, base_url=ORIGIN) as client:
         response = client.get("/api/admin/github/oauth/setup-guide")
-
-    assert response.status_code == 200
-    assert response.json()["callback_url"] == f"{ORIGIN}/api/admin/github/callback"
-    assert "evil.example" not in response.text
+    assert response.status_code == 410
+    assert response.json()["error"]["code"] == "GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED"
 
 
 def test_setup_requires_same_origin_and_returns_generic_denial(tmp_path: Path) -> None:

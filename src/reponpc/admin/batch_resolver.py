@@ -1,11 +1,8 @@
 """Bounded GitHub metadata resolution and safe batch-preflight primitives.
 
-This module deliberately owns no database rows and no HTTP routes.  The admin
-orchestrator supplies decrypted *public-read* credentials from mutable runtime
-state, persists the resulting plan, and records a connection as unavailable on
-``GITHUB_CONNECTION_REQUIRED``.  Keeping those integrations outside this
-module prevents a resolver failure from silently changing credential purpose or
-mutating batch state.
+This module deliberately owns no database rows and no HTTP routes. Public
+repository resolution is anonymous; writeback credentials never enter this
+module's normal discovery or analysis path.
 """
 
 from __future__ import annotations
@@ -22,7 +19,7 @@ import threading
 import time
 import zipfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from enum import StrEnum
@@ -36,14 +33,13 @@ from reponpc.indexing.exclusions import SourceEntryKind
 from reponpc.indexing.sources import RepositoryBlob
 from reponpc.indexing.sources import ResolvedRepository as IndexedRepository
 
-GITHUB_GRAPHQL_URL: Final = "https://api.github.com/graphql"
+GITHUB_REST_API_URL: Final = "https://api.github.com"
 GITHUB_ARCHIVE_BASE_URL: Final = "https://api.github.com"
-MAX_GRAPHQL_PAGE_SIZE: Final = 100
-MAX_GRAPHQL_RESPONSE_BYTES: Final = 1024 * 1024
 DEFAULT_PREFLIGHT_PLAN_TTL: Final = timedelta(minutes=5)
 _SHA_RE: Final = re.compile(r"^[0-9a-f]{40}$")
 _OWNER_RE: Final = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
 _REPOSITORY_RE: Final = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
+_SECONDARY_LIMIT_RESPONSE_BYTES: Final = 64 * 1024
 
 
 class BatchResolverError(RuntimeError):
@@ -54,85 +50,10 @@ class BatchResolverError(RuntimeError):
         code: str,
         *,
         retry_after_seconds: int | None = None,
-        credential_id: int | None = None,
     ) -> None:
         self.code = code
         self.retry_after_seconds = retry_after_seconds
-        self.credential_id = credential_id
         super().__init__("GitHub batch resolver operation failed")
-
-
-class CredentialPurpose(StrEnum):
-    """The only credential purposes eligible for public repository analysis."""
-
-    IDENTITY_PUBLIC_READ = "identity_public_read"
-    PUBLIC_READ = "public_read"
-    WRITEBACK = "writeback"
-
-
-@dataclass(frozen=True, slots=True)
-class PublicReadCredential:
-    """Server-only decrypted credential candidate.
-
-    ``token`` is intentionally omitted from the representation so accidental
-    exception or test output cannot expose it.  Callers must never serialize
-    this object into an API response, event, log, or persisted preflight plan.
-    """
-
-    credential_id: int
-    purpose: CredentialPurpose
-    status: str
-    token: str = field(repr=False, compare=False)
-    github_login: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.credential_id <= 0 or not self.token:
-            raise ValueError("credential is invalid")
-        if self.status not in {"ready", "connection_required", "invalid"}:
-            raise ValueError("credential status is invalid")
-
-
-@dataclass(frozen=True, slots=True)
-class CredentialSelection:
-    """Safe selected-credential metadata suitable for a preflight response."""
-
-    credential_id: int
-    purpose: CredentialPurpose
-    github_login: str | None
-
-
-def select_public_read_credential(
-    candidates: Iterable[PublicReadCredential],
-) -> tuple[PublicReadCredential, CredentialSelection]:
-    """Select one ready read credential without a writeback fallback.
-
-    OAuth public-read credentials are preferred because a PAT is explicitly a
-    fallback connection method.  Within a purpose, the smallest persisted ID
-    makes the result deterministic.  A failed selected credential must be
-    marked connection-required by the caller and explicitly reconnected; this
-    function never tries a second credential after a request has begun.
-    """
-
-    available = tuple(
-        credential
-        for credential in candidates
-        if credential.status == "ready"
-        and credential.purpose
-        in {CredentialPurpose.IDENTITY_PUBLIC_READ, CredentialPurpose.PUBLIC_READ}
-    )
-    for purpose in (CredentialPurpose.IDENTITY_PUBLIC_READ, CredentialPurpose.PUBLIC_READ):
-        matching = sorted(
-            (credential for credential in available if credential.purpose is purpose),
-            key=lambda credential: credential.credential_id,
-        )
-        if matching:
-            selected = matching[0]
-            return selected, CredentialSelection(
-                credential_id=selected.credential_id,
-                purpose=selected.purpose,
-                github_login=selected.github_login,
-            )
-    raise BatchResolverError("GITHUB_CONNECTION_REQUIRED")
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +88,28 @@ class ResolvedRepository:
 
 
 @dataclass(frozen=True, slots=True)
+class RepositoryMetadataHint:
+    slug: str
+    node_id: str
+    default_branch: str
+    is_archived: bool
+
+
+class GitHubResolutionCache(Protocol):
+    def metadata(self, slug: str) -> RepositoryMetadataHint | None: ...
+
+    def resolved(self, selection: RepositorySelection) -> ResolvedRepository | None: ...
+
+    def save_metadata(self, metadata: RepositoryMetadataHint) -> None: ...
+
+    def save_resolved(
+        self, selection: RepositorySelection, repository: ResolvedRepository
+    ) -> None: ...
+
+    def discard(self, selections: Sequence[RepositorySelection]) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
 class ResolutionBlocker:
     slug: str
     code: str
@@ -187,67 +130,12 @@ class GitHubHttpResponse:
     headers: Mapping[str, str]
 
 
-class GitHubGraphQLTransport(Protocol):
-    def request(
-        self,
-        *,
-        method: str,
-        url: str,
-        headers: Mapping[str, str],
-        body: bytes | None,
-    ) -> GitHubHttpResponse: ...
-
-
 class _NoRedirect(HTTPRedirectHandler):
     """Return the redirect response to the caller instead of following it."""
 
     def redirect_request(self, *args: object, **kwargs: object) -> Request | None:
         del args, kwargs
         return None
-
-
-class UrllibGitHubGraphQLTransport:
-    """Production GraphQL transport restricted to GitHub's fixed API endpoint."""
-
-    def __init__(self, *, timeout_seconds: float = 20.0) -> None:
-        if timeout_seconds <= 0:
-            raise ValueError("GitHub GraphQL timeout must be positive")
-        self._timeout_seconds = timeout_seconds
-
-    def request(
-        self,
-        *,
-        method: str,
-        url: str,
-        headers: Mapping[str, str],
-        body: bytes | None,
-    ) -> GitHubHttpResponse:
-        _validate_github_api_url(url, expected_path="/graphql")
-        request = Request(url, data=body, headers=dict(headers), method=method)
-        try:
-            with build_opener(_NoRedirect()).open(
-                request, timeout=self._timeout_seconds
-            ) as response:
-                _validate_github_api_url(response.geturl(), expected_path="/graphql")
-                payload = response.read(MAX_GRAPHQL_RESPONSE_BYTES + 1)
-                if len(payload) > MAX_GRAPHQL_RESPONSE_BYTES:
-                    raise BatchResolverError("GITHUB_ERROR")
-                return GitHubHttpResponse(
-                    status=int(response.status),
-                    body=payload,
-                    headers={key: value for key, value in response.headers.items()},
-                )
-        except BatchResolverError:
-            raise
-        except HTTPError as exc:
-            payload = exc.read(MAX_GRAPHQL_RESPONSE_BYTES + 1)
-            return GitHubHttpResponse(
-                status=int(exc.code),
-                body=payload if len(payload) <= MAX_GRAPHQL_RESPONSE_BYTES else b"",
-                headers={key: value for key, value in exc.headers.items()},
-            )
-        except (URLError, OSError, TimeoutError) as exc:
-            raise BatchResolverError("GITHUB_ERROR") from exc
 
 
 class GitHubArchiveTransport(Protocol):
@@ -257,18 +145,17 @@ class GitHubArchiveTransport(Protocol):
         self,
         *,
         archive_url: str,
-        credential: PublicReadCredential,
+        repository: ResolvedRepository,
         limiter: GitHubRateLimiter,
     ) -> Iterable[bytes]: ...
 
 
 class UrllibGitHubArchiveTransport:
-    """Stream one immutable archive without forwarding credentials on redirects.
+    """Stream one immutable archive without sending authorization headers.
 
     GitHub's archive endpoint normally redirects to ``codeload.github.com``.
     We make that redirect explicit, accept only that single HTTPS host, and
-    deliberately remove Authorization on the second request.  This keeps the
-    OAuth/PAT scoped to the fixed GitHub API host.
+    deliberately construct both requests from fixed non-secret headers.
     """
 
     def __init__(self, *, timeout_seconds: float = 20.0, chunk_bytes: int = 64 * 1024) -> None:
@@ -281,34 +168,22 @@ class UrllibGitHubArchiveTransport:
         self,
         *,
         archive_url: str,
-        credential: PublicReadCredential,
+        repository: ResolvedRepository,
         limiter: GitHubRateLimiter,
     ) -> Iterable[bytes]:
-        _validate_exact_archive_url(archive_url)
-        if (
-            credential.purpose
-            not in {
-                CredentialPurpose.IDENTITY_PUBLIC_READ,
-                CredentialPurpose.PUBLIC_READ,
-            }
-            or credential.status != "ready"
-        ):
-            raise BatchResolverError(
-                "GITHUB_CONNECTION_REQUIRED", credential_id=credential.credential_id
-            )
+        _validate_exact_archive_url(archive_url, repository=repository)
         admission = limiter.admit(GitHubRateResource.CORE)
         if not admission.allowed:
             raise BatchResolverError(
                 "GITHUB_RATE_LIMITED",
                 retry_after_seconds=admission.retry_after_seconds,
-                credential_id=credential.credential_id,
             )
 
         request = Request(
             archive_url,
             headers={
                 "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {credential.token}",
+                "User-Agent": "RepoNPC-anonymous-rest",
                 "X-GitHub-Api-Version": "2022-11-28",
             },
             method="GET",
@@ -320,23 +195,36 @@ class UrllibGitHubArchiveTransport:
                 response = opener.open(request, timeout=self._timeout_seconds)
             except HTTPError as exc:
                 if exc.code not in {301, 302, 303, 307, 308}:
-                    self._raise_archive_http_error(exc, credential, limiter)
+                    self._raise_archive_http_error(exc, limiter)
+                limiter.observe(
+                    resource=GitHubRateResource.CORE,
+                    status=int(exc.code),
+                    headers={key: value for key, value in exc.headers.items()},
+                )
                 location = exc.headers.get("Location")
-                _validate_archive_redirect(location)
+                _validate_archive_redirect(location, repository=repository)
                 redirect = Request(
                     str(location),
-                    headers={"Accept": "application/vnd.github+json"},
+                    headers={
+                        "Accept": "application/vnd.github+json",
+                        "User-Agent": "RepoNPC-anonymous-rest",
+                    },
                     method="GET",
                 )
-                response = opener.open(redirect, timeout=self._timeout_seconds)
-            _validate_archive_final_url(response.geturl())
+                try:
+                    response = opener.open(redirect, timeout=self._timeout_seconds)
+                except HTTPError as redirect_error:
+                    if redirect_error.code in {301, 302, 303, 307, 308}:
+                        raise BatchResolverError("ARCHIVE_UNSAFE") from redirect_error
+                    raise
+            _validate_archive_final_url(response.geturl(), repository=repository)
             limiter.observe(
                 resource=GitHubRateResource.CORE,
                 status=int(response.status),
                 headers={key: value for key, value in response.headers.items()},
             )
             if int(response.status) != 200:
-                raise BatchResolverError("GITHUB_ERROR", credential_id=credential.credential_id)
+                raise BatchResolverError("GITHUB_ERROR")
             while True:
                 chunk = response.read(self._chunk_bytes)
                 if not chunk:
@@ -345,11 +233,11 @@ class UrllibGitHubArchiveTransport:
         except BatchResolverError:
             raise
         except HTTPError as exc:
-            self._raise_archive_http_error(exc, credential, limiter)
-        except (URLError, OSError, TimeoutError) as exc:
-            raise BatchResolverError(
-                "GITHUB_ERROR", credential_id=credential.credential_id
-            ) from exc
+            self._raise_archive_http_error(exc, limiter)
+        except TimeoutError as exc:
+            raise BatchResolverError("GITHUB_TIMEOUT") from exc
+        except (URLError, OSError) as exc:
+            raise BatchResolverError("GITHUB_ERROR") from exc
         finally:
             if response is not None:
                 response.close()
@@ -357,7 +245,6 @@ class UrllibGitHubArchiveTransport:
     @staticmethod
     def _raise_archive_http_error(
         error: HTTPError,
-        credential: PublicReadCredential,
         limiter: GitHubRateLimiter,
     ) -> None:
         headers = {key: value for key, value in error.headers.items()}
@@ -366,22 +253,29 @@ class UrllibGitHubArchiveTransport:
             status=int(error.code),
             headers=headers,
         )
-        if error.code == 401:
-            raise BatchResolverError(
-                "GITHUB_CONNECTION_REQUIRED", credential_id=credential.credential_id
+        if (
+            error.code == 403
+            and _is_secondary_limit_body(error.read(_SECONDARY_LIMIT_RESPONSE_BYTES + 1))
+            and limiter.admit(GitHubRateResource.CORE).allowed
+        ):
+            headers.setdefault("Retry-After", "60")
+            limiter.observe(
+                resource=GitHubRateResource.CORE,
+                status=int(error.code),
+                headers=headers,
             )
+        if error.code == 401:
+            raise BatchResolverError("GITHUB_ERROR")
         admission = limiter.admit(GitHubRateResource.CORE)
         if error.code in {403, 429} and not admission.allowed:
             raise BatchResolverError(
                 "GITHUB_RATE_LIMITED",
                 retry_after_seconds=admission.retry_after_seconds,
-                credential_id=credential.credential_id,
             )
-        raise BatchResolverError("GITHUB_ERROR", credential_id=credential.credential_id)
+        raise BatchResolverError("GITHUB_ERROR")
 
 
 class GitHubRateResource(StrEnum):
-    GRAPHQL = "graphql"
     CORE = "core"
 
 
@@ -404,12 +298,11 @@ class RateAdmission:
 class GitHubRateStatePersistence(Protocol):
     """Sanitized runtime persistence for shared rate admission state."""
 
-    def load(self) -> tuple[RateBudget, RateBudget, datetime | None]: ...
+    def load(self) -> tuple[RateBudget, datetime | None]: ...
 
     def save(
         self,
         *,
-        graphql: RateBudget,
         core: RateBudget,
         secondary_retry_at: datetime | None,
     ) -> None: ...
@@ -418,9 +311,8 @@ class GitHubRateStatePersistence(Protocol):
 class GitHubRateLimiter:
     """Read GitHub headers and expose non-blocking admission decisions.
 
-    GraphQL and REST/core primary budgets are independent.  GitHub secondary
-    limits are intentionally shared, so one response can pause both request
-    classes.  The limiter never sleeps or calls ``/rate_limit``; schedulers use
+    The limiter tracks only GitHub REST/core plus secondary-limit pauses. It
+    never sleeps or calls ``/rate_limit``; schedulers use
     the returned retry time to pause admission without a busy loop.
     """
 
@@ -437,17 +329,13 @@ class GitHubRateLimiter:
         self._now = now
         self._persistence = persistence
         self._budgets = {
-            GitHubRateResource.GRAPHQL: RateBudget(GitHubRateResource.GRAPHQL, None, None, None),
-            GitHubRateResource.CORE: RateBudget(GitHubRateResource.CORE, None, None, None),
+            GitHubRateResource.CORE: RateBudget(GitHubRateResource.CORE, None, None, None)
         }
         self._secondary_retry_at: datetime | None = None
         self._lock = threading.RLock()
         if persistence is not None:
-            graphql, core, secondary = persistence.load()
-            self._budgets = {
-                GitHubRateResource.GRAPHQL: graphql,
-                GitHubRateResource.CORE: core,
-            }
+            core, secondary = persistence.load()
+            self._budgets = {GitHubRateResource.CORE: core}
             self._secondary_retry_at = secondary
 
     def observe(
@@ -464,11 +352,7 @@ class GitHubRateLimiter:
         normalized = _normalized_headers(headers)
         reported_resource = normalized.get("x-ratelimit-resource", "").casefold()
         effective_resource = (
-            GitHubRateResource.GRAPHQL
-            if reported_resource == GitHubRateResource.GRAPHQL
-            else GitHubRateResource.CORE
-            if reported_resource == GitHubRateResource.CORE
-            else resource
+            GitHubRateResource.CORE if reported_resource == GitHubRateResource.CORE else resource
         )
         with self._lock:
             prior = self._budgets[effective_resource]
@@ -533,188 +417,266 @@ class GitHubRateLimiter:
                 reason=reason,
             )
 
-    def snapshot(self) -> tuple[RateBudget, RateBudget, datetime | None]:
+    def admit_cost(
+        self,
+        resource: GitHubRateResource,
+        cost: int,
+        *,
+        observed_at: datetime | None = None,
+    ) -> RateAdmission:
+        """Admit a non-resumable request group before its first request."""
+
+        if isinstance(cost, bool) or cost < 0:
+            raise ValueError("GitHub request cost is invalid")
+        admission = self.admit(resource, observed_at=observed_at)
+        if not admission.allowed or cost == 0:
+            return admission
+        now = _as_utc(observed_at or self._now())
+        with self._lock:
+            budget = self._budgets[resource]
+            if (
+                budget.remaining is None
+                or budget.reset_at is None
+                or budget.reset_at <= now
+                or budget.remaining - cost >= self._safety_reserve
+            ):
+                return admission
+            return RateAdmission(
+                False,
+                retry_at=budget.reset_at,
+                retry_after_seconds=max(1, math.ceil((budget.reset_at - now).total_seconds())),
+                reason="primary",
+            )
+
+    def snapshot(self) -> tuple[RateBudget, datetime | None]:
         """Return safe rate metadata for preflight responses and persistence."""
 
         with self._lock:
-            return (
-                self._budgets[GitHubRateResource.GRAPHQL],
-                self._budgets[GitHubRateResource.CORE],
-                self._secondary_retry_at,
-            )
+            return self._budgets[GitHubRateResource.CORE], self._secondary_retry_at
 
     def _persist(self) -> None:
         if self._persistence is not None:
             self._persistence.save(
-                graphql=self._budgets[GitHubRateResource.GRAPHQL],
                 core=self._budgets[GitHubRateResource.CORE],
                 secondary_retry_at=self._secondary_retry_at,
             )
 
 
-class GitHubGraphQLMetadataResolver:
-    """Resolve one page of confirmed public repositories through GraphQL."""
+class GitHubRESTTransport(Protocol):
+    """Minimal transport for unauthenticated GitHub REST calls."""
+
+    def request(
+        self, *, method: str, url: str, headers: Mapping[str, str], body: bytes | None
+    ) -> GitHubHttpResponse: ...
+
+
+class UrllibGitHubRESTTransport:
+    """Bounded fixed-origin REST transport; never sends credentials."""
+
+    def __init__(
+        self, *, timeout_seconds: float = 20.0, max_response_bytes: int = 8 * 1024 * 1024
+    ) -> None:
+        if timeout_seconds <= 0 or max_response_bytes <= 0:
+            raise ValueError("REST transport limits must be positive")
+        self._timeout_seconds = timeout_seconds
+        self._max_response_bytes = max_response_bytes
+
+    def request(
+        self, *, method: str, url: str, headers: Mapping[str, str], body: bytes | None
+    ) -> GitHubHttpResponse:
+        del body
+        _validate_github_rest_url(url)
+        safe_headers = {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "RepoNPC-anonymous-rest",
+        }
+        safe_headers.update(
+            {
+                k: v
+                for k, v in headers.items()
+                if k.casefold() in {"accept", "x-github-api-version", "user-agent"}
+            }
+        )
+        request = Request(url, headers=safe_headers, method=method)
+        try:
+            with build_opener(_NoRedirect()).open(
+                request, timeout=self._timeout_seconds
+            ) as response:
+                _validate_github_rest_url(response.geturl())
+                payload = response.read(self._max_response_bytes + 1)
+                if len(payload) > self._max_response_bytes:
+                    raise BatchResolverError("GITHUB_ERROR")
+                return GitHubHttpResponse(
+                    int(response.status), payload, dict(response.headers.items())
+                )
+        except BatchResolverError:
+            raise
+        except HTTPError as exc:
+            payload = exc.read(self._max_response_bytes + 1)
+            return GitHubHttpResponse(
+                int(exc.code), payload[: self._max_response_bytes], dict(exc.headers.items())
+            )
+        except TimeoutError as exc:
+            raise BatchResolverError("GITHUB_TIMEOUT") from exc
+        except (URLError, OSError) as exc:
+            raise BatchResolverError("GITHUB_ERROR") from exc
+
+
+class GitHubRESTMetadataResolver:
+    """Resolve public repositories through anonymous REST and exact full SHAs."""
 
     def __init__(
         self,
         *,
-        transport: GitHubGraphQLTransport,
+        transport: GitHubRESTTransport,
         limiter: GitHubRateLimiter,
-        api_url: str = GITHUB_GRAPHQL_URL,
+        api_url: str = GITHUB_REST_API_URL,
         allow_archived: bool = False,
+        cache: GitHubResolutionCache | None = None,
     ) -> None:
-        _validate_github_api_url(api_url, expected_path="/graphql")
-        self._transport = transport
-        self._limiter = limiter
-        self._api_url = api_url
-        self._allow_archived = allow_archived
+        _validate_github_rest_url(api_url, path="")
+        self._transport, self._limiter, self._api_url, self._allow_archived = (
+            transport,
+            limiter,
+            api_url.rstrip("/"),
+            allow_archived,
+        )
+        self._cache = cache
 
     def resolve_page(
         self,
         *,
         selections: Sequence[RepositorySelection],
-        credential: PublicReadCredential,
     ) -> MetadataResolution:
-        """Resolve at most 100 confirmed selections without source retrieval."""
-
-        if not 1 <= len(selections) <= MAX_GRAPHQL_PAGE_SIZE:
-            raise ValueError("GraphQL metadata page must contain 1 to 100 repositories")
-        if any(not selection.confirmed for selection in selections):
-            raise ValueError("unconfirmed repositories cannot be resolved for analysis")
-        if (
-            credential.purpose
-            not in {
-                CredentialPurpose.IDENTITY_PUBLIC_READ,
-                CredentialPurpose.PUBLIC_READ,
-            }
-            or credential.status != "ready"
-        ):
-            raise BatchResolverError(
-                "GITHUB_CONNECTION_REQUIRED", credential_id=credential.credential_id
-            )
-
-        admission = self._limiter.admit(GitHubRateResource.GRAPHQL)
-        if not admission.allowed:
-            raise BatchResolverError(
-                "RATE_LIMITED",
-                retry_after_seconds=admission.retry_after_seconds,
-                credential_id=credential.credential_id,
-            )
-
-        query, variables = build_metadata_query(selections)
-        request_body = json.dumps(
-            {"query": query, "variables": variables}, separators=(",", ":")
-        ).encode("utf-8")
-        try:
-            response = self._transport.request(
-                method="POST",
-                url=self._api_url,
-                headers={
-                    "Accept": "application/vnd.github+json",
-                    "Authorization": f"Bearer {credential.token}",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                    "Content-Type": "application/json",
-                },
-                body=request_body,
-            )
-        except BatchResolverError:
-            raise
-        except Exception as exc:
-            raise BatchResolverError(
-                "GITHUB_ERROR", credential_id=credential.credential_id
-            ) from exc
-        self._limiter.observe(
-            resource=GitHubRateResource.GRAPHQL,
-            status=response.status,
-            headers=response.headers,
-        )
-        if response.status == 401:
-            raise BatchResolverError(
-                "GITHUB_CONNECTION_REQUIRED", credential_id=credential.credential_id
-            )
-        admission = self._limiter.admit(GitHubRateResource.GRAPHQL)
-        if response.status in {403, 429} and not admission.allowed:
-            raise BatchResolverError(
-                "RATE_LIMITED",
-                retry_after_seconds=admission.retry_after_seconds,
-                credential_id=credential.credential_id,
-            )
-        if response.status != 200 or len(response.body) > MAX_GRAPHQL_RESPONSE_BYTES:
-            raise BatchResolverError("GITHUB_ERROR", credential_id=credential.credential_id)
-        try:
-            payload = json.loads(response.body.decode("utf-8"))
-            data = payload["data"]
-        except (KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise BatchResolverError(
-                "GITHUB_ERROR", credential_id=credential.credential_id
-            ) from exc
-        if not isinstance(data, dict):
-            raise BatchResolverError("GITHUB_ERROR", credential_id=credential.credential_id)
-        resolution = _metadata_resolution(
-            selections=selections,
-            data=data,
-            allow_archived=self._allow_archived,
-        )
-        return MetadataResolution(
-            _deduplicate_repositories(resolution.repositories), resolution.blockers
-        )
+        if not 1 <= len(selections) <= 50:
+            raise ValueError("REST metadata page must contain 1 to 50 repositories")
+        repositories: list[ResolvedRepository] = []
+        blockers: list[ResolutionBlocker] = []
+        for selection in selections:
+            if not selection.confirmed:
+                blockers.append(ResolutionBlocker(selection.slug, "CONFIRMATION_REQUIRED"))
+                continue
+            try:
+                cached = self._cache.resolved(selection) if self._cache is not None else None
+                if cached is not None:
+                    repositories.append(cached)
+                    continue
+                owner, name = selection.slug.split("/", 1)
+                hint = self._cache.metadata(selection.slug) if self._cache is not None else None
+                request_cost = 1 if hint is not None else 2
+                admission = self._limiter.admit_cost(GitHubRateResource.CORE, request_cost)
+                if not admission.allowed:
+                    raise BatchResolverError(
+                        "GITHUB_RATE_LIMITED",
+                        retry_after_seconds=admission.retry_after_seconds,
+                    )
+                if hint is None:
+                    metadata = self._get(f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}")
+                    if metadata.get("private") is not False:
+                        raise BatchResolverError("NOT_FOUND")
+                    default_branch = metadata.get("default_branch")
+                    node_id = metadata.get("id")
+                    archived = metadata.get("archived")
+                    if (
+                        not isinstance(default_branch, str)
+                        or not isinstance(node_id, (str, int))
+                        or not isinstance(archived, bool)
+                    ):
+                        raise BatchResolverError("NOT_FOUND")
+                    hint = RepositoryMetadataHint(
+                        selection.slug, str(node_id), default_branch, archived
+                    )
+                    if self._cache is not None:
+                        self._cache.save_metadata(hint)
+                requested = selection.ref or hint.default_branch
+                commit = self._get(
+                    f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
+                    f"/commits/{quote(requested, safe='')}"
+                )
+                sha = commit.get("sha")
+                if not isinstance(sha, str) or not _SHA_RE.fullmatch(sha):
+                    raise BatchResolverError("NOT_FOUND")
+                if hint.is_archived and not self._allow_archived:
+                    blockers.append(ResolutionBlocker(selection.slug, "ARCHIVED_NOT_ALLOWED"))
+                    continue
+                repositories.append(
+                    ResolvedRepository(
+                        selection.slug,
+                        hint.node_id,
+                        hint.default_branch,
+                        sha,
+                        hint.is_archived,
+                        f"{self._api_url}/repos/{quote(owner, safe='')}"
+                        f"/{quote(name, safe='')}/tarball/{sha}",
+                    )
+                )
+                if self._cache is not None:
+                    self._cache.save_resolved(selection, repositories[-1])
+            except BatchResolverError as exc:
+                if exc.code != "NOT_FOUND":
+                    raise
+                blockers.append(ResolutionBlocker(selection.slug, exc.code))
+            except (KeyError, TypeError, ValueError):
+                blockers.append(ResolutionBlocker(selection.slug, "NOT_FOUND"))
+        return MetadataResolution(tuple(repositories), tuple(blockers))
 
     def resolve_all(
         self,
         *,
         selections: Sequence[RepositorySelection],
-        credential: PublicReadCredential,
     ) -> MetadataResolution:
-        """Resolve every selection in GraphQL pages of at most 100 entries."""
+        return self.resolve_page(selections=selections)
 
-        repositories: list[ResolvedRepository] = []
-        blockers: list[ResolutionBlocker] = []
-        for start in range(0, len(selections), MAX_GRAPHQL_PAGE_SIZE):
-            page = self.resolve_page(
-                selections=selections[start : start + MAX_GRAPHQL_PAGE_SIZE], credential=credential
+    def finish_attempt(self, selections: Sequence[RepositorySelection]) -> None:
+        """Consume partial mutable-ref hints after a complete preflight attempt."""
+
+        if self._cache is not None:
+            self._cache.discard(selections)
+
+    def _get(self, path: str) -> Mapping[str, object]:
+        admission = self._limiter.admit(GitHubRateResource.CORE)
+        if not admission.allowed:
+            raise BatchResolverError(
+                "GITHUB_RATE_LIMITED", retry_after_seconds=admission.retry_after_seconds
             )
-            repositories.extend(page.repositories)
-            blockers.extend(page.blockers)
-        return MetadataResolution(_deduplicate_repositories(repositories), tuple(blockers))
-
-
-def build_metadata_query(
-    selections: Sequence[RepositorySelection],
-) -> tuple[str, dict[str, str]]:
-    """Build a variable-only GraphQL page; slugs/refs never become query text."""
-
-    definitions: list[str] = []
-    fields: list[str] = []
-    variables: dict[str, str] = {}
-    for index, selection in enumerate(selections):
-        owner, repository = selection.slug.split("/", 1)
-        owner_name = f"owner{index}"
-        repository_name = f"repository{index}"
-        definitions.extend((f"${owner_name}: String!", f"${repository_name}: String!"))
-        variables[owner_name] = owner
-        variables[repository_name] = repository
-        object_field = ""
-        if selection.ref is not None:
-            ref_name = f"ref{index}"
-            definitions.append(f"${ref_name}: String!")
-            variables[ref_name] = selection.ref
-            object_field = (
-                f" object(expression: ${ref_name}) {{"
-                " ... on Commit { oid }"
-                " ... on Tag { target { ... on Commit { oid } } }"
-                " }"
-            )
-        fields.append(
-            f"repo{index}: repository(owner: ${owner_name}, name: ${repository_name}) {{"
-            " id nameWithOwner isPrivate isArchived"
-            " defaultBranchRef { name target { ... on Commit { oid } } }"
-            f"{object_field}"
-            " }"
+        url = self._api_url + path
+        _validate_github_rest_url(url)
+        response = self._transport.request(method="GET", url=url, headers={}, body=None)
+        self._limiter.observe(
+            resource=GitHubRateResource.CORE, status=response.status, headers=response.headers
         )
-    return (
-        f"query BatchRepositoryMetadata({', '.join(definitions)}) {{ {' '.join(fields)} }}",
-        variables,
-    )
+        if (
+            response.status in {403, 429}
+            and not self._limiter.admit(GitHubRateResource.CORE).allowed
+        ):
+            admission = self._limiter.admit(GitHubRateResource.CORE)
+            raise BatchResolverError(
+                "GITHUB_RATE_LIMITED", retry_after_seconds=admission.retry_after_seconds
+            )
+        if response.status in {401, 404}:
+            raise BatchResolverError("NOT_FOUND")
+        if response.status == 403 and _is_secondary_limit_body(response.body):
+            headers = dict(response.headers)
+            headers.setdefault("Retry-After", "60")
+            self._limiter.observe(
+                resource=GitHubRateResource.CORE, status=response.status, headers=headers
+            )
+            admission = self._limiter.admit(GitHubRateResource.CORE)
+            raise BatchResolverError(
+                "GITHUB_RATE_LIMITED", retry_after_seconds=admission.retry_after_seconds
+            )
+        if response.status == 403:
+            raise BatchResolverError("NOT_FOUND")
+        if response.status != 200:
+            raise BatchResolverError("GITHUB_ERROR")
+        try:
+            payload = json.loads(response.body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise BatchResolverError("GITHUB_ERROR") from exc
+        if not isinstance(payload, Mapping):
+            raise BatchResolverError("GITHUB_ERROR")
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -869,7 +831,6 @@ class GitHubArchiveSource:
         self,
         *,
         repository: ResolvedRepository,
-        credential: PublicReadCredential,
         cancel_requested: Callable[[], bool] | None = None,
         deadline: float | None = None,
         monotonic: Callable[[], float] = time.monotonic,
@@ -880,7 +841,7 @@ class GitHubArchiveSource:
         staged = stage_archive_stream(
             self._transport.stream(
                 archive_url=repository.archive_url,
-                credential=credential,
+                repository=repository,
                 limiter=self._limiter,
             ),
             staging_root=self._staging_root,
@@ -975,10 +936,8 @@ class BatchPreflightPlan:
     plan_id: str
     expires_at: datetime
     selection_hash: str
-    selected_credential: CredentialSelection | None
     repositories: tuple[ResolvedRepository, ...]
     cache_predictions: Mapping[str, CachePrediction]
-    graphql_budget: RateBudget
     core_budget: RateBudget
     secondary_retry_at: datetime | None
     provider_ready: bool
@@ -995,7 +954,7 @@ class BatchPreflightPlanner:
     def __init__(
         self,
         *,
-        resolver: GitHubGraphQLMetadataResolver,
+        resolver: GitHubRESTMetadataResolver,
         limiter: GitHubRateLimiter,
         plan_ttl: timedelta = DEFAULT_PREFLIGHT_PLAN_TTL,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -1013,7 +972,6 @@ class BatchPreflightPlanner:
         self,
         *,
         selections: Sequence[RepositorySelection],
-        credentials: Iterable[PublicReadCredential],
         cache_prediction: Callable[[ResolvedRepository], CachePrediction],
         provider: ProviderReadiness,
         capacity: BatchCapacity,
@@ -1028,14 +986,10 @@ class BatchPreflightPlanner:
             for selection in selections
             if not selection.confirmed
         ]
-        selected: CredentialSelection | None = None
         resolution = MetadataResolution((), ())
         if not blockers:
             try:
-                credential, selected = select_public_read_credential(credentials)
-                resolution = self._resolver.resolve_all(
-                    selections=selections, credential=credential
-                )
+                resolution = self._resolver.resolve_all(selections=selections)
             except BatchResolverError as exc:
                 blockers.append(ResolutionBlocker("github", exc.code))
         blockers.extend(resolution.blockers)
@@ -1051,21 +1005,33 @@ class BatchPreflightPlanner:
             predictions[f"{repository.slug}@{repository.commit_sha}"] = prediction
             if repository.is_archived:
                 warnings.append(f"ARCHIVED_REPOSITORY:{repository.slug}")
+        archive_requests = sum(
+            not prediction.derived_index_hit for prediction in predictions.values()
+        )
+        if archive_requests:
+            admission = self._limiter.admit_cost(GitHubRateResource.CORE, 1)
+            if not admission.allowed:
+                blockers.append(ResolutionBlocker("github", "GITHUB_RATE_LIMITED"))
+        if not any(
+            blocker.slug == "github"
+            and blocker.code in {"GITHUB_ERROR", "GITHUB_RATE_LIMITED", "GITHUB_TIMEOUT"}
+            for blocker in blockers
+        ):
+            self._resolver.finish_attempt(selections)
+        warnings.append(f"ANONYMOUS_ARCHIVE_REQUESTS:{archive_requests}")
         duration = (
             _estimate_duration(tuple(predictions.values()), capacity.effective_work_items)
             if not blockers
             else None
         )
-        graphql_budget, core_budget, secondary_retry_at = self._limiter.snapshot()
+        core_budget, secondary_retry_at = self._limiter.snapshot()
         now = _as_utc(self._now())
         return BatchPreflightPlan(
             plan_id=self._plan_id_factory(),
             expires_at=now + self._plan_ttl,
             selection_hash=selection_hash,
-            selected_credential=selected,
             repositories=resolution.repositories,
             cache_predictions=predictions,
-            graphql_budget=graphql_budget,
             core_budget=core_budget,
             secondary_retry_at=secondary_retry_at,
             provider_ready=provider.ready,
@@ -1120,106 +1086,6 @@ def normalize_repository_slug(value: str) -> str:
     return f"{parts[0]}/{parts[1]}"
 
 
-def _metadata_resolution(
-    *,
-    selections: Sequence[RepositorySelection],
-    data: Mapping[str, object],
-    allow_archived: bool,
-) -> MetadataResolution:
-    repositories: list[ResolvedRepository] = []
-    blockers: list[ResolutionBlocker] = []
-    for index, selection in enumerate(selections):
-        if not selection.confirmed:
-            blockers.append(ResolutionBlocker(selection.slug, "CONFIRMATION_REQUIRED"))
-            continue
-        raw = data.get(f"repo{index}")
-        if raw is None:
-            blockers.append(ResolutionBlocker(selection.slug, "NOT_FOUND"))
-            continue
-        if not isinstance(raw, Mapping):
-            blockers.append(ResolutionBlocker(selection.slug, "GITHUB_ERROR"))
-            continue
-        is_private = raw.get("isPrivate")
-        if is_private is True:
-            blockers.append(ResolutionBlocker(selection.slug, "NOT_FOUND"))
-            continue
-        if is_private is not False:
-            blockers.append(ResolutionBlocker(selection.slug, "GITHUB_ERROR"))
-            continue
-        try:
-            reported_slug = str(raw["nameWithOwner"])
-            if normalize_repository_slug(reported_slug).casefold() != selection.slug.casefold():
-                raise ValueError
-            node_id = _required_text(raw, "id")
-            branch = raw.get("defaultBranchRef")
-            if not isinstance(branch, Mapping):
-                raise ValueError
-            default_branch = _required_text(branch, "name")
-            commit_sha = _commit_from_repository(raw, selection.ref is not None)
-            is_archived = raw.get("isArchived")
-            if not isinstance(is_archived, bool):
-                raise ValueError
-        except (KeyError, TypeError, ValueError):
-            blockers.append(ResolutionBlocker(selection.slug, "GITHUB_ERROR"))
-            continue
-        if is_archived and not allow_archived:
-            blockers.append(ResolutionBlocker(selection.slug, "ARCHIVED_NOT_ALLOWED"))
-            continue
-        owner, repository = selection.slug.split("/", 1)
-        archive_url = (
-            f"{GITHUB_ARCHIVE_BASE_URL}/repos/{quote(owner, safe='')}/"
-            f"{quote(repository, safe='')}/tarball/{commit_sha}"
-        )
-        repositories.append(
-            ResolvedRepository(
-                slug=selection.slug,
-                node_id=node_id,
-                default_branch=default_branch,
-                commit_sha=commit_sha,
-                is_archived=is_archived,
-                archive_url=archive_url,
-            )
-        )
-    return MetadataResolution(tuple(repositories), tuple(blockers))
-
-
-def _deduplicate_repositories(
-    repositories: Iterable[ResolvedRepository],
-) -> tuple[ResolvedRepository, ...]:
-    unique: dict[tuple[str, str], ResolvedRepository] = {}
-    for repository in repositories:
-        unique.setdefault((repository.slug.casefold(), repository.commit_sha), repository)
-    return tuple(unique.values())
-
-
-def _commit_from_repository(repository: Mapping[str, object], requested_ref: bool) -> str:
-    candidate: object = (
-        repository.get("object") if requested_ref else repository.get("defaultBranchRef")
-    )
-    if not isinstance(candidate, Mapping):
-        raise ValueError("commit target is missing")
-    if not requested_ref:
-        candidate = candidate.get("target")
-    if not isinstance(candidate, Mapping):
-        raise ValueError("commit target is missing")
-    direct = candidate.get("oid")
-    if isinstance(direct, str) and _SHA_RE.fullmatch(direct):
-        return direct
-    target = candidate.get("target")
-    if isinstance(target, Mapping):
-        nested = target.get("oid")
-        if isinstance(nested, str) and _SHA_RE.fullmatch(nested):
-            return nested
-    raise ValueError("commit SHA is invalid")
-
-
-def _required_text(value: Mapping[str, object], key: str) -> str:
-    candidate = value[key]
-    if not isinstance(candidate, str) or not candidate:
-        raise ValueError("metadata text is invalid")
-    return candidate
-
-
 def _normalized_headers(headers: Mapping[str, str]) -> dict[str, str]:
     return {
         str(key).casefold(): str(value).strip()
@@ -1265,7 +1131,7 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
-def _validate_github_api_url(value: str, *, expected_path: str) -> None:
+def _validate_github_rest_url(value: str, *, path: str | None = None) -> None:
     parsed = urlsplit(value)
     if (
         parsed.scheme != "https"
@@ -1273,11 +1139,10 @@ def _validate_github_api_url(value: str, *, expected_path: str) -> None:
         or parsed.port not in {None, 443}
         or parsed.username
         or parsed.password
-        or parsed.path != expected_path
         or parsed.query
         or parsed.fragment
-    ):
-        raise ValueError("GitHub API URL is invalid")
+    ) or (path is not None and parsed.path != path):
+        raise ValueError("GitHub REST URL is invalid")
 
 
 def _validate_exact_archive_url(
@@ -1310,7 +1175,7 @@ def _validate_exact_archive_url(
         raise BatchResolverError("ARCHIVE_UNSAFE")
 
 
-def _validate_archive_redirect(value: str | None) -> None:
+def _validate_archive_redirect(value: str | None, *, repository: ResolvedRepository) -> None:
     if not value:
         raise BatchResolverError("ARCHIVE_UNSAFE")
     parsed = urlsplit(value)
@@ -1318,16 +1183,29 @@ def _validate_archive_redirect(value: str | None) -> None:
         parsed.scheme != "https"
         or parsed.hostname != "codeload.github.com"
         or parsed.port not in {None, 443}
-        or not parsed.path.startswith("/")
+        or parsed.query
         or parsed.username
         or parsed.password
         or parsed.fragment
     ):
         raise BatchResolverError("ARCHIVE_UNSAFE")
+    parts = parsed.path.split("/")
+    if (
+        len(parts) != 5
+        or parts[1] + "/" + parts[2] != repository.slug
+        or parts[3] != "legacy.tar.gz"
+        or parts[4] != repository.commit_sha
+    ):
+        raise BatchResolverError("ARCHIVE_UNSAFE")
 
 
-def _validate_archive_final_url(value: str) -> None:
-    _validate_archive_redirect(value)
+def _validate_archive_final_url(value: str, *, repository: ResolvedRepository) -> None:
+    _validate_archive_redirect(value, repository=repository)
+
+
+def _is_secondary_limit_body(body: bytes) -> bool:
+    text = body[:4096].decode("utf-8", errors="ignore").casefold()
+    return "secondary rate limit" in text or "abuse detection" in text
 
 
 def _check_stream_cancellation(

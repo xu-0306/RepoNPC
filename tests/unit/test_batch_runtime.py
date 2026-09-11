@@ -1,18 +1,28 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from reponpc.admin.batch_resolver import GitHubRateLimiter, GitHubRateResource
+from reponpc.admin.analysis_selection import AnalysisModelPair
+from reponpc.admin.batch_resolver import (
+    GitHubRateLimiter,
+    GitHubRateResource,
+    RepositoryMetadataHint,
+    RepositorySelection,
+    ResolvedRepository,
+)
 from reponpc.admin.batch_runtime import (
     BatchCreateRequest,
     BatchItemInput,
     BatchRuntimeError,
     BatchRuntimeStore,
     SQLiteGitHubRateStateStore,
+    SQLiteGitHubResolutionCache,
 )
+from reponpc.indexing.sources import EmbeddingIdentity
 from reponpc.runtime.database import RuntimeDatabase
 
 
@@ -42,7 +52,6 @@ def _request(
         plan_id="plan-safe-id",
         selection_hash=_hash(selection),
         idempotency_key=key,
-        selected_credential_id=1,
         maximum_generation_attempts=maximum_generation_attempts,
         items=(
             BatchItemInput(
@@ -79,6 +88,33 @@ def test_idempotency_active_owner_boundary_and_safe_events(tmp_path) -> None:
     with pytest.raises(BatchRuntimeError) as active:
         store.create_batch(_request(slug="octocat/other", key="other-key"))
     assert active.value.code == "ANALYSIS_BATCH_ACTIVE"
+
+
+def test_batch_accepts_a_frozen_pair_with_legal_empty_embedding_prefixes(tmp_path) -> None:
+    pair = AnalysisModelPair(
+        1,
+        "chat-a",
+        "chat-connection",
+        1,
+        "ollama",
+        "chat-model",
+        "embed-a",
+        "embedding-connection",
+        1,
+        "ollama",
+        EmbeddingIdentity("ollama", "embed-model", 2, True, "", ""),
+    )
+
+    store = _store(tmp_path, Clock())
+    batch, created = store.create_batch(
+        replace(_request(), analysis_model_pair=pair.safe_dict())
+    )
+
+    assert created is True
+    assert batch.state == "queued"
+    claimed = store.claim_next_item(batch.batch_id)
+    assert claimed is not None
+    assert claimed.analysis_model_pair == pair.safe_dict()
 
 
 def test_item_completion_transitions_to_durable_terminal_snapshot(tmp_path) -> None:
@@ -243,10 +279,11 @@ def test_github_rate_state_survives_runtime_restart_without_credentials(tmp_path
         persistence=SQLiteGitHubRateStateStore(database, now=clock),
     )
     limiter.observe(
-        resource=GitHubRateResource.GRAPHQL,
+        resource=GitHubRateResource.CORE,
         status=200,
         headers={
-            "X-RateLimit-Limit": "5000",
+            "X-RateLimit-Resource": "core",
+            "X-RateLimit-Limit": "60",
             "X-RateLimit-Remaining": "5",
             "X-RateLimit-Reset": str(int((clock.value + timedelta(minutes=2)).timestamp())),
         },
@@ -257,8 +294,40 @@ def test_github_rate_state_survives_runtime_restart_without_credentials(tmp_path
         now=clock,
         persistence=SQLiteGitHubRateStateStore(database, now=clock),
     )
-    budget, _core, secondary = restarted.snapshot()
+    budget, secondary = restarted.snapshot()
 
     assert budget.remaining == 5
     assert secondary is None
-    assert restarted.admit(GitHubRateResource.GRAPHQL).allowed is False
+    assert restarted.admit(GitHubRateResource.CORE).allowed is False
+
+
+def test_anonymous_resolution_cache_survives_restart_and_expires(tmp_path) -> None:
+    clock = Clock()
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    selection = RepositorySelection("octocat/demo", ref="release")
+    metadata = RepositoryMetadataHint("octocat/demo", "R_demo", "main", False)
+    resolved = ResolvedRepository(
+        slug="octocat/demo",
+        node_id="R_demo",
+        default_branch="main",
+        commit_sha="a" * 40,
+        is_archived=False,
+        archive_url=f"https://api.github.com/repos/octocat/demo/tarball/{'a' * 40}",
+    )
+    cache = SQLiteGitHubResolutionCache(database, ttl=timedelta(seconds=30), now=clock)
+    cache.save_metadata(metadata)
+    cache.save_resolved(selection, resolved)
+
+    restarted = SQLiteGitHubResolutionCache(database, ttl=timedelta(seconds=30), now=clock)
+    assert restarted.metadata(selection.slug) == metadata
+    assert restarted.resolved(selection) == resolved
+
+    clock.advance(seconds=31)
+    assert restarted.metadata(selection.slug) is None
+    assert restarted.resolved(selection) is None
+    with database.connection() as connection:
+        remaining = connection.execute(
+            "SELECT COUNT(*) FROM github_public_resolution_cache"
+        ).fetchone()
+    assert remaining is not None and remaining[0] == 0

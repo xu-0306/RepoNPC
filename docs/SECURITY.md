@@ -1,6 +1,6 @@
 # RepoNPC Security Model
 
-**Status:** Security contract aligned with approved Technical Specification 0.1.9
+**Status:** Security contract aligned with approved Technical Specification 0.2.3; model connection code exists, model-first analysis-selection integration and evidence remain pending
 **Audience:** implementation Agents, operators, reviewers, security researchers
 
 ## 1. Security goals
@@ -30,6 +30,8 @@ RepoNPC cannot make already-public repositories secret, prove the truth of owner
 | Ephemeral private | visitor question/history, provider prompt/output, uploaded draft before save | request memory only by default; not persisted/logged |
 
 Owner assertions are public statements, not verified facts. The UI and answer policy must keep that label.
+
+**0.2.2 ingress exception:** A provider key/private URL newly typed by the authenticated owner may exist transiently in the isolated model form and its same-origin request. Stored keys/private URLs are never returned to the browser. This narrow exception does not authorize browser storage, public export, logging, or direct browser-to-provider calls. Section 21 governs it; the older blanket `never browser` wording means no disclosure of stored secrets.
 
 ## 3. Trust boundaries
 
@@ -62,9 +64,10 @@ Crossing a boundary requires schema validation, size/time bounds, context-specif
 | XSS/Markdown/SVG injection | Conservative Markdown sanitizer; DOM escaping; safe link schemes; SVG XML escaping and element/attribute allowlists; strict headers/CSP | AC-014, AC-021, AC-034 |
 | Path/archive traversal | POSIX normalization, no `..`/absolute paths; archive regular-files-only policy; exact asset path allowlist | AC-027, AC-030 |
 | Malicious image/decompression bomb | Byte/pixel/dimension caps; real decode; APNG rejection; metadata removal; safe re-encode | AC-020, AC-027 |
-| First visitor claims or exhausts an uninitialized deployment | No default credential or open registration; host-issued 256-bit code; SHA-256 at rest; 15-minute expiry; replacement; same-origin exchange; validate host proof before Argon2; atomic single-owner creation; permanent closure | AC-024 |
-| Admin credential/session attack | Explicit loopback/production password policy (4–128 only for loopback evaluation; 15–128 for production/non-loopback); common/compromised-password blocklist; Argon2id; generic errors; backoff; 256-bit sessions; HttpOnly/Secure/SameSite; CSRF + origin; idle/absolute expiry; rotation/revocation | AC-024, AC-049 |
-| OAuth state/token or GitHub identity abuse | One-use hashed state; PKCE S256; intent-bound Lax transaction cookie; fixed callback; server-side exchange; numeric identity matching; generic unlinked failure; encrypted credential records | AC-041, AC-042 |
+| First visitor claims or exhausts an uninitialized deployment | No open registration; loopback uses a host-minted 256-bit fragment-only grant with SHA-256 at rest, two-minute expiry, strict loopback/no-proxy validation, one-use atomic owner/session creation, and relaunch recovery; production retains the 15-minute host setup code and password | AC-024, AC-049 |
+| Admin credential/session attack | Loopback host capability or production 15–128-character password; common/compromised-password blocklist and Argon2id in production; generic errors; backoff/rate limit; 256-bit sessions; HttpOnly/Secure/SameSite; CSRF + origin/host; idle/absolute expiry; rotation/revocation | AC-024, AC-049 |
+| Localhost attack, DNS rebinding, or accidental remote exposure | Validate deployment profile, bind, public base URL, peer, Host, and Origin as loopback; disable trusted-proxy interpretation; never accept forwarded headers for local launch; refuse unsafe startup; keep grant out of request URL/log/referrer and clear fragment immediately | AC-024, AC-049 |
+| OAuth state/token or GitHub connection abuse | Existing authenticated RepoNPC session; one-use hashed state; PKCE S256; connection-intent Lax transaction cookie; fixed callback; server-side exchange; numeric account metadata; encrypted credential records; no owner-session issuance | AC-041, AC-042 |
 | GitHub overreach/conflict | Fine-grained repo token; fixed branch; exact app path allowlist; expected blob SHA; no auto-merge/delete | AC-026, AC-027 |
 | Cost/availability exhaustion | input/history/output caps; per-IP bucket; concurrency; daily budget; timeouts; check before provider | AC-018 |
 | Bundle supply-chain/tampering | immutable release; SHA-256 inside/outside; schema/app/model checks; SQLite integrity/smoke; atomic activation; previous bundle | AC-029–AC-031 |
@@ -108,6 +111,7 @@ The admin listener follows the same private-network rule. A high/non-standard po
 - The `vllm` preset accepts a private HTTP origin only after explicit server-side selection, normalizes to `openai_compatible` for bundle/public compatibility, and keeps both chat and embedding base URLs out of object representations and diagnostics.
 - Embedding profile records keep provider/model labels and encrypted credential references separate from public configuration. Probe responses are reduced to safe capability/identity metadata; raw provider bodies, model paths, download URLs, and progress payloads are not persisted or returned.
 - Ollama pull/delete is restricted to a curated model ID allowlist and the provider's native API. vLLM and generic OpenAI-compatible profiles have no RepoNPC download path. Arbitrary URLs, local paths, shell commands, and unverified archives are rejected to prevent SSRF, supply-chain injection, and disk exhaustion.
+- Managed model keys may enter only through the protected form in section 21. Their encrypted storage is separate from the retired GitHub OAuth/PAT lifecycle; prefer existing mounted secrets for host-managed configurations.
 
 ## 8. Web and browser policy
 
@@ -134,7 +138,7 @@ External GitHub/demo/profile links accept `https` only, render with safe `rel="n
 
 ## 10. Admin and GitHub permissions
 
-Admin authentication and GitHub authorization are separate capabilities. `REPONPC_IP_HASH_KEY` enables first-owner setup/login/session protection. A missing GitHub token leaves authentication plus local YAML validation, built-in-character preview, character upload validation, README snippet generation, embedding-profile CRUD/probe, and local bundle status available. GitHub-backed configuration/custom-asset reads, writes, asset upload, and workflow dispatch fail closed with `SERVICE_NOT_READY`.
+Admin authentication and GitHub authorization are separate capabilities. In `loopback_evaluation`, possession and successful same-origin exchange of a fresh host-minted local-launch grant creates the normal protected session; production uses setup proof plus a local password. A missing GitHub token or OAuth configuration leaves authentication plus local YAML validation, built-in-character preview, character upload validation, README snippet generation, embedding-profile CRUD/probe, and local bundle status available. Only the affected GitHub-backed operations fail closed with `SERVICE_NOT_READY`.
 
 Embedding profile management is owner-authenticated and server-side. Exactly one external profile may be active; a changed profile cannot replace the last-known-good bundle until probe, reindex, checksum, schema, model/dimension, and smoke checks pass. Model pull/delete is available only for curated Ollama IDs and is never a browser-to-provider direct request.
 
@@ -170,9 +174,9 @@ On suspected compromise: disable public chat, revoke/rotate GitHub and provider 
 
 - [ ] HTTPS and trusted-host/proxy configuration verified.
 - [ ] Admin routes are loopback/private/VPN-only; public visitor routing denies `/admin` and `/api/admin/*`; no unusual-port-only exposure is used.
-- [ ] No default credential exists; first owner was created with a fresh host-issued setup code or explicitly pre-provisioned Argon2id hash.
-- [ ] Deployment profile is explicit: loopback evaluation uses the 4-character convenience only locally; production/non-loopback setup enforces the 15-character minimum and blocklist.
-- [ ] IP-HMAC key generated uniquely; setup endpoint, reissue, expiry, and permanent closure verified.
+- [ ] No default credential exists; loopback owner access used a fresh two-minute launcher grant, or production owner creation used a fresh host setup code/pre-provisioned Argon2id hash.
+- [ ] Deployment profile is explicit: loopback evaluation has only loopback bind/base URL/peer/Host/origin and no trusted proxy; production/non-loopback setup enforces the 15-character minimum and blocklist.
+- [ ] IP-HMAC key generated uniquely; profile-appropriate grant/setup issuance, replacement, expiry, replay denial, and atomic sole-owner behavior verified.
 - [ ] GitHub/provider secrets supplied through protected files and least privilege reviewed.
 - [ ] At least one external embedding profile is probed and active; bundle identity matches; no local embedding runtime or arbitrary model downloader is relied on.
 - [ ] Ollama/private services are not publicly published.
@@ -202,32 +206,31 @@ ADR-021 and Technical Specification 0.1.7 supersede only this section's original
 - Copy/download is local and non-mutating. The generated file receives the same config validation as a saved draft and must never include deployment secrets or inferred unconfirmed claims.
 - Security verification adds SSRF/redirect/account pagination, selected-only source access, no-token discovery, staging cleanup on cancellation/restart/expiry, one-active-owner-batch enforcement, compatibility-route delegation, prompt injection, no-fallback, owner-confirmation, Web Storage canaries, and no-model ordinary preview cases from AC-038 through AC-046.
 
-## 15. GitHub identity and connection extension (0.1.6)
+## 15. Legacy GitHub identity and connection extension (0.1.6–0.2.0; superseded by 0.2.1)
 
-- OAuth Web Application Flow uses a fixed allowlisted GitHub authorization/token/user endpoint set, a random one-use state hash, PKCE S256, server-side code exchange, and an intent-specific short-lived cookie. The normal session cookie is not relied on during GitHub's cross-site return.
-- OAuth state, PKCE verifier, first-owner setup proof, and browser/session binding are encrypted or hashed at rest. Tokens and PATs use a dedicated authenticated-encryption key that is independent of IP hashing, provider keys, OAuth client secret, and writeback token.
-- OAuth requests no repository scope. Reported broad scopes, token/user endpoint errors, invalid user IDs, redirects, expiry, replay, and wrong intent all fail closed without issuing a session or consuming first-owner setup proof.
+This section records the migration source. ADR-028 removes these reachable OAuth/PAT behaviors; section 20 is normative for the replacement.
+
+- OAuth Web Application Flow uses a fixed allowlisted GitHub authorization/token/user endpoint set, a random one-use state hash, PKCE S256, server-side code exchange, an existing RepoNPC session binding, and a connection-intent short-lived cookie. The normal session cookie is not the sole proof during GitHub's cross-site return.
+- OAuth state, PKCE verifier, local session binding, and connection metadata are encrypted or hashed at rest. Tokens and PATs use a dedicated authenticated-encryption key that is independent of IP hashing, provider keys, OAuth client secret, and writeback token.
+- OAuth requests no repository scope. Reported broad scopes, token/user endpoint errors, invalid user IDs, redirects, expiry, replay, wrong intent, missing RepoNPC session, and legacy login/setup starts all fail closed without issuing a session or consuming production setup/local-launch proof.
 - The browser receives an authorization redirect and safe connection state only. It never receives access/refresh tokens, PATs, encryption keys, client secret, transaction verifier/state, token fingerprints, or raw upstream payloads.
 - `identity_public_read`, `public_read`, and `writeback` are distinct credential purposes. A revoked/401 read credential requires explicit reconnection and cannot trigger selection of another credential. The configured writeback token is never copied into runtime credentials or used for identity/read preflight.
-- First-owner setup always creates a local password before optional GitHub linking. The local method is the break-glass recovery path and cannot be removed as the final method. Unlinking, logout-all, and other sensitive identity changes require recent local authentication. The host-only `reponpc admin set-password --data-dir <dir>` command changes only the local hash; recovery readiness is proven by command/backup tests, not a free-form environment string.
+- GitHub is connection-only. It cannot create, authenticate, or recover the RepoNPC owner. Disconnecting it affects only public-read work. Production recovery uses host-only `reponpc admin set-password --data-dir <dir>`; loopback recovery mints a new local-launch grant through the launcher.
 
 ## 16. Bounded GitHub resolver and batch extension (0.1.7)
 
-- Batch analysis is public-repository-only. A GraphQL metadata result is an eligibility gate, not merely a hint: missing, private, inaccessible, unconfirmed, duplicate, or policy-disallowed archived repositories are rejected before archive access.
-- Exactly one selected `identity_public_read` or `public_read` credential is admitted to an analysis. The separate writeback credential is structurally unavailable to the resolver. A `401` marks that selected connection `connection_required`; selection does not try another PAT/OAuth credential or writeback token.
-- Resolver archives are requested only by a validated full commit SHA and must arrive from the configured GitHub allowlist. Archive readers reject redirects, absolute/parent/backslash paths, duplicate normalized paths, non-regular entries, symbolic/hard links, devices, oversized compressed/expanded streams, excessive entries/files, and deadline/cancellation violations. No raw archive or staging path is included in an API response, event, log, or runtime row.
-- GitHub rate metadata is sanitized and stored centrally. Primary GraphQL/core budgets, reset timestamps, `Retry-After`, and secondary-limit pauses govern admission; the scheduler does not spin, repeatedly probe rate endpoints, or leak token-linked headers to the browser.
-- Durable batch state stores only safe IDs, immutable commits, stage/state, bounded counts/timestamps, retry reason, event payloads, and validated normalized terminal results. It never stores repository bodies, archive bytes, prompt bodies, provider bodies, credentials, or raw incomplete model output.
+- Batch analysis is public-repository-only. Bounded unauthenticated REST metadata is an eligibility gate, not merely a hint: missing, private, inaccessible, unconfirmed, duplicate, or policy-disallowed archived repositories are rejected before archive access.
+- Discovery, resolution, and archive requests carry no OAuth/PAT/writeback authorization. The separate writeback credential is structurally unavailable to the resolver and cannot be selected as a fallback.
+- Resolver archives are requested only by a validated full commit SHA. Every redirect and final URL must match the exact allowlisted codeload owner/repository/archive-format/full-SHA identity; unrelated repositories, SHAs, malformed paths, query/fragment/userinfo, hostile hosts, and second redirects fail before body consumption. Archive readers also reject absolute/parent/backslash paths, duplicate normalized paths, non-regular entries, symbolic/hard links, devices, oversized compressed/expanded streams, excessive entries/files, and deadline/cancellation violations. No raw archive or staging path is included in an API response, event, log, or runtime row.
+- GitHub rate metadata is sanitized and stored centrally. Anonymous REST/core budgets, reset timestamps, `Retry-After`, and secondary-limit pauses govern admission; the scheduler does not spin, repeatedly probe rate endpoints, or leak upstream headers to the browser.
+- Durable batch state and the bounded resolution cache store only safe IDs/metadata, immutable commits, stage/state, bounded counts/timestamps, retry reason, event payloads, expiry, and validated normalized terminal results. They never store repository bodies, archive bytes, prompt bodies, provider bodies, credentials, or raw incomplete model output. Cached exact-SHA resolution permits forward progress across anonymous rate resets without ref drift.
 - Each item owns a unique bounded staging directory. Cancellation, expiry, startup recovery, validation failure, and terminal transitions remove it. A restart can repeat immutable local work, but a generation already dispatched becomes `needs_retry_confirmation` and cannot be automatically resent.
 - Cache records are checksummed before reuse and include the complete identity vector: commit, include/exclude policy, parser/exclusion version, embedding identity, chat model, prompt version, output-schema version, and validation version. Cache eviction is TTL/LRU only and cannot delete active/previous immutable bundles.
 - Provider permits are acquired around the actual embedding/generation call, not archive/download/local work. Public chat has weighted-fair admission ahead of batch work so admin analysis cannot turn into a denial of service.
 
-## 17. GitHub OAuth setup guidance (0.1.8)
+## 17. Legacy GitHub OAuth setup (0.1.8–0.2.0; removed in 0.2.1)
 
-- Unconfigured setup, sign-in, link, and reauthentication buttons are actionable only as a same-origin guide interaction. They do not submit OAuth starts, redirect to GitHub, or collect any secret, encryption key, or token.
-- `GET /api/admin/github/oauth/setup-guide` is deliberately non-sensitive and cache-disabled. It returns only a boolean configuration state, the canonical fixed callback URL, the fixed official GitHub OAuth-App documentation URL, and a next-step label. It never returns environment values, secret-file paths, owner identity, or credential material.
-- The frontend renders the callback as non-editable guidance, uses a same-origin dialog with keyboard focus management, and treats documentation links as external navigation with no credential handoff. Dialog status/error text is announced without echoing request bodies or upstream payloads.
-- Configured OAuth remains the existing Authorization Code Flow with PKCE S256 and intent-specific state. The actionable preconfiguration path does not weaken state validation, token purpose isolation, final-method protection, or the no-writeback-fallback rule.
+This historical section is retained only to explain migration scope. OAuth setup, callback, connection, and browser-entered public-read PAT controls are removed; compatibility routes return `410 GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED` and never process credentials.
 
 ## 18. External embedding and private-admin extension (0.1.9)
 
@@ -236,3 +239,47 @@ ADR-021 and Technical Specification 0.1.7 supersede only this section's original
 - Ollama model operations are constrained to a curated model-ID catalog and native provider endpoints. vLLM/OpenAI-compatible profiles are connect/probe-only. Arbitrary URL/local-path downloads and provider-supplied shell commands are forbidden.
 - Admin routes are private-management routes. Loopback plus SSH tunnel or a firewall-restricted VPN/LAN is the default; a non-standard port does not reduce exposure. Public reverse proxies must deny `/admin` and `/api/admin/*` to Internet clients.
 - Security tests cover profile CRUD/single-active races, probe/reindex rollback, model-download allowlists, SSRF/path traversal/disk exhaustion, password profile boundaries, SSH/proxy route ACLs, and absence of provider secrets/private URLs in all outputs.
+
+## 19. Passwordless loopback launch (0.2.0)
+
+- The local launcher creates a random 256-bit grant only after readiness. It stores only a SHA-256 digest, expires it after two minutes, replaces any prior unused grant, and opens it only in the `#local-launch=` fragment. The grant is never placed in a query string, request/access log, cookie, persistent browser storage, diagnostic payload, screenshot, or fixture.
+- The frontend exchanges the fragment exactly once through same-origin `POST /api/admin/session/local-launch`, calls `history.replaceState` before rendering any external navigation, and retains only the returned CSRF value in memory. Failed/replayed values are cleared and produce one safe relaunch instruction.
+- The backend enables this endpoint only for `loopback_evaluation` after validating loopback bind, loopback public base URL, loopback peer, allowlisted `Host`, same-origin request, and disabled trusted-proxy interpretation. `Forwarded` and `X-Forwarded-*` cannot upgrade a request to local. Any unsafe combination fails startup or returns one generic denial.
+
+## 20. GitHub public-read credential retirement (0.2.1)
+
+- The product accepts no GitHub OAuth authorization code, OAuth token, public-read PAT, client secret, callback configuration, or browser-entered GitHub read credential.
+- Legacy OAuth/PAT endpoints are non-redirecting and non-mutating during their bounded `410` compatibility window. They never parse/decrypt credential bodies, issue owner sessions, or disclose whether legacy encrypted state existed.
+- Runtime migration deletes OAuth transactions, GitHub connection identities, and `identity_public_read` / `public_read` credential rows without decrypting or logging them. Authentication, local-launch, password, session, draft, bundle, and independent writeback state are preserved transactionally.
+- Public discovery and analysis use only fixed-origin unauthenticated REST metadata and immutable-full-SHA archives. Redirect/SSRF, response-size, timeout, path, link, archive-bomb, staging-cleanup, selected-only, and untrusted-content controls remain mandatory.
+- No discovery, resolution, preflight, or archive request may contain an authorization header or receive the writeback credential. Tests use writeback-secret canaries across every normal, retry, error, and cancellation path.
+- Anonymous primary/secondary rate exhaustion produces only sanitized capacity/retry state, never a credential prompt. Manual authoring, validation, preview, copy, and download remain available immediately.
+- Pre-migration backups may contain encrypted legacy records and remain protected by the existing backup-retention and destruction policy.
+- Grant consumption, sole-owner creation/reuse, session creation, and competing-grant invalidation are one transaction. The durable owner may have no password in loopback mode. Moving that runtime to production fails readiness until the operator uses the host-only password command.
+- Session, CSRF, expiry, rotation, revocation, and safe-audit controls are unchanged. A local logout does not expose a login form; access resumes only through a new launcher grant.
+
+## 21. Owner-managed model connections (0.2.2)
+
+ADR-029 authorizes a write-only provider-key/API-address input on authenticated Web Admin. It does not authorize a secret read endpoint, a network proxy, a public credential form, or a new inference runtime.
+
+- Enforce body-size limits, valid session, CSRF, same-origin/private administration and safe validation before any provider call. Public YAML/editor/preview endpoints continue rejecting secrets. Return only server IDs, display labels, configured booleans and sanitized capability/status metadata. No key suffix, fingerprint, previous private URL, raw upstream body or rejected request body is returned.
+- A newly entered key is ephemeral form state, cleared after submission and on cancel/logout/expiry/unmount. Do not serialize it or the private address with the guided draft. Disable request-body recording for this boundary; synthetic canaries must prove absence from app/proxy logs, snapshots, traces, browser stores, exports and validation exceptions. Showing a freshly typed key is not permission to fetch a stored key.
+- Use vetted authenticated encryption with an independent host-protected key, or an equivalent supported OS secret store. Never store plaintext keys in SQLite or reuse OAuth/PAT encryption settings. Bound stored entries and cleanup unreferenced revisions. Protect encryption keys separately from runtime backups; test permissions, unavailable keys, ciphertext tampering, backup/restore and rotation. Missing protection fails closed while manual work remains possible.
+- Connection revisions bind protocol, exact normalized endpoint and credential reference. Active/in-flight profiles retain their revision. Endpoint/protocol replacement requires a fresh credential choice; never probe a changed host/path with a retained secret. A blank key is not a delete instruction. Explicit no-key authentication is allowed for suitable private services; errors cannot select another key or service.
+- Server egress accepts only fixed operations on a validated chosen service. Enforce HTTPS for public endpoints and explicit private-target policy for local/private services. Reject userinfo, query/fragment credentials, traversal, forbidden address classes and metadata endpoints; validate all IPv4/IPv6/DNS resolutions when connecting, constrain transport to those addresses, and reject credential-bearing redirects. Model listing, health, chat, embedding and Ollama operations use the same policy.
+- Optional listing never substitutes for bounded synthetic capability tests. Apply provider capacity/time/response limits; test failures cannot cause automatic downloads, repository uploads, reindexes or publication. User-selected destinations receive only the intentionally configured role's requests.
+- AC-055/AC-056 cover attack and recovery paths. Retain AC-024/AC-033/AC-035/AC-051/AC-052 to prevent regressions in authentication, evidence isolation, privacy, and GitHub retirement.
+
+## 22. Model-first analysis selection (0.2.3)
+
+ADR-030 permits an explicitly selected tested chat/embedding pair to power authenticated owner analysis before public bundle activation. It does not make model setup public, grant the LLM tools, relax source confirmation, or turn temporary analysis data into a published index.
+
+- Analysis readiness is authenticated safe metadata owned by the server. Never trust sessionStorage/local state, model-list presence, `/api/public/status.model.ready`, or a public `active` profile flag as sole authority. Role selections bind server IDs, exact connection revisions, tested model/embedding identity and a selection generation. Read responses remain secret-safe under section 21.
+- Merely opening/resuming the wizard, listing metadata, saving a candidate, testing a model or returning from settings cannot fetch repository source or generate analysis. One explicit Start analysis intent enters existing preflight/admission/idempotency controls. Network loss/reload checks the active server job before retry; it must not duplicate provider work.
+- The analysis pair is distinct from public-serving state. Selecting/testing it must not mutate public bundle pointers, activate an incompatible profile, start a reindex, publish a temporary derived index or replace last-known-good service. Public visitors continue to use only the verified active bundle/model pair.
+- The current analysis algorithm requires both embedding and chat. Use the selected embedding revision for passages/query and selected chat revision for generation. A missing or invalid role fails before source/model work and offers the manual route. Do not introduce lexical/chat-only fallback or select another role/provider automatically.
+- Preflight and execution freeze repository selection plus both model revisions. A model/connection/repository change invalidates a stale plan and incompatible cache identity. In-flight work retains the frozen pair or fails safely if its referenced secret/revision cannot be resolved; it never retargets the newest model. Generation interruption retains explicit retry confirmation.
+- Reuse global provider admission/fairness and per-provider limits even if implementation separates analysis and public runtimes. Creating a second runtime object must not double the effective generation allowance. Probe and analysis requests retain bounds, synthetic/content separation, redaction, request IDs and no raw upstream persistence.
+- Clean startup can have no provider runtime or public bundle. Later authenticated setup must construct analysis dependencies safely in the same process. Avoid callbacks that report selected/active while leaving runtime execution unavailable. Failure preserves connection/profile data, manual drafts and public last-known-good service.
+- Browser-state migration preserves only allowed public draft fields and navigation intent. It may record a safe return destination but not capability proof, profile secrets, private endpoints or raw results. Legacy progress cannot cause automatic tests or analysis. Session expiry/logout retains existing clearing controls; newly typed key/URL state is always ephemeral.
+- Security regression adds AC-058 through AC-060: clean no-model/no-bundle first analysis, existing-public-A versus analysis-B isolation, stale-plan and rotation races, duplicate Start/reload, old guided-state recovery, secret canaries, and absence of temporary index/provider bodies from runtime rows, logs, exports and bundles.

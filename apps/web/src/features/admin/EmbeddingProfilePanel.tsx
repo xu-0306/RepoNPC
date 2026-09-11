@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import type { Locale } from "../../i18n/messages";
+import type { ModelConnectionView } from "./ModelConnectionPanel";
 
 export interface EmbeddingProfileView {
   profile_id: string;
@@ -44,6 +45,7 @@ export interface EmbeddingProfileDraft {
 
 interface Props {
   locale: Locale;
+  connections: ModelConnectionView[];
   catalog: EmbeddingModelCatalogEntry[];
   installedModels: string[];
   profiles: EmbeddingProfileView[];
@@ -88,8 +90,7 @@ const COPY = {
     heading: "Embedding model center",
     description:
       "Manage external embedding profiles. Private URLs and credentials stay in server environment or secret storage and are never shown here.",
-    recommended:
-      "Recommended starter: Ollama qwen3-embedding:0.6b (1024 dimensions).",
+    recommended: "Ollama recommendations appear after you choose Ollama.",
     provider: "Provider",
     model: "Model",
     dimension: "Dimensions",
@@ -115,6 +116,7 @@ const COPY = {
 
 export function EmbeddingProfilePanel({
   locale,
+  connections,
   catalog,
   installedModels,
   profiles,
@@ -129,15 +131,17 @@ export function EmbeddingProfilePanel({
   onOllamaDelete,
 }: Props) {
   const copy = COPY[locale];
-  const [provider, setProvider] =
-    useState<EmbeddingProfileDraft["provider"]>("ollama");
-  const [model, setModel] = useState("qwen3-embedding:0.6b");
-  const [dimension, setDimension] = useState(1024);
-  const [connection, setConnection] = useState("environment");
+  const [provider, setProvider] = useState<
+    "" | EmbeddingProfileDraft["provider"]
+  >("");
+  const [model, setModel] = useState("");
+  const [dimension, setDimension] = useState(1);
+  const [connection, setConnection] = useState("");
   const ollamaModels = catalog.filter((entry) => entry.provider === "ollama");
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (!provider || !model.trim() || !connection.trim()) return;
     onCreate({
       provider,
       model_id: model,
@@ -153,15 +157,16 @@ export function EmbeddingProfilePanel({
     <section aria-labelledby="embedding-profile-heading">
       <h2 id="embedding-profile-heading">{copy.heading}</h2>
       <p>{copy.description}</p>
-      <p>{copy.recommended}</p>
-      <h3>{copy.catalog}</h3>
+      {provider === "ollama" && <p>{copy.recommended}</p>}
+      {provider === "ollama" && <h3>{copy.catalog}</h3>}
       <ul>
-        {ollamaModels.map((entry) => (
-          <li key={entry.model_id}>
-            <strong>{entry.model_id}</strong> — {entry.license};{" "}
-            {entry.language_context_notes}; {entry.resource_hint}
-          </li>
-        ))}
+        {provider === "ollama" &&
+          ollamaModels.map((entry) => (
+            <li key={entry.model_id}>
+              <strong>{entry.model_id}</strong> — {entry.license};{" "}
+              {entry.language_context_notes}; {entry.resource_hint}
+            </li>
+          ))}
       </ul>
       <p>{copy.probeAuthoritative}</p>
       <h3>{copy.installed}</h3>
@@ -271,6 +276,7 @@ export function EmbeddingProfilePanel({
             }}
             value={provider}
           >
+            <option value="">Select a service</option>
             <option value="ollama">Ollama</option>
             <option value="vllm">vLLM</option>
             <option value="openai_compatible">OpenAI-compatible</option>
@@ -318,15 +324,23 @@ export function EmbeddingProfilePanel({
         </label>
         <label htmlFor="embedding-profile-connection">
           {copy.connection}
-          <input
+          <select
             disabled={pending}
             id="embedding-profile-connection"
-            maxLength={64}
             onChange={(event) => setConnection(event.target.value)}
-            pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}"
             required
             value={connection}
-          />
+          >
+            <option value="">Select a service</option>
+            {connections.map((modelConnection) => (
+              <option
+                key={modelConnection.connection_id}
+                value={modelConnection.connection_id}
+              >
+                {modelConnection.display_name}
+              </option>
+            ))}
+          </select>
         </label>
         <button disabled={pending} type="submit">
           {copy.create}

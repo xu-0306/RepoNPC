@@ -1,8 +1,14 @@
 # RepoNPC public configuration example.
 # Copy to reponpc.yml in the configured GitHub repository and replace examples.
 # Never put API keys, passwords, tokens, private URLs, or other secrets here.
-# GitHub OAuth client settings and public-read credentials are deployment-only
-# environment/secret-file values; they never belong in this public YAML file.
+# GitHub OAuth and browser-entered public-read PATs were removed in 0.2.1. The
+# independent writeback token remains deployment-only and
+# must never appear in this public YAML file.
+# 0.2.2: the embedding descriptor below is an illustrative validated identity,
+# not a provider choice for first-run setup. Managed connection URLs/keys must
+# never be added here. Replace this descriptor with the selected model's actual
+# identity when building. Manual drafts may retain this labeled illustration;
+# it never selects a runtime connection or proves that a model is ready.
 
 schema_version: 1
 

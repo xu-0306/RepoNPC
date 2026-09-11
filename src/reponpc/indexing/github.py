@@ -14,6 +14,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from reponpc.admin.batch_resolver import GitHubRateLimiter, GitHubRateResource
 from reponpc.domain.evidence import COMMIT_RE
 from reponpc.indexing.exclusions import SourceEntryKind
 from reponpc.indexing.sources import RepositoryBlob, ResolvedRepository
@@ -65,6 +66,8 @@ class GitHubSourceResolver:
     allowed_hosts: frozenset[str] = frozenset({"api.github.com", "github.com"})
     timeout_seconds: float = 15.0
     max_response_bytes: int = 8 * 1024 * 1024
+    metadata_observer: Callable[[PublicRepositoryMetadata], None] | None = None
+    rate_limiter: GitHubRateLimiter | None = None
 
     def __post_init__(self) -> None:
         parsed = urlsplit(self.api_base_url)
@@ -92,6 +95,9 @@ class GitHubSourceResolver:
             for item in payload[:50]
             if item.get("private") is False
         )
+        if self.metadata_observer is not None:
+            for repository in repositories:
+                self.metadata_observer(repository)
         return RepositoryDiscoveryPage(
             repositories=repositories,
             page=page,
@@ -106,7 +112,10 @@ class GitHubSourceResolver:
         payload = self._get_json(f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}")
         if payload.get("private") is True:
             raise SourceResolutionError("github_not_found")
-        return _repository_metadata(payload, self.allowed_hosts)
+        metadata = _repository_metadata(payload, self.allowed_hosts)
+        if self.metadata_observer is not None:
+            self.metadata_observer(metadata)
+        return metadata
 
     def resolve(
         self,
@@ -245,25 +254,75 @@ class GitHubSourceResolver:
             if remaining <= 0:
                 raise SourceResolutionError("github_timeout")
             timeout = min(timeout, remaining)
-        request = Request(url, headers={"Accept": "application/vnd.github+json"}, method="GET")
+        request = Request(
+            url,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "RepoNPC/0.2.1",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            method="GET",
+        )
+        if self.rate_limiter is not None:
+            admission = self.rate_limiter.admit(GitHubRateResource.CORE)
+            if not admission.allowed:
+                raise SourceResolutionError(
+                    "github_rate_limited",
+                    admission.retry_after_seconds,
+                )
         try:
             opener = build_opener(_NoRedirect())
             with opener.open(request, timeout=timeout) as response:
                 _validate_allowed_url(response.geturl(), self.allowed_hosts)
+                if self.rate_limiter is not None:
+                    self.rate_limiter.observe(
+                        resource=GitHubRateResource.CORE,
+                        status=int(response.status),
+                        headers={key: value for key, value in response.headers.items()},
+                    )
+                payload = response.read(self.max_response_bytes + 1)
                 if response.status != 200:
                     raise SourceResolutionError("github_response_invalid")
-                payload = response.read(self.max_response_bytes + 1)
                 if len(payload) > self.max_response_bytes:
                     raise SourceResolutionError("github_response_too_large")
         except SourceResolutionError:
             raise
         except HTTPError as exc:
+            payload = exc.read(self.max_response_bytes + 1)
+            headers = {key: value for key, value in exc.headers.items()}
+            if self.rate_limiter is not None:
+                self.rate_limiter.observe(
+                    resource=GitHubRateResource.CORE,
+                    status=int(exc.code),
+                    headers=headers,
+                )
             if exc.code == 404:
                 raise SourceResolutionError("github_not_found") from exc
             if exc.code in {403, 429}:
+                if (
+                    exc.code == 403
+                    and _is_secondary_limit_body(payload)
+                    and self.rate_limiter is not None
+                    and self.rate_limiter.admit(GitHubRateResource.CORE).allowed
+                ):
+                    headers.setdefault("Retry-After", "60")
+                    self.rate_limiter.observe(
+                        resource=GitHubRateResource.CORE,
+                        status=int(exc.code),
+                        headers=headers,
+                    )
+                rate_admission = (
+                    self.rate_limiter.admit(GitHubRateResource.CORE)
+                    if self.rate_limiter is not None
+                    else None
+                )
                 raise SourceResolutionError(
                     "github_rate_limited",
-                    _retry_after_seconds(exc.headers),
+                    (
+                        rate_admission.retry_after_seconds
+                        if rate_admission is not None and not rate_admission.allowed
+                        else _retry_after_seconds(exc.headers)
+                    ),
                 ) from exc
             raise SourceResolutionError("github_request_failed") from exc
         except (URLError, OSError) as exc:
@@ -386,6 +445,19 @@ def _retry_after_seconds(headers: Any) -> int | None:
     if isinstance(reset, str) and reset.isdigit():
         return max(1, min(int(reset) - int(time.time()), 3600))
     return None
+
+
+def _is_secondary_limit_body(body: bytes) -> bool:
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    message = payload.get("message")
+    return isinstance(message, str) and (
+        "secondary rate limit" in message.casefold() or "abuse detection" in message.casefold()
+    )
 
 
 def _required_text(value: dict[str, Any], key: str, code: str) -> str:

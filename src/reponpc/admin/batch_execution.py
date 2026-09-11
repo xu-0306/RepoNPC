@@ -1,9 +1,8 @@
 """Pinned archive execution for durable guided-analysis batch items.
 
-This is deliberately separate from the legacy REST/tree/blob resolver.  A
+This is deliberately separate from the legacy REST/tree/blob resolver. A
 batch item is rebuilt only from its persisted immutable commit and selection
-policy, then fetched through the selected public-read credential as one exact
-SHA archive.
+policy, then fetched anonymously as one exact-SHA archive.
 """
 
 from __future__ import annotations
@@ -11,22 +10,23 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 
+from reponpc.admin.analysis_selection import AnalysisModelPair, AnalysisSelectionError
 from reponpc.admin.batch_resolver import (
     GITHUB_ARCHIVE_BASE_URL,
     BatchResolverError,
     GitHubArchiveSource,
-    PublicReadCredential,
     ResolvedRepository,
 )
 from reponpc.admin.batch_runtime import BatchRuntimeError, BatchRuntimeStore, ClaimedBatchItem
 from reponpc.admin.batches import BatchExecutionError, BatchStageGates
 from reponpc.admin.onboarding import GuidedOnboardingError, GuidedOnboardingService
+from reponpc.providers.runtime import ProviderRuntime
 
 
 class PinnedBatchItemRunner:
-    """Fetch and analyze items using one selected credential and stage caps."""
+    """Fetch and analyze exact-SHA public archives with bounded stage caps."""
 
     def __init__(
         self,
@@ -34,7 +34,6 @@ class PinnedBatchItemRunner:
         store: BatchRuntimeStore,
         source: GitHubArchiveSource,
         onboarding: GuidedOnboardingService,
-        credentials_supplier: Callable[[], Iterable[PublicReadCredential]],
         gates: BatchStageGates,
         parser_identity: str = "parser-v1",
         embedding_identity: str = "embedding-runtime",
@@ -42,12 +41,12 @@ class PinnedBatchItemRunner:
         prompt_version: str = "onboarding-prompt-v1",
         output_schema_version: str = "analysis-schema-v1",
         validation_version: str = "validation-v1",
+        runtime_resolver: Callable[[AnalysisModelPair], ProviderRuntime | None] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._store = store
         self._source = source
         self._onboarding = onboarding
-        self._credentials_supplier = credentials_supplier
         self._gates = gates
         self._parser_identity = parser_identity
         self._embedding_identity = embedding_identity
@@ -55,6 +54,7 @@ class PinnedBatchItemRunner:
         self._prompt_version = prompt_version
         self._output_schema_version = output_schema_version
         self._validation_version = validation_version
+        self._runtime_resolver = runtime_resolver
         self._monotonic = monotonic
 
     def __call__(self, item: ClaimedBatchItem, cancelled: Callable[[], bool]) -> dict[str, object]:
@@ -64,7 +64,9 @@ class PinnedBatchItemRunner:
         try:
             if cancelled():
                 raise BatchExecutionError("CANCELLED")
-            derived_key, result_key = self._cache_keys(item)
+            pair = self._frozen_pair(item)
+            runtime = self._frozen_runtime(pair)
+            derived_key, result_key = self._cache_keys(item, pair)
             cached = self._store.get_cache(result_key)
             if (
                 cached is not None
@@ -72,13 +74,11 @@ class PinnedBatchItemRunner:
                 and _cache_matches_item(cached.payload, item)
             ):
                 return _cached_result(cached.payload)
-            credential = self._selected_credential(item.batch_id)
             repository = _immutable_repository(item)
             self._store.advance_item(item, state="fetching_source")
             with self._gates.archive_staging():
                 snapshot = self._source.fetch(
                     repository=repository,
-                    credential=credential,
                     cancel_requested=cancelled,
                     deadline=deadline,
                     monotonic=self._monotonic,
@@ -91,6 +91,7 @@ class PinnedBatchItemRunner:
                 stage_changed=lambda stage: self._store.advance_item(item, state=stage),
                 index_permit=self._gates.index_work,
                 execution_deadline=deadline,
+                providers=runtime,
             )
             self._store.advance_item(item, state="cleaning_up")
             self._store.put_cache(
@@ -101,7 +102,11 @@ class PinnedBatchItemRunner:
                     "repository": item.input.slug,
                     "commit": item.input.commit_sha,
                     "parser": self._parser_identity,
-                    "embedding": self._embedding_identity,
+                    "embedding": (
+                        pair.cache_embedding_identity()
+                        if pair is not None
+                        else self._embedding_identity
+                    ),
                 },
                 payload={"commit": item.input.commit_sha, "validated": True},
             )
@@ -112,7 +117,9 @@ class PinnedBatchItemRunner:
                 metadata={
                     "repository": item.input.slug,
                     "commit": item.input.commit_sha,
-                    "chat_model": self._chat_model,
+                    "chat_model": (
+                        pair.cache_chat_identity() if pair is not None else self._chat_model
+                    ),
                     "prompt_version": self._prompt_version,
                     "output_schema_version": self._output_schema_version,
                     "validation_version": self._validation_version,
@@ -131,18 +138,27 @@ class PinnedBatchItemRunner:
             # outcome.  Never attempt another upstream/provider call.
             raise BatchExecutionError("CANCELLED") from None
 
-    def _selected_credential(self, batch_id: str) -> PublicReadCredential:
-        selected_id = self._store.selected_credential_id(batch_id)
-        for credential in self._credentials_supplier():
-            if credential.credential_id == selected_id:
-                if credential.status == "ready":
-                    return credential
-                break
-        # Deliberately no fallback, including another OAuth/PAT row and every
-        # writeback credential. Reconnection must be explicit.
-        raise BatchExecutionError("GITHUB_CONNECTION_REQUIRED")
+    def _frozen_pair(self, item: ClaimedBatchItem) -> AnalysisModelPair | None:
+        if item.analysis_model_pair is None:
+            return None
+        try:
+            return AnalysisModelPair.from_safe_dict(item.analysis_model_pair)
+        except AnalysisSelectionError as exc:
+            raise BatchExecutionError("MODEL_UNAVAILABLE") from exc
 
-    def _cache_keys(self, item: ClaimedBatchItem) -> tuple[str, str]:
+    def _frozen_runtime(self, pair: AnalysisModelPair | None) -> ProviderRuntime | None:
+        if self._runtime_resolver is None:
+            return None
+        if pair is None:
+            raise BatchExecutionError("MODEL_UNAVAILABLE")
+        runtime = self._runtime_resolver(pair)
+        if runtime is None:
+            raise BatchExecutionError("MODEL_UNAVAILABLE")
+        return runtime
+
+    def _cache_keys(
+        self, item: ClaimedBatchItem, pair: AnalysisModelPair | None
+    ) -> tuple[str, str]:
         policy = json.dumps(
             {"include": item.input.include, "exclude": item.input.exclude},
             separators=(",", ":"),
@@ -153,11 +169,11 @@ class PinnedBatchItemRunner:
             item.input.commit_sha,
             policy,
             self._parser_identity,
-            self._embedding_identity,
+            pair.cache_embedding_identity() if pair is not None else self._embedding_identity,
         )
         return derived, _cache_key(
             derived,
-            self._chat_model,
+            pair.cache_chat_identity() if pair is not None else self._chat_model,
             self._prompt_version,
             self._output_schema_version,
             self._validation_version,
@@ -193,7 +209,7 @@ def _batch_error(error: BatchResolverError) -> BatchExecutionError:
         return BatchExecutionError(
             "GITHUB_RATE_LIMITED", retry_after_seconds=error.retry_after_seconds
         )
-    if error.code in {"GITHUB_CONNECTION_REQUIRED", "CANCELLED"}:
+    if error.code == "CANCELLED":
         return BatchExecutionError(error.code)
     return BatchExecutionError(error.code)
 

@@ -13,7 +13,6 @@ const preflight: BatchPreflightState = {
   plan: {
     selectionCount: 3,
     cachedResultCount: 1,
-    connection: "ready",
     rateBudget: "available",
     providerReady: true,
     effectiveConcurrency: 2,
@@ -86,6 +85,7 @@ function props(
     onResume: vi.fn(),
     onCancel: vi.fn(),
     onRetry: vi.fn(),
+    onRetryPreflight: vi.fn(),
     ...overrides,
   };
 }
@@ -99,6 +99,9 @@ describe("BatchAnalysisPanel", () => {
     expect(markup).toContain(
       "Preflight is complete. The batch can be created.",
     );
+    expect(markup).toContain("Anonymous GitHub REST budget");
+    expect(markup).not.toContain("GitHub connection");
+    expect(markup).not.toContain("Reconnect required");
     expect(markup).toContain("3");
     expect(markup).toContain("1m 30s–3m 0s");
     expect(markup).toContain('data-batch-status="running"');
@@ -165,6 +168,9 @@ describe("BatchAnalysisPanel", () => {
 
     expect(markup.match(/role="alert"/g)).toHaveLength(1);
     expect(markup).toContain("Preflight did not complete.");
+    expect(markup).toContain(
+      '<button type="button">Run preflight again</button>',
+    );
     expect(markup).not.toContain("UNSAFE_SERVER_DETAIL");
     expect(markup).not.toContain("request-id-is-not-rendered");
     expect(markup).not.toContain("event-id-is-not-rendered");
@@ -190,6 +196,7 @@ describe("BatchAnalysisPanel", () => {
 
     expect(markup).toContain("GitHub is limiting new work.");
     expect(markup).toContain("Try again in about 30s.");
+    expect(markup).toMatch(/<button[^>]*disabled[^>]*>Run preflight again/);
     expect(markup).not.toContain("GITHUB_RATE_LIMITED");
   });
 
@@ -206,13 +213,14 @@ describe("BatchAnalysisPanel", () => {
     expect(markup).toContain("重試需要確認的項目");
   });
 
-  it("shows safe blockers before a batch exists", () => {
+  it("shows anonymous rate-limit blockers before a batch exists", () => {
     const markup = renderToStaticMarkup(
       <BatchAnalysisPanel
         {...props({
           preflight: {
             status: "blocked",
-            blockers: ["connection_required", "rate_limited"],
+            blockers: ["rate_limited"],
+            retryAfterSeconds: 90,
           },
           job: null,
           progress: null,
@@ -220,8 +228,49 @@ describe("BatchAnalysisPanel", () => {
       />,
     );
 
-    expect(markup).toContain("Reconnect GitHub before analysis can begin.");
     expect(markup).toContain("GitHub is limiting new work.");
+    expect(markup).toContain("Try again in about 1m 30s.");
+    expect(markup).toMatch(/<button[^>]*disabled[^>]*>Run preflight again/);
     expect(markup).toContain("No analysis batch has been created.");
+  });
+
+  it("keeps transient GitHub failures distinct from selection changes", () => {
+    const markup = renderToStaticMarkup(
+      <BatchAnalysisPanel
+        {...props({
+          preflight: {
+            status: "blocked",
+            blockers: ["github_unavailable"],
+          },
+          job: null,
+          progress: null,
+        })}
+      />,
+    );
+
+    expect(markup).toContain("GitHub is temporarily unavailable.");
+    expect(markup).not.toContain("repository selection changed");
+    expect(markup).toContain(
+      '<button type="button">Run preflight again</button>',
+    );
+  });
+
+  it("allows preflight retry after the previous batch is terminal", () => {
+    const markup = renderToStaticMarkup(
+      <BatchAnalysisPanel
+        {...props({
+          preflight: {
+            status: "failed",
+            error: { scope: "preflight", code: "GITHUB_ERROR" },
+          },
+          job: { ...job, status: "completed" },
+          progress: null,
+        })}
+      />,
+    );
+
+    expect(markup).toContain(
+      '<button type="button">Run preflight again</button>',
+    );
   });
 });

@@ -72,6 +72,8 @@ class ProbeEmbeddingProvider(Protocol):
 
     def embed_query(self, texts: list[str]) -> object: ...
 
+    def embed_passages(self, texts: list[str]) -> object: ...
+
 
 @dataclass(frozen=True, slots=True)
 class EmbeddingProfileInput:
@@ -82,6 +84,7 @@ class EmbeddingProfileInput:
     query_prefix: str
     passage_prefix: str
     connection_reference: str
+    connection_revision: int = 0
 
     def validate(self) -> None:
         if (
@@ -92,6 +95,8 @@ class EmbeddingProfileInput:
             or len(self.query_prefix) > 128
             or len(self.passage_prefix) > 128
             or not _CONNECTION_REFERENCE.fullmatch(self.connection_reference)
+            or not isinstance(self.connection_revision, int)
+            or self.connection_revision < 0
         ):
             raise EmbeddingProfileError("VALIDATION_ERROR")
 
@@ -117,6 +122,7 @@ class EmbeddingProfile:
     query_prefix: str
     passage_prefix: str
     connection_reference: str
+    connection_revision: int
     status: str
     active: bool
     observed_adapter: str | None
@@ -161,7 +167,12 @@ class EmbeddingProfileRegistry:
         self._lock = RLock()
 
     def ensure_environment_profile(
-        self, *, provider: str, identity: EmbeddingIdentity
+        self,
+        *,
+        provider: str,
+        identity: EmbeddingIdentity,
+        connection_reference: str = "environment",
+        connection_revision: int = 0,
     ) -> EmbeddingProfile:
         values = EmbeddingProfileInput(
             provider=provider,
@@ -170,7 +181,8 @@ class EmbeddingProfileRegistry:
             normalized=identity.normalized,
             query_prefix=identity.query_prefix,
             passage_prefix=identity.passage_prefix,
-            connection_reference="environment",
+            connection_reference=connection_reference,
+            connection_revision=connection_revision,
         )
         values.validate()
         now = _time(self._now())
@@ -179,13 +191,19 @@ class EmbeddingProfileRegistry:
             try:
                 connection.execute("BEGIN IMMEDIATE")
                 rows = connection.execute(
-                    "SELECT * FROM embedding_profiles WHERE connection_reference = 'environment'"
+                    "SELECT * FROM embedding_profiles WHERE profile_id = 'environment' "
+                    "OR connection_reference = 'environment'"
                 ).fetchall()
                 matching = next(
                     (
                         _profile(row)
                         for row in rows
-                        if _profile(row).provider == provider and _profile(row).identity == identity
+                        if (
+                            _profile(row).provider == provider
+                            and _profile(row).identity == identity
+                            and _profile(row).connection_reference == connection_reference
+                            and _profile(row).connection_revision == connection_revision
+                        )
                     ),
                     None,
                 )
@@ -210,10 +228,10 @@ class EmbeddingProfileRegistry:
                         INSERT INTO embedding_profiles(
                           profile_id, provider, model_id, dimension, normalized,
                           query_prefix, passage_prefix, connection_reference,
-                          status, active, observed_adapter, observed_model_id,
+                          connection_revision, status, active, observed_adapter, observed_model_id,
                           observed_dimension, last_error_code, created_at, updated_at,
                           last_probed_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'environment', 'probe', 0,
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'probe', 0,
                                   NULL, NULL, NULL, NULL, ?, ?, NULL)
                         """,
                         (
@@ -224,6 +242,8 @@ class EmbeddingProfileRegistry:
                             int(values.normalized),
                             values.query_prefix,
                             values.passage_prefix,
+                            values.connection_reference,
+                            values.connection_revision,
                             now,
                             now,
                         ),
@@ -234,6 +254,7 @@ class EmbeddingProfileRegistry:
                         UPDATE embedding_profiles SET
                           provider = ?, model_id = ?, dimension = ?, normalized = ?,
                           query_prefix = ?, passage_prefix = ?,
+                          connection_reference = ?, connection_revision = ?,
                           status = 'reindex_required', observed_adapter = NULL,
                           observed_model_id = NULL, observed_dimension = NULL,
                           last_error_code = NULL, updated_at = ?, last_probed_at = NULL
@@ -246,6 +267,8 @@ class EmbeddingProfileRegistry:
                             int(values.normalized),
                             values.query_prefix,
                             values.passage_prefix,
+                            values.connection_reference,
+                            values.connection_revision,
                             now,
                             profile_id,
                         ),
@@ -285,8 +308,9 @@ class EmbeddingProfileRegistry:
                     INSERT INTO embedding_profiles(
                       profile_id, provider, model_id, dimension, normalized,
                       query_prefix, passage_prefix, connection_reference,
+                      connection_revision,
                       status, active, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'probe', 0, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'probe', 0, ?, ?)
                     """,
                     (
                         profile_id,
@@ -297,6 +321,7 @@ class EmbeddingProfileRegistry:
                         values.query_prefix,
                         values.passage_prefix,
                         values.connection_reference,
+                        values.connection_revision,
                         now,
                         now,
                     ),
@@ -319,6 +344,7 @@ class EmbeddingProfileRegistry:
                 UPDATE embedding_profiles SET
                   provider = ?, model_id = ?, dimension = ?, normalized = ?,
                   query_prefix = ?, passage_prefix = ?, connection_reference = ?,
+                  connection_revision = ?,
                   status = 'reindex_required', observed_adapter = NULL,
                   observed_model_id = NULL, observed_dimension = NULL,
                   last_error_code = NULL, updated_at = ?, last_probed_at = NULL
@@ -332,6 +358,7 @@ class EmbeddingProfileRegistry:
                     values.query_prefix,
                     values.passage_prefix,
                     values.connection_reference,
+                    values.connection_revision,
                     now,
                     profile_id,
                 ),
@@ -357,17 +384,11 @@ class EmbeddingProfileRegistry:
             if provider is None:
                 raise EmbeddingProfileError("EMBEDDING_CONNECTION_REQUIRED")
             observed = provider.identity()
-            output = provider.embed_query(["RepoNPC embedding readiness probe"])
-            shape = getattr(output, "shape", None)
-            if shape != (1, observed.dimension):
-                raise EmbeddingProfileError("EMBEDDING_PROBE_DIMENSION_MISMATCH")
-            if getattr(output, "dtype", None) != np.dtype(np.float32):
-                raise EmbeddingProfileError("EMBEDDING_PROBE_INVALID_VECTOR")
-            vector = np.asarray(output, dtype=np.float32)
-            if not all(math.isfinite(float(value)) for value in vector.flat):
-                raise EmbeddingProfileError("EMBEDDING_PROBE_INVALID_VECTOR")
-            if not np.allclose(np.linalg.norm(vector, axis=1), 1.0, rtol=1e-4, atol=1e-6):
-                raise EmbeddingProfileError("EMBEDDING_PROBE_NOT_NORMALIZED")
+            for output in (
+                provider.embed_query(["RepoNPC embedding readiness query"]),
+                provider.embed_passages(["RepoNPC embedding readiness passage"]),
+            ):
+                _validate_probe_vector(output, observed.dimension)
             if observed != profile.identity:
                 raise EmbeddingProfileError("EMBEDDING_PROFILE_IDENTITY_MISMATCH")
         except EmbeddingProfileError as exc:
@@ -824,6 +845,7 @@ def _profile(row: sqlite3.Row) -> EmbeddingProfile:
         query_prefix=str(row["query_prefix"]),
         passage_prefix=str(row["passage_prefix"]),
         connection_reference=str(row["connection_reference"]),
+        connection_revision=int(row["connection_revision"]),
         status=str(row["status"]),
         active=bool(row["active"]),
         observed_adapter=(str(row["observed_adapter"]) if row["observed_adapter"] else None),
@@ -864,3 +886,16 @@ def _environment_candidate_id(provider: str, identity: EmbeddingIdentity) -> str
 def _rollback(connection: sqlite3.Connection) -> None:
     if connection.in_transaction:
         connection.execute("ROLLBACK")
+
+
+def _validate_probe_vector(output: object, dimension: int) -> None:
+    shape = getattr(output, "shape", None)
+    if shape != (1, dimension):
+        raise EmbeddingProfileError("EMBEDDING_PROBE_DIMENSION_MISMATCH")
+    if getattr(output, "dtype", None) != np.dtype(np.float32):
+        raise EmbeddingProfileError("EMBEDDING_PROBE_INVALID_VECTOR")
+    vector = np.asarray(output, dtype=np.float32)
+    if not all(math.isfinite(float(value)) for value in vector.flat):
+        raise EmbeddingProfileError("EMBEDDING_PROBE_INVALID_VECTOR")
+    if not np.allclose(np.linalg.norm(vector, axis=1), 1.0, rtol=1e-4, atol=1e-6):
+        raise EmbeddingProfileError("EMBEDDING_PROBE_NOT_NORMALIZED")

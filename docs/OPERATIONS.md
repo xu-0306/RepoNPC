@@ -1,13 +1,13 @@
 # RepoNPC v1 Operations Guide
 
-**Status:** Draft operational contract through approved Technical Specification 0.1.9
+**Status:** Draft operational contract through approved Technical Specification 0.2.3; connection/profile implementation is present, model-first guided integration and release evidence remain pending
 **Audience:** a single owner self-hosting RepoNPC
 
-Technical Specification 0.1.9 and ADR-015 through ADR-026 freeze the index CLI, external embedding profiles, deployment-aware password/private-admin topology, local-first owner recovery, guided owner-onboarding, vLLM provider-preset, GitHub OAuth identity/public-read credential, actionable OAuth setup guidance, and bounded GitHub batch-analysis contracts. The resolver/batch implementation and local automated suite are not a clean release claim. Phase 5 still owns the final clean-host, live-provider, real GitHub Profile/browser, Compose, CLI, backup/restore, and release-document checks; it must not be marked complete until that evidence is recorded.
+Technical Specification 0.2.1 and ADR-015 through ADR-028 freeze the index CLI, external embedding profiles, deployment-aware private administration, profile-specific owner access, guided owner-onboarding, vLLM provider preset, anonymous public GitHub resolution, and bounded GitHub batch-analysis contracts. The 0.2.0 local-launch implementation and 0.2.1 OAuth/public-read PAT removal are integrated. Phase 5 still owns the final clean-host, live-provider, real GitHub Profile/browser, Compose, CLI, backup/restore, and release-document checks.
 
 This guide defines the operating experience the implementation must provide. Implemented commands are exercised at their delivery-phase gates; prospective commands must still be exercised and corrected against the release candidate before this document is marked complete.
 
-The 0.1.9 amendment makes external embedding profiles mandatory, uses Ollama `qwen3-embedding:0.6b` as the recommended starter (with provider-aware model management), requires local-password-first ownership with optional GitHub binding, applies a loopback/production password policy, and keeps administration private through SSH/VPN or route allowlisting. A non-standard port is not a security control.
+The 0.1.9 amendment makes external embedding profiles mandatory and keeps administration private through SSH/VPN or route allowlisting. The 0.2.0 amendment separates access by deployment profile: `loopback_evaluation` uses a passwordless one-use launcher grant, while `production` and every non-loopback administration path retain local password setup/recovery. The 0.2.1 amendment removes GitHub OAuth and browser-entered public-read PATs; public discovery/analysis uses anonymous REST capacity. A non-standard port is not a security control.
 
 The 2026-08-30 audit and ordered release fixes are tracked in `SPEC_AND_ENGINEERING_REMEDIATION_PLAN.md`. In particular, a command shown as a planned release contract below is not an assertion that the current CLI implements it.
 
@@ -59,19 +59,19 @@ An authenticated new owner normally uses the guided flow instead of authoring YA
 
 Existing saved configuration is loaded into the guided editor for return editing. Unsaved guided state is limited to the current authenticated browser session and clears on logout or successful save. Saving or downloading does not make private data safe: the resulting configuration is intended to become public. Raw repository bodies, provider prompts/outputs, credentials, tokens, and private provider URLs are never saved in browser storage; guided draft generation preserves configuration fields outside the guided surface.
 
-Version 0.1.7 supersedes the earlier synchronous one-repository execution lifecycle with one owner-scoped durable batch and bounded item stages. Each repository retains an active-execution deadline of 120 seconds and the configured provider deadline (45 seconds by default); queue, owner pause, and GitHub rate waiting do not spend active execution time. Analysis uses only the selected provider/model and explicit public-read connection, has no automatic credential/provider fallback, shares generation capacity fairly, and does not consume the anonymous public daily-chat counter. These constraints do not make analysis mandatory: manual authoring, validation, preview, copy, and download remain available.
+Version 0.1.7 supersedes the earlier synchronous one-repository execution lifecycle with one owner-scoped durable batch and bounded item stages. Each repository retains an active-execution deadline of 120 seconds and the configured provider deadline (45 seconds by default); queue, owner pause, and GitHub rate waiting do not spend active execution time. Under 0.2.1, analysis uses only the selected provider/model plus anonymous REST capacity, has no credential/provider fallback, shares generation capacity fairly, and does not consume the anonymous public daily-chat counter. These constraints do not make analysis mandatory: manual authoring, validation, preview, copy, and download remain available.
 
 Treat connections as independent capabilities rather than one global ready flag:
 
-- **Sign in:** local password remains usable independently of GitHub OAuth configuration.
-- **Read public repositories for analysis:** OAuth/PAT readiness affects authenticated analysis, not public metadata discovery or manual authoring.
+- **Sign in:** local-launch or production password access is independent of GitHub.
+- **Read public repositories for analysis:** anonymous REST capacity affects discovery/analysis; no OAuth or public-read PAT is requested.
 - **AI analysis:** provider readiness affects suggestions, not owner-entered contribution text.
 - **Save to GitHub:** writeback readiness affects remote save, not validate/preview/copy/download.
 - **Publish portfolio:** workflow/publication readiness affects dispatch/activation, not the local draft.
 
 Every unavailable primary action must state which capability is missing, how to configure/recheck it, and which unaffected local action remains available. Cache hits, semaphore counts, rate-budget internals, and predictive estimates belong in Advanced diagnostics rather than the first-run critical path.
 
-## 4. Create deployment secrets and the first owner
+## 4. Create deployment secrets and the owner session
 
 Generate a unique IP pseudonymization key (example operator command):
 
@@ -85,13 +85,15 @@ Store GitHub/provider/IP-HMAC values in separate files in the repository-local `
 set both direct and file forms. Create the directory and files before starting Compose, and restrict
 their permissions to the deployment operator.
 
-Start the application after configuring the IP-HMAC key, then issue a setup code against the persistent runtime volume:
+For `production`, start the application after configuring the IP-HMAC key, then issue a setup code against the persistent runtime volume:
 
 ```bash
 docker compose exec app reponpc admin setup-code
 ```
 
-The command prints one random 256-bit code. It expires after 15 minutes, a new invocation invalidates the prior unused code, and runtime SQLite stores only its SHA-256 digest. Open `/admin` through loopback/SSH/VPN and enter that code with your chosen local username/password. In `loopback_evaluation`, a password may be 4–128 Unicode code points; in `production`, or whenever the admin surface is non-loopback, it must be 15–128 (15 is a minimum, not a maximum). No uppercase, number, or symbol composition rule applies, but common/compromised passwords are rejected. Owner creation, Argon2id hashing, code consumption, and the initial session commit atomically; after success, setup cannot be reopened.
+The command prints one random 256-bit code. It expires after 15 minutes, a new invocation invalidates the prior unused code, and runtime SQLite stores only its SHA-256 digest. Open `/admin` through loopback/SSH/VPN and enter that code with your chosen local username/password. Production passwords must contain 15–128 Unicode code points; no uppercase, number, or symbol composition rule applies, but common/compromised passwords are rejected. Owner creation, Argon2id hashing, code consumption, and the initial session commit atomically; after success, setup cannot be reopened.
+
+For the local Windows `loopback_evaluation` launcher, do not run setup-code and do not create an account. After readiness the launcher runs the equivalent of `reponpc admin launch-token`, stores only a two-minute one-use grant digest, and opens `/admin#local-launch=<grant>`. The browser exchanges it for the normal protected session and removes the fragment immediately. A direct visit with no session shows a relaunch instruction. If any bind/base URL/host setting is non-loopback or trusted-proxy handling is enabled, environment validation must reject this profile before startup.
 
 There is no RepoNPC default username or password. For automated/pre-provisioned legacy deployments only, the non-echoing `docker compose run --rm app reponpc admin hash-password` command may be used to set both `REPONPC_ADMIN_USERNAME` and `REPONPC_ADMIN_PASSWORD_HASH`. Providing that pair disables the Web first-owner flow.
 
@@ -107,23 +109,11 @@ Create a fine-grained token for exactly `REPONPC_CONFIG_REPOSITORY`:
 
 No organization, issue, pull-request, package, secret, or unrelated repository access is needed.
 
-### GitHub OAuth identity and public-read connection
+### GitHub public-read credential removal (0.2.1)
 
-To enable **Sign in with GitHub**, create a dedicated GitHub OAuth App, not a GitHub App. Set its callback exactly to the configured `REPONPC_GITHUB_OAUTH_CALLBACK_URL`, which must be the same RepoNPC origin at `/api/admin/github/callback`. Configure the client ID plus client-secret file and a separate 32-byte credential-encryption-key file. Do not reuse the IP HMAC key, provider keys, or writeback token as the encryption key.
+GitHub OAuth and browser-entered public-read PATs are retired. Do not create OAuth Apps or configure the retired client, callback, or encryption-key variables. Legacy routes return `410 GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED`. Existing runtimes apply migration 14, which removes OAuth/public-read rows without decrypting them; protected backups may still contain encrypted legacy bytes. Migration 15 adds only bounded anonymous metadata/exact-SHA resolution cache rows and contains no token, archive, repository body, prompt, or provider body.
 
-RepoNPC uses Authorization Code Web Flow with PKCE and asks for no repository scope. The browser redirects to GitHub; it never receives access tokens or client secrets. GitHub identity uses the numeric account ID; a login rename is only display metadata. The OAuth connection can read public GitHub data after its readiness check, but it cannot write. The existing `REPONPC_GITHUB_TOKEN(_FILE)` remains the independent writeback credential.
-
-First-owner setup is always local-password-first: the host-issued code creates the local owner, then the signed-in owner may choose **Link GitHub**. OAuth configuration alone never creates an owner. The local password remains the break-glass method, so a GitHub-only owner is not supported and no recovery-command environment variable is required. Do not unlink or disable the final local method.
-
-For public-read fallback, an authenticated owner may paste a fine-grained PAT in the connection screen. It never signs in, is immediately cleared from the form, is encrypted when managed persistence is enabled, and must not have repository, organization, or account permissions. Revoking or receiving a 401 from a selected read credential pauses only GitHub-backed work; it never silently selects a PAT or writeback credential.
-
-If OAuth is not configured, the GitHub buttons on /admin remain usable and open a host-side setup guide. The guide shows the authoritative callback URL returned by GET /api/admin/github/oauth/setup-guide, links to GitHub's official OAuth-App documentation, and explains the following operator sequence:
-
-1. Create a dedicated GitHub OAuth App and register the displayed callback URL.
-2. Configure REPONPC_GITHUB_OAUTH_CLIENT_ID, exactly one of REPONPC_GITHUB_OAUTH_CLIENT_SECRET or REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE, REPONPC_GITHUB_OAUTH_CALLBACK_URL, and exactly one independent REPONPC_CREDENTIAL_ENCRYPTION_KEY or REPONPC_CREDENTIAL_ENCRYPTION_KEY_FILE (at least 32 bytes).
-3. Restart RepoNPC, then use Check configuration again. Never paste a client secret, encryption key, or OAuth token into the page.
-
-Once the server reports OAuth as configured, the same buttons perform the normal top-level redirect. A password owner must still sign in first and explicitly choose Link GitHub; OAuth configuration alone never links an owner identity.
+Public repository discovery and analysis use anonymous, fixed-origin REST requests and exact full commit SHA archives. Completed immutable resolution is reused after a rate reset, so a large 1–50 selection makes durable forward progress instead of restarting at repository one. Anonymous rate limits can pause work; the UI reports a safe retry time and permits manual continuation. `REPONPC_GITHUB_TOKEN` and `REPONPC_GITHUB_TOKEN_FILE` remain independent writeback credentials for explicit config/material writes and workflow dispatch only.
 
 ### Headless/private administration
 
@@ -133,7 +123,7 @@ Do not publish an admin listener to `0.0.0.0` on the public Internet, and do not
 ssh -N -L 8090:127.0.0.1:8000 user@host
 ```
 
-Then browse to `http://127.0.0.1:8090/admin`. The browser still uses the normal same-origin Web Admin; SSH is only the transport and does not create another authentication protocol. For a persistent GUI, use Tailscale/WireGuard or a LAN interface restricted by a firewall. If a public visitor site is required, configure the reverse proxy to allow only `/`, static assets, and `/api/public/*`; deny `/admin` and `/api/admin/*` except from the private management network. Configure the OAuth callback for the origin actually used by the administrator (the SSH-tunnel localhost origin for tunnel-only administration).
+Then browse to `http://127.0.0.1:8090/admin`. Headless/SSH/VPN operation uses the `production` profile and its password even though the browser-facing end of an SSH tunnel is localhost; the passwordless launcher grant is reserved for a directly loopback-bound evaluation process with no trusted proxy. SSH is only the transport and does not create another authentication protocol. For a persistent GUI, use Tailscale/WireGuard or a LAN interface restricted by a firewall. If a public visitor site is required, configure the reverse proxy to allow only `/`, static assets, and `/api/public/*`; deny `/admin` and `/api/admin/*` except from the private management network.
 
 ### Local password recovery
 
@@ -143,9 +133,23 @@ If the owner forgets the password while the runtime volume is intact, run the ho
 docker compose exec app reponpc admin set-password --data-dir /var/lib/reponpc
 ```
 
-The command updates only the local Argon2id hash and applies the deployment-aware policy. It does not reopen first-owner setup, unlink/relink GitHub, alter writeback credentials, or print the password. If GitHub is unavailable or its OAuth app is revoked, sign in with this local password and reconnect GitHub explicitly. If the runtime database is lost, restore the protected backup first; GitHub OAuth is not a replacement for a runtime backup.
+The command creates or updates only the local Argon2id hash and applies the production policy. It does not reopen first-owner setup, alter writeback credentials, or print the password. Use it before moving a passwordless loopback runtime to production, or when a production password is forgotten. If the runtime database is lost, restore the protected backup first.
 
 ## 5. Configure the provider
+
+### Provider-neutral setup and guided order (0.2.3 target)
+
+The owner chooses chat and search models independently in Web Admin. No provider/model is preselected on a clean deployment. Enter the service protocol, API base URL, optional write-only API key and model name, explicitly test, then explicitly use the profile. Model lists are optional assistance; an unsupported list endpoint does not prevent testing a typed model ID. Tests use small synthetic inputs and may consume provider capacity.
+
+The first-run AI path must complete both role selections before repository analysis: models -> repositories -> analysis -> contributions -> profile -> preview/draft. Welcome is not counted. The alternative manual path is available immediately and omits model setup/analysis rather than presenting them as completed. Model controls must be available from guided mode and contextual recovery, not only the advanced/raw-YAML surface.
+
+Public gateways use HTTPS and a base path such as `https://api.example.com/v1`; append no operation path manually. Ollama native URLs use the private service base such as `http://127.0.0.1:11434`. Addresses are resolved from the RepoNPC host/container, not the visitor browser: container loopback points at the container, not the owner's desktop. Existing private-network validation still applies. Never expose a local model publicly to make an index runner reach it.
+
+Host-managed environment/secret-file settings remain supported. Managed connections store keys through protected server storage and return only configured status, never their stored value or private address. Changing a destination requires an explicit credential choice. Preserve and test the secret store plus its separate host protection material during backup/restore; losing it must not silently create an empty store over existing encrypted data. Exact packaging/key-store setup is an implementation contract-preparation deliverable in `MODEL_SETUP_IMPLEMENTATION_HANDOFF.md`.
+
+No-model startup must still reach health and protected administration. Manual drafting/preview/export remains usable. A tested chat service does not imply embeddings. Admin project analysis requires an explicitly selected tested chat/embedding pair but does not require a published bundle; it uses bounded temporary derived-index work and must not publish or activate that index. Public visitor chat remains unavailable until the separately validated compatible bundle and public model lifecycle are ready. A runtime connection does not imply the index runner can reach it. Index-builder credentials are provisioned independently; no UI export contains them. Figma and a managed GGUF/Hugging Face runtime are outside this implementation package.
+
+**Current-source status (2026-09-10):** Managed connection, Chat profile and Embedding profile code/panels exist, so earlier text saying the form is wholly absent is obsolete. The guided flow still hides those panels, goes from repository confirmation to analysis, and projects public model status into the analysis step. Clean no-model startup can leave no usable provider runtime after later selection. Do not advertise the model-first flow, same-process first analysis, or full 0.2.2/0.2.3 acceptance until AC-053 through AC-060 pass. Use `ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md` for the correction.
 
 ### Private Ollama
 
@@ -155,7 +159,7 @@ RepoNPC uses Ollama's native `GET /api/tags`, `POST /api/chat`, and `POST /api/e
 
 Official references: [Ollama API introduction](https://docs.ollama.com/api/introduction), [chat](https://docs.ollama.com/api/chat), [embeddings](https://docs.ollama.com/api/embed), and [structured outputs](https://docs.ollama.com/capabilities/structured-outputs).
 
-The embedding profile/model used to build the bundle must exactly match runtime. The recommended starter is Ollama `qwen3-embedding:0.6b`; other curated choices include `bge-m3` and `embeddinggemma:300m`. The local sentence-transformers adapter is benchmark/build-fixture-only and is not installed or selected as a production default. Model load or encode failure is explicit and never falls back to another provider/model.
+The embedding profile/model used to build the bundle must exactly match runtime. After choosing Ollama, an optional recommendation is `qwen3-embedding:0.6b`; other curated choices include `bge-m3` and `embeddinggemma:300m`. None is a product default under 0.2.2. The local sentence-transformers adapter is benchmark/build-fixture-only. Model load or encode failure is explicit and never falls back to another provider/model.
 
 #### Embedding model center
 
@@ -183,7 +187,7 @@ Set `REPONPC_CHAT_PROVIDER=vllm`, use the server's `/v1` base URL, and configure
 
 For embeddings, run an embedding/pooling model with the OpenAI-compatible `/v1/embeddings` endpoint and set `REPONPC_EMBEDDING_PROVIDER=vllm`. A generative chat model does not imply embedding support, so chat and embedding may use different vLLM instances, base URLs, models, and server-only API-key files. The embedding bundle identity remains `openai_compatible` and must exactly match at build/runtime.
 
-Do not expose vLLM directly to the Internet. vLLM API-key enforcement does not protect every operational endpoint. Put it on a private network and, when a reverse proxy is required, allowlist only `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/embeddings`; deny all other paths. Readiness fails safely when either selected model is absent. Never place provider keys or private URLs in `reponpc.yml` or browser-managed fields.
+Do not expose vLLM directly to the Internet. vLLM API-key enforcement does not protect every operational endpoint. Put it on a private network and, when a reverse proxy is required, allowlist only `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/embeddings`; deny all other paths. Readiness fails safely when the selected capability test fails. Never place provider keys or private URLs in `reponpc.yml` or browser storage; only the protected write-only model form may accept newly entered values under 0.2.2.
 
 The model-list readiness check cannot prove that the chat model has a valid template, that the embedding model was served with the correct task, or that the selected model supports structured output. Validate those capabilities explicitly before production traffic.
 
@@ -231,11 +235,13 @@ For a repository checkout on Windows, double-click `start-reponpc.cmd`, or run:
 .\scripts\start-reponpc.ps1
 ```
 
-The launcher reads existing `REPONPC_*` overrides from `.env`, adapts container secret-file paths to ignored files below `secrets/` (including OAuth client-secret and credential-encryption-key files), binds only `127.0.0.1`, uses a same-origin `http://localhost:8090` admin URL by default, builds stale Web assets, starts the server in the background, waits for `/healthz`, and opens `/admin`. On startup it compares the managed process state with the latest backend/frontend inputs; a stale process is stopped through its recorded process tree and replaced. Before stopping, it verifies the recorded PID and configured RepoNPC Python executable. If Windows rejects tree termination because of an elevation-context mismatch, the launcher falls back to directly stopping that same verified PID. An unknown process occupying the port is never terminated automatically. If first-owner setup remains open for the launcher's runtime database, it issues and displays a fresh 15-minute code; re-running it replaces any prior unused code. It generates only the local IP-HMAC secret, never a default administrator credential. GitHub OAuth controls remain actionable before configuration and open the setup guide; GitHub-backed write operations still require their explicit server-side token.
+The launcher reads existing `REPONPC_*` overrides from `.env`, adapts container secret-file paths to ignored files below `secrets/`, forces and validates `loopback_evaluation`, binds only `127.0.0.1`, uses same-origin `http://localhost:8090`, builds stale Web assets, starts the server in the background, and waits for `/healthz`. It then creates a fresh two-minute one-use launch grant and opens `/admin#local-launch=<grant>`; re-running replaces any prior unused grant. It never prints or creates a username/password and never requires GitHub configuration to enter settings. On startup it compares the managed process state with the latest backend/frontend inputs; a stale process is stopped through its recorded process tree and replaced. Before stopping, it verifies the recorded PID and configured RepoNPC Python executable. If Windows rejects tree termination because of an elevation-context mismatch, the launcher falls back to directly stopping that same verified PID. An unknown process occupying the port is never terminated automatically.
 
 The default local chat model is `qwen3.5:9b` when `.env` does not select another model. Provider readiness requires an external embedding profile compatible with the active bundle. The launcher never installs or downloads a local embedding runtime; use the Ollama model center/provider host or configure vLLM/OpenAI-compatible embeddings explicitly. It never fabricates a bundle or silently falls back to another provider. Logs and mutable state are kept below ignored `runtime-data/local/`. Use `-Port`, `-DataDir`, `-ChatModel`, `-SkipBuild`, `-NoBrowser`, or `-NoPause` for terminal-driven evaluation. This launcher is a development/evaluation convenience only; the supported production topology remains Docker Compose on x86_64 Linux behind HTTPS.
 
 ### Production Compose startup
+
+The preceding launcher defaults describe the existing code, not the 0.2.2 target. The implementation must remove implicit model defaults in the launcher and environment loader together; deleting `.env.example` values alone would still leave hidden defaults. Explicit overrides and existing working profiles must survive.
 
 Prepare `.env` from `.env.example`, mount secrets, verify the exact manifest/public base URLs, then:
 
@@ -306,7 +312,7 @@ Back up:
 - the protected secret source/vault, outside RepoNPC data backups;
 - persistent data directory or at minimum `runtime.sqlite` plus active/previous bundles/pointers.
 
-For Web-created owners, `runtime.sqlite` contains the sole Argon2id owner credential record plus profile/connection metadata. Losing it removes local authentication and embedding-profile continuity; GitHub OAuth is not a replacement for this backup. v1 intentionally has no unauthenticated Web password reset or setup reopening path. Protect and test this backup.
+`runtime.sqlite` contains the sole owner record, optional production Argon2id hash, hashed session/proof state, and profile metadata. Before the 0.2.1 migration it may also contain encrypted legacy OAuth/PAT connection records; older protected backups retain those encrypted bytes under the normal retention policy. Losing the database removes local authentication and embedding-profile continuity. The product intentionally has no unauthenticated Web password reset or setup reopening path. Protect and test this backup.
 
 Before copying SQLite, use the verified online backup command or stop the application cleanly and back up the protected persistent data directory as one unit. The backup command refuses to overwrite an existing target and runs SQLite integrity verification before publishing the copy.
 
@@ -315,7 +321,7 @@ docker compose exec app reponpc runtime backup /var/lib/reponpc/backups/runtime.
 docker compose exec app reponpc runtime check
 ```
 
-Recovery order: restore secrets with correct permissions, restore/verify runtime database, start the pinned application version, validate local bundles, fetch manifest if necessary, and check health/readiness/admin login/card/chat plus the active embedding profile. Since configuration and immutable releases are in GitHub, runtime conversation data does not need recovery. The supported host-only `reponpc admin set-password --data-dir <dir> [--username <owner>]` procedure restores local password sign-in; it does not reopen setup or alter GitHub identity. Recovery readiness is established by this command's clean-host test, not by an arbitrary non-empty environment string.
+Recovery order: restore secrets with correct permissions, restore/verify runtime database, start the pinned application version, validate local bundles, fetch manifest if necessary, and check health/readiness/admin access/card/chat plus the active embedding profile. Since configuration and immutable releases are in GitHub, runtime conversation data does not need recovery. Loopback evaluation restores access by minting a new launcher grant. Production uses host-only `reponpc admin set-password --data-dir <dir> [--username <owner>]`; it does not reopen setup or alter GitHub connections. Recovery readiness is established by clean-host tests for both profile paths.
 
 ## 12. Upgrades
 
@@ -360,7 +366,7 @@ Monitor safe aggregate accepted/rejected counts, retrieval/model latency, provid
 
 Before this guide changes from Draft to complete, the release owner must run every shown RepoNPC/Compose command against a clean release candidate, replace assumptions with actual output, document image/version support and backup consistency behavior, and attach AC-036/AC-037 evidence.
 
-The Phase 5 gate also requires every P0 item in `SPEC_AND_ENGINEERING_REMEDIATION_PLAN.md` to close, including a working default embedding profile, deployment-aware password/recovery behavior, batch compatibility-route conformance, and no-dead-end owner journeys.
+The Phase 5 gate also requires every P0 item in `SPEC_AND_ENGINEERING_REMEDIATION_PLAN.md` to close, including provider-neutral model setup with an explicitly selected working embedding profile, deployment-aware password/recovery behavior, batch compatibility-route conformance, and no-dead-end owner journeys. AC-053 through AC-060 are unverified model-setup/model-first gates.
 
 ### 16.1 Current Milestone D–F verification record (2026-08-16)
 
@@ -368,14 +374,16 @@ The Phase 5 gate also requires every P0 item in `SPEC_AND_ENGINEERING_REMEDIATIO
 | --- | --- | --- |
 | Python format, lint, type, contract, integration, security, migration, cache, batch, and retrieval suites | Pass — `607 passed, 2 skipped` with Compose smoke excluded | D–E local automated evidence is complete; two skips remain part of the suite result. |
 | Web format, lint, type, unit, and production build | Pass — Prettier/typecheck/build and `53` Vitest tests; ESLint exits zero with 8 existing Fast Refresh warnings | D–E frontend implementation has local build/test evidence. |
-| Current-source browser smoke | Pass for isolated first-owner/login/admin workspace flow; keyboard Tab focus and labelled landmarks/statuses observed | This is a smoke only, not the required full viewport, assistive-technology, GitHub-linked, or active-batch browser evidence. |
+| Current-source browser smoke | Historical pass for the superseded 0.1.9 first-owner/login/admin flow | Must be rerun for the 0.2.0 local-launch, production-password, authenticated GitHub-connection, full viewport, and assistive-technology paths. |
 | Docker image, Compose smoke, runtime-volume restart, and clean host | Blocked | Docker configuration and engine named-pipe access were denied on this host. |
 | Windows launcher smoke | Partial / blocked | Launcher contract passed 5 tests; the stale `reponpc.exe` lock was cleared and frozen dependency sync plus environment validation completed. Full health smoke remains blocked by host-denied Hugging Face network access during embedding startup. |
 | Ollama, vLLM, and generic OpenAI-compatible live capacity/timeout matrix | Not run | No owner-authorized live provider endpoints/models were available. |
-| Real GitHub OAuth/profile, revocation, reconnect, and public repository run | Not run | Requires an owner OAuth App configuration and a real GitHub account/repository; mocked coverage is not substituted for this evidence. |
+| Real anonymous GitHub public-repository resolution, rate exhaustion, and exact-SHA archive run | Not run | Required by 0.2.1 after the anonymous REST resolver lands; OAuth/reconnect evidence is no longer a release gate. |
 
 These results deliberately do **not** complete Milestone F. Keep the operations status Draft until every blocked or not-run release item has dated, safe evidence. AC-036's clean x86_64 Linux host gate is explicitly owner-directed deferred/not-run in this Windows worktree; the Windows launcher smoke and local test suite are not substitutes for that evidence and must remain a release blocker until a clean Linux run is attached.
 
 **Latest rerun correction:** the non-Docker total is `607 passed, 2 skipped`; release-audit coverage is `13 passed` after adding the release-input gate test.
 
 **Repair addendum (2026-08-16):** The non-Docker suite was rerun after the D-E repairs with `606 passed, 2 skipped`. The launcher contract passed 5 tests. A real launcher smoke cleared the stale `reponpc.exe` lock, completed frozen `uv sync`, and validated the environment, but startup health could not complete because this host denies outbound Hugging Face socket access while loading the local embedding model. Docker/Compose remains unavailable, live providers and real GitHub credentials remain unconfigured, and AC-036 remains deferred/not-run.
+
+**0.2.1 correction addendum (2026-09-09):** The current Docker Desktop x86_64 Linux engine passed `tests/smoke/test_container.py` (`1 passed in 25.84s`), including image build, health/public-status checks, runtime-volume restart persistence, and isolated teardown; `docker compose config --quiet` also passed. This local Docker smoke does not replace AC-036 clean-host evidence.

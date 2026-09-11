@@ -15,6 +15,7 @@ from argon2 import PasswordHasher, Type
 
 from reponpc.admin.auth import (
     AdminAuthError,
+    issue_admin_local_launch_grant,
     issue_admin_setup_code,
     set_admin_recovery_password,
     validate_new_admin_password,
@@ -47,6 +48,10 @@ def _parser() -> argparse.ArgumentParser:
         "setup-code", help="issue a short-lived one-time first-owner setup code"
     )
     setup_code.add_argument("--data-dir", type=Path)
+    launch_token = admin_commands.add_parser(
+        "launch-token", help="issue a short-lived loopback launch URL"
+    )
+    launch_token.add_argument("--data-dir", type=Path)
     set_password = admin_commands.add_parser(
         "set-password", help="host-only recovery: restore local owner password sign-in"
     )
@@ -116,6 +121,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                     deployment_profile=os.environ.get("REPONPC_DEPLOYMENT_PROFILE", "production"),
                 )
                 print(PasswordHasher(type=Type.ID).hash(password))
+            elif args.admin_command == "launch-token":
+                settings = load_environment()
+                data_dir = args.data_dir or settings.data_dir
+                database = RuntimeDatabase(data_dir)
+                database.initialize()
+                grant = issue_admin_local_launch_grant(
+                    database, deployment_profile=settings.deployment_profile
+                )
+                print(f"{settings.public_base_url.rstrip('/')}/admin#local-launch={grant}")
             else:
                 data_dir = args.data_dir or Path(
                     os.environ.get("REPONPC_DATA_DIR", "/var/lib/reponpc")
@@ -227,12 +241,17 @@ def _bundle_manager(data_dir: Path | None) -> BundleManager:
         if settings.embedding_provider == "vllm"
         else settings.embedding_provider
     )
+    if not settings.embedding_provider or not settings.embedding_model:
+        adapter = "unconfigured"
+        model_id = "unconfigured"
+    else:
+        model_id = settings.embedding_model
     return BundleManager(
         data_directory=data_dir or settings.data_dir,
         runtime_database=database,
         expected_embedding=EmbeddingIdentity(
             adapter=adapter,
-            model_id=settings.embedding_model,
+            model_id=model_id,
             dimension=settings.embedding_dimension,
             normalized=settings.embedding_normalized,
             query_prefix="query: ",

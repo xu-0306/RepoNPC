@@ -319,6 +319,27 @@ def test_health_requires_the_explicitly_selected_model(provider: object) -> None
     assert health.failure_code is ProviderFailureCode.UNAVAILABLE
 
 
+@pytest.mark.parametrize(
+    "provider",
+    [
+        OpenAICompatibleChatProvider(
+            "https://models.example.test/v1",
+            "selected-model",
+            CAPABILITIES,
+            transport=RecordingTransport([response(404, {"error": "unsupported"})]),
+        ),
+        OllamaChatProvider(
+            "http://ollama:11434",
+            "selected-model",
+            CAPABILITIES,
+            RecordingTransport([response(501, {"error": "unsupported"})]),
+        ),
+    ],
+)
+def test_health_allows_services_without_model_listing(provider: object) -> None:
+    assert provider.health().ready is True  # type: ignore[attr-defined]
+
+
 def test_ollama_health_accepts_the_default_latest_tag_for_selected_model() -> None:
     provider = OllamaChatProvider(
         "http://ollama:11434",

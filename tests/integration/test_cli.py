@@ -9,9 +9,11 @@ import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+import reponpc.main as runtime_main
 from reponpc import cli
 from reponpc.admin.auth import AdminSessionService
 from reponpc.indexing.pipeline import (
@@ -213,6 +215,80 @@ def test_admin_setup_code_uses_runtime_database_and_emits_raw_code_once(
     assert second_hash != first_hash
 
 
+def test_admin_launch_token_emits_one_fragment_url_and_replaces_prior_grant(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    data_dir = tmp_path / "runtime"
+    settings = SimpleNamespace(
+        data_dir=data_dir,
+        deployment_profile="loopback_evaluation",
+        public_base_url="http://localhost:8090",
+    )
+    monkeypatch.setattr(cli, "load_environment", lambda: settings)
+
+    assert cli.main(["admin", "launch-token"]) == 0
+    first_lines = capsys.readouterr().out.splitlines()
+    assert len(first_lines) == 1
+    first = urlsplit(first_lines[0])
+    assert first.scheme == "http"
+    assert first.netloc == "localhost:8090"
+    assert first.path == "/admin"
+    assert first.query == ""
+    assert set(parse_qs(first.fragment)) == {"local-launch"}
+    first_grant = parse_qs(first.fragment)["local-launch"][0]
+
+    assert cli.main(["admin", "launch-token", "--data-dir", str(data_dir)]) == 0
+    second_lines = capsys.readouterr().out.splitlines()
+    assert len(second_lines) == 1
+    second = urlsplit(second_lines[0])
+    second_grant = parse_qs(second.fragment)["local-launch"][0]
+    assert second_grant != first_grant
+
+    database = cli.RuntimeDatabase(data_dir)
+    with database.connection() as connection:
+        stored = connection.execute(
+            "SELECT grant_hash FROM admin_local_launch_grants WHERE state_key = 'current'"
+        ).fetchone()[0]
+    assert stored == hashlib.sha256(second_grant.encode()).hexdigest()
+    assert first_grant not in stored
+    assert second_grant not in stored
+
+
+@pytest.mark.parametrize(
+    ("profile", "proxy_headers"),
+    [("loopback_evaluation", False), ("production", True)],
+)
+def test_server_proxy_header_trust_tracks_deployment_profile(
+    tmp_path: Path, monkeypatch, profile: str, proxy_headers: bool
+) -> None:
+    settings = SimpleNamespace(
+        data_dir=tmp_path / profile,
+        sqlite_busy_timeout_ms=1_000,
+        host="127.0.0.1",
+        port=8090,
+        deployment_profile=profile,
+    )
+    database = SimpleNamespace(initialize=lambda: None)
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(runtime_main, "load_environment", lambda: settings)
+    monkeypatch.setattr(runtime_main, "RuntimeDatabase", lambda *_args, **_kwargs: database)
+    monkeypatch.setattr(runtime_main, "_configure_admin", lambda *_args: None)
+    monkeypatch.setattr(runtime_main, "_configure_bundle_lifecycle", lambda *_args: None)
+    monkeypatch.setattr(runtime_main.uvicorn, "run", lambda *_args, **kwargs: calls.append(kwargs))
+    runtime_main.app.state.analysis_batch_service = None
+
+    runtime_main.run()
+
+    assert calls == [
+        {
+            "host": "127.0.0.1",
+            "port": 8090,
+            "factory": False,
+            "proxy_headers": proxy_headers,
+        }
+    ]
+
+
 def test_admin_setup_code_uses_data_dir_environment(tmp_path: Path, monkeypatch, capsys) -> None:
     data_dir = tmp_path / "configured-runtime"
     monkeypatch.setenv("REPONPC_DATA_DIR", str(data_dir))
@@ -228,7 +304,11 @@ def test_admin_setup_code_fails_safely_after_owner_exists(tmp_path: Path, capsys
     data_dir = tmp_path / "runtime"
     database = cli.RuntimeDatabase(data_dir)
     database.initialize()
-    service = AdminSessionService(database=database, identity_hmac_key=b"k" * 32)
+    service = AdminSessionService(
+        database=database,
+        identity_hmac_key=b"k" * 32,
+        deployment_profile="production",
+    )
     setup_code = secrets.token_urlsafe(32)
     with database.connection() as connection:
         connection.execute(
@@ -256,7 +336,11 @@ def test_set_password_uses_optional_owner_selector_and_preserves_username(
     data_dir = tmp_path / "runtime"
     database = cli.RuntimeDatabase(data_dir)
     database.initialize()
-    service = AdminSessionService(database=database, identity_hmac_key=b"k" * 32)
+    service = AdminSessionService(
+        database=database,
+        identity_hmac_key=b"k" * 32,
+        deployment_profile="production",
+    )
     setup_code = secrets.token_urlsafe(32)
     with database.connection() as connection:
         connection.execute(
@@ -267,8 +351,8 @@ def test_set_password_uses_optional_owner_selector_and_preserves_username(
     service.setup_owner(
         setup_code=setup_code,
         username="owner",
-        password="npcx",
-        password_confirmation="npcx",
+        password="correct horse battery staple",
+        password_confirmation="correct horse battery staple",
     )
     replacement = "安全密碼" * 4
     prompts = iter((replacement, replacement))
@@ -277,7 +361,11 @@ def test_set_password_uses_optional_owner_selector_and_preserves_username(
 
     assert cli.main(["admin", "set-password", "--data-dir", str(data_dir)]) == 0
     assert "completed" in capsys.readouterr().out
-    restarted = AdminSessionService(database=database, identity_hmac_key=b"k" * 32)
+    restarted = AdminSessionService(
+        database=database,
+        identity_hmac_key=b"k" * 32,
+        deployment_profile="production",
+    )
     restarted.login(username="owner", password=replacement, remote_identity="host")
 
 

@@ -16,11 +16,9 @@ import {
 import {
   BatchAnalysisPanel,
   type BatchActionState,
-  type BatchDurationEstimate,
   type BatchJobSnapshot,
   type BatchJobStatus,
   type BatchOperationError,
-  type BatchPreflightBlocker,
   type BatchPreflightState,
   type BatchProgressAnnouncement,
   type BatchProgressState,
@@ -29,6 +27,20 @@ import {
   type BatchRepositoryState,
   type BatchSseState,
 } from "./BatchAnalysisPanel";
+import {
+  ChatProfilePanel,
+  type ChatProfileDraft,
+  type ChatProfileView,
+} from "./ChatProfilePanel";
+import {
+  AnalysisSelectionPanel,
+  type AnalysisSelectionView,
+} from "./AnalysisSelectionPanel";
+import {
+  batchDuration,
+  preflightState,
+  type BatchPreflightBody,
+} from "./batchPreflight";
 import { adminErrorStateReducer, initialAdminErrorState } from "./adminErrors";
 import {
   EmbeddingProfilePanel,
@@ -36,12 +48,13 @@ import {
   type EmbeddingProfileDraft,
   type EmbeddingProfileView,
 } from "./EmbeddingProfilePanel";
-import { GitHubButton } from "./GitHubButton";
 import {
-  GitHubOAuthSetupGuideDialog,
-  type GitHubOAuthSetupGuideBody,
-} from "./GitHubOAuthSetupGuideDialog";
+  ModelConnectionPanel,
+  type ModelConnectionDraft,
+  type ModelConnectionView,
+} from "./ModelConnectionPanel";
 import { GuidedOnboardingView } from "./GuidedOnboardingView";
+import { LocalLaunchAccessPanel } from "./LocalLaunchAccessPanel";
 import {
   guidedOnboardingReducer,
   guidedOnboardingFromConfig,
@@ -67,40 +80,16 @@ interface SetupStatusBody {
 }
 
 interface AuthMethodsBody {
+  mode: "local_launch" | "password";
   password: { available: boolean };
-  github: { available: boolean };
   setup_required: boolean;
-}
-
-interface GitHubConnection {
-  id: number;
-  purpose: "identity_public_read" | "public_read";
-  github_login: string | null;
-  expires_at: string | null;
-  last_validated_at: string | null;
-  status: "ready" | "connection_required" | "invalid";
-}
-
-interface GitHubConnectionsBody {
-  connections: GitHubConnection[];
-}
-
-interface GitHubOAuthStartBody {
-  authorization_url: string;
-}
-
-interface PublicStatusBody {
-  model: {
-    ready: boolean;
-    provider: "ollama" | "openai_compatible" | null;
-    last_checked_at: string | null;
-  };
 }
 
 interface AdminAccessPanelProps {
   locale: Locale;
   busy: boolean;
   error: string;
+  passwordAvailable: boolean | null;
   setupStatus: SetupStatusBody | null;
   setupStatusPending: boolean;
   username: string;
@@ -116,10 +105,6 @@ interface AdminAccessPanelProps {
   onLogin: React.FormEventHandler<HTMLFormElement>;
   onSetupOwner: React.FormEventHandler<HTMLFormElement>;
   onRefreshSetupStatus: () => void;
-  githubAvailable?: boolean;
-  githubPending?: boolean;
-  onGitHubRedirect?: () => void;
-  onGitHubSetupGuide?: (trigger: HTMLButtonElement) => void;
 }
 
 interface ConfigBody {
@@ -157,66 +142,6 @@ interface BatchSelectionBody {
   include: string[];
   exclude: string[];
   confirmed: true;
-}
-
-interface BatchCredentialBody {
-  credential_id: number;
-  purpose: "identity_public_read" | "public_read";
-  github_login?: string | null;
-}
-
-interface BatchRepositoryPlanBody {
-  slug: string;
-  commit_sha: string;
-  default_branch: string;
-  is_archived: boolean;
-}
-
-interface BatchCachePredictionBody {
-  derived_index_hit: boolean;
-  validated_analysis_hit: boolean;
-}
-
-interface BatchRateBudgetBody {
-  remaining?: number;
-  reset_at?: string | null;
-}
-
-interface BatchCapacityBody {
-  github_requests: number;
-  archive_staging: number;
-  index_work: number;
-  generation: number;
-  whole_job_items: number;
-}
-
-interface BatchDurationBody {
-  minimum_seconds: number;
-  maximum_seconds: number;
-  confidence: "low" | "medium" | "high";
-}
-
-interface BatchBlockerBody {
-  slug: string;
-  code: string;
-}
-
-interface BatchPreflightBody {
-  plan_id: string;
-  expires_at: string;
-  selection_hash: string;
-  selected_credential: BatchCredentialBody | null;
-  repositories: BatchRepositoryPlanBody[];
-  cache_predictions: Record<string, BatchCachePredictionBody>;
-  graphql_budget: BatchRateBudgetBody;
-  core_budget: BatchRateBudgetBody;
-  secondary_retry_at?: string | null;
-  provider_ready: boolean;
-  capacity: BatchCapacityBody;
-  maximum_generation_attempts: number;
-  duration: BatchDurationBody | null;
-  blockers: BatchBlockerBody[];
-  warnings: string[];
 }
 
 interface BatchProgressBody {
@@ -280,22 +205,11 @@ class AdminRequestError extends Error {
   }
 }
 
-interface GitHubConnectionPanelProps {
-  locale: Locale;
-  oauthAvailable: boolean;
-  connections: GitHubConnection[];
-  pending: boolean;
-  linkPending: boolean;
-  patToken: string;
-  error: string;
-  onLink: () => void;
-  onUnlink: () => void;
-  onCheck: (credentialId: number) => void;
-  onDelete: (credentialId: number) => void;
-  onPatChange: (value: string) => void;
-  onSavePat: React.FormEventHandler<HTMLFormElement>;
-  onGitHubSetupGuide?: (trigger: HTMLButtonElement) => void;
-}
+type AdminAccessState =
+  | "checking"
+  | "local_launch"
+  | "password"
+  | "unavailable";
 
 const GUIDED_ONBOARDING_STORAGE_KEY = "reponpc.guided-onboarding.v1";
 export const GUIDED_DRAFT_STORAGE_KEY = "reponpc.guided-draft.v1";
@@ -316,6 +230,19 @@ function copyFor(locale: Locale, chinese: string, english: string): string {
   return locale === "zh-TW" ? chinese : english;
 }
 
+export function takeLocalLaunchGrant(
+  hash: string,
+  clearFragment: () => void,
+): string | null {
+  if (!hash) return null;
+
+  const values = new URLSearchParams(
+    hash.startsWith("#") ? hash.slice(1) : hash,
+  ).getAll("local-launch");
+  clearFragment();
+  return values.length === 1 && values[0].length > 0 ? values[0] : null;
+}
+
 function batchOperationError(
   error: unknown,
   scope: BatchOperationError["scope"],
@@ -325,65 +252,6 @@ function batchOperationError(
     code: error instanceof Error ? error.message : "REQUEST_FAILED",
     retryAfterSeconds:
       error instanceof AdminRequestError ? error.retryAfterSeconds : undefined,
-  };
-}
-
-function batchDuration(
-  duration: BatchDurationBody | null,
-): BatchDurationEstimate | null {
-  if (!duration) return null;
-  return {
-    minimumSeconds: Math.max(0, duration.minimum_seconds),
-    maximumSeconds: Math.max(0, duration.maximum_seconds),
-    confidence: duration.confidence,
-  };
-}
-
-function preflightBlocker(code: string): BatchPreflightBlocker {
-  if (code === "GITHUB_CONNECTION_REQUIRED") return "connection_required";
-  if (code === "MODEL_UNAVAILABLE") return "provider_unavailable";
-  if (code === "GITHUB_RATE_LIMITED" || code === "RATE_LIMITED") {
-    return "rate_limited";
-  }
-  if (code === "NO_REPOSITORIES") return "no_repositories";
-  return "selection_changed";
-}
-
-function budgetStatus(
-  plan: BatchPreflightBody,
-): "available" | "limited" | "exhausted" {
-  const remaining = [plan.graphql_budget.remaining, plan.core_budget.remaining]
-    .filter((value): value is number => typeof value === "number")
-    .some((value) => value <= 0);
-  if (remaining) return "exhausted";
-  return plan.secondary_retry_at ? "limited" : "available";
-}
-
-function preflightState(plan: BatchPreflightBody): BatchPreflightState {
-  const blockers = plan.blockers.map((blocker) =>
-    preflightBlocker(blocker.code),
-  );
-  if (blockers.length > 0) return { status: "blocked", blockers };
-
-  const cachedResultCount = Object.values(plan.cache_predictions).filter(
-    (prediction) => prediction.validated_analysis_hit,
-  ).length;
-  return {
-    status: "ready",
-    plan: {
-      selectionCount: plan.repositories.length,
-      cachedResultCount,
-      connection: plan.selected_credential ? "ready" : "connection_required",
-      rateBudget: budgetStatus(plan),
-      providerReady: plan.provider_ready,
-      effectiveConcurrency: Math.min(
-        plan.capacity.generation,
-        plan.capacity.whole_job_items,
-      ),
-      serverConcurrency: plan.capacity.whole_job_items,
-      maximumGenerationAttempts: plan.maximum_generation_attempts,
-      estimatedDuration: batchDuration(plan.duration),
-    },
   };
 }
 
@@ -408,7 +276,6 @@ function batchRepositoryState(state: string): BatchRepositoryState {
     "queued",
     "active",
     "waiting_rate_limit",
-    "waiting_reconnection",
     "needs_retry_confirmation",
     "failed",
     "cancelled",
@@ -641,10 +508,41 @@ function embeddingProfileErrorMessage(locale: Locale, error: unknown): string {
   );
 }
 
+function chatProfileErrorMessage(locale: Locale, error: unknown): string {
+  const code = error instanceof Error ? error.message : "REQUEST_FAILED";
+  const messages: Record<string, [string, string]> = {
+    CHAT_CONNECTION_REQUIRED: [
+      "Chat 服務尚未設定，請先選擇可用的模型服務。",
+      "This Chat service is not configured. Choose a configured model service first.",
+    ],
+    CHAT_PROBE_REQUIRED: [
+      "請先測試 Chat 模型，再啟用它。",
+      "Test this Chat model before using it.",
+    ],
+    CHAT_PROFILE_STALE: [
+      "模型服務設定已變更，請重新測試後再啟用。",
+      "The service changed. Test the model again before using it.",
+    ],
+    CHAT_PROBE_INVALID_RESPONSE: [
+      "模型回應格式不符合測試要求，請修改模型或服務後重試。",
+      "The model response did not pass the capability test. Edit the model or service and retry.",
+    ],
+  };
+  const message = messages[code];
+  return message
+    ? copyFor(locale, message[0], message[1])
+    : copyFor(
+        locale,
+        "Chat 模型操作失敗，請檢查狀態後重試。",
+        "The Chat model operation failed. Check its safe status and try again.",
+      );
+}
+
 export function AdminAccessPanel({
   locale,
   busy,
   error,
+  passwordAvailable,
   setupStatus,
   setupStatusPending,
   username,
@@ -660,47 +558,30 @@ export function AdminAccessPanel({
   onLogin,
   onSetupOwner,
   onRefreshSetupStatus,
-  githubAvailable = false,
-  githubPending = false,
-  onGitHubRedirect,
-  onGitHubSetupGuide = () => undefined,
 }: AdminAccessPanelProps) {
   const setupRequired = setupStatus?.setup_required === true;
   const setupUnavailable = !setupStatusPending && setupStatus === null;
+  const passwordRecoveryRequired =
+    !setupStatusPending &&
+    setupStatus?.setup_required === false &&
+    passwordAvailable === false;
   const mode = setupStatusPending
     ? "loading"
     : setupRequired
       ? "setup"
-      : setupUnavailable
-        ? "unavailable"
-        : "login";
+      : passwordRecoveryRequired
+        ? "recovery"
+        : setupUnavailable
+          ? "unavailable"
+          : "login";
   const title =
     mode === "setup"
       ? copyFor(locale, "首次設定", "first-time setup")
       : mode === "login"
         ? copyFor(locale, "管理員登入", "admin sign in")
-        : copyFor(locale, "管理介面", "admin console");
-
-  function handleGitHubFormSubmit(event: React.FormEvent<HTMLFormElement>) {
-    const button = event.currentTarget.querySelector<HTMLButtonElement>(
-      "button.github-button",
-    );
-    if (!githubAvailable) {
-      // A form can be submitted by pressing Enter in another field without a
-      // button click. Keep that keyboard path aligned with the button path:
-      // show the safe setup guide and never send an OAuth start request.
-      event.preventDefault();
-      if (button !== null) onGitHubSetupGuide(button);
-      return;
-    }
-    if (button?.disabled) {
-      // Prerequisite-disabled configured controls (for example, a missing
-      // setup code) must not submit a partially valid OAuth request.
-      event.preventDefault();
-      return;
-    }
-    onGitHubRedirect?.();
-  }
+        : mode === "recovery"
+          ? copyFor(locale, "恢復管理員存取", "restore admin access")
+          : copyFor(locale, "管理介面", "admin console");
 
   return (
     <main className="admin-auth-shell" lang={locale}>
@@ -755,6 +636,31 @@ export function AdminAccessPanel({
               type="button"
             >
               {copyFor(locale, "重新檢查", "Check again")}
+            </button>
+          </div>
+        )}
+
+        {mode === "recovery" && (
+          <div className="admin-auth__content">
+            <p className="admin-auth__intro">
+              {copyFor(
+                locale,
+                "這個資料目錄已有管理員，但目前沒有可用的 production 密碼。請在部署主機執行下方命令設定新密碼，再重新檢查。",
+                "This data directory has an administrator, but no production password is available. Run the command below on the deployment host to set a new password, then check again.",
+              )}
+            </p>
+            <code>reponpc admin set-password --data-dir &lt;dir&gt;</code>
+            <button
+              className="admin-auth__secondary-action"
+              disabled={busy}
+              onClick={onRefreshSetupStatus}
+              type="button"
+            >
+              {copyFor(
+                locale,
+                "設定密碼後重新檢查",
+                "Check after setting password",
+              )}
             </button>
           </div>
         )}
@@ -881,37 +787,6 @@ export function AdminAccessPanel({
                 "First-time setup is complete for this local data directory. Sign in with the administrator credentials you created.",
               )}
             </p>
-            <form
-              action="/api/admin/session/github/start"
-              className="admin-auth__oauth-form"
-              method="post"
-              onSubmit={handleGitHubFormSubmit}
-            >
-              <GitHubButton
-                available={githubAvailable}
-                className="admin-auth__github-button"
-                disabled={githubPending}
-                label={copyFor(
-                  locale,
-                  "使用 GitHub 登入",
-                  "Sign in with GitHub",
-                )}
-                onOpenSetupGuide={onGitHubSetupGuide}
-                pending={githubPending}
-                pendingLabel={copyFor(
-                  locale,
-                  "正在前往 GitHub…",
-                  "Redirecting to GitHub…",
-                )}
-                type="submit"
-              />
-            </form>
-            <p
-              aria-label={copyFor(locale, "或", "or")}
-              className="admin-auth__separator"
-            >
-              <span>{copyFor(locale, "或", "or")}</span>
-            </p>
             <form className="admin-auth__form" onSubmit={onLogin}>
               <div className="admin-auth__field">
                 <label htmlFor="admin-username">
@@ -961,190 +836,6 @@ export function AdminAccessPanel({
   );
 }
 
-export function GitHubConnectionPanel({
-  locale,
-  oauthAvailable,
-  connections,
-  pending,
-  linkPending,
-  patToken,
-  error,
-  onLink,
-  onUnlink,
-  onCheck,
-  onDelete,
-  onPatChange,
-  onSavePat,
-  onGitHubSetupGuide = () => undefined,
-}: GitHubConnectionPanelProps) {
-  const identityConnection = connections.find(
-    (connection) => connection.purpose === "identity_public_read",
-  );
-  const publicReadConnections = connections.filter(
-    (connection) => connection.purpose === "public_read",
-  );
-  const title = copyFor(locale, "GitHub 連線", "GitHub connection");
-  const unavailable = copyFor(
-    locale,
-    "部署管理員尚未設定 GitHub OAuth。請選擇「連結 GitHub」查看主機端設定步驟；帳密登入與本機管理功能仍可使用。",
-    "GitHub OAuth is not configured yet. Select Link GitHub to see the host-side setup steps; password sign-in and local administration remain available.",
-  );
-
-  return (
-    <section
-      aria-busy={pending || linkPending || undefined}
-      aria-labelledby="github-connection-heading"
-      className="admin-github-connection"
-    >
-      <h2 id="github-connection-heading">{title}</h2>
-      <p className="admin-github-connection__intro">
-        {copyFor(
-          locale,
-          "GitHub 登入與公開儲存庫讀取只會使用明確選取的唯讀憑證；寫回憑證始終獨立。",
-          "GitHub sign-in and public repository reads use only an explicitly selected read-only credential. The writeback credential always remains separate.",
-        )}
-      </p>
-
-      {!oauthAvailable && (
-        <p className="admin-github-connection__status" role="status">
-          {unavailable}
-        </p>
-      )}
-
-      <div className="admin-github-connection__actions">
-        <GitHubButton
-          available={oauthAvailable}
-          disabled={pending || linkPending}
-          label={
-            identityConnection
-              ? copyFor(locale, "重新驗證 GitHub", "Reauthenticate GitHub")
-              : copyFor(locale, "連結 GitHub", "Link GitHub")
-          }
-          onClick={onLink}
-          onOpenSetupGuide={onGitHubSetupGuide}
-          pending={linkPending}
-          pendingLabel={copyFor(
-            locale,
-            "正在前往 GitHub…",
-            "Redirecting to GitHub…",
-          )}
-          type="button"
-        />
-        {identityConnection && (
-          <button
-            disabled={pending || linkPending}
-            onClick={onUnlink}
-            type="button"
-          >
-            {copyFor(locale, "解除 GitHub 連結", "Unlink GitHub")}
-          </button>
-        )}
-      </div>
-
-      {connections.length > 0 && (
-        <ul className="admin-github-connection__list" aria-label={title}>
-          {connections.map((connection) => (
-            <li key={connection.id}>
-              <div>
-                <strong>
-                  {connection.purpose === "identity_public_read"
-                    ? copyFor(
-                        locale,
-                        "GitHub 身分與公開讀取",
-                        "GitHub identity and public read",
-                      )
-                    : copyFor(locale, "公開讀取 PAT", "Public-read PAT")}
-                </strong>
-                <p>
-                  {connection.github_login ??
-                    copyFor(locale, "未提供帳號", "No account name")}
-                  {" · "}
-                  {connection.status}
-                </p>
-                {connection.last_validated_at && (
-                  <p className="admin-github-connection__metadata">
-                    {copyFor(locale, "上次驗證：", "Last checked: ")}
-                    {connection.last_validated_at}
-                  </p>
-                )}
-              </div>
-              <div className="admin-github-connection__actions">
-                <button
-                  disabled={pending || linkPending}
-                  onClick={() => onCheck(connection.id)}
-                  type="button"
-                >
-                  {copyFor(locale, "重新檢查", "Check again")}
-                </button>
-                {connection.purpose === "public_read" && (
-                  <button
-                    disabled={pending || linkPending}
-                    onClick={() => onDelete(connection.id)}
-                    type="button"
-                  >
-                    {copyFor(locale, "移除 PAT", "Remove PAT")}
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <form className="admin-github-connection__pat" onSubmit={onSavePat}>
-        <label htmlFor="github-public-read-pat">
-          {copyFor(
-            locale,
-            "公開讀取 Fine-grained PAT（選用）",
-            "Public-read fine-grained PAT (optional)",
-          )}
-        </label>
-        <p id="github-public-read-pat-help">
-          {copyFor(
-            locale,
-            "此 PAT 只可用於公開讀取，不能登入或寫入。送出後會立刻從此頁面清除。",
-            "This PAT is for public reads only. It cannot sign in or write, and is cleared from this page immediately after submission.",
-          )}
-        </p>
-        <div className="admin-github-connection__actions">
-          <input
-            aria-describedby="github-public-read-pat-help"
-            autoComplete="off"
-            id="github-public-read-pat"
-            maxLength={1024}
-            disabled={pending || linkPending}
-            onChange={(event) => onPatChange(event.target.value)}
-            spellCheck={false}
-            type="password"
-            value={patToken}
-          />
-          <button disabled={pending || linkPending || !patToken} type="submit">
-            {copyFor(locale, "儲存公開讀取 PAT", "Save public-read PAT")}
-          </button>
-        </div>
-      </form>
-
-      {error && (
-        <p className="admin-github-connection__error" role="alert">
-          {error}
-        </p>
-      )}
-
-      {publicReadConnections.some(
-        (connection) => connection.status === "connection_required",
-      ) && (
-        <p className="admin-github-connection__status" role="status">
-          {copyFor(
-            locale,
-            "公開讀取憑證需要重新連線；RepoNPC 不會自動改用其他憑證。",
-            "A public-read credential needs reconnection. RepoNPC will not automatically switch to another credential.",
-          )}
-        </p>
-      )}
-    </section>
-  );
-}
-
 export function AdminPage({ locale }: { locale: Locale }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -1154,21 +845,10 @@ export function AdminPage({ locale }: { locale: Locale }) {
     useState("");
   const [setupStatus, setSetupStatus] = useState<SetupStatusBody | null>(null);
   const [setupStatusPending, setSetupStatusPending] = useState(true);
-  const [authMethods, setAuthMethods] = useState<AuthMethodsBody | null>(null);
-  const [githubSetupGuide, setGithubSetupGuide] =
-    useState<GitHubOAuthSetupGuideBody | null>(null);
-  const [githubSetupGuideOpen, setGithubSetupGuideOpen] = useState(false);
-  const [githubSetupGuidePending, setGithubSetupGuidePending] = useState(false);
-  const [githubSetupGuideError, setGithubSetupGuideError] = useState("");
-  const [githubRedirectPending, setGithubRedirectPending] = useState(false);
-  const [githubConnections, setGithubConnections] = useState<
-    GitHubConnection[]
-  >([]);
-  const [githubConnectionsPending, setGithubConnectionsPending] =
-    useState(false);
-  const [githubLinkPending, setGithubLinkPending] = useState(false);
-  const [githubConnectionError, setGithubConnectionError] = useState("");
-  const [publicReadPat, setPublicReadPat] = useState("");
+  const [passwordAvailable, setPasswordAvailable] = useState<boolean | null>(
+    null,
+  );
+  const [accessState, setAccessState] = useState<AdminAccessState>("checking");
   const [csrfToken, setCsrfToken] = useState("");
   const [draft, setDraft] = useState("");
   const [blobSha, setBlobSha] = useState("");
@@ -1190,6 +870,19 @@ export function AdminPage({ locale }: { locale: Locale }) {
   const [embeddingProfilesPending, setEmbeddingProfilesPending] =
     useState(false);
   const [embeddingProfilesError, setEmbeddingProfilesError] = useState("");
+  const [modelConnections, setModelConnections] = useState<
+    ModelConnectionView[]
+  >([]);
+  const [modelConnectionsPending, setModelConnectionsPending] = useState(false);
+  const [modelConnectionsError, setModelConnectionsError] = useState("");
+  const [chatProfiles, setChatProfiles] = useState<ChatProfileView[]>([]);
+  const [chatProfilesPending, setChatProfilesPending] = useState(false);
+  const [chatProfilesError, setChatProfilesError] = useState("");
+  const [analysisSelection, setAnalysisSelection] =
+    useState<AnalysisSelectionView | null>(null);
+  const [analysisSelectionPending, setAnalysisSelectionPending] =
+    useState(false);
+  const [analysisSelectionError, setAnalysisSelectionError] = useState("");
   const [snippet, setSnippet] = useState<SnippetBody | null>(null);
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1236,8 +929,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
     announcedAt: number;
   } | null>(null);
   const batchIdempotency = useRef<{ planId: string; key: string } | null>(null);
-  const batchPreflightGeneration = useRef(0);
-  const githubSetupGuideTrigger = useRef<HTMLElement | null>(null);
+  const accessBootstrapStarted = useRef(false);
   const authenticated = Boolean(csrfToken);
 
   const request = useCallback(
@@ -1391,83 +1083,6 @@ export function AdminPage({ locale }: { locale: Locale }) {
     }
   }, [request]);
 
-  const refreshAuthMethods = useCallback(async () => {
-    try {
-      setAuthMethods(await request<AuthMethodsBody>("/api/admin/auth/methods"));
-    } catch {
-      setAuthMethods(null);
-    }
-  }, [request]);
-
-  const loadGitHubSetupGuide = useCallback(async () => {
-    setGithubSetupGuidePending(true);
-    setGithubSetupGuideError("");
-    try {
-      setGithubSetupGuide(
-        await request<GitHubOAuthSetupGuideBody>(
-          "/api/admin/github/oauth/setup-guide",
-        ),
-      );
-    } catch {
-      setGithubSetupGuide(null);
-      setGithubSetupGuideError(
-        copyFor(
-          locale,
-          "無法讀取 GitHub 登入設定說明。請確認服務正在執行後再試一次。",
-          "GitHub sign-in setup guidance could not be loaded. Confirm the service is running and try again.",
-        ),
-      );
-    } finally {
-      setGithubSetupGuidePending(false);
-    }
-  }, [locale, request]);
-
-  const openGitHubSetupGuide = useCallback(
-    (trigger: HTMLButtonElement) => {
-      githubSetupGuideTrigger.current = trigger;
-      setGithubSetupGuideOpen(true);
-      void loadGitHubSetupGuide();
-    },
-    [loadGitHubSetupGuide],
-  );
-
-  const closeGitHubSetupGuide = useCallback(() => {
-    setGithubSetupGuideOpen(false);
-  }, []);
-
-  const refreshGitHubSetupGuide = useCallback(() => {
-    void Promise.all([loadGitHubSetupGuide(), refreshAuthMethods()]);
-  }, [loadGitHubSetupGuide, refreshAuthMethods]);
-
-  const refreshGitHubConnections = useCallback(async () => {
-    setGithubConnectionsPending(true);
-    try {
-      const result = await request<GitHubConnectionsBody>(
-        "/api/admin/github/connections",
-      );
-      setGithubConnections(result.connections);
-      setGithubConnectionError("");
-    } catch (connectionError) {
-      setGithubConnections([]);
-      setGithubConnectionError(
-        connectionError instanceof Error &&
-          connectionError.message === "GITHUB_LOGIN_UNAVAILABLE"
-          ? copyFor(
-              locale,
-              "GitHub OAuth 尚未由部署管理員設定。",
-              "GitHub OAuth has not been configured by the deployment operator.",
-            )
-          : copyFor(
-              locale,
-              "無法讀取 GitHub 連線狀態，請再試一次。",
-              "GitHub connection status could not be loaded. Try again.",
-            ),
-      );
-    } finally {
-      setGithubConnectionsPending(false);
-    }
-  }, [locale, request]);
-
   const refreshEmbeddingProfiles = useCallback(async () => {
     setEmbeddingProfilesPending(true);
     try {
@@ -1500,15 +1115,125 @@ export function AdminPage({ locale }: { locale: Locale }) {
     }
   }, [locale, request]);
 
+  const refreshModelConnections = useCallback(async () => {
+    setModelConnectionsPending(true);
+    try {
+      const result = await request<{ connections: ModelConnectionView[] }>(
+        "/api/admin/model-connections",
+      );
+      setModelConnections(result.connections);
+      setModelConnectionsError("");
+    } catch {
+      setModelConnectionsError(
+        copyFor(
+          locale,
+          "無法載入模型連線，請稍後再試。",
+          "Model connections could not be loaded. Try again.",
+        ),
+      );
+    } finally {
+      setModelConnectionsPending(false);
+    }
+  }, [locale, request]);
+
+  const refreshChatProfiles = useCallback(async () => {
+    setChatProfilesPending(true);
+    try {
+      const result = await request<{ profiles: ChatProfileView[] }>(
+        "/api/admin/chat-profiles",
+      );
+      setChatProfiles(result.profiles);
+      setChatProfilesError("");
+    } catch {
+      setChatProfilesError(
+        copyFor(
+          locale,
+          "L�k���J Chat �ҫ��A���դ@���C",
+          "Chat models could not be loaded. Try again.",
+        ),
+      );
+    } finally {
+      setChatProfilesPending(false);
+    }
+  }, [locale, request]);
+
+  const refreshAnalysisSelection = useCallback(async () => {
+    try {
+      const value = await request<AnalysisSelectionView>(
+        "/api/admin/analysis-selection",
+      );
+      setAnalysisSelection(value);
+      setAnalysisSelectionError("");
+      setGuidedState((current) =>
+        guidedOnboardingReducer(current, {
+          type: "SET_MODELS_CONFIGURED",
+          value: value.eligible,
+        }),
+      );
+    } catch {
+      setAnalysisSelection(null);
+      setAnalysisSelectionError(
+        copyFor(
+          locale,
+          "無法讀取分析模型狀態，請重新檢查。",
+          "Analysis model status could not be loaded. Recheck to continue.",
+        ),
+      );
+      setGuidedState((current) =>
+        guidedOnboardingReducer(current, {
+          type: "SET_MODELS_CONFIGURED",
+          value: false,
+        }),
+      );
+    }
+  }, [locale, request]);
+
+  async function selectAnalysisModels(
+    chatProfileId: string,
+    embeddingProfileId: string,
+    generation: number,
+  ) {
+    setAnalysisSelectionPending(true);
+    setAnalysisSelectionError("");
+    try {
+      const value = await request<AnalysisSelectionView>(
+        "/api/admin/analysis-selection",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            chat_profile_id: chatProfileId,
+            embedding_profile_id: embeddingProfileId,
+            expected_generation: generation,
+          }),
+        },
+      );
+      setAnalysisSelection(value);
+      setGuidedState((current) =>
+        guidedOnboardingReducer(current, {
+          type: "SET_MODELS_CONFIGURED",
+          value: value.eligible,
+        }),
+      );
+    } catch (error) {
+      setAnalysisSelectionError(
+        error instanceof Error ? error.message : "REQUEST_FAILED",
+      );
+      await refreshAnalysisSelection();
+    } finally {
+      setAnalysisSelectionPending(false);
+    }
+  }
+
   const refreshProviderStatus = useCallback(async () => {
     setProviderStatusPending(true);
     try {
-      const currentStatus =
-        await request<PublicStatusBody>("/api/public/status");
+      const currentStatus = await request<AnalysisSelectionView>(
+        "/api/admin/analysis-selection",
+      );
       setProviderStatus({
-        ready: currentStatus.model.ready,
-        provider: currentStatus.model.provider,
-        lastCheckedAt: currentStatus.model.last_checked_at,
+        ready: currentStatus.eligible,
+        provider: null,
+        lastCheckedAt: currentStatus.selection.updated_at,
       });
     } catch {
       setProviderStatus(null);
@@ -1518,49 +1243,52 @@ export function AdminPage({ locale }: { locale: Locale }) {
   }, [request]);
 
   useEffect(() => {
-    if (authenticated) return;
-    void refreshSetupStatus().catch(() => {
-      setSetupStatus(null);
+    if (authenticated || accessBootstrapStarted.current) return;
+    accessBootstrapStarted.current = true;
+
+    let grant = takeLocalLaunchGrant(window.location.hash, () => {
+      window.history.replaceState(
+        {},
+        "",
+        `${window.location.pathname}${window.location.search}`,
+      );
     });
-    void refreshAuthMethods();
-  }, [authenticated, refreshAuthMethods, refreshSetupStatus]);
 
-  useEffect(() => {
-    const oauthResult = new URLSearchParams(window.location.search).get(
-      "github_oauth",
-    );
-    if (!oauthResult) return;
-    if (oauthResult !== "success") {
-      setGithubRedirectPending(false);
-      dispatchAdminError({
-        type: "SET_GLOBAL_ERROR",
-        message: copyFor(
-          locale,
-          "GitHub 登入未完成。請再試一次。",
-          "GitHub sign-in did not complete. Try again.",
-        ),
-      });
-      window.setTimeout(() => {
-        document.getElementById("admin-access-heading")?.focus();
-      }, 0);
-    }
-    window.history.replaceState({}, "", "/admin");
-  }, [locale]);
-
-  useEffect(() => {
-    if (authenticated) return;
     void (async () => {
+      if (grant !== null) {
+        const body = JSON.stringify({ grant });
+        grant = null;
+        try {
+          const session = await request<SessionBody>(
+            "/api/admin/session/local-launch",
+            { method: "POST", body },
+          );
+          setAccessState("local_launch");
+          setCsrfToken(session.csrf_token);
+        } catch {
+          setAccessState("local_launch");
+        }
+        return;
+      }
+
       try {
-        const result = await request<SessionBody>(
-          "/api/admin/session/github/result",
+        const methods = await request<AuthMethodsBody>(
+          "/api/admin/auth/methods",
         );
-        setCsrfToken(result.csrf_token);
-        setGithubRedirectPending(false);
+        if (methods.mode === "local_launch") {
+          setAccessState("local_launch");
+          return;
+        }
+        setPasswordAvailable(methods.password.available);
+        setAccessState("password");
+        await refreshSetupStatus();
       } catch {
-        // This endpoint normally has no handoff; its error is intentionally not global.
+        setSetupStatus(null);
+        setSetupStatusPending(false);
+        setAccessState("unavailable");
       }
     })();
-  }, [authenticated, request]);
+  }, [accessState, authenticated, refreshSetupStatus, request]);
 
   useEffect(() => {
     if (!authenticated) return;
@@ -1579,13 +1307,23 @@ export function AdminPage({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     if (!authenticated) return;
-    void refreshGitHubConnections();
-  }, [authenticated, refreshGitHubConnections]);
+    void refreshEmbeddingProfiles();
+  }, [authenticated, refreshEmbeddingProfiles]);
 
   useEffect(() => {
     if (!authenticated) return;
-    void refreshEmbeddingProfiles();
-  }, [authenticated, refreshEmbeddingProfiles]);
+    void refreshModelConnections();
+  }, [authenticated, refreshModelConnections]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    void refreshChatProfiles();
+  }, [authenticated, refreshChatProfiles]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    void refreshAnalysisSelection();
+  }, [authenticated, refreshAnalysisSelection]);
 
   useEffect(() => {
     if (!authenticated) {
@@ -1860,6 +1598,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
       setSetupCode("");
       setSetupPassword("");
       setSetupPasswordConfirmation("");
+      setPasswordAvailable(true);
       setCsrfToken(session.csrf_token);
     } catch (setupError) {
       setSetupCode("");
@@ -1881,147 +1620,6 @@ export function AdminPage({ locale }: { locale: Locale }) {
     }
   }
 
-  function beginGitHubRedirect() {
-    setGithubRedirectPending(true);
-    dispatchAdminError({ type: "CLEAR_GLOBAL_ERROR" });
-  }
-
-  async function beginGitHubLink() {
-    setGithubLinkPending(true);
-    setGithubConnectionError("");
-    try {
-      const started = await request<GitHubOAuthStartBody>(
-        "/api/admin/identity/github/link/start",
-        { method: "POST", headers: { Accept: "application/json" } },
-      );
-      window.location.assign(started.authorization_url);
-    } catch (linkError) {
-      setGithubConnectionError(
-        linkError instanceof Error &&
-          linkError.message === "RECENT_AUTHENTICATION_REQUIRED"
-          ? copyFor(
-              locale,
-              "請先以目前的登入方式重新驗證，再連結或變更 GitHub 身分。",
-              "Reauthenticate with your current sign-in method before changing the GitHub identity.",
-            )
-          : copyFor(
-              locale,
-              "無法開始 GitHub 連結，請再試一次。",
-              "GitHub linking could not start. Try again.",
-            ),
-      );
-    } finally {
-      setGithubLinkPending(false);
-    }
-  }
-
-  async function unlinkGitHub() {
-    setGithubConnectionsPending(true);
-    setGithubConnectionError("");
-    try {
-      await request<unknown>("/api/admin/identity/github", {
-        method: "DELETE",
-      });
-      await refreshGitHubConnections();
-    } catch (unlinkError) {
-      setGithubConnectionError(
-        unlinkError instanceof Error &&
-          unlinkError.message === "LAST_AUTH_METHOD_REQUIRED"
-          ? copyFor(
-              locale,
-              "無法移除唯一可用的登入方式。請先新增或復原帳密登入。",
-              "The final usable sign-in method cannot be removed. Add or recover password sign-in first.",
-            )
-          : copyFor(
-              locale,
-              "無法解除 GitHub 連結，請再試一次。",
-              "GitHub could not be unlinked. Try again.",
-            ),
-      );
-    } finally {
-      setGithubConnectionsPending(false);
-    }
-  }
-
-  async function checkGitHubConnection(credentialId: number) {
-    setGithubConnectionsPending(true);
-    setGithubConnectionError("");
-    try {
-      await request<GitHubConnection>(
-        `/api/admin/github/connections/${credentialId}/check`,
-        { method: "POST" },
-      );
-      await refreshGitHubConnections();
-    } catch (checkError) {
-      setGithubConnectionError(
-        checkError instanceof Error &&
-          checkError.message === "GITHUB_CONNECTION_REQUIRED"
-          ? copyFor(
-              locale,
-              "此 GitHub 憑證需要重新連線；RepoNPC 不會自動改用其他憑證。",
-              "This GitHub credential needs reconnection. RepoNPC will not switch to another credential automatically.",
-            )
-          : copyFor(
-              locale,
-              "無法驗證 GitHub 連線，請再試一次。",
-              "GitHub connection validation failed. Try again.",
-            ),
-      );
-      await refreshGitHubConnections();
-    } finally {
-      setGithubConnectionsPending(false);
-    }
-  }
-
-  async function deleteGitHubConnection(credentialId: number) {
-    setGithubConnectionsPending(true);
-    setGithubConnectionError("");
-    try {
-      await request<unknown>(`/api/admin/github/connections/${credentialId}`, {
-        method: "DELETE",
-      });
-      await refreshGitHubConnections();
-    } catch {
-      setGithubConnectionError(
-        copyFor(
-          locale,
-          "無法移除 GitHub 公開讀取憑證，請再試一次。",
-          "The GitHub public-read credential could not be removed. Try again.",
-        ),
-      );
-    } finally {
-      setGithubConnectionsPending(false);
-    }
-  }
-
-  async function savePublicReadPat(event: React.FormEvent) {
-    event.preventDefault();
-    const token = publicReadPat;
-    setPublicReadPat("");
-    if (!token) return;
-    setGithubConnectionsPending(true);
-    setGithubConnectionError("");
-    try {
-      await request<GitHubConnection>("/api/admin/github/connections/pat", {
-        method: "PUT",
-        body: JSON.stringify({ token }),
-      });
-      await refreshGitHubConnections();
-    } catch {
-      setGithubConnectionError(
-        copyFor(
-          locale,
-          "無法儲存 GitHub 公開讀取 PAT。請確認它沒有額外權限後再試一次。",
-          "The GitHub public-read PAT could not be saved. Confirm that it has no additional permissions, then try again.",
-        ),
-      );
-    } finally {
-      // Keep the secret out of controlled component state even on a failed request.
-      setPublicReadPat("");
-      setGithubConnectionsPending(false);
-    }
-  }
-
   async function createEmbeddingProfile(draft: EmbeddingProfileDraft) {
     setEmbeddingProfilesPending(true);
     setEmbeddingProfilesError("");
@@ -2035,6 +1633,119 @@ export function AdminPage({ locale }: { locale: Locale }) {
       setEmbeddingProfilesError(embeddingProfileErrorMessage(locale, error));
     } finally {
       setEmbeddingProfilesPending(false);
+    }
+  }
+
+  async function createModelConnection(draft: ModelConnectionDraft) {
+    setModelConnectionsPending(true);
+    setModelConnectionsError("");
+    try {
+      await request<ModelConnectionView>("/api/admin/model-connections", {
+        method: "POST",
+        body: JSON.stringify(draft),
+      });
+      await refreshModelConnections();
+    } catch (error) {
+      setModelConnectionsError(
+        error instanceof Error ? error.message : "REQUEST_FAILED",
+      );
+    } finally {
+      setModelConnectionsPending(false);
+    }
+  }
+
+  async function deleteModelConnection(connectionId: string) {
+    setModelConnectionsPending(true);
+    setModelConnectionsError("");
+    try {
+      await request<void>(
+        "/api/admin/model-connections/" + encodeURIComponent(connectionId),
+        { method: "DELETE" },
+      );
+      await refreshModelConnections();
+    } catch (error) {
+      setModelConnectionsError(
+        error instanceof Error ? error.message : "REQUEST_FAILED",
+      );
+    } finally {
+      setModelConnectionsPending(false);
+    }
+  }
+
+  async function updateModelConnection(
+    connectionId: string,
+    draft: ModelConnectionDraft,
+  ) {
+    setModelConnectionsPending(true);
+    setModelConnectionsError("");
+    try {
+      await request<ModelConnectionView>(
+        "/api/admin/model-connections/" + encodeURIComponent(connectionId),
+        { method: "PUT", body: JSON.stringify(draft) },
+      );
+      await refreshModelConnections();
+      await refreshChatProfiles();
+      await refreshAnalysisSelection();
+    } catch (error) {
+      setModelConnectionsError(
+        error instanceof Error ? error.message : "REQUEST_FAILED",
+      );
+    } finally {
+      setModelConnectionsPending(false);
+    }
+  }
+
+  async function createChatProfile(draft: ChatProfileDraft) {
+    setChatProfilesPending(true);
+    setChatProfilesError("");
+    try {
+      await request<ChatProfileView>("/api/admin/chat-profiles", {
+        method: "POST",
+        body: JSON.stringify(draft),
+      });
+      await refreshChatProfiles();
+      await refreshAnalysisSelection();
+    } catch (error) {
+      setChatProfilesError(chatProfileErrorMessage(locale, error));
+    } finally {
+      setChatProfilesPending(false);
+    }
+  }
+
+  async function actOnChatProfile(
+    profileId: string,
+    action: "probe" | "activate" | "delete",
+  ) {
+    setChatProfilesPending(true);
+    setChatProfilesError("");
+    try {
+      await request<ChatProfileView>(
+        `/api/admin/chat-profiles/${encodeURIComponent(profileId)}${
+          action === "delete" ? "" : `/${action}`
+        }`,
+        { method: action === "delete" ? "DELETE" : "POST" },
+      );
+      await refreshChatProfiles();
+    } catch (error) {
+      setChatProfilesError(chatProfileErrorMessage(locale, error));
+    } finally {
+      setChatProfilesPending(false);
+    }
+  }
+
+  async function updateChatProfile(profileId: string, draft: ChatProfileDraft) {
+    setChatProfilesPending(true);
+    setChatProfilesError("");
+    try {
+      await request<ChatProfileView>(
+        "/api/admin/chat-profiles/" + encodeURIComponent(profileId),
+        { method: "PUT", body: JSON.stringify(draft) },
+      );
+      await refreshChatProfiles();
+    } catch (error) {
+      setChatProfilesError(chatProfileErrorMessage(locale, error));
+    } finally {
+      setChatProfilesPending(false);
     }
   }
 
@@ -2052,6 +1763,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
         { method: action === "delete" ? "DELETE" : "POST" },
       );
       await refreshEmbeddingProfiles();
+      await refreshAnalysisSelection();
     } catch (error) {
       setEmbeddingProfilesError(embeddingProfileErrorMessage(locale, error));
     } finally {
@@ -2110,7 +1822,6 @@ export function AdminPage({ locale }: { locale: Locale }) {
         batchEventSource.current = null;
         batchLastEventId.current = null;
         batchAnnouncement.current = null;
-        batchPreflightGeneration.current += 1;
         batchIdempotency.current = null;
         batchPlanRef.current = null;
         setBatchSnapshot(null);
@@ -2191,58 +1902,44 @@ export function AdminPage({ locale }: { locale: Locale }) {
     });
   }
 
-  async function prepareAnalysisBatch() {
-    if (
-      !authenticated ||
-      !activeBatchLoaded ||
-      guidedState.step !== "analysis" ||
-      !guidedState.selectionConfirmed ||
-      batchSnapshot !== null
-    ) {
-      return;
-    }
-
-    const generation = batchPreflightGeneration.current + 1;
-    batchPreflightGeneration.current = generation;
-    setBatchPreflight({ status: "loading" });
-    setBatchPlan(null);
-    batchPlanRef.current = null;
-    setBatchActions({ pending: null, error: null });
-    batchIdempotency.current = null;
-    try {
-      const plan = await request<BatchPreflightBody>(
-        "/api/admin/onboarding/analysis-batches/preflight",
-        {
-          method: "POST",
-          body: JSON.stringify({ selections: batchSelections }),
-        },
-      );
-      if (batchPreflightGeneration.current !== generation) return;
-      setBatchPlan(plan);
-      batchPlanRef.current = plan;
-      setBatchPreflight(preflightState(plan));
-    } catch (error) {
-      if (batchPreflightGeneration.current !== generation) return;
-      setBatchPreflight({
-        status: "failed",
-        error: batchOperationError(error, "preflight"),
-      });
-    }
-  }
-
   async function createAnalysisBatch() {
-    if (!batchPlan || batchPreflight.status !== "ready") return;
+    let plan = batchPlan;
+    if (plan === null) {
+      if (!authenticated || !activeBatchLoaded || batchSnapshot !== null)
+        return;
+      setBatchPreflight({ status: "loading" });
+      try {
+        plan = await request<BatchPreflightBody>(
+          "/api/admin/onboarding/analysis-batches/preflight",
+          {
+            method: "POST",
+            body: JSON.stringify({ selections: batchSelections }),
+          },
+        );
+        setBatchPlan(plan);
+        batchPlanRef.current = plan;
+        setBatchPreflight(preflightState(plan));
+      } catch (error) {
+        setBatchPreflight({
+          status: "failed",
+          error: batchOperationError(error, "preflight"),
+        });
+        return;
+      }
+    }
+    if (!plan) return;
+    if (preflightState(plan).status !== "ready") return;
     setBatchCreatePending(true);
     setBatchActions({ pending: null, error: null });
     try {
       const existingKey = batchIdempotency.current;
       const idempotencyKey =
-        existingKey?.planId === batchPlan.plan_id
+        existingKey?.planId === plan.plan_id
           ? existingKey.key
           : (window.crypto?.randomUUID?.() ??
             `batch-${Date.now()}-${Math.random().toString(16).slice(2)}`);
       batchIdempotency.current = {
-        planId: batchPlan.plan_id,
+        planId: plan.plan_id,
         key: idempotencyKey,
       };
       const result = await request<BatchCreateBody>(
@@ -2250,7 +1947,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
         {
           method: "POST",
           body: JSON.stringify({
-            plan_id: batchPlan.plan_id,
+            plan_id: plan.plan_id,
             selections: batchSelections,
             idempotency_key: idempotencyKey,
           }),
@@ -2265,6 +1962,58 @@ export function AdminPage({ locale }: { locale: Locale }) {
       });
     } finally {
       setBatchCreatePending(false);
+    }
+  }
+
+  async function retryAnalysisPreflight() {
+    if (!authenticated || !activeBatchLoaded || batchCreatePending) return;
+    setBatchPlan(null);
+    batchPlanRef.current = null;
+    setBatchActions({ pending: null, error: null });
+    setBatchPreflight({ status: "loading" });
+    try {
+      try {
+        const active = await request<BatchSnapshotBody>(
+          "/api/admin/onboarding/analysis-batches/active",
+        );
+        applyBatchSnapshot(active);
+        setBatchPreflight({ status: "idle" });
+        return;
+      } catch (error) {
+        if (
+          !(error instanceof AdminRequestError) ||
+          error.message !== "NOT_FOUND"
+        ) {
+          throw error;
+        }
+      }
+      batchEventSource.current?.close();
+      batchEventSource.current = null;
+      batchLastEventId.current = null;
+      batchAnnouncement.current = null;
+      batchIdempotency.current = null;
+      setBatchSnapshot(null);
+      setBatchProgressState(null);
+      setBatchStream({
+        connection: "idle",
+        reconnectAttempts: 0,
+        lastEventId: null,
+      });
+      const plan = await request<BatchPreflightBody>(
+        "/api/admin/onboarding/analysis-batches/preflight",
+        {
+          method: "POST",
+          body: JSON.stringify({ selections: batchSelections }),
+        },
+      );
+      setBatchPlan(plan);
+      batchPlanRef.current = plan;
+      setBatchPreflight(preflightState(plan));
+    } catch (error) {
+      setBatchPreflight({
+        status: "failed",
+        error: batchOperationError(error, "preflight"),
+      });
     }
   }
 
@@ -2488,8 +2237,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
     await perform(async () => {
       await request<unknown>("/api/admin/session", { method: "DELETE" });
       clearSensitiveState();
-      await refreshSetupStatus();
-      await refreshAuthMethods();
+      if (accessState === "password") await refreshSetupStatus();
     });
   }
 
@@ -2528,17 +2276,6 @@ export function AdminPage({ locale }: { locale: Locale }) {
     setSnippet(null);
     setConflict(false);
     setGitHubOperationsReady(false);
-    setGithubSetupGuide(null);
-    setGithubSetupGuideOpen(false);
-    setGithubSetupGuidePending(false);
-    setGithubSetupGuideError("");
-    githubSetupGuideTrigger.current = null;
-    setGithubRedirectPending(false);
-    setGithubConnections([]);
-    setGithubConnectionsPending(false);
-    setGithubLinkPending(false);
-    setGithubConnectionError("");
-    setPublicReadPat("");
     dispatchAdminError({ type: "CLEAR_ALL_ERRORS" });
     setBaseConfig(null);
     setGuidedState(initialGuidedOnboardingState());
@@ -2568,47 +2305,104 @@ export function AdminPage({ locale }: { locale: Locale }) {
   }
 
   if (!authenticated) {
+    if (accessState === "checking") {
+      return <LocalLaunchAccessPanel locale={locale} state="checking" />;
+    }
+    if (accessState === "local_launch") {
+      return <LocalLaunchAccessPanel locale={locale} state="relaunch" />;
+    }
+
     return (
-      <>
-        <AdminAccessPanel
-          busy={busy}
-          error={adminErrors.globalMessage}
-          locale={locale}
-          onGitHubRedirect={beginGitHubRedirect}
-          onGitHubSetupGuide={openGitHubSetupGuide}
-          onLogin={(event) => void login(event)}
-          onPasswordChange={setPassword}
-          onRefreshSetupStatus={() => {
+      <AdminAccessPanel
+        busy={busy}
+        error={adminErrors.globalMessage}
+        locale={locale}
+        onLogin={(event) => void login(event)}
+        onPasswordChange={setPassword}
+        onRefreshSetupStatus={() => {
+          if (accessState === "unavailable" || passwordAvailable === false) {
+            accessBootstrapStarted.current = false;
+            setPasswordAvailable(null);
+            setSetupStatusPending(true);
+            setAccessState("checking");
+          } else {
             void refreshSetupStatus().catch(() => undefined);
-          }}
-          onSetupCodeChange={setSetupCode}
-          onSetupOwner={(event) => void setupOwner(event)}
-          onSetupPasswordChange={setSetupPassword}
-          onSetupPasswordConfirmationChange={setSetupPasswordConfirmation}
-          onUsernameChange={setUsername}
-          githubAvailable={authMethods?.github.available === true}
-          githubPending={githubRedirectPending}
-          password={password}
-          setupCode={setupCode}
-          setupPassword={setupPassword}
-          setupPasswordConfirmation={setupPasswordConfirmation}
-          setupStatus={setupStatus}
-          setupStatusPending={setupStatusPending}
-          username={username}
-        />
-        <GitHubOAuthSetupGuideDialog
-          error={githubSetupGuideError}
-          guide={githubSetupGuide}
-          locale={locale}
-          onClose={closeGitHubSetupGuide}
-          onRefresh={refreshGitHubSetupGuide}
-          open={githubSetupGuideOpen}
-          pending={githubSetupGuidePending}
-          returnFocusRef={githubSetupGuideTrigger}
-        />
-      </>
+          }
+        }}
+        onSetupCodeChange={setSetupCode}
+        onSetupOwner={(event) => void setupOwner(event)}
+        onSetupPasswordChange={setSetupPassword}
+        onSetupPasswordConfirmationChange={setSetupPasswordConfirmation}
+        onUsernameChange={setUsername}
+        password={password}
+        passwordAvailable={passwordAvailable}
+        setupCode={setupCode}
+        setupPassword={setupPassword}
+        setupPasswordConfirmation={setupPasswordConfirmation}
+        setupStatus={setupStatus}
+        setupStatusPending={
+          accessState === "password" ? setupStatusPending : false
+        }
+        username={username}
+      />
     );
   }
+
+  const modelPanels = (
+    <>
+      <ModelConnectionPanel
+        connections={modelConnections}
+        error={modelConnectionsError}
+        locale={locale}
+        onCreate={(value) => void createModelConnection(value)}
+        onDelete={(value) => void deleteModelConnection(value)}
+        onRefresh={() => void refreshModelConnections()}
+        onUpdate={(connectionId, value) =>
+          void updateModelConnection(connectionId, value)
+        }
+        pending={modelConnectionsPending}
+      />
+      <ChatProfilePanel
+        connections={modelConnections}
+        error={chatProfilesError}
+        locale={locale}
+        onActivate={(profileId) => void actOnChatProfile(profileId, "activate")}
+        onCreate={(profile) => void createChatProfile(profile)}
+        onDelete={(profileId) => void actOnChatProfile(profileId, "delete")}
+        onUpdate={(profileId, profile) =>
+          void updateChatProfile(profileId, profile)
+        }
+        onProbe={(profileId) => void actOnChatProfile(profileId, "probe")}
+        onRefresh={() => void refreshChatProfiles()}
+        pending={chatProfilesPending}
+        profiles={chatProfiles}
+      />
+      <EmbeddingProfilePanel
+        catalog={embeddingModelCatalog}
+        connections={modelConnections}
+        error={embeddingProfilesError}
+        installedModels={installedEmbeddingModels}
+        locale={locale}
+        onActivate={(profileId) =>
+          void actOnEmbeddingProfile(profileId, "activate")
+        }
+        onCreate={(profile) => void createEmbeddingProfile(profile)}
+        onDelete={(profileId) =>
+          void actOnEmbeddingProfile(profileId, "delete")
+        }
+        onOllamaDelete={(profileId) =>
+          void actOnOllamaEmbeddingModel(profileId, "delete")
+        }
+        onOllamaPull={(profileId) =>
+          void actOnOllamaEmbeddingModel(profileId, "pull")
+        }
+        onProbe={(profileId) => void actOnEmbeddingProfile(profileId, "probe")}
+        onRefresh={() => void refreshEmbeddingProfiles()}
+        pending={embeddingProfilesPending}
+        profiles={embeddingProfiles}
+      />
+    </>
+  );
 
   return (
     <>
@@ -2618,53 +2412,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
         busy={busy}
         conflict={conflict}
         draft={draft}
-        githubConnectionView={
-          <GitHubConnectionPanel
-            connections={githubConnections}
-            error={githubConnectionError}
-            linkPending={githubLinkPending}
-            locale={locale}
-            oauthAvailable={authMethods?.github.available === true}
-            onCheck={(credentialId) => void checkGitHubConnection(credentialId)}
-            onDelete={(credentialId) =>
-              void deleteGitHubConnection(credentialId)
-            }
-            onLink={() => void beginGitHubLink()}
-            onGitHubSetupGuide={openGitHubSetupGuide}
-            onPatChange={setPublicReadPat}
-            onSavePat={(event) => void savePublicReadPat(event)}
-            onUnlink={() => void unlinkGitHub()}
-            patToken={publicReadPat}
-            pending={githubConnectionsPending}
-          />
-        }
-        embeddingProfileView={
-          <EmbeddingProfilePanel
-            catalog={embeddingModelCatalog}
-            error={embeddingProfilesError}
-            installedModels={installedEmbeddingModels}
-            locale={locale}
-            onActivate={(profileId) =>
-              void actOnEmbeddingProfile(profileId, "activate")
-            }
-            onCreate={(profile) => void createEmbeddingProfile(profile)}
-            onDelete={(profileId) =>
-              void actOnEmbeddingProfile(profileId, "delete")
-            }
-            onOllamaDelete={(profileId) =>
-              void actOnOllamaEmbeddingModel(profileId, "delete")
-            }
-            onOllamaPull={(profileId) =>
-              void actOnOllamaEmbeddingModel(profileId, "pull")
-            }
-            onProbe={(profileId) =>
-              void actOnEmbeddingProfile(profileId, "probe")
-            }
-            onRefresh={() => void refreshEmbeddingProfiles()}
-            pending={embeddingProfilesPending}
-            profiles={embeddingProfiles}
-          />
-        }
+        embeddingProfileView={modelPanels}
         githubOperationsReady={githubOperationsReady}
         guidedView={
           <GuidedOnboardingView
@@ -2684,6 +2432,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
                   onPause={(batchId) => void actOnBatch(batchId, "pause")}
                   onResume={(batchId) => void actOnBatch(batchId, "resume")}
                   onRetry={(batchId) => void actOnBatch(batchId, "retry")}
+                  onRetryPreflight={() => void retryAnalysisPreflight()}
                   preflight={batchPreflight}
                   progress={batchProgressState}
                   stream={batchStream}
@@ -2697,6 +2446,22 @@ export function AdminPage({ locale }: { locale: Locale }) {
               !batchCreatePending
             }
             batchCreatePending={batchCreatePending}
+            modelSetupView={
+              <>
+                <AnalysisSelectionPanel
+                  chatProfiles={chatProfiles}
+                  embeddingProfiles={embeddingProfiles}
+                  error={analysisSelectionError}
+                  locale={locale}
+                  onSelect={(chatId, embeddingId, generation) =>
+                    void selectAnalysisModels(chatId, embeddingId, generation)
+                  }
+                  pending={analysisSelectionPending}
+                  value={analysisSelection}
+                />
+                {modelPanels}
+              </>
+            }
             busy={busy}
             errorCode={adminErrors.guidedCode}
             locale={locale}
@@ -2704,7 +2469,6 @@ export function AdminPage({ locale }: { locale: Locale }) {
             providerStatusPending={providerStatusPending}
             onAction={applyGuidedAction}
             onAnalyze={(slug) => void analyzeRepository(slug)}
-            onPrepareBatch={() => void prepareAnalysisBatch()}
             onCreateBatch={() => void createAnalysisBatch()}
             onCopyDraft={() => void copyGuidedDraft()}
             onCreateDraft={() => void createGuidedDraft()}
@@ -2751,16 +2515,6 @@ export function AdminPage({ locale }: { locale: Locale }) {
         snippet={snippet}
         status={status}
         validation={validation}
-      />
-      <GitHubOAuthSetupGuideDialog
-        error={githubSetupGuideError}
-        guide={githubSetupGuide}
-        locale={locale}
-        onClose={closeGitHubSetupGuide}
-        onRefresh={refreshGitHubSetupGuide}
-        open={githubSetupGuideOpen}
-        pending={githubSetupGuidePending}
-        returnFocusRef={githubSetupGuideTrigger}
       />
     </>
   );

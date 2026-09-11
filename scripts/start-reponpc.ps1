@@ -101,8 +101,6 @@ function Resolve-LocalSecretPath {
 function Import-LocalSecretFiles {
     $pairs = @(
         @{ Direct = "REPONPC_GITHUB_TOKEN"; File = "REPONPC_GITHUB_TOKEN_FILE"; Required = $false },
-        @{ Direct = "REPONPC_GITHUB_OAUTH_CLIENT_SECRET"; File = "REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE"; Required = $false },
-        @{ Direct = "REPONPC_CREDENTIAL_ENCRYPTION_KEY"; File = "REPONPC_CREDENTIAL_ENCRYPTION_KEY_FILE"; Required = $false },
         @{ Direct = "REPONPC_CHAT_API_KEY"; File = "REPONPC_CHAT_API_KEY_FILE"; Required = $false },
         @{ Direct = "REPONPC_EMBEDDING_API_KEY"; File = "REPONPC_EMBEDDING_API_KEY_FILE"; Required = $false },
         @{ Direct = "REPONPC_IP_HASH_KEY"; File = "REPONPC_IP_HASH_KEY_FILE"; Required = $true }
@@ -453,22 +451,9 @@ function Invoke-RepoNpcLauncher {
     Set-ProcessEnvironmentValue "REPONPC_TRUSTED_PROXY_CIDRS" $null
     Set-ProcessEnvironmentDefault "REPONPC_CONFIG_REPOSITORY" "example/reponpc"
     Set-ProcessEnvironmentDefault "REPONPC_INDEX_MANIFEST_URL" "https://raw.githubusercontent.com/example/reponpc/main/stable-manifest.json"
-    Set-ProcessEnvironmentDefault "REPONPC_CHAT_PROVIDER" "ollama"
-    Set-ProcessEnvironmentDefault "REPONPC_CHAT_BASE_URL" "http://127.0.0.1:11434"
-    if ((Get-ProcessEnvironmentValue "REPONPC_CHAT_BASE_URL") -eq "http://ollama:11434") {
-        Set-ProcessEnvironmentValue "REPONPC_CHAT_BASE_URL" "http://127.0.0.1:11434"
-    }
     if (-not [string]::IsNullOrWhiteSpace($ChatModel)) {
         Set-ProcessEnvironmentValue "REPONPC_CHAT_MODEL" $ChatModel
     }
-    else {
-        Set-ProcessEnvironmentDefault "REPONPC_CHAT_MODEL" "qwen3.5:9b"
-    }
-    Set-ProcessEnvironmentDefault "REPONPC_EMBEDDING_PROVIDER" "ollama"
-    Set-ProcessEnvironmentDefault "REPONPC_EMBEDDING_MODEL" "qwen3-embedding:0.6b"
-    Set-ProcessEnvironmentDefault "REPONPC_EMBEDDING_DIMENSION" "1024"
-    Set-ProcessEnvironmentDefault "REPONPC_EMBEDDING_NORMALIZED" "true"
-    Set-ProcessEnvironmentDefault "REPONPC_EMBEDDING_BASE_URL" "http://127.0.0.1:11434"
     Import-LocalSecretFiles
     Ensure-LocalIpHashKey
 
@@ -549,40 +534,20 @@ function Invoke-RepoNpcLauncher {
         Write-Step "Server is healthy."
     }
 
-    $setupStatus = Invoke-RestMethod -UseBasicParsing -Uri "$probeBaseUrl/api/admin/setup" -TimeoutSec 5
-    if ($setupStatus.setup_required -eq $true) {
-        $mayIssueCode = $startedHere -or
-            (Test-LauncherOwnsRunningInstance $statePath $baseUrl $resolvedDataDir)
-        if ($mayIssueCode) {
-            Write-Step "Issuing a fresh 15-minute first-owner setup code."
-            $setupOutput = & $reponpcExe admin setup-code --data-dir $resolvedDataDir 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                throw "Unable to issue the first-owner setup code."
-            }
-            $setupCode = ([string]($setupOutput | Select-Object -Last 1)).Trim()
-            if ($SmokeTest) {
-                if ($setupCode.Length -lt 40) {
-                    throw "The smoke-test setup code is unexpectedly short."
-                }
-                Write-Step "A first-owner setup code was issued successfully (hidden for the smoke test)."
-            }
-            else {
-                Write-Host ""
-                Write-Host "First-owner setup code (shown only here):" -ForegroundColor Yellow
-                Write-Host $setupCode -ForegroundColor White
-                Write-Host "Expires in 15 minutes. Choose your own username and password in /admin." -ForegroundColor Yellow
-                Write-Host ""
-            }
-        }
-        else {
-            Write-Warning "An existing RepoNPC instance uses an unknown data directory, so no setup code was changed."
-        }
+    $launchOutput = @(& $reponpcExe admin launch-token --data-dir $resolvedDataDir 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to issue the local launch URL."
     }
-    else {
-        Write-Step "The first owner already exists; use the normal sign-in form."
+    if ($launchOutput.Count -ne 1) {
+        throw "The local launch command returned an invalid response."
+    }
+    $adminUrl = ([string]$launchOutput[0]).Trim()
+    $expectedLaunchPrefix = "$baseUrl/admin#local-launch="
+    if (-not $adminUrl.StartsWith($expectedLaunchPrefix, [StringComparison]::Ordinal) -or
+        $adminUrl.Substring($expectedLaunchPrefix.Length) -notmatch '^[A-Za-z0-9_-]{43}$') {
+        throw "The local launch command returned an invalid response."
     }
 
-    $adminUrl = "$baseUrl/admin"
     if ($SmokeTest) {
         if (-not $startedHere -or $null -eq $server -or $server.HasExited) {
             throw "The isolated smoke-test server is not running."
@@ -592,11 +557,12 @@ function Invoke-RepoNpcLauncher {
         Write-Step "Isolated startup smoke test passed and its server was stopped."
     }
     elseif (-not $NoBrowser) {
-        Write-Step "Opening $adminUrl"
+        Write-Step "Opening RepoNPC Admin."
         Start-Process -FilePath $adminUrl | Out-Null
     }
     else {
-        Write-Step "Admin URL: $adminUrl"
+        Write-Host "One-use Admin URL (expires in two minutes):" -ForegroundColor Yellow
+        Write-Host $adminUrl -ForegroundColor White
     }
 
     if (-not $SmokeTest) {

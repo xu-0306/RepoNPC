@@ -472,6 +472,229 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             """,
         ),
     ),
+    Migration(
+        version=13,
+        name="passwordless-loopback-and-connection-only-github",
+        statements=(
+            "ALTER TABLE admin_owner RENAME TO admin_owner_v12",
+            """
+            CREATE TABLE admin_owner (
+                state_key TEXT PRIMARY KEY CHECK(state_key = 'current'),
+                username TEXT NOT NULL CHECK(length(username) BETWEEN 1 AND 64),
+                password_hash TEXT
+                    CHECK(password_hash IS NULL OR password_hash LIKE '$argon2id$%'),
+                created_at TEXT NOT NULL
+            )
+            """,
+            """
+            INSERT INTO admin_owner(state_key, username, password_hash, created_at)
+            SELECT state_key, username, password_hash, created_at FROM admin_owner_v12
+            """,
+            "DROP TABLE admin_owner_v12",
+            "ALTER TABLE admin_auth_methods RENAME TO admin_auth_methods_v12",
+            """
+            CREATE TABLE admin_auth_methods (
+                method TEXT PRIMARY KEY CHECK(method = 'local_password'),
+                created_at TEXT NOT NULL
+            )
+            """,
+            """
+            INSERT INTO admin_auth_methods(method, created_at)
+            SELECT method, created_at FROM admin_auth_methods_v12
+            WHERE method = 'local_password'
+            """,
+            "DROP TABLE admin_auth_methods_v12",
+            "ALTER TABLE admin_oauth_transactions RENAME TO admin_oauth_transactions_v12",
+            """
+            CREATE TABLE admin_oauth_transactions (
+                state_hash TEXT PRIMARY KEY
+                    CHECK(length(state_hash) = 64 AND state_hash NOT GLOB '*[^0-9a-f]*'),
+                intent TEXT NOT NULL CHECK(intent = 'connection'),
+                verifier_nonce BLOB NOT NULL,
+                verifier_ciphertext BLOB NOT NULL,
+                session_hash TEXT NOT NULL REFERENCES admin_sessions(session_hash),
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                consumed_at TEXT,
+                return_path TEXT NOT NULL CHECK(return_path = '/admin')
+            )
+            """,
+            """
+            INSERT INTO admin_oauth_transactions(
+                state_hash, intent, verifier_nonce, verifier_ciphertext, session_hash,
+                created_at, expires_at, consumed_at, return_path
+            )
+            SELECT
+                state_hash, 'connection', verifier_nonce, verifier_ciphertext, session_hash,
+                created_at, expires_at, consumed_at, return_path
+            FROM admin_oauth_transactions_v12
+            WHERE intent = 'link' AND session_hash IS NOT NULL
+            """,
+            "DROP TABLE admin_oauth_transactions_v12",
+            (
+                "CREATE INDEX admin_oauth_transactions_expiry_idx "
+                "ON admin_oauth_transactions(expires_at)"
+            ),
+            "DROP TABLE admin_oauth_handoffs",
+            """
+            CREATE TABLE admin_local_launch_grants (
+                state_key TEXT PRIMARY KEY CHECK(state_key = 'current'),
+                grant_hash TEXT NOT NULL
+                    CHECK(length(grant_hash) = 64
+                          AND grant_hash NOT GLOB '*[^0-9a-f]*'),
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                consumed_at TEXT
+            )
+            """,
+        ),
+    ),
+    Migration(
+        version=14,
+        name="retire-github-oauth-public-read-credentials",
+        statements=(
+            "DELETE FROM admin_oauth_transactions",
+            (
+                "DELETE FROM admin_github_credentials "
+                "WHERE purpose IN ('identity_public_read', 'public_read')"
+            ),
+        ),
+    ),
+    Migration(
+        version=15,
+        name="anonymous-github-resolution-cache",
+        statements=(
+            """
+            CREATE TABLE github_public_resolution_cache (
+                cache_key TEXT PRIMARY KEY
+                    CHECK(length(cache_key) = 64
+                          AND cache_key NOT GLOB '*[^0-9a-f]*'),
+                entry_kind TEXT NOT NULL CHECK(entry_kind IN ('metadata', 'resolved')),
+                repository_slug TEXT NOT NULL,
+                requested_ref TEXT,
+                node_id TEXT NOT NULL,
+                default_branch TEXT NOT NULL,
+                commit_sha TEXT
+                    CHECK(commit_sha IS NULL OR (length(commit_sha) = 40
+                          AND commit_sha NOT GLOB '*[^0-9a-f]*')),
+                is_archived INTEGER NOT NULL CHECK(is_archived IN (0, 1)),
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                CHECK((entry_kind = 'metadata' AND commit_sha IS NULL)
+                   OR (entry_kind = 'resolved' AND commit_sha IS NOT NULL))
+            )
+            """,
+            (
+                "CREATE INDEX github_public_resolution_cache_expiry_idx "
+                "ON github_public_resolution_cache(expires_at)"
+            ),
+        ),
+    ),
+    Migration(
+        version=16,
+        name="protected-model-connections",
+        statements=(
+            (
+                "ALTER TABLE embedding_profiles ADD COLUMN connection_revision INTEGER "
+                "NOT NULL DEFAULT 0 CHECK(connection_revision >= 0)"
+            ),
+            """
+            CREATE TABLE model_connections (
+                connection_id TEXT PRIMARY KEY
+                    CHECK(length(connection_id) BETWEEN 1 AND 64),
+                display_name TEXT NOT NULL
+                    CHECK(length(display_name) BETWEEN 1 AND 120),
+                provider TEXT NOT NULL
+                    CHECK(provider IN ('ollama', 'openai_compatible', 'vllm')),
+                source TEXT NOT NULL
+                    CHECK(source IN ('host-managed', 'managed')),
+                revision INTEGER NOT NULL CHECK(revision >= 1),
+                secret_ref TEXT NOT NULL UNIQUE,
+                endpoint_configured INTEGER NOT NULL CHECK(endpoint_configured IN (0, 1)),
+                key_configured INTEGER NOT NULL CHECK(key_configured IN (0, 1)),
+                status TEXT NOT NULL CHECK(status IN (
+                    'configured', 'testing', 'available', 'failed', 'unavailable'
+                )),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE model_connection_secrets (
+                secret_ref TEXT PRIMARY KEY
+                    CHECK(length(secret_ref) BETWEEN 1 AND 128),
+                connection_id TEXT NOT NULL
+                    REFERENCES model_connections(connection_id) ON DELETE CASCADE,
+                revision INTEGER NOT NULL CHECK(revision >= 1),
+                ciphertext BLOB NOT NULL CHECK(length(ciphertext) > 0),
+                created_at TEXT NOT NULL,
+                UNIQUE(connection_id, revision),
+                UNIQUE(connection_id, secret_ref)
+            )
+            """,
+            (
+                "CREATE INDEX model_connection_secrets_connection_idx "
+                "ON model_connection_secrets(connection_id, revision)"
+            ),
+            """
+            CREATE TABLE chat_profiles (
+                profile_id TEXT PRIMARY KEY
+                    CHECK(length(profile_id) BETWEEN 1 AND 64),
+                connection_id TEXT NOT NULL
+                    REFERENCES model_connections(connection_id) ON DELETE RESTRICT,
+                connection_revision INTEGER NOT NULL CHECK(connection_revision >= 1),
+                model_id TEXT NOT NULL CHECK(length(model_id) BETWEEN 1 AND 256),
+                status TEXT NOT NULL CHECK(status IN (
+                    'probe', 'ready', 'last_known_good', 'probe_failed'
+                )),
+                active INTEGER NOT NULL CHECK(active IN (0, 1)),
+                observed_model_id TEXT,
+                last_error_code TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_probed_at TEXT
+            )
+            """,
+            (
+                "CREATE UNIQUE INDEX chat_profiles_one_active_idx "
+                "ON chat_profiles(active) WHERE active = 1"
+            ),
+            (
+                "CREATE INDEX chat_profiles_connection_idx "
+                "ON chat_profiles(connection_id, connection_revision)"
+            ),
+        ),
+    ),
+    Migration(
+        version=17,
+        name="analysis-model-selection",
+        statements=(
+            """
+            CREATE TABLE analysis_model_selection (
+                selection_key TEXT PRIMARY KEY CHECK(selection_key = 'current'),
+                chat_profile_id TEXT REFERENCES chat_profiles(profile_id) ON DELETE SET NULL,
+                chat_connection_revision INTEGER
+                    CHECK(chat_connection_revision IS NULL OR chat_connection_revision >= 1),
+                embedding_profile_id TEXT
+                    REFERENCES embedding_profiles(profile_id) ON DELETE SET NULL,
+                embedding_connection_revision INTEGER
+                    CHECK(embedding_connection_revision IS NULL
+                          OR embedding_connection_revision >= 0),
+                selection_generation INTEGER NOT NULL DEFAULT 0 CHECK(selection_generation >= 0),
+                updated_at TEXT NOT NULL
+            )
+            """,
+            """
+            INSERT INTO analysis_model_selection(selection_key, selection_generation, updated_at)
+            VALUES ('current', 0, '1970-01-01T00:00:00Z')
+            """,
+        ),
+    ),
+    Migration(
+        version=18,
+        name="analysis-batch-model-pair",
+        statements=("ALTER TABLE analysis_batches ADD COLUMN analysis_model_pair_json TEXT",),
+    ),
 )
 
 

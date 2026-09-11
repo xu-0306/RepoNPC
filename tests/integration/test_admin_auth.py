@@ -12,6 +12,7 @@ from reponpc.admin.auth import (
     AdminAuthError,
     AdminSession,
     AdminSessionService,
+    issue_admin_local_launch_grant,
     issue_admin_setup_code,
     set_admin_recovery_password,
 )
@@ -41,6 +42,7 @@ def _service(tmp_path: Path, clock: Clock) -> tuple[AdminSessionService, Runtime
             identity_hmac_key=b"k" * 32,
             idle_minutes=30,
             absolute_hours=12,
+            deployment_profile="production",
             now=clock,
         ),
         database,
@@ -56,9 +58,33 @@ def _dynamic_service(tmp_path: Path, clock: Clock) -> tuple[AdminSessionService,
             identity_hmac_key=b"k" * 32,
             idle_minutes=30,
             absolute_hours=12,
+            deployment_profile="production",
             now=clock,
         ),
         database,
+    )
+
+
+def test_unspecified_profile_defaults_to_production_password_auth(tmp_path: Path) -> None:
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    password = "correct horse battery staple"
+    service = AdminSessionService(
+        database=database,
+        username="admin",
+        password_hash=PasswordHasher(type=Type.ID).hash(password),
+        identity_hmac_key=b"k" * 32,
+    )
+
+    assert service.auth_methods().mode == "password"
+    session = service.login(
+        username="admin",
+        password=password,
+        remote_identity="default-profile-test",
+    )
+    service.authorize(
+        session_token=session.session_token,
+        csrf_token=session.csrf_token,
     )
 
 
@@ -88,11 +114,212 @@ def test_setup_code_is_short_lived_hashed_and_reissued_atomically(tmp_path: Path
     assert stale.value.code == "SETUP_DENIED"
 
 
+def test_local_launch_grant_is_hashed_reissued_and_consumed_once(tmp_path: Path) -> None:
+    clock = Clock()
+    database = RuntimeDatabase(tmp_path, busy_timeout_ms=10_000)
+    database.initialize()
+    service = AdminSessionService(
+        database=database,
+        identity_hmac_key=b"k" * 32,
+        deployment_profile="loopback_evaluation",
+        now=clock,
+    )
+
+    first = issue_admin_local_launch_grant(
+        database,
+        deployment_profile="loopback_evaluation",
+        now=clock(),
+    )
+    second = issue_admin_local_launch_grant(
+        database,
+        deployment_profile="loopback_evaluation",
+        now=clock(),
+    )
+
+    assert first != second
+    with pytest.raises(AdminAuthError) as stale:
+        service.consume_local_launch(grant=first, remote_identity="stale-peer")
+    assert stale.value.code == "LOCAL_LAUNCH_DENIED"
+
+    session = service.consume_local_launch(grant=second, remote_identity="valid-peer")
+    service.authorize(session_token=session.session_token, csrf_token=session.csrf_token)
+    with pytest.raises(AdminAuthError) as replayed:
+        service.consume_local_launch(grant=second, remote_identity="valid-peer")
+    assert replayed.value.code == "LOCAL_LAUNCH_DENIED"
+
+    with database.connection() as connection:
+        owner = connection.execute(
+            "SELECT username, password_hash FROM admin_owner WHERE state_key = 'current'"
+        ).fetchone()
+        grant = connection.execute(
+            "SELECT grant_hash, consumed_at FROM admin_local_launch_grants"
+        ).fetchone()
+
+    assert owner is not None and owner["password_hash"] is None
+    assert grant is not None
+    assert grant["grant_hash"] == hashlib.sha256(second.encode()).hexdigest()
+    assert grant["consumed_at"] is not None
+    persisted = repr(tuple(owner)) + repr(tuple(grant))
+    assert second not in persisted
+
+
+def test_local_launch_grant_expiry_profile_gate_and_atomic_concurrency(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    database = RuntimeDatabase(tmp_path, busy_timeout_ms=10_000)
+    database.initialize()
+    local = AdminSessionService(
+        database=database,
+        identity_hmac_key=b"k" * 32,
+        deployment_profile="loopback_evaluation",
+        now=clock,
+    )
+    grant = issue_admin_local_launch_grant(
+        database,
+        deployment_profile="loopback_evaluation",
+        now=clock(),
+    )
+    clock.advance(minutes=2)
+    with pytest.raises(AdminAuthError) as expired:
+        local.consume_local_launch(grant=grant, remote_identity="expired-peer")
+    assert expired.value.code == "LOCAL_LAUNCH_DENIED"
+
+    fresh = issue_admin_local_launch_grant(
+        database,
+        deployment_profile="loopback_evaluation",
+        now=clock(),
+    )
+
+    def attempt(_unused: int) -> AdminSession | str:
+        try:
+            return local.consume_local_launch(grant=fresh, remote_identity="concurrent-peer")
+        except AdminAuthError as exc:
+            return exc.code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(attempt, range(2)))
+
+    assert sum(isinstance(result, AdminSession) for result in results) == 1
+    assert results.count("LOCAL_LAUNCH_DENIED") == 1
+    with database.connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM admin_owner").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM admin_sessions").fetchone()[0] == 1
+
+    with pytest.raises(AdminAuthError) as production_issue:
+        issue_admin_local_launch_grant(
+            database,
+            deployment_profile="production",
+            now=clock(),
+        )
+    assert production_issue.value.code == "LOCAL_LAUNCH_DENIED"
+
+
+def test_local_launch_backoff_is_independent_from_password_login(tmp_path: Path) -> None:
+    clock = Clock()
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    local = AdminSessionService(
+        database=database,
+        identity_hmac_key=b"k" * 32,
+        deployment_profile="loopback_evaluation",
+        now=clock,
+    )
+    password = "correct horse battery staple"
+    production = AdminSessionService(
+        database=database,
+        username="local-launch",
+        password_hash=PasswordHasher(type=Type.ID).hash(password),
+        identity_hmac_key=b"k" * 32,
+        deployment_profile="production",
+        now=clock,
+    )
+
+    with pytest.raises(AdminAuthError) as denied:
+        local.consume_local_launch(grant="not-the-current-grant", remote_identity="127.0.0.1")
+
+    assert denied.value.code == "LOCAL_LAUNCH_DENIED"
+    assert denied.value.retry_after_seconds == 1
+    session = production.login(
+        username="local-launch",
+        password=password,
+        remote_identity="127.0.0.1",
+    )
+    production.authorize(session_token=session.session_token, csrf_token=session.csrf_token)
+
+
+def test_loopback_disables_setup_and_password_login(tmp_path: Path) -> None:
+    clock = Clock()
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    service = AdminSessionService(
+        database=database,
+        identity_hmac_key=b"k" * 32,
+        deployment_profile="loopback_evaluation",
+        now=clock,
+    )
+
+    assert service.setup_status().setup_required is False
+    assert service.setup_status().setup_code_available is False
+    with pytest.raises(AdminAuthError) as setup:
+        service.setup_owner(
+            setup_code="unused",
+            username="owner",
+            password="correct horse battery staple",
+            password_confirmation="correct horse battery staple",
+        )
+    assert setup.value.code == "SETUP_DENIED"
+    with pytest.raises(AdminAuthError) as login:
+        service.login(username="owner", password="unused", remote_identity="local")
+    assert login.value.code == "INVALID_CREDENTIALS"
+
+
+def test_loopback_logout_all_requires_and_consumes_a_fresh_launch_grant(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    service = AdminSessionService(
+        database=database,
+        identity_hmac_key=b"k" * 32,
+        deployment_profile="loopback_evaluation",
+        now=clock,
+    )
+    initial_grant = issue_admin_local_launch_grant(
+        database,
+        deployment_profile="loopback_evaluation",
+        now=clock(),
+    )
+    session = service.consume_local_launch(grant=initial_grant)
+    proof = issue_admin_local_launch_grant(
+        database,
+        deployment_profile="loopback_evaluation",
+        now=clock(),
+    )
+
+    service.logout_all(
+        session_token=session.session_token,
+        csrf_token=session.csrf_token,
+        password=None,
+        local_launch_grant=proof,
+    )
+
+    with pytest.raises(AdminAuthError) as revoked:
+        service.authorize(session_token=session.session_token)
+    assert revoked.value.code == "AUTHENTICATION_REQUIRED"
+    with database.connection() as connection:
+        grant = connection.execute(
+            "SELECT consumed_at FROM admin_local_launch_grants WHERE state_key = 'current'"
+        ).fetchone()
+        assert grant is not None and grant["consumed_at"] is not None
+
+
 def test_setup_owner_is_durable_one_time_and_never_stores_plaintext(tmp_path: Path) -> None:
     clock = Clock()
     service, database = _dynamic_service(tmp_path, clock)
     setup_code = issue_admin_setup_code(database, now=clock())
-    password = "npcx"
+    password = "correct horse battery staple"
 
     session = service.setup_owner(
         setup_code=setup_code,
@@ -123,6 +350,7 @@ def test_setup_owner_is_durable_one_time_and_never_stores_plaintext(tmp_path: Pa
     restarted = AdminSessionService(
         database=database,
         identity_hmac_key=b"k" * 32,
+        deployment_profile="production",
         now=clock,
     )
     restarted.login(username="portfolio-owner", password=password, remote_identity="visitor")
@@ -182,8 +410,8 @@ def test_host_recovery_changes_only_hash_and_accepts_optional_owner_selector(
     service.setup_owner(
         setup_code=setup_code,
         username="owner",
-        password="npcx",
-        password_confirmation="npcx",
+        password="correct horse battery staple",
+        password_confirmation="correct horse battery staple",
     )
 
     replacement = "安全密碼" * 4

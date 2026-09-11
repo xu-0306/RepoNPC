@@ -56,8 +56,18 @@ def test_load_environment_uses_typed_defaults_and_redacts_direct_secrets(tmp_pat
     assert canary not in str(settings.secrets["github_token"])
 
 
-def test_deployment_profile_is_explicit_and_loopback_cannot_bind_publicly(
+@pytest.mark.parametrize(
+    ("host", "public_base_url"),
+    [
+        ("127.0.0.1", "http://localhost:8000"),
+        ("::1", "http://[::1]:8000"),
+        ("LOCALHOST", "http://LOCALHOST:8000"),
+    ],
+)
+def test_deployment_profile_is_explicit_and_accepts_only_loopback_endpoints(
     tmp_path: Path,
+    host: str,
+    public_base_url: str,
 ) -> None:
     production = load_environment(deployment_environment(), secret_roots=(tmp_path,))
     assert production.deployment_profile == "production"
@@ -65,22 +75,68 @@ def test_deployment_profile_is_explicit_and_loopback_cannot_bind_publicly(
     loopback = load_environment(
         deployment_environment(
             REPONPC_DEPLOYMENT_PROFILE="loopback_evaluation",
-            REPONPC_HOST="127.0.0.1",
-            REPONPC_PUBLIC_BASE_URL="http://localhost:8000",
+            REPONPC_HOST=host,
+            REPONPC_PUBLIC_BASE_URL=public_base_url,
         ),
         secret_roots=(tmp_path,),
     )
     assert loopback.deployment_profile == "loopback_evaluation"
 
+
+@pytest.mark.parametrize(
+    ("host", "public_base_url"),
+    [
+        ("0.0.0.0", "http://localhost:8000"),
+        ("::", "http://[::1]:8000"),
+        ("192.168.1.10", "http://localhost:8000"),
+        ("localhost.evil.example", "http://localhost:8000"),
+        ("127.0.0.1", "http://127.0.0.1.evil.example:8000"),
+        ("127.0.0.1", "http://2130706433:8000"),
+    ],
+)
+def test_loopback_profile_rejects_exposed_or_rebinding_shaped_endpoints(
+    tmp_path: Path,
+    host: str,
+    public_base_url: str,
+) -> None:
     with pytest.raises(EnvironmentValidationError) as exposed:
         load_environment(
             deployment_environment(
                 REPONPC_DEPLOYMENT_PROFILE="loopback_evaluation",
-                REPONPC_HOST="0.0.0.0",
+                REPONPC_HOST=host,
+                REPONPC_PUBLIC_BASE_URL=public_base_url,
             ),
             secret_roots=(tmp_path,),
         )
     assert "loopback_profile_exposed" in issue_codes(exposed.value)
+
+
+@pytest.mark.parametrize("trusted_proxy_cidrs", ["127.0.0.1/32", "::1/128"])
+def test_loopback_profile_rejects_all_trusted_proxy_interpretation(
+    tmp_path: Path,
+    trusted_proxy_cidrs: str,
+) -> None:
+    with pytest.raises(EnvironmentValidationError) as exposed:
+        load_environment(
+            deployment_environment(
+                REPONPC_DEPLOYMENT_PROFILE="loopback_evaluation",
+                REPONPC_HOST="127.0.0.1",
+                REPONPC_PUBLIC_BASE_URL="http://localhost:8000",
+                REPONPC_TRUSTED_PROXY_CIDRS=trusted_proxy_cidrs,
+            ),
+            secret_roots=(tmp_path,),
+        )
+
+    assert "loopback_profile_exposed" in issue_codes(exposed.value)
+
+
+def test_production_preserves_trusted_proxy_configuration(tmp_path: Path) -> None:
+    settings = load_environment(
+        deployment_environment(REPONPC_TRUSTED_PROXY_CIDRS="127.0.0.1/32"),
+        secret_roots=(tmp_path,),
+    )
+
+    assert settings.trusted_proxy_cidrs == ("127.0.0.1/32",)
 
 
 def test_legacy_recovery_command_and_local_production_embedding_are_rejected(
@@ -135,6 +191,7 @@ def test_first_owner_mode_needs_no_default_username_or_github_token(
     )
     monkeypatch.setattr(main.app.state, "admin_operations", main.app.state.admin_operations)
     monkeypatch.setattr(main.app.state, "admin_origins", main.app.state.admin_origins)
+    monkeypatch.setattr(main.app.state, "github_rate_limiter", main.app.state.github_rate_limiter)
     main._configure_admin(settings, database)
 
     assert settings.admin_username == ""
@@ -143,85 +200,39 @@ def test_first_owner_mode_needs_no_default_username_or_github_token(
     assert main.app.state.admin_session_service.setup_status().setup_required is True
     assert main.app.state.admin_operations is not None
     assert main.app.state.admin_operations.github is None
+    assert main.app.state.github_rate_limiter is not None
+    assert (
+        main.app.state.admin_operations.onboarding._source_resolver.rate_limiter
+        is main.app.state.github_rate_limiter
+    )
 
 
-def test_github_oauth_requires_complete_same_origin_encrypted_configuration(tmp_path: Path) -> None:
-    credential_key = "credential-encryption-key-canary-material"
+def test_retired_github_public_read_settings_warn_and_are_never_loaded(tmp_path: Path) -> None:
     client_secret = "oauth-client-secret-canary"
-    settings = load_environment(
-        deployment_environment(
-            REPONPC_GITHUB_OAUTH_CLIENT_ID="oauth-client-id",
-            REPONPC_GITHUB_OAUTH_CLIENT_SECRET=client_secret,
-            REPONPC_GITHUB_OAUTH_CALLBACK_URL=(
-                "https://portfolio.example.com/api/admin/github/callback"
-            ),
-            REPONPC_CREDENTIAL_ENCRYPTION_KEY=credential_key,
-        ),
-        secret_roots=(tmp_path,),
-    )
+    encryption_key = "credential-encryption-key-canary-material"
+    missing_secret = tmp_path / "must-not-be-read"
 
-    assert settings.github_oauth_client_id == "oauth-client-id"
-    assert settings.github_oauth_callback_url.endswith("/api/admin/github/callback")
-    assert client_secret not in repr(settings)
-    assert credential_key not in repr(settings)
-
-    with pytest.raises(EnvironmentValidationError) as incomplete:
-        load_environment(
-            deployment_environment(REPONPC_GITHUB_OAUTH_CLIENT_ID="oauth-client-id"),
-            secret_roots=(tmp_path,),
-        )
-    assert "oauth_configuration_incomplete" in issue_codes(incomplete.value)
-
-    with pytest.raises(EnvironmentValidationError) as invalid_callback:
-        load_environment(
+    with pytest.warns(DeprecationWarning, match="ignored"):
+        settings = load_environment(
             deployment_environment(
                 REPONPC_GITHUB_OAUTH_CLIENT_ID="oauth-client-id",
                 REPONPC_GITHUB_OAUTH_CLIENT_SECRET=client_secret,
+                REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE=str(missing_secret),
                 REPONPC_GITHUB_OAUTH_CALLBACK_URL=(
-                    "https://portfolio.example.com/api/admin/session/github/callback"
+                    "https://portfolio.example.com/api/admin/github/callback"
                 ),
-                REPONPC_CREDENTIAL_ENCRYPTION_KEY=credential_key,
+                REPONPC_CREDENTIAL_ENCRYPTION_KEY=encryption_key,
+                REPONPC_CREDENTIAL_ENCRYPTION_KEY_FILE=str(missing_secret),
             ),
             secret_roots=(tmp_path,),
         )
-    assert "invalid_oauth_callback" in issue_codes(invalid_callback.value)
 
-    with pytest.raises(EnvironmentValidationError) as malformed_callback:
-        load_environment(
-            deployment_environment(
-                REPONPC_GITHUB_OAUTH_CLIENT_ID="oauth-client-id",
-                REPONPC_GITHUB_OAUTH_CLIENT_SECRET=client_secret,
-                REPONPC_GITHUB_OAUTH_CALLBACK_URL=("https://[malformed/api/admin/github/callback"),
-                REPONPC_CREDENTIAL_ENCRYPTION_KEY=credential_key,
-            ),
-            secret_roots=(tmp_path,),
-        )
-    assert "invalid_oauth_callback" in issue_codes(malformed_callback.value)
-
-
-def test_credential_encryption_key_allows_pat_only_without_oauth(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    settings = load_environment(
-        deployment_environment(
-            REPONPC_CREDENTIAL_ENCRYPTION_KEY="credential-encryption-key-canary-material",
-            REPONPC_IP_HASH_KEY="ip-hmac-canary",
-        ),
-        secret_roots=(tmp_path,),
-    )
-    database = RuntimeDatabase(tmp_path / "runtime")
-    database.initialize()
-
-    monkeypatch.setattr(
-        main.app.state, "github_identity_service", main.app.state.github_identity_service
-    )
-    main._configure_admin(settings, database)
-
-    assert settings.secrets["credential_encryption_key"] is not None
-    assert settings.github_oauth_client_id == ""
-    assert settings.github_oauth_callback_url == ""
-    assert main.app.state.github_identity_service is not None
-    assert main.app.state.github_identity_service.oauth_available is False
+    assert not hasattr(settings, "github_oauth_client_id")
+    assert not hasattr(settings, "github_oauth_callback_url")
+    assert "github_oauth_client_secret" not in settings.secrets
+    assert "credential_encryption_key" not in settings.secrets
+    assert client_secret not in repr(settings)
+    assert encryption_key not in repr(settings)
 
 
 def test_admin_service_remains_unavailable_without_identity_hmac_key(
@@ -237,10 +248,12 @@ def test_admin_service_remains_unavailable_without_identity_hmac_key(
     )
     monkeypatch.setattr(main.app.state, "admin_operations", main.app.state.admin_operations)
     monkeypatch.setattr(main.app.state, "admin_origins", main.app.state.admin_origins)
+    monkeypatch.setattr(main.app.state, "github_rate_limiter", main.app.state.github_rate_limiter)
     main._configure_admin(settings, database)
 
     assert main.app.state.admin_session_service is None
     assert main.app.state.admin_operations is None
+    assert main.app.state.github_rate_limiter is None
 
 
 @pytest.mark.parametrize(
@@ -435,6 +448,7 @@ def test_production_entrypoint_uses_validated_host_and_port(
         lambda: SimpleNamespace(
             host="127.0.0.2",
             port=8123,
+            deployment_profile="production",
             data_dir=tmp_path / "runtime-data",
             sqlite_busy_timeout_ms=5_000,
         ),
@@ -443,7 +457,14 @@ def test_production_entrypoint_uses_validated_host_and_port(
 
     main.run()
 
-    assert calls == [{"host": "127.0.0.2", "port": 8123, "factory": False}]
+    assert calls == [
+        {
+            "host": "127.0.0.2",
+            "port": 8123,
+            "factory": False,
+            "proxy_headers": True,
+        }
+    ]
 
 
 def test_production_entrypoint_reports_environment_failure_without_values(

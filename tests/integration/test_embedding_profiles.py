@@ -40,7 +40,11 @@ class ProbeProvider:
         return IDENTITY
 
     def embed_query(self, texts: list[str]) -> np.ndarray:
-        assert texts == ["RepoNPC embedding readiness probe"]
+        assert texts == ["RepoNPC embedding readiness query"]
+        return np.asarray([[0.0, 0.6, 0.8]], dtype=np.float32)
+
+    def embed_passages(self, texts: list[str]) -> np.ndarray:
+        assert texts == ["RepoNPC embedding readiness passage"]
         return np.asarray([[0.0, 0.6, 0.8]], dtype=np.float32)
 
     def installed_models(self) -> tuple[str, ...]:
@@ -443,7 +447,7 @@ def test_probe_rejects_wrong_dtype_and_non_normalized_vectors(
 ) -> None:
     class BadProbeProvider(ProbeProvider):
         def embed_query(self, texts: list[str]) -> np.ndarray:
-            assert texts == ["RepoNPC embedding readiness probe"]
+            assert texts == ["RepoNPC embedding readiness query"]
             return vector
 
     database = RuntimeDatabase(tmp_path)

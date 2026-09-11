@@ -12,11 +12,9 @@ from reponpc.admin.auth import AdminSessionService
 from reponpc.admin.batch_resolver import (
     BatchCapacity,
     BatchPreflightPlanner,
-    CredentialPurpose,
-    GitHubGraphQLMetadataResolver,
     GitHubHttpResponse,
     GitHubRateLimiter,
-    PublicReadCredential,
+    GitHubRESTMetadataResolver,
 )
 from reponpc.admin.batch_runtime import BatchRuntimeStore
 from reponpc.admin.batches import AnalysisBatchService
@@ -29,27 +27,18 @@ PASSWORD = "npcx"
 SHA = "a" * 40
 
 
-class GraphQLTransport:
-    def request(self, **_values: object) -> GitHubHttpResponse:
+class RESTTransport:
+    def request(self, **values: object) -> GitHubHttpResponse:
+        url = str(values["url"])
+        payload = (
+            {"sha": SHA}
+            if "/commits/" in url
+            else {"id": "R_demo", "private": False, "archived": False, "default_branch": "main"}
+        )
         return GitHubHttpResponse(
             status=200,
-            body=json.dumps(
-                {
-                    "data": {
-                        "repo0": {
-                            "id": "R_demo",
-                            "nameWithOwner": "octocat/demo",
-                            "isPrivate": False,
-                            "isArchived": False,
-                            "defaultBranchRef": {
-                                "name": "main",
-                                "target": {"oid": SHA},
-                            },
-                        }
-                    }
-                }
-            ).encode(),
-            headers={"X-RateLimit-Remaining": "5000"},
+            body=json.dumps(payload).encode(),
+            headers={"X-RateLimit-Resource": "core", "X-RateLimit-Remaining": "60"},
         )
 
 
@@ -65,8 +54,8 @@ def _application(tmp_path: Path) -> tuple[FastAPI, RuntimeDatabase]:
     )
     limiter = GitHubRateLimiter()
     planner = BatchPreflightPlanner(
-        resolver=GitHubGraphQLMetadataResolver(
-            transport=GraphQLTransport(),  # type: ignore[arg-type]
+        resolver=GitHubRESTMetadataResolver(
+            transport=RESTTransport(),  # type: ignore[arg-type]
             limiter=limiter,
         ),
         limiter=limiter,
@@ -74,15 +63,6 @@ def _application(tmp_path: Path) -> tuple[FastAPI, RuntimeDatabase]:
     batches = AnalysisBatchService(
         store=BatchRuntimeStore(database),
         planner=planner,
-        credentials_supplier=lambda: (
-            PublicReadCredential(
-                credential_id=1,
-                purpose=CredentialPurpose.IDENTITY_PUBLIC_READ,
-                status="ready",
-                token="api-test-token",
-            ),
-        ),
-        mark_connection_required=lambda _credential_id: None,
         provider_ready_supplier=lambda: True,
         capacity=BatchCapacity(1, 1, 2, 1, 4),
         runner=lambda item, _cancelled: {"repository": {"slug": item.input.slug}},

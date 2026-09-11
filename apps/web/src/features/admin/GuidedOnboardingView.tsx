@@ -23,6 +23,11 @@ type Copy = {
   outcome: string;
   outcomeItems: string[];
   start: string;
+  startAi: string;
+  startManual: string;
+  modelsHeading: string;
+  modelsDescription: string;
+  confirmModels: string;
   advanced: string;
   advancedDescription: string;
   progress: string;
@@ -168,11 +173,18 @@ const COPY: Record<Locale, Copy> = {
       "不需要 GitHub token 也能驗證、預覽、複製或下載的 YAML 草稿",
     ],
     start: "開始引導設定",
+    startAi: "設定 AI 並開始",
+    startManual: "先手動建立作品集",
+    modelsHeading: "設定 AI 模型",
+    modelsDescription:
+      "先分別測試分析與回答模型、搜尋模型，再選擇要用於分析。這不會啟用公開網站模型。",
+    confirmModels: "完成模型設定並選擇專案",
     advanced: "使用進階 raw YAML",
     advancedDescription: "熟悉 schema 的使用者可以直接編輯 reponpc.yml。",
     progress: "引導設定進度",
     steps: {
       intro: "歡迎",
+      models: "設定 AI 模型",
       repositories: "探索與選擇",
       analysis: "分析",
       contributions: "確認貢獻",
@@ -334,11 +346,18 @@ const COPY: Record<Locale, Copy> = {
       "A schema-v1 YAML draft that works without a GitHub writeback token",
     ],
     start: "Start guided setup",
+    startAi: "Set up AI and begin",
+    startManual: "Build manually first",
+    modelsHeading: "Set up AI models",
+    modelsDescription:
+      "Test the analysis/chat model and search model separately, then explicitly choose them for analysis. This does not change the public website model.",
+    confirmModels: "Finish model setup and choose projects",
     advanced: "Use advanced raw YAML",
     advancedDescription: "Experienced owners can edit reponpc.yml directly.",
     progress: "Guided setup progress",
     steps: {
       intro: "Welcome",
+      models: "Set up AI models",
       repositories: "Discover and select",
       analysis: "Analyze",
       contributions: "Confirm contribution",
@@ -510,22 +529,8 @@ const COPY: Record<Locale, Copy> = {
   },
 };
 
-const STEPS: readonly GuidedStep[] = [
-  "intro",
-  "repositories",
-  "analysis",
-  "contributions",
-  "profile",
-  "review",
-  "draft",
-];
-
 function localized(value: LocalizedText, locale: Locale): string {
   return value[locale];
-}
-
-function stepIndex(step: GuidedStep): number {
-  return STEPS.indexOf(step);
 }
 
 function selectedRepositories(
@@ -1205,7 +1210,19 @@ function Progress({
   state: GuidedOnboardingState;
   copy: Copy;
 }) {
-  const current = stepIndex(state.step);
+  const steps: readonly GuidedStep[] =
+    state.route === "manual"
+      ? ["repositories", "contributions", "profile", "review"]
+      : [
+          "models",
+          "repositories",
+          "analysis",
+          "contributions",
+          "profile",
+          "review",
+        ];
+  const current = steps.indexOf(state.step);
+  if (current < 0) return null;
   return (
     <section
       aria-label={copy.progress}
@@ -1213,13 +1230,13 @@ function Progress({
       data-current-step={state.step}
     >
       <p>
-        {copy.progress}: {current + 1}/{STEPS.length}
+        {copy.progress}: {current + 1}/{steps.length}
       </p>
-      <progress max={STEPS.length} value={current + 1}>
-        {current + 1}/{STEPS.length}
+      <progress max={steps.length} value={current + 1}>
+        {current + 1}/{steps.length}
       </progress>
       <ol>
-        {STEPS.map((step, index) => (
+        {steps.map((step, index) => (
           <li
             aria-current={step === state.step ? "step" : undefined}
             key={step}
@@ -1258,10 +1275,17 @@ function IntroStep({
       </ul>
       <button
         disabled={busy}
-        onClick={() => onAction({ type: "START" })}
+        onClick={() => onAction({ type: "START_AI" })}
         type="button"
       >
-        {copy.start}
+        {copy.startAi}
+      </button>
+      <button
+        disabled={busy}
+        onClick={() => onAction({ type: "START_MANUAL" })}
+        type="button"
+      >
+        {copy.startManual}
       </button>
       {disabledReason(busy ? copy.disabledBusy : null, "guided-start-reason")}
       <button
@@ -1276,6 +1300,52 @@ function IntroStep({
       {state.rawYamlHasUnmappedChanges && (
         <p role="alert">{copy.rawYamlWarning}</p>
       )}
+    </section>
+  );
+}
+
+function ModelsStep({
+  state,
+  copy,
+  busy,
+  modelSetupView,
+  onAction,
+}: {
+  state: GuidedOnboardingState;
+  copy: Copy;
+  busy: boolean;
+  modelSetupView?: ReactNode;
+  onAction: GuidedOnboardingViewProps["onAction"];
+}) {
+  const reason = busy
+    ? copy.disabledBusy
+    : !state.modelsConfigured
+      ? copy.confirmModels
+      : null;
+  return (
+    <section
+      aria-labelledby="guided-models-heading"
+      className="guided-onboarding__step"
+    >
+      <h2 id="guided-models-heading">{copy.modelsHeading}</h2>
+      <p>{copy.modelsDescription}</p>
+      {modelSetupView ?? <p>{copy.providerUnknown}</p>}
+      <button
+        aria-describedby={reason ? "guided-models-reason" : undefined}
+        disabled={Boolean(reason) || busy}
+        onClick={() => onAction({ type: "COMPLETE_MODEL_SETUP" })}
+        type="button"
+      >
+        {copy.confirmModels}
+      </button>
+      {disabledReason(reason, "guided-models-reason")}
+      <button
+        disabled={busy}
+        onClick={() => onAction({ type: "START_MANUAL" })}
+        type="button"
+      >
+        {copy.startManual}
+      </button>
     </section>
   );
 }
@@ -1507,7 +1577,6 @@ function AnalysisStep({
   batchCreatePending = false,
   onAction,
   onAnalyze,
-  onPrepareBatch,
   onCreateBatch,
   onRefreshProviderStatus,
 }: {
@@ -1524,7 +1593,6 @@ function AnalysisStep({
   batchCreatePending?: boolean;
   onAction: GuidedOnboardingViewProps["onAction"];
   onAnalyze: GuidedOnboardingViewProps["onAnalyze"];
-  onPrepareBatch?: GuidedOnboardingViewProps["onPrepareBatch"];
   onCreateBatch?: GuidedOnboardingViewProps["onCreateBatch"];
   onRefreshProviderStatus: GuidedOnboardingViewProps["onRefreshProviderStatus"];
 }) {
@@ -1614,9 +1682,16 @@ function AnalysisStep({
           ) : (
             <p>{copy.analysisRequired}</p>
           )}
-          {onPrepareBatch && repositories.length > 0 && (
-            <button disabled={busy} onClick={onPrepareBatch} type="button">
-              {copy.prepareAnalysis}
+          {onCreateBatch && repositories.length > 0 && (
+            <button
+              aria-busy={batchCreatePending || undefined}
+              disabled={busy || batchCreatePending || hasActiveBatch}
+              onClick={onCreateBatch}
+              type="button"
+            >
+              {batchCreatePending
+                ? copy.batchCreationPending
+                : copy.createBatch}
             </button>
           )}
         </>
@@ -1956,13 +2031,13 @@ export function GuidedOnboardingView({
   batchAnalysisActive,
   batchCanCreate,
   batchCreatePending,
+  modelSetupView,
   providerStatus,
   providerStatusPending,
   onAction,
   onDiscover,
   onResolve,
   onAnalyze,
-  onPrepareBatch,
   onCreateBatch,
   onRefreshProviderStatus,
   onSuggestContribution,
@@ -2086,6 +2161,15 @@ export function GuidedOnboardingView({
               state={state}
             />
           )}
+          {state.step === "models" && (
+            <ModelsStep
+              busy={busy}
+              copy={copy}
+              modelSetupView={modelSetupView}
+              onAction={onAction}
+              state={state}
+            />
+          )}
           {state.step === "repositories" && (
             <RepositoriesStep
               busy={busy}
@@ -2109,7 +2193,6 @@ export function GuidedOnboardingView({
               locale={locale}
               onAction={onAction}
               onAnalyze={onAnalyze}
-              onPrepareBatch={onPrepareBatch}
               onCreateBatch={onCreateBatch}
               onRefreshProviderStatus={onRefreshProviderStatus}
               providerStatus={providerStatus}

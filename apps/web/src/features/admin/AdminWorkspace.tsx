@@ -81,7 +81,6 @@ export interface AdminWorkspaceProps {
   onDispatch: () => void;
   onLogout: () => void;
   guidedView?: ReactNode;
-  githubConnectionView?: ReactNode;
   embeddingProfileView?: ReactNode;
   advancedMode?: boolean;
   onAdvancedModeChange?: (advanced: boolean) => void;
@@ -234,7 +233,6 @@ export function AdminWorkspace({
   onDispatch,
   onLogout,
   guidedView,
-  githubConnectionView,
   embeddingProfileView,
   advancedMode = false,
   onAdvancedModeChange,
@@ -277,8 +275,7 @@ export function AdminWorkspace({
         </p>
       )}
 
-      {authenticated && githubConnectionView}
-      {authenticated && embeddingProfileView}
+      {authenticated && (!guidedView || advancedMode) && embeddingProfileView}
 
       {!authenticated && (
         <p role="alert" className="admin-workspace__auth-message">

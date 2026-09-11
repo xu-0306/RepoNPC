@@ -2,8 +2,8 @@
 
 This module is the composition boundary: it retains only short-lived safe
 preflight metadata in memory, while all recoverable job/item/event/cache state
-lives in ``runtime.sqlite``. Credentials remain in the identity service and
-are supplied only to the resolver/runner on the server.
+lives in ``runtime.sqlite``. Public GitHub source access is anonymous; the
+separate writeback client is outside this boundary.
 """
 
 from __future__ import annotations
@@ -13,20 +13,20 @@ import json
 import secrets
 import threading
 import time
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+from reponpc.admin.analysis_selection import AnalysisModelPair
 from reponpc.admin.batch_resolver import (
     BatchCapacity,
     BatchPreflightPlan,
     BatchPreflightPlanner,
     BatchResolverError,
     CachePrediction,
-    PublicReadCredential,
     RepositorySelection,
 )
 from reponpc.admin.batch_runtime import (
@@ -93,6 +93,7 @@ class BatchPreflightInput:
 class _StoredPlan:
     plan: BatchPreflightPlan
     selections: tuple[RepositorySelection, ...]
+    analysis_pair: AnalysisModelPair | None
 
 
 class AnalysisBatchService:
@@ -103,8 +104,6 @@ class AnalysisBatchService:
         *,
         store: BatchRuntimeStore,
         planner: BatchPreflightPlanner,
-        credentials_supplier: Callable[[], Iterable[PublicReadCredential]],
-        mark_connection_required: Callable[[int], None],
         provider_ready_supplier: Callable[[], bool],
         capacity: BatchCapacity,
         runner: BatchItemRunner,
@@ -115,12 +114,11 @@ class AnalysisBatchService:
         output_schema_version: str = "analysis-schema-v1",
         validation_version: str = "validation-v1",
         stage_gates: BatchStageGates | None = None,
+        analysis_pair_supplier: Callable[[], AnalysisModelPair | None] | None = None,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._store = store
         self._planner = planner
-        self._credentials_supplier = credentials_supplier
-        self._mark_connection_required = mark_connection_required
         self._provider_ready_supplier = provider_ready_supplier
         self._capacity = capacity
         self._runner = runner
@@ -131,6 +129,7 @@ class AnalysisBatchService:
         self._output_schema_version = output_schema_version
         self._validation_version = validation_version
         self._stage_gates = stage_gates or BatchStageGates(capacity)
+        self._analysis_pair_supplier = analysis_pair_supplier
         self._now = now
         self._plans: dict[str, _StoredPlan] = {}
         self._plans_lock = threading.RLock()
@@ -142,22 +141,23 @@ class AnalysisBatchService:
 
         try:
             policies = {selection.slug: selection for selection in request.selections}
+            analysis_pair = self._analysis_pair()
             with self._stage_gates.github_request():
                 plan = self._planner.create(
                     selections=request.selections,
-                    credentials=tuple(self._credentials_supplier()),
                     cache_prediction=lambda repository: self._cache_prediction(
-                        repository, policies[repository.slug]
+                        repository, policies[repository.slug], analysis_pair
                     ),
-                    provider=_provider_readiness(self._provider_ready_supplier()),
+                    provider=_provider_readiness(
+                        self._provider_ready_supplier()
+                        and (self._analysis_pair_supplier is None or analysis_pair is not None)
+                    ),
                     capacity=self._capacity,
                 )
-        except BatchResolverError as exc:
-            if exc.code == "GITHUB_CONNECTION_REQUIRED" and exc.credential_id is not None:
-                self._mark_connection_required(exc.credential_id)
+        except BatchResolverError:
             raise
         with self._plans_lock:
-            self._plans[plan.plan_id] = _StoredPlan(plan, request.selections)
+            self._plans[plan.plan_id] = _StoredPlan(plan, request.selections, analysis_pair)
             self._prune_expired_plans_locked()
         return plan
 
@@ -177,14 +177,11 @@ class AnalysisBatchService:
             raise BatchRuntimeError("ANALYSIS_PLAN_STALE")
         if tuple(selections) != stored.selections:
             raise BatchRuntimeError("ANALYSIS_PLAN_STALE")
+        if self._analysis_pair() != stored.analysis_pair:
+            raise BatchRuntimeError("ANALYSIS_PLAN_STALE")
         plan = stored.plan
-        if plan.selected_credential is None:
-            raise BatchRuntimeError("GITHUB_CONNECTION_REQUIRED")
         if plan.blockers:
             codes = {blocker.code for blocker in plan.blockers}
-            if "GITHUB_CONNECTION_REQUIRED" in codes:
-                self._mark_connection_required(plan.selected_credential.credential_id)
-                raise BatchRuntimeError("GITHUB_CONNECTION_REQUIRED")
             if "GITHUB_RATE_LIMITED" in codes:
                 raise BatchRuntimeError("GITHUB_RATE_LIMITED")
             if "RATE_LIMITED" in codes:
@@ -213,8 +210,10 @@ class AnalysisBatchService:
                 selection_hash=plan.selection_hash,
                 idempotency_key=idempotency_key,
                 items=tuple(items),
-                selected_credential_id=plan.selected_credential.credential_id,
                 maximum_generation_attempts=plan.maximum_generation_attempts,
+                analysis_model_pair=(
+                    stored.analysis_pair.safe_dict() if stored.analysis_pair is not None else None
+                ),
             )
         )
         if created:
@@ -306,6 +305,14 @@ class AnalysisBatchService:
             self._workers[batch_id] = worker
             worker.start()
 
+    def _analysis_pair(self) -> AnalysisModelPair | None:
+        if self._analysis_pair_supplier is None:
+            return None
+        try:
+            return self._analysis_pair_supplier()
+        except Exception:
+            return None
+
     def _run_batch(self, batch_id: str) -> None:
         # Work-item concurrency is bounded independently from the runner's
         # GitHub/archive/index/provider semaphores.  The runner receives a
@@ -370,15 +377,6 @@ class AnalysisBatchService:
         except BatchExecutionError as exc:
             if exc.code == "CANCELLED":
                 self._store.cancel_item(item)
-            elif exc.code == "GITHUB_CONNECTION_REQUIRED":
-                try:
-                    self._mark_connection_required(
-                        self._store.selected_credential_id(item.batch_id)
-                    )
-                finally:
-                    self._store.advance_item(
-                        item, state="waiting_reconnection", error_code=exc.code
-                    )
             elif exc.code == "GITHUB_RATE_LIMITED":
                 retry = max(1, exc.retry_after_seconds or 60)
                 self._store.advance_item(
@@ -394,7 +392,9 @@ class AnalysisBatchService:
         except Exception:
             self._store.fail_item(item, code="ANALYSIS_FAILED")
 
-    def _cache_prediction(self, repository, selection: RepositorySelection) -> CachePrediction:
+    def _cache_prediction(
+        self, repository, selection: RepositorySelection, pair: AnalysisModelPair | None
+    ) -> CachePrediction:
         # A deliberately strict key includes every identity component known at
         # preflight. The runner writes a validated-result cache only after its
         # evidence/output validation succeeds.
@@ -403,11 +403,11 @@ class AnalysisBatchService:
             repository.commit_sha,
             _selection_policy_identity(selection),
             self._parser_identity,
-            self._embedding_identity,
+            pair.cache_embedding_identity() if pair is not None else self._embedding_identity,
         )
         result_key = _cache_key(
             derived_key,
-            self._chat_model,
+            pair.cache_chat_identity() if pair is not None else self._chat_model,
             self._prompt_version,
             self._output_schema_version,
             self._validation_version,

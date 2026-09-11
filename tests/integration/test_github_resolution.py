@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import base64
+from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 
 import pytest
 
+from reponpc.admin.batch_resolver import GitHubRateLimiter
 from reponpc.indexing.exclusions import SourceEntryKind
 from reponpc.indexing.github import GitHubSourceResolver, SourceResolutionError
 
@@ -133,3 +135,85 @@ def test_resolver_applies_a_hard_response_byte_limit_before_json_parsing(monkeyp
     with pytest.raises(SourceResolutionError) as error:
         resolver._get_json("/oversized")
     assert error.value.code == "github_response_too_large"
+
+
+def test_production_discovery_request_is_anonymous_and_versioned(monkeypatch) -> None:
+    requests = []
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def geturl(self) -> str:
+            return "https://api.github.com/repos/owner/repository"
+
+        def read(self, _amount: int) -> bytes:
+            return b"{}"
+
+    class Opener:
+        def open(self, request, **_kwargs):
+            requests.append(request)
+            return Response()
+
+    monkeypatch.setattr("reponpc.indexing.github.build_opener", lambda *_args: Opener())
+
+    GitHubSourceResolver()._get_json("/repos/owner/repository")
+
+    headers = {key.casefold(): value for key, value in requests[0].header_items()}
+    assert headers["accept"] == "application/vnd.github+json"
+    assert headers["user-agent"] == "RepoNPC/0.2.1"
+    assert headers["x-github-api-version"] == "2022-11-28"
+    assert "authorization" not in headers
+
+
+def test_production_discovery_updates_and_honors_the_shared_rate_budget(monkeypatch) -> None:
+    now = datetime(2026, 9, 9, tzinfo=UTC)
+    reset = now + timedelta(hours=1)
+    requests = []
+
+    class Response:
+        status = 200
+        headers = MappingProxyType(
+            {
+                "X-RateLimit-Resource": "core",
+                "X-RateLimit-Limit": "60",
+                "X-RateLimit-Remaining": "24",
+                "X-RateLimit-Reset": str(int(reset.timestamp())),
+            }
+        )
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def geturl(self) -> str:
+            return "https://api.github.com/repos/owner/repository"
+
+        def read(self, _amount: int) -> bytes:
+            return b"{}"
+
+    class Opener:
+        def open(self, request, **_kwargs):
+            requests.append(request)
+            return Response()
+
+    monkeypatch.setattr("reponpc.indexing.github.build_opener", lambda *_args: Opener())
+    limiter = GitHubRateLimiter(now=lambda: now)
+    resolver = GitHubSourceResolver(rate_limiter=limiter)
+
+    resolver._get_json("/repos/owner/repository")
+    budget, _secondary = limiter.snapshot()
+    assert budget.remaining == 24
+
+    with pytest.raises(SourceResolutionError) as blocked:
+        resolver._get_json("/repos/owner/another")
+    assert blocked.value.code == "github_rate_limited"
+    assert blocked.value.retry_after_seconds == 3600
+    assert len(requests) == 1

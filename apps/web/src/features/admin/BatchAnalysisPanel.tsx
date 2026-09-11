@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import type { Locale } from "../../i18n/messages";
 
 export type BatchPreflightStatus =
@@ -7,18 +9,12 @@ export type BatchPreflightStatus =
   | "blocked"
   | "failed";
 
-export type BatchConnectionStatus =
-  | "ready"
-  | "checking"
-  | "connection_required"
-  | "unavailable";
-
 export type BatchRateBudgetStatus = "available" | "limited" | "exhausted";
 
 export type BatchPreflightBlocker =
-  | "connection_required"
   | "provider_unavailable"
   | "rate_limited"
+  | "github_unavailable"
   | "selection_changed"
   | "no_repositories";
 
@@ -41,7 +37,6 @@ export interface BatchDurationEstimate {
 export interface BatchPreflightPlan {
   selectionCount: number;
   cachedResultCount: number;
-  connection: BatchConnectionStatus;
   rateBudget: BatchRateBudgetStatus;
   providerReady: boolean;
   effectiveConcurrency: number;
@@ -54,7 +49,11 @@ export type BatchPreflightState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "ready"; plan: BatchPreflightPlan }
-  | { status: "blocked"; blockers: readonly BatchPreflightBlocker[] }
+  | {
+      status: "blocked";
+      blockers: readonly BatchPreflightBlocker[];
+      retryAfterSeconds?: number;
+    }
   | { status: "failed"; error: BatchOperationError };
 
 export type BatchJobStatus =
@@ -83,7 +82,6 @@ export type BatchRepositoryState =
   | "queued"
   | "active"
   | "waiting_rate_limit"
-  | "waiting_reconnection"
   | "needs_retry_confirmation"
   | "failed"
   | "cancelled"
@@ -165,6 +163,7 @@ export interface BatchAnalysisPanelProps {
   onResume: (batchId: string) => void;
   onCancel: (batchId: string) => void;
   onRetry: (batchId: string) => void;
+  onRetryPreflight: () => void;
 }
 
 type Copy = {
@@ -179,7 +178,6 @@ type Copy = {
   preflightFailed: string;
   repositories: string;
   cachePrediction: string;
-  connection: string;
   rateBudget: string;
   provider: string;
   concurrency: string;
@@ -189,7 +187,6 @@ type Copy = {
   notReported: string;
   confidence: (confidence: BatchDurationEstimate["confidence"]) => string;
   blocker: (blocker: BatchPreflightBlocker) => string;
-  connectionStatus: (status: BatchConnectionStatus) => string;
   rateStatus: (status: BatchRateBudgetStatus) => string;
   providerReady: string;
   providerUnavailable: string;
@@ -216,6 +213,7 @@ type Copy = {
   resume: string;
   cancel: string;
   retry: string;
+  retryPreflight: string;
   pauseUnavailable: string;
   resumeUnavailable: string;
   cancelUnavailable: string;
@@ -235,13 +233,13 @@ const COPY: Record<Locale, Copy> = {
       "伺服器會依照容量與 GitHub 限制處理已確認的公開 repositories；進度不會揭露憑證、請求內容或來源資料。",
     preflightHeading: "分析前檢查",
     preflightIdle: "確認 repository 選擇後，即可建立分析前檢查。",
-    preflightLoading: "正在檢查 GitHub 連線、快取、容量與 provider 狀態。",
+    preflightLoading:
+      "正在檢查匿名 GitHub REST 配額、快取、容量與 provider 狀態。",
     preflightReady: "分析前檢查已完成，可以建立批次。",
     preflightBlocked: "分析前檢查已封鎖；請先處理下列項目。",
     preflightFailed: "分析前檢查未完成。請重新檢查後再建立批次。",
     repositories: "已選 repositories",
     cachePrediction: "預測快取命中",
-    connection: "GitHub 連線",
     rateBudget: "GitHub 配額",
     provider: "模型 provider",
     concurrency: "預計並行數",
@@ -253,19 +251,12 @@ const COPY: Record<Locale, Copy> = {
       ({ low: "信心低", medium: "信心中等", high: "信心高" })[confidence],
     blocker: (blocker) =>
       ({
-        connection_required: "需要重新連接 GitHub，才能開始分析。",
         provider_unavailable: "模型 provider 尚未就緒，無法開始分析。",
         rate_limited: "GitHub 目前限制新的工作；請依重試時間再試。",
+        github_unavailable: "GitHub 暫時無法使用，請稍後重新檢查。",
         selection_changed: "選擇的 repositories 已變更，請重新執行分析前檢查。",
         no_repositories: "請至少選擇一個公開 repository。",
       })[blocker],
-    connectionStatus: (status) =>
-      ({
-        ready: "已就緒",
-        checking: "檢查中",
-        connection_required: "需要重新連接",
-        unavailable: "無法使用",
-      })[status],
     rateStatus: (status) =>
       ({ available: "可使用", limited: "暫時受限", exhausted: "已用盡" })[
         status
@@ -309,6 +300,7 @@ const COPY: Record<Locale, Copy> = {
     resume: "繼續批次",
     cancel: "取消批次",
     retry: "重試需要確認的項目",
+    retryPreflight: "重新執行分析前檢查",
     pauseUnavailable: "只有執行中的批次可以暫停。",
     resumeUnavailable: "只有已暫停的批次可以繼續。",
     cancelUnavailable: "只有佇列中、執行中或已暫停的批次可以取消。",
@@ -331,15 +323,14 @@ const COPY: Record<Locale, Copy> = {
     preflightIdle:
       "Create a preflight after confirming the repository selection.",
     preflightLoading:
-      "Checking GitHub connection, cache, capacity, and provider readiness.",
+      "Checking anonymous GitHub capacity, cache, and provider readiness.",
     preflightReady: "Preflight is complete. The batch can be created.",
     preflightBlocked: "Preflight is blocked. Resolve the items below first.",
     preflightFailed:
       "Preflight did not complete. Check again before creating a batch.",
     repositories: "Selected repositories",
     cachePrediction: "Predicted cache hits",
-    connection: "GitHub connection",
-    rateBudget: "GitHub budget",
+    rateBudget: "Anonymous GitHub REST budget",
     provider: "Model provider",
     concurrency: "Planned concurrency",
     maxGenerationAttempts: "Maximum generations per repository",
@@ -354,22 +345,16 @@ const COPY: Record<Locale, Copy> = {
       })[confidence],
     blocker: (blocker) =>
       ({
-        connection_required: "Reconnect GitHub before analysis can begin.",
         provider_unavailable:
           "The model provider is not ready, so analysis cannot begin.",
         rate_limited:
           "GitHub is limiting new work. Try again after its retry window.",
+        github_unavailable:
+          "GitHub is temporarily unavailable. Run preflight again later.",
         selection_changed:
           "The repository selection changed. Run preflight again.",
         no_repositories: "Select at least one public repository.",
       })[blocker],
-    connectionStatus: (status) =>
-      ({
-        ready: "Ready",
-        checking: "Checking",
-        connection_required: "Reconnect required",
-        unavailable: "Unavailable",
-      })[status],
     rateStatus: (status) =>
       ({
         available: "Available",
@@ -418,6 +403,7 @@ const COPY: Record<Locale, Copy> = {
     resume: "Resume batch",
     cancel: "Cancel batch",
     retry: "Retry items that need confirmation",
+    retryPreflight: "Run preflight again",
     pauseUnavailable: "Only a running batch can be paused.",
     resumeUnavailable: "Only a paused batch can be resumed.",
     cancelUnavailable:
@@ -478,9 +464,12 @@ export function BatchAnalysisPanel({
   onResume,
   onCancel,
   onRetry,
+  onRetryPreflight,
 }: BatchAnalysisPanelProps) {
   const copy = COPY[locale];
   const availability = batchActionAvailability(job, actions);
+  const activeJob =
+    job !== null && !["completed", "failed", "cancelled"].includes(job.status);
 
   return (
     <section
@@ -495,7 +484,13 @@ export function BatchAnalysisPanel({
         <p>{copy.description}</p>
       </header>
 
-      <PreflightSummary copy={copy} locale={locale} preflight={preflight} />
+      <PreflightSummary
+        canRetry={!activeJob}
+        copy={copy}
+        locale={locale}
+        onRetry={onRetryPreflight}
+        preflight={preflight}
+      />
 
       {actions.error && (
         <p className="guided-onboarding__error" role="alert">
@@ -553,11 +548,15 @@ export function BatchAnalysisPanel({
 
 function PreflightSummary({
   copy,
+  canRetry,
   locale,
+  onRetry,
   preflight,
 }: {
   copy: Copy;
+  canRetry: boolean;
   locale: Locale;
+  onRetry: () => void;
   preflight: BatchPreflightState;
 }) {
   return (
@@ -583,7 +582,13 @@ function PreflightSummary({
           <p role="status">{copy.preflightBlocked}</p>
           <ul>
             {preflight.blockers.map((blocker) => (
-              <li key={blocker}>{copy.blocker(blocker)}</li>
+              <li key={blocker}>
+                {copy.blocker(blocker)}
+                {blocker === "rate_limited" &&
+                preflight.retryAfterSeconds !== undefined
+                  ? ` ${copy.retryAfter(preflight.retryAfterSeconds)}`
+                  : ""}
+              </li>
             ))}
           </ul>
         </>
@@ -598,8 +603,6 @@ function PreflightSummary({
             <dd>{preflight.plan.selectionCount}</dd>
             <dt>{copy.cachePrediction}</dt>
             <dd>{preflight.plan.cachedResultCount}</dd>
-            <dt>{copy.connection}</dt>
-            <dd>{copy.connectionStatus(preflight.plan.connection)}</dd>
             <dt>{copy.rateBudget}</dt>
             <dd>{copy.rateStatus(preflight.plan.rateBudget)}</dd>
             <dt>{copy.provider}</dt>
@@ -624,7 +627,57 @@ function PreflightSummary({
           </dl>
         </>
       )}
+      {(preflight.status === "failed" || preflight.status === "blocked") && (
+        <PreflightRetryButton
+          canRetry={canRetry}
+          copy={copy}
+          onRetry={onRetry}
+          retryAfterSeconds={
+            preflight.status === "failed"
+              ? preflight.error.retryAfterSeconds
+              : preflight.retryAfterSeconds
+          }
+        />
+      )}
     </section>
+  );
+}
+
+function PreflightRetryButton({
+  canRetry,
+  copy,
+  onRetry,
+  retryAfterSeconds,
+}: {
+  canRetry: boolean;
+  copy: Copy;
+  onRetry: () => void;
+  retryAfterSeconds: number | undefined;
+}) {
+  const [remaining, setRemaining] = useState(
+    Math.max(0, retryAfterSeconds ?? 0),
+  );
+
+  useEffect(() => {
+    const next = Math.max(0, retryAfterSeconds ?? 0);
+    setRemaining(next);
+    if (next === 0) return;
+    const timer = window.setInterval(
+      () => setRemaining((current) => Math.max(0, current - 1)),
+      1_000,
+    );
+    return () => window.clearInterval(timer);
+  }, [retryAfterSeconds]);
+
+  return (
+    <button
+      disabled={!canRetry || remaining > 0}
+      onClick={onRetry}
+      type="button"
+    >
+      {copy.retryPreflight}
+      {remaining > 0 ? ` · ${copy.retryAfter(remaining)}` : ""}
+    </button>
   );
 }
 
@@ -837,12 +890,6 @@ function operationErrorMessage(error: BatchOperationError, copy: Copy): string {
   if (error.scope === "preflight") {
     return `${copy.preflightFailed}${retry}`;
   }
-  if (
-    error.code === "GITHUB_CONNECTION_REQUIRED" ||
-    error.code === "GITHUB_CREDENTIAL_INVALID"
-  ) {
-    return `${copy.blocker("connection_required")}${retry}`;
-  }
   if (error.code === "MODEL_UNAVAILABLE" || error.code === "PROVIDER_TIMEOUT") {
     return `${copy.blocker("provider_unavailable")}${retry}`;
   }
@@ -922,7 +969,6 @@ function repositoryStateLabel(
     "zh-TW": {
       queued: "等待處理",
       waiting_rate_limit: "等待 GitHub 配額",
-      waiting_reconnection: "等待重新連接",
       needs_retry_confirmation: "需要明確確認重試",
       failed: "需要處理",
       cancelled: "已取消",
@@ -931,7 +977,6 @@ function repositoryStateLabel(
     en: {
       queued: "Queued",
       waiting_rate_limit: "Waiting for GitHub capacity",
-      waiting_reconnection: "Waiting for reconnection",
       needs_retry_confirmation: "Needs explicit retry confirmation",
       failed: "Needs attention",
       cancelled: "Cancelled",

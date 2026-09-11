@@ -8,9 +8,20 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from reponpc.admin.analysis_selection import (
+    AnalysisSelectionError,
+    AnalysisSelectionRegistry,
+    AnalysisSelectionView,
+)
 from reponpc.admin.batch_resolver import BatchPreflightPlan, RepositorySelection
 from reponpc.admin.batch_runtime import BatchRuntimeError, BatchSnapshot
 from reponpc.admin.batches import AnalysisBatchService, BatchPreflightInput
+from reponpc.admin.chat_profiles import (
+    ChatProfile,
+    ChatProfileError,
+    ChatProfileInput,
+    ChatProfileRegistry,
+)
 from reponpc.admin.embedding_profiles import (
     EmbeddingProfile,
     EmbeddingProfileError,
@@ -19,6 +30,12 @@ from reponpc.admin.embedding_profiles import (
 )
 from reponpc.admin.embedding_reindex import EmbeddingReindexCoordinator
 from reponpc.admin.github import GitCommit, GitFile, GitHubAdminClient, GitHubAdminError
+from reponpc.admin.model_connections import (
+    ModelConnection,
+    ModelConnectionError,
+    ModelConnectionInput,
+    ModelConnectionRegistry,
+)
 from reponpc.admin.model_operations import (
     OllamaModelOperation,
     OllamaModelOperationCoordinator,
@@ -52,6 +69,9 @@ class AdminOperations:
     onboarding: GuidedOnboardingService | None = None
     analysis_batches: AnalysisBatchService | None = None
     embedding_profiles: EmbeddingProfileRegistry | None = None
+    model_connections: ModelConnectionRegistry | None = None
+    chat_profiles: ChatProfileRegistry | None = None
+    analysis_selection: AnalysisSelectionRegistry | None = None
     embedding_reindex: EmbeddingReindexCoordinator | None = None
     ollama_model_operations: OllamaModelOperationCoordinator | None = None
 
@@ -199,6 +219,48 @@ class AdminOperations:
     def list_embedding_profiles(self) -> tuple[EmbeddingProfile, ...]:
         return self._embedding_profiles().list()
 
+    def list_model_connections(self) -> tuple[ModelConnection, ...]:
+        return self._model_connections().list()
+
+    def get_model_connection(self, connection_id: str) -> ModelConnection:
+        return self._model_connections().get(connection_id)
+
+    def create_model_connection(
+        self, values: ModelConnectionInput, *, connection_id: str | None = None
+    ) -> ModelConnection:
+        return self._model_connections().create(values, connection_id=connection_id)
+
+    def update_model_connection(
+        self, connection_id: str, values: ModelConnectionInput
+    ) -> ModelConnection:
+        return self._model_connections().update(connection_id, values)
+
+    def delete_model_connection(self, connection_id: str) -> None:
+        self._model_connections().delete(connection_id)
+
+    def list_chat_profiles(self) -> tuple[ChatProfile, ...]:
+        return self._chat_profiles().list()
+
+    def get_chat_profile(self, profile_id: str) -> ChatProfile:
+        return self._chat_profiles().get(profile_id)
+
+    def create_chat_profile(self, values: ChatProfileInput) -> ChatProfile:
+        return self._chat_profiles().create(values)
+
+    def update_chat_profile(self, profile_id: str, values: ChatProfileInput) -> ChatProfile:
+        return self._chat_profiles().update(profile_id, values)
+
+    def delete_chat_profile(self, profile_id: str) -> None:
+        self._chat_profiles().delete(profile_id)
+        if self.analysis_selection is not None:
+            self.analysis_selection.clear_reference(profile_id)
+
+    def probe_chat_profile(self, profile_id: str) -> ChatProfile:
+        return self._chat_profiles().probe(profile_id)
+
+    def activate_chat_profile(self, profile_id: str) -> ChatProfile:
+        return self._chat_profiles().activate(profile_id)
+
     def get_embedding_profile(self, profile_id: str) -> EmbeddingProfile:
         return self._embedding_profiles().get(profile_id)
 
@@ -212,6 +274,28 @@ class AdminOperations:
 
     def delete_embedding_profile(self, profile_id: str) -> None:
         self._embedding_profiles().delete(profile_id)
+        if self.analysis_selection is not None:
+            self.analysis_selection.clear_reference(profile_id)
+
+    def analysis_selection_view(self) -> AnalysisSelectionView:
+        if self.analysis_selection is None:
+            raise AnalysisSelectionError("SERVICE_NOT_READY")
+        return self.analysis_selection.view()
+
+    def select_analysis_models(
+        self,
+        *,
+        chat_profile_id: str,
+        embedding_profile_id: str,
+        expected_generation: int | None = None,
+    ) -> AnalysisSelectionView:
+        if self.analysis_selection is None:
+            raise AnalysisSelectionError("SERVICE_NOT_READY")
+        return self.analysis_selection.select(
+            chat_profile_id=chat_profile_id,
+            embedding_profile_id=embedding_profile_id,
+            expected_generation=expected_generation,
+        )
 
     def probe_embedding_profile(self, profile_id: str) -> EmbeddingProfile:
         return self._embedding_profiles().probe(profile_id)
@@ -415,6 +499,16 @@ class AdminOperations:
         if self.embedding_profiles is None:
             raise EmbeddingProfileError("SERVICE_NOT_READY")
         return self.embedding_profiles
+
+    def _model_connections(self) -> ModelConnectionRegistry:
+        if self.model_connections is None:
+            raise ModelConnectionError("SERVICE_NOT_READY")
+        return self.model_connections
+
+    def _chat_profiles(self) -> ChatProfileRegistry:
+        if self.chat_profiles is None:
+            raise ChatProfileError("SERVICE_NOT_READY")
+        return self.chat_profiles
 
     def _audit(
         self,

@@ -8,10 +8,12 @@ RepoNPC 是一個開源、自託管的互動式 GitHub 作品集。你挑選想�
 回答不只「聽起來合理」：重要內容會連回固定 commit、檔案與行號，讓訪客可以直接核對原始證據。
 
 > [!IMPORTANT]
-> RepoNPC 目前仍在 Phase 5 發布強化階段。主要功能已有大量本機測試，但 clean-host Docker、真實 provider/OAuth、完整瀏覽器與無障礙驗證尚未全部完成，因此目前適合開發與評估，還不能視為正式完成的 v1 發布版。
+> RepoNPC 0.2.1 已完成 GitHub OAuth／公開讀取 PAT 退場與匿名 REST resolver；clean-host Docker、真實 provider、完整瀏覽器與無障礙驗證仍待執行，因此目前適合開發與評估，尚非正式 v1 發布版。
 > Phase 5 remains the release-hardening boundary.
 
-最後檢閱：2026-09-03
+最後檢閱：2026-09-10
+
+模型連線、回答模型與搜尋模型的基礎程式已加入目前 working tree，但首次使用流程尚未正確串接。**規格 0.2.3 / ADR-030** 已核准改為「先設定兩種模型，再選專案並分析」，同時保留立即手動建立作品集的路線。管理員專案分析可在正式索引發布前執行；訪客問答仍需通過正式 bundle 驗證與啟用。修正交接請讀 [模型優先引導實作交接](docs/ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md)，前一版連線／秘密設計見 [模型設定實作交接](docs/MODEL_SETUP_IMPLEMENTATION_HANDOFF.md)。Figma 暫不處理；GGUF／Hugging Face 本地 runtime 仍是後續研究。
 
 ## 30 秒了解 RepoNPC
 
@@ -55,7 +57,7 @@ RepoNPC 不讓模型自由搜尋、執行程式或自行拼湊 GitHub 連結。�
 - 固定到 exact commit、檔案和行號的 GitHub 引用。
 - Ollama、vLLM 與通用 OpenAI-compatible 聊天／embedding 服務。
 - 引導式 repository 選擇、貢獻撰寫、預覽與設定匯出。
-- 單一擁有者管理介面、GitHub OAuth 選配與本機密碼復原。
+- 單一擁有者管理介面：本機啟動免註冊／免密碼，遠端部署保留密碼；公開 repository 的讀取不要求 OAuth 或 PAT。
 - 內建角色組合器與自訂 sprite sheet。
 - 不可變索引包、校驗、原子切換、保留上一個可用版本與 rollback。
 
@@ -95,7 +97,7 @@ RepoNPC 的 Compose 檔只啟動應用程式，不會順便啟動 Ollama 或 vLL
    .\start-reponpc.cmd
    ```
 
-啟動器會在需要時安裝鎖定的 Python／Web 依賴、建立前端、只監聽 `localhost:8090`、開啟 `/admin`，並在終端顯示有效 15 分鐘的一次性 setup code。請用這組 code 建立你自己的本機管理員帳號；專案沒有預設帳號或密碼。
+啟動器會在需要時安裝鎖定的 Python／Web 依賴、建立前端、只監聽 `localhost:8090`，並以兩分鐘、僅能使用一次的本機授權開啟 `/admin`。瀏覽器會把它交換成受保護的管理 session 並立即清除網址片段，因此本機評估不需要註冊、帳號、密碼或 GitHub OAuth。若直接開啟 `/admin` 而沒有有效 session，重新執行啟動器即可。
 
 如果你已建立 `.env`，本機 provider URL 必須能從 Windows 主機連線，例如 Ollama 通常是 `http://127.0.0.1:11434`。完整訪客問答仍需要一個已發布並啟用、且 embedding 身分相符的索引包。
 
@@ -124,7 +126,7 @@ cp reponpc.example.yml reponpc.yml
 
 RepoNPC 將聊天模型與 embedding 模型視為兩個獨立能力。兩者可以來自同一台 Ollama，也可以分別使用 vLLM 或 OpenAI-compatible API。
 
-目前建議的入門 embedding 模型是 Ollama `qwen3-embedding:0.6b`。正式環境必須使用外部 embedding profile；內建的 sentence-transformers adapter 只供隔離測試與 benchmark 使用。
+選擇 Ollama 後，可參考 `qwen3-embedding:0.6b` 等模型；它不是規格 0.2.2/0.2.3 的預設服務或預選模型。正式環境仍使用外部 embedding profile；內建 sentence-transformers adapter 只供隔離測試與 benchmark。管理頁已有連線／模型面板，但一般引導與乾淨啟動後的首次分析仍在修正，因此目前可使用明確環境設定或進階管理面板評估，不能把引導畫面視為完成的首次使用流程。
 
 先建立部署環境檔與 secret 目錄：
 
@@ -188,22 +190,22 @@ curl --fail http://127.0.0.1:8000/api/public/status
 
 `healthz` 只表示程序有回應；`readyz` 成功才代表索引、runtime 與模型已相容並可服務。
 
-### 5. 建立擁有者並分享卡片
+### 5. 進入管理介面並分享卡片
 
-在部署主機產生一次性 setup code：
+本機 Windows 評估只要執行啟動器；它會自動簽發短效本機授權並直接開啟管理介面。以下 setup code 僅供 `production` 或任何非 loopback 的管理部署使用：
 
 ```bash
 docker compose exec app reponpc admin setup-code
 ```
 
-透過 loopback、SSH tunnel、私人 LAN 或 VPN 開啟 `/admin`，輸入 setup code，再建立本機帳號與密碼。正式環境的密碼至少 15 個 Unicode 字元；GitHub OAuth 是之後可選的替代登入／公開讀取連線，不會取代本機密碼復原。
+透過 loopback、SSH tunnel、私人 LAN 或 VPN 開啟 `/admin`，輸入 setup code，再建立本機帳號與密碼。正式環境的密碼至少 15 個 Unicode 字元。GitHub 公開 repository 分析使用匿名 REST 容量；OAuth 與瀏覽器輸入的公開讀取 PAT 已退場。
 
 管理介面確認 index 與 provider 都 ready 後，即可預覽 NPC、產生 README Markdown，並貼到你的 GitHub Profile README。
 
 > [!WARNING]
 > 不要把 `/admin` 或 `/api/admin/*` 直接公開到 Internet。特殊或高編號 port 不是安全控制；正式環境應由 reverse proxy 只公開訪客路由，並把管理路由限制在私人網路。
 
-完整的 HTTPS、GitHub 權限、OAuth、備份、更新、rollback 與故障排除方式請參閱 [操作手冊](docs/OPERATIONS.md)。
+完整的 HTTPS、GitHub 寫回權限、匿名讀取額度、備份、更新、rollback 與故障排除方式請參閱 [操作手冊](docs/OPERATIONS.md)。
 
 ## 常見疑問
 
@@ -219,9 +221,9 @@ docker compose exec app reponpc admin setup-code
 
 不可以。LLM 沒有 shell、工具、檔案系統、repository 寫入或任意網路能力。GitHub 設定回寫由後端以獨立權限和衝突檢查處理。
 
-### 沒有 GitHub OAuth 或模型時，還能編輯作品集嗎？
+### GitHub 匿名讀取額度或模型不可用時，還能編輯作品集嗎？
 
-可以。你仍可手動輸入貢獻、驗證、預覽、複製或下載 YAML。模型分析是可選的建議功能，GitHub writeback 也不是本機編輯的必要條件。
+可以。你仍可手動輸入貢獻、驗證、預覽、複製或下載 YAML。模型分析是可選的建議功能，GitHub writeback 也不是本機編輯的必要條件；匿名 GitHub REST 達到限制時只需稍後重試分析。
 
 ### 更新索引失敗會讓網站壞掉嗎？
 
@@ -233,6 +235,8 @@ docker compose exec app reponpc admin setup-code
 | --- | --- |
 | 完整安裝、HTTPS、備份、恢復與 rollback | [操作手冊](docs/OPERATIONS.md) |
 | API、資料結構與功能契約 | [技術規格](docs/TECHNICAL_SPEC.md) |
+| 先設定模型再分析的引導修正 | [模型優先引導實作交接](docs/ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md) |
+| 中立模型設定、API 金鑰安全與前置引導改版 | [實作交接](docs/MODEL_SETUP_IMPLEMENTATION_HANDOFF.md) |
 | 每項需求如何判定完成 | [驗收標準](docs/ACCEPTANCE_CRITERIA.md) |
 | 威脅、秘密管理與管理介面限制 | [安全模型](docs/SECURITY.md) |
 | 重要架構選擇及其理由 | [架構決策](docs/DECISIONS.md) |

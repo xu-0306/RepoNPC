@@ -3,13 +3,21 @@
 | Field | Value |
 | --- | --- |
 | Status | **Approved** |
-| Version | 0.1.9 |
+| Version | 0.2.3 |
 | Product | RepoNPC v1 |
 | Audience | Implementation Agents, reviewers, maintainers |
-| Last updated | 2026-08-30 |
-| Approval date | 2026-08-10; Phase 2 closure amendment approved 2026-08-11; first-owner onboarding, personal-deployment convenience, and guided-onboarding amendments approved 2026-08-14; vLLM provider-preset amendment approved 2026-08-15; GitHub identity and connection amendment approved 2026-08-16; OAuth setup-guidance UX and ENGD-001/002/003/006 amendments approved 2026-08-30 |
+| Last updated | 2026-09-10 |
+| Approval date | 2026-08-10; Phase 2 closure amendment approved 2026-08-11; first-owner onboarding, personal-deployment convenience, and guided-onboarding amendments approved 2026-08-14; vLLM provider-preset amendment approved 2026-08-15; GitHub identity and connection amendment approved 2026-08-16; OAuth setup-guidance UX and ENGD-001/002/003/006 amendments approved 2026-08-30; passwordless loopback launch and connection-only GitHub amendment approved 2026-09-04; GitHub OAuth/public-read PAT retirement approved 2026-09-08; provider-neutral setup approved 2026-09-09; model-first guided workflow approved 2026-09-10 |
 
 Application implementation is authorized under this approved specification. The words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RECOMMENDED, MAY, and OPTIONAL are normative as described by RFC 2119.
+
+**0.2.3 approval:** On 2026-09-10 the owner approved the reviewed six-step model-first AI journey, an immediate manual route, and separate analysis-model readiness from published-index activation (ENGD-011 / ADR-030). This work package updates documents only. Existing 0.2.2 connection/profile implementation is present, but guided integration and clean-bootstrap lifecycle gaps remain; see `ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md`. Figma and RepoNPC-managed GGUF/Hugging Face execution remain outside scope.
+
+**0.2.2 historical approval:** On 2026-09-09 the owner accepted the provider-neutral onboarding analysis and requested specification, memory, and implementation-handoff updates under ENGD-010 / ADR-029. That documentation delivery did not establish application acceptance. The 2026-09-10 source review supersedes its then-current “not implemented” inventory without claiming complete release verification.
+
+Version 0.2.3 puts model setup before project analysis on the AI route, adds an explicit four-step manual route, and separates the model pair selected for owner analysis from the publicly active bundle/model state. It requires the clean no-model/no-bundle runtime to become analysis-capable after explicit model setup without restart, while keeping publication and public chat behind their stricter bundle lifecycle.
+
+Version 0.2.2 adds independent chat/embedding setup through authenticated Web Admin: explicit service selection, API base URL, write-only API key, manually entered model ID, optional model discovery, and capability testing. There is no automatically selected provider/model on a clean deployment. Section 11.5 supersedes the environment-only/browser-input prohibition in older sections only for this protected model-connection form. Stored keys and private endpoints are still never returned to browsers, exported, logged, or sent directly from the browser to providers. ADR-029 also supersedes a mandatory model-list gate when a gateway does not support listing; actual capability testing remains required.
 
 Version 0.1.1 records the owner-approved Phase 2 closure boundary as historical context: Phase 2 shipped a build-time local embedding adapter and executable index CLI, while concrete chat adapters and runtime query-provider integration remained Phase 3 work. The local adapter is retained only for isolated reproducibility fixtures; version 0.1.9 is normative for production embedding deployment and requires an external profile.
 
@@ -28,6 +36,10 @@ Version 0.1.7 records the owner's 2026-08-16 authorization for the bounded GitHu
 Version 0.1.8 records the owner's 2026-08-30 authorization for the GitHub OAuth setup-guidance UX amendment. GitHub entry points remain actionable when OAuth is not configured: they open a host-side setup guide instead of redirecting to GitHub. Configured OAuth continues to use the existing top-level Authorization Code Flow with PKCE S256. The guide endpoint exposes only a canonical callback URL, fixed GitHub documentation URL, configuration state, and a next-step label; it never exposes secrets, tokens, secret-file paths, or owner identity.
 
 Version 0.1.9 records the owner's 2026-08-30 engineering decisions: production embeddings are external provider profiles with CRUD and one active profile; Ollama may manage models through provider-native pull/delete while vLLM and generic OpenAI-compatible services are connect/probe-only; administration uses an explicit loopback/production password policy and private access topology; first-owner setup is local-password-first with optional GitHub binding and local break-glass recovery; and daily Web Admin work is complemented by a bounded host operations CLI. Where the historical 0.1.1/0.1.3 paragraphs above describe a local production embedding default or an unrestricted four-character production password, this 0.1.9 amendment is normative.
+
+Version 0.2.0 records the owner's 2026-09-04 correction after observing the implemented first-run flow. The `loopback_evaluation` launcher now uses a short-lived one-use local-launch capability and presents no registration, password-login, or GitHub-login screen. Production and every non-loopback administration path retain the setup-code, local password, and host recovery controls. GitHub OAuth is connection-only and begins from authenticated settings; it never creates or authenticates the RepoNPC owner. ADR-027 is normative where the historical 0.1.2/0.1.3/0.1.6/0.1.8/0.1.9 text describes loopback password setup, GitHub sign-in, or a public OAuth setup guide.
+
+Version 0.2.1 records the owner's 2026-09-08 decision to retire GitHub OAuth and browser-entered public-read PATs entirely. Public discovery and selected-repository analysis move to bounded unauthenticated GitHub REST resolution followed by an archive addressed by a validated full commit SHA. Anonymous rate exhaustion is a recoverable capacity state and never blocks manual authoring/export. The independent least-privilege writeback credential remains server-only and MUST NOT be sent to discovery or analysis. ADR-028 is normative where historical 0.1.6 through 0.2.0 text requires OAuth, public-read PATs, GraphQL, connection UI, or public-read credential storage. The current OAuth/PAT implementation is legacy until the ordered removal plan is complete; it is not a release target.
 
 The local Windows launcher is also required to reconcile its own runtime state at startup: when the recorded process is stale, it MUST verify the recorded PID and configured Python executable before stopping it, MAY fall back from process-tree termination to a direct stop of that same verified PID when Windows reports an elevation-context error, and MUST never terminate an unknown process occupying the port.
 
@@ -66,7 +78,7 @@ The production deployment is one application image plus persistent storage. Inde
 | FR-014 | The public site MUST show profile/project content, suggested questions, evidence-linked chat, index/model status, and responsive bilingual controls. |
 | FR-015 | The character system MUST support built-in customization, the specified custom sprite-sheet format, required animation states, accessibility, and reduced motion. |
 | FR-016 | The card service MUST provide sanitized, self-contained SVG, GIF fallback, and static preview outputs with light/dark and `zh-TW`/`en` variants. |
-| FR-017 | The admin surface MUST use the single-admin session, deployment-aware password policy, CSRF, backoff, expiration, and revocation controls defined here, and MUST be reachable through a private/loopback administration topology. |
+| FR-017 | The admin surface MUST use the single-admin session, CSRF, origin/host validation, expiration, rotation, and revocation controls defined here. `loopback_evaluation` MUST bootstrap that session only from a host-minted one-use local-launch grant and MUST expose no registration/password-login UI; production or any non-loopback administration MUST use the deployment-aware password, setup proof, and backoff controls. |
 | FR-018 | The admin UI/API MUST read, validate, preview, and edit configuration and character assets without exposing secrets. |
 | FR-019 | Admin writeback MUST use blob-SHA conflict detection and MUST modify only `reponpc.yml` or `assets/character/` in the configured repository. |
 | FR-020 | GitHub Actions MUST validate sources, build a reproducible immutable bundle, publish it to a GitHub Release, and update the stable manifest last. |
@@ -74,12 +86,13 @@ The production deployment is one application image plus persistent storage. Inde
 | FR-022 | All visitor/admin workflows and equivalent answers MUST support Traditional Chinese (`zh-TW`) and English (`en`). |
 | FR-023 | The system MUST expose public status plus process/readiness health endpoints without revealing secrets or sensitive diagnostics. |
 | FR-024 | The admin UI MUST generate ready-to-copy GitHub README snippets for SVG, GIF, light/dark, and locale selections. |
-| FR-029 | RepoNPC MUST support local password sign-in and GitHub OAuth Web Application Flow with PKCE as alternative authentication methods for the same sole owner, while retaining host-issued setup proof, local-first owner creation, generic invalid-identity failures, local sessions, and no open registration. |
-| FR-030 | RepoNPC MUST store GitHub OAuth and explicit public-read PAT credentials only as authenticated-encrypted runtime records with an explicit purpose, and MUST keep writeback credentials separate and non-fallbackable. |
-| FR-031 | The authenticated admin UI MUST expose local sign-in, optional GitHub identity linking/unlinking, connection state, and safe public-read PAT guidance with bilingual, keyboard-accessible, no-secret behavior. The local password remains the recovery method. |
-| FR-034 | GitHub OAuth entry points MUST remain actionable when OAuth is unavailable: they MUST open a bilingual, keyboard-accessible host-side setup guide without redirecting or accepting secrets, and MUST resume the normal top-level PKCE redirect once OAuth is configured. |
-| FR-035 | The deployment MUST provide an authenticated embedding-profile registry with create/read/update/delete, provider/model probing, one-and-only-one active profile, explicit reindex status, and atomic last-known-good switching. |
+| FR-029 | RepoNPC MUST support exactly one owner through profile-specific local authentication: one-use launcher grants for `loopback_evaluation`, and host-issued setup proof plus local password sign-in/recovery for production or non-loopback administration. GitHub OAuth MUST NOT authenticate or register the owner. |
+| FR-030 | **Legacy in 0.2.1; superseded by FR-037.** OAuth and browser-entered public-read PAT storage is not a release requirement. Writeback credential isolation remains normative under FR-019 and FR-037. |
+| FR-031 | The admin UI MUST expose the access state appropriate to the deployment profile with bilingual, keyboard-accessible, no-secret behavior. It MUST NOT expose GitHub OAuth setup/connection controls, public-read PAT inputs, or missing-public-read-credential warnings. |
+| FR-034 | **Legacy in 0.2.1; superseded by FR-037.** The OAuth setup-guide, recheck, and Continue-to-GitHub contract is retained only as historical migration context. |
+| FR-035 | The deployment MUST provide an authenticated embedding-profile registry with create/read/update/delete, provider/model probing, at most one active profile (exactly one when ready), explicit reindex status, and atomic last-known-good switching. |
 | FR-036 | The deployment MUST provide the bounded host operations CLI and private-admin access topology defined in sections 5.5, 11.1, and 15.5; it MUST NOT add a separate public management protocol or treat a non-standard port as access control. |
+| FR-037 | RepoNPC MUST retire GitHub OAuth and browser-entered public-read PATs, resolve selected public repositories through bounded unauthenticated GitHub REST requests, and fetch source only by a validated immutable full commit SHA. Rate exhaustion MUST provide a safe retry state and preserve manual continuation. Discovery and analysis MUST NOT receive or fall back to the independent writeback credential. |
 
 ### 2.2 Non-functional requirements
 
@@ -109,28 +122,32 @@ The production deployment is one application image plus persistent storage. Inde
 | FR-027 | RepoNPC MUST analyze only explicitly confirmed public repositories, reuse the production indexing/trust boundaries, invoke only the configured provider/model, clean temporary data, and return separately labeled repository facts and model inferences. Analysis is an optional enhancement: before preflight and on every blocked or failed analysis state, the owner MUST be able to skip it and continue with owner-authored contribution fields without first triggering a failed request. |
 | FR-028 | Model-generated role, responsibility, achievement, context, summary, or translation suggestions MUST remain unconfirmed proposals until the owner accepts or edits them; only confirmed configuration text becomes `OWNER_ASSERTION`. The owner MUST be able to author contributions manually and validate, preview, copy, or download a complete YAML draft without model availability, a GitHub public-read connection, or GitHub writeback. |
 
-### 2.4 Version 0.1.6 identity and connection requirements
+### 2.4 Legacy version 0.1.6 identity and connection requirements (superseded by 0.2.1)
 
-- GitHub OAuth uses the Authorization Code Web Application Flow with a cryptographically random one-use `state`, PKCE S256 verifier/challenge, server-side token exchange, fixed configured callback URL, and a short-lived `HttpOnly` OAuth transaction cookie with `SameSite=Lax`. The normal `__Host-reponpc_session` remains `SameSite=Strict` and is issued only after the callback resolves the transaction.
-- Setup, login, and link are distinct transaction intents. First-owner setup creates the local username/password after an unexpired host-issued setup code; OAuth is a later login/link transaction from that local owner session. A legacy setup/OAuth request must never create a GitHub-only owner or consume the setup code. Expired, replaced, replayed, cross-intent, and cross-browser transactions fail closed.
-- The GitHub numeric user ID is the unique stable linked identity. The GitHub login is display metadata only. An unlinked or wrong identity returns `INVALID_CREDENTIALS` and never reveals the configured owner.
+The following bullets document the implemented migration source only. They are not 0.2.1 release requirements and MUST NOT be used to justify retaining a reachable OAuth/PAT product flow after ADR-028 is implemented.
+
+- GitHub OAuth uses the Authorization Code Web Application Flow with a cryptographically random one-use `state`, PKCE S256 verifier/challenge, server-side token exchange, fixed configured callback URL, and a short-lived `HttpOnly` OAuth transaction cookie with `SameSite=Lax`. It is initiated only from an existing authenticated RepoNPC session and returns a public-read connection to that same owner; it never issues an owner session.
+- OAuth has one connection intent. Legacy setup/login intents must return a safe removal error and must never create an owner, consume setup/local-launch proof, or redirect to GitHub. Expired, replaced, replayed, wrong-intent, and cross-browser transactions fail closed.
+- The GitHub numeric user ID is stable connection metadata. The GitHub login is display metadata only and has no RepoNPC authentication meaning.
 - OAuth requests no repository scope. RepoNPC rejects a broader reported scope, including `public_repo`. A selected OAuth token may be used only as `identity_public_read`; it can read public metadata/source after a bounded server-side readiness probe, but cannot write. A `401` makes that connection unavailable and MUST NOT select a PAT or writeback credential automatically.
 - A manually submitted fine-grained PAT is never an authentication method. Its input is cleared immediately after submission and its persisted form is `public_read` only. It is never shown, echoed, masked, fingerprinted, logged, or returned to the browser.
-- Local-first ownership is mandatory. GitHub-only ownership is not supported in v1. Unlinking requires recent local authentication and MUST preserve the local password as a usable break-glass method.
+- GitHub-only ownership is not supported in v1. Removing an OAuth connection affects only GitHub-backed public-read work and cannot revoke or create a RepoNPC session.
 
 ### 2.5 Version 0.1.7 bounded resolver and batch requirements
 
 | ID | Requirement |
 | --- | --- |
-| FR-032 | GitHub-backed guided analysis MUST use a centralized public-read resolver that selects exactly one explicit `identity_public_read` or `public_read` credential, obtains public repository eligibility and immutable commit OIDs through bounded GraphQL metadata, and downloads only an archive addressed by that full commit SHA. It MUST reject unconfirmed, private, inaccessible, or policy-disallowed archived repositories before source access; it MUST never use the writeback credential for analysis or silently select another credential after a `401`. |
+| FR-032 | GitHub-backed guided analysis MUST use a centralized unauthenticated public-read resolver that obtains public repository eligibility and immutable commit OIDs through bounded fixed-origin REST metadata, and downloads only an archive addressed by that full commit SHA. It MUST reject unconfirmed, private, inaccessible, or policy-disallowed archived repositories before source access; it MUST never send or fall back to the writeback credential. Anonymous primary/secondary rate exhaustion MUST produce a safe bounded retry state without busy looping. |
 | FR-033 | Guided analysis MUST run as a durable, owner-scoped, idempotent batch with safe snapshots/events, bounded stage-specific concurrency, pause/resume/cancel/retry/restart recovery, isolated staging and terminal cleanup. Cache reuse MUST be integrity-checked and keyed by immutable commit plus policy, parser, embedding, chat model, prompt, and output-schema identities. A dispatched generation interrupted by cancellation or restart MUST require explicit retry confirmation. |
 
-### 2.6 Version 0.1.8 OAuth setup-guidance requirements
+### 2.6 Legacy version 0.1.8 OAuth setup-guidance requirements (superseded by 0.2.1)
 
-- When OAuth is not configured, setup, login, link, and reauthenticate GitHub buttons MUST remain keyboard-operable and MUST open a setup guide dialog. They MUST NOT submit an OAuth start request or redirect to GitHub in that state.
-- When OAuth is configured, the same entry points MUST perform the existing top-level redirect and MUST preserve Authorization Code Flow, PKCE S256, one-use state, fixed callback, server-side token exchange, and intent separation.
+This section is historical migration context. The 0.2.1 target removes the setup guide and every OAuth/PAT entry point; FR-037 and ADR-028 are normative.
+
+- When OAuth is not configured, the authenticated GitHub connection button MUST remain keyboard-operable and MUST open a setup guide dialog. It MUST NOT submit an OAuth start request or redirect to GitHub in that state.
+- Recheck reports configuration state and does not implicitly navigate. When OAuth is configured, the dialog exposes a distinct **Continue to GitHub** action that performs the top-level redirect and preserves Authorization Code Flow, PKCE S256, one-use state, fixed callback, server-side token exchange, and connection intent.
 - The setup guide MUST identify host-side deployment configuration, show the authoritative callback URL, link only to the fixed GitHub official OAuth-App documentation URL, explain host-secret configuration and service restart/recheck steps, and warn that secrets, encryption keys, and tokens MUST NOT be pasted into the browser.
-- GET /api/admin/github/oauth/setup-guide MUST be safe for an unauthenticated browser request and MUST return only configured, callback_url, documentation_url, and next_step. It MUST set Cache-Control: no-store and MUST NOT return environment values, secret-file paths, secret material, token material, or owner identity.
+- GET /api/admin/github/oauth/setup-guide MUST require an authenticated session and return only configured, callback_url, documentation_url, and next_step. It MUST set Cache-Control: no-store and MUST NOT return environment values, secret-file paths, secret material, token material, or owner identity.
 - Dialog behavior MUST meet NFR-009: semantic dialog labeling, focus trap, Escape close, focus return to the invoking button, visible status/error announcements, Traditional Chinese/English parity, responsive layouts at 375/768/1024/1440 pixels, and reduced-motion compatibility.
 - GitHub expiring-token refresh, refresh-token rotation, and revoke-error recovery are explicitly deferred from 0.1.8. Until a separately approved lifecycle amendment is implemented, a selected credential that receives `401` is marked `connection_required` and requires explicit reconnection; RepoNPC MUST NOT silently refresh or fall back to a PAT or writeback credential.
 
@@ -143,24 +160,44 @@ The production deployment is one application image plus persistent storage. Inde
 - The authenticated Web Admin MUST support embedding-profile create, read, update, delete, probe, and explicit activation. At most one profile may be `active`; deleting or disabling the active profile is rejected unless a replacement has passed its probe. A deployment with no valid active profile is not ready for semantic retrieval.
 - A profile records a stable local ID, provider kind, provider model ID, server-side endpoint/credential references, observed dimension, normalization, query/passage prefixes, capability status, and timestamps. Secret values and private URLs never enter browser responses, public YAML, bundles, logs, or snapshots.
 - Activating a new profile whose model identity, dimension, prefix, normalization, or provider semantics differ from the active bundle MUST enter `reindex_required`/`reindexing` state. The candidate is probed, indexed, validated, and smoke-tested before an atomic switch. Any failure keeps the last-known-good profile/bundle serving.
-- The first-run model center SHOULD present a curated catalog. The initial recommendation is Ollama `qwen3-embedding:0.6b` for zh-TW/en/code-oriented personal deployments; `BAAI/bge-m3` and `embeddinggemma:300m` are alternatives, and larger Qwen3-Embedding variants are optional for capable hardware. Catalog entries MUST show license, language/context notes, resource estimate, and provider support; labels never substitute for a live probe.
+- The first-run model center MUST start with explicit service selection and no selected provider/model. Only after the owner chooses Ollama may its curated catalog recommend `qwen3-embedding:0.6b`, with `BAAI/bge-m3` and `embeddinggemma:300m` as alternatives. Catalog entries MUST show license, language/context notes, resource estimate, and provider support; recommendations never create a profile, download a model, or substitute for a live probe.
 - Ollama MAY expose provider-native installed-model listing, curated pull, progress/cancel, and delete actions. vLLM and generic OpenAI-compatible providers expose connect/list/probe/select only; installation is performed on the provider host. RepoNPC MUST NOT download arbitrary URLs, arbitrary local paths, or unverified model archives.
 
 #### Private administration and password policy
 
-- The deployment profile MUST be explicit: `loopback_evaluation` permits a 4-128 Unicode-code-point password; `production` (and any non-loopback admin exposure) requires at least 15 and permits up to 128. Fifteen is a minimum, not a maximum. No character-class composition rule is required; new passwords are rejected when present in the configured common/compromised-password blocklist.
-- Existing password hashes remain usable during migration. A password creation/change and host recovery operation apply the selected deployment profile policy. Argon2id, backoff, secure cookie sessions, CSRF, origin checks, idle/absolute expiry, and revocation remain mandatory.
+- The deployment profile MUST be explicit. `loopback_evaluation` uses the 0.2.0 local-launch grant and has no password creation/login UI. `production` (and any non-loopback admin exposure) requires a 15–128 Unicode-code-point password. Fifteen is a minimum, not a maximum. No character-class composition rule is required; new passwords are rejected when present in the configured common/compromised-password blocklist.
+- Existing password hashes remain usable during migration and are not deleted in loopback mode. Production password creation/change and host recovery apply the production policy. Argon2id, backoff, secure cookie sessions, CSRF, origin checks, idle/absolute expiry, and revocation remain mandatory where applicable.
 - A non-standard port is not an access control. The supported headless topology binds the admin-capable service to loopback and uses an SSH local-port tunnel, or uses a private LAN/VPN with firewall allowlisting. A reverse proxy MAY expose visitor routes while denying `/admin` and `/api/admin` from the public Internet. A public `0.0.0.0` admin listener is not a supported default.
 
 #### Local-first owner and recovery
 
-- Host-issued setup proof MUST be followed by local username/password creation. GitHub OAuth is optional and may be linked only from that authenticated local owner session; it is an alternative sign-in/public-read connection, not first-owner registration.
-- The local password method MUST remain available as break-glass recovery. A GitHub-only owner and an unauthenticated Web reset/setup-reopen path are not supported in v1. `reponpc admin set-password --data-dir <dir>` is host-only, changes only the local hash, and never changes GitHub identity, reopens setup, or prints secrets.
+- In `loopback_evaluation`, `reponpc admin launch-token` creates a 256-bit one-use two-minute grant only after loopback configuration validation. Its digest is stored in runtime SQLite; the browser receives it only in a URL fragment and exchanges it for the normal session. The first valid exchange atomically creates or reuses the sole local owner without asking for a username or password. A missing/expired grant presents a relaunch action, not registration or GitHub sign-in.
+- In production or any non-loopback mode, host-issued setup proof MUST be followed by local username/password creation. The local password remains the break-glass recovery method. `reponpc admin set-password --data-dir <dir>` is host-only, changes only the local hash, never reopens setup or changes the independent writeback credential, and is required before a passwordless local owner can become production-ready.
+- GitHub OAuth and public-read PATs are unsupported under 0.2.1 and have no owner-session role. Public repository discovery/analysis uses anonymous REST capacity.
 
 #### Bounded operations CLI
 
-- Web Admin is the daily surface for configuration, embedding profiles, provider probes, and status. The host CLI is limited to `admin setup-code`, `admin set-password`, `runtime check`, `runtime backup <path>`, `bundle status`, `bundle verify <id>`, `bundle pin <id>`, and `bundle unpin`.
+- Web Admin is the daily surface for configuration, embedding profiles, provider probes, and status. The host CLI is limited to `admin launch-token` for loopback launch, `admin setup-code`/`admin set-password` for production bootstrap/recovery, `runtime check`, `runtime backup <path>`, `bundle status`, `bundle verify <id>`, `bundle pin <id>`, and `bundle unpin`.
 - Linux/headless operators use SSH to reach the same Web Admin; no separate public management protocol or public setup port is added. Commands require explicit paths/IDs, stable safe errors, and consistency/rollback tests.
+
+### 2.8 Version 0.2.2 model setup requirements
+
+| ID | Requirement |
+| --- | --- |
+| FR-038 | The authenticated owner MUST configure chat and embedding independently using a provider-neutral service form with an explicit protocol/preset, API base URL, write-only API key when needed, and editable model ID. Listing is optional assistance; model capability testing is mandatory before use. New deployments MUST start with neither provider nor model selected and allow administration/manual authoring without models. |
+| FR-039 | Model connections MUST persist through a deployment-local protected secret boundary, with server-issued references, explicit credential replacement/removal, bounded validated egress, safe metadata-only reads, and transactional revision/activation behavior. Editing a destination MUST NOT forward a previously stored key to that destination. Environment-based configurations remain supported and cannot silently overwrite owner-managed selections. |
+| FR-040 | First-run model setup MUST present separate chat and search capabilities, reversible steps, contextual recovery, and bilingual plain-language statuses. Dimensions, prefixes, connection references, raw errors, and model-installation diagnostics MUST NOT be required knowledge in the primary flow. Configuration, test, activation, download, reindex, and publication are distinct operations. |
+
+These requirements extend FR-006/FR-012/FR-025/FR-035 and NFR-001/002/003/008/009/011/012/013/014. AC-053 through AC-057 define their acceptance. All prior non-legacy v1 requirements remain required.
+
+### 2.9 Version 0.2.3 model-first guided workflow
+
+| ID | Requirement |
+| --- | --- |
+| FR-041 | The authenticated first-run AI route MUST configure, test, and explicitly select both analysis/chat and search models before repository selection and analysis. Welcome is unnumbered; the six steps are models, repositories, analysis, contributions, profile, and preview/draft. A manual route MUST be available at welcome, model setup, and analysis blockers without an attempted model call. Existing draft/resume/edit routes MUST preserve unrelated work and lead directly to any missing prerequisite. |
+| FR-042 | Admin analysis MUST use an explicitly selected, tested, immutable chat/embedding revision pair independently of public bundle activation. A clean runtime MUST be able to configure this pair and analyze a confirmed repository without a published bundle, preconfigured environment provider, or restart. Public semantic chat still requires validated compatible bundle activation. Model or selection changes MUST invalidate stale admission plans/caches without retargeting in-flight work, silently generating again, or discarding owner-confirmed text. |
+
+These extend FR-025/FR-027/FR-028/FR-033/FR-038/FR-040 and NFR-001/002/003/008/009/011/013/014. AC-058 through AC-060 are additional release gates. Section 11.6 governs order and analysis selection where older sections conflate a selected analysis profile with a publicly active embedding profile.
 
 ## 3. Normative repository structure
 
@@ -241,7 +278,7 @@ RepoNPC/
 ### 4.1 Sources and precedence
 
 - Public portfolio/index settings come from UTF-8 `reponpc.yml` in `REPONPC_CONFIG_REPOSITORY` at `REPONPC_CONFIG_BRANCH`.
-- Runtime secrets and deployment-specific values come from environment variables or mounted secret files.
+- Runtime secrets and deployment-specific values come from environment variables, mounted secret files, or the protected deployment-local model connection store defined in section 11.5. Public YAML never contains connection credentials or private endpoints.
 - Secrets MUST NOT be accepted in YAML.
 - Environment variables MUST NOT override public semantic fields in ways that make the built bundle disagree with its manifest.
 - Unknown YAML keys MUST fail validation unless a future schema version explicitly defines an extension namespace.
@@ -349,7 +386,7 @@ The authenticated Web Admin MUST support profile create/read/update/delete, prob
 
 Changing provider, model identity, dimension, prefixes, normalization, or relevant provider semantics invalidates vector compatibility and MUST set `reindex_required`. Activation then follows `probe -> build/reindex -> validate -> smoke test -> atomic switch`; until the final switch, the prior profile/bundle remains the last-known-good service. Failed, cancelled, or timed-out reindex work MUST clean staging and leave the prior state active. RepoNPC MUST NOT silently select another profile/provider/model.
 
-The initial curated model catalog SHOULD include Ollama `qwen3-embedding:0.6b` as the recommended zh-TW/en/code-oriented personal profile, `BAAI/bge-m3` and `embeddinggemma:300m` as alternatives, and larger Qwen3-Embedding variants for hosts with more memory. Catalog metadata MUST include license, language/context notes, approximate resource requirements, and supported provider operations; the live probe remains authoritative for dimension and capability.
+After explicit Ollama selection, its curated model catalog SHOULD include `qwen3-embedding:0.6b` as a recommendation, `BAAI/bge-m3` and `embeddinggemma:300m` as alternatives, and larger Qwen3-Embedding variants for hosts with more memory. This is not a product default. Catalog metadata MUST include license, language/context notes, approximate resource requirements, and supported provider operations; the live probe remains authoritative for dimension and capability.
 
 The initial catalog is intentionally small and uses provider/model IDs rather than pretending that every provider exposes the same inventory:
 
@@ -362,13 +399,13 @@ The initial catalog is intentionally small and uses provider/model IDs rather th
 | vLLM or generic OpenAI-compatible model ID | Operators already serving an embedding endpoint | The operator may serve Qwen3, BGE-M3, EmbeddingGemma, or another licensed model through `/v1/embeddings`; model installation stays on that provider host | Connect/list/probe/select; no RepoNPC download |
 | Hosted OpenAI-compatible API (for example, a gateway exposing `text-embedding-3-small`/`text-embedding-3-large`) | No local model lifecycle desired | Availability, pricing, retention, dimensions, and terms belong to the selected provider; the model ID is not guaranteed across gateways | Connect/list/probe/select; no RepoNPC download |
 
-The Qwen3 0.6B, BGE-M3, and EmbeddingGemma dimensions/context values above are catalog hints, not bundle contracts. Probe output is authoritative because quantization, truncation/Matryoshka settings, prefixes, normalization, and provider versions can change the observed identity.
+The Qwen3 0.6B, BGE-M3, and EmbeddingGemma dimensions/context values above are catalog hints, not bundle contracts. A sample establishes actual dimension and finite-vector behavior. Query/passage prefixes, task instructions, pooling, and model revision cannot in general be inferred from one vector; they come from a reviewed model preset or explicit advanced settings and are recorded with the observed identity. Never apply the E5 `query: ` / `passage: ` defaults to every model. Normalization is the explicit RepoNPC adapter contract and is validated at build/runtime. A structurally successful sample does not prove retrieval quality; AC-009 remains required.
 
 RepoNPC MUST provide a provider-aware **model center**, not a generic download area. For Ollama, a curated model ID may be pulled, monitored, cancelled, and deleted by calling Ollama on the configured private host. For vLLM and generic APIs, the owner follows the provider's own installation/serving process and then enters or selects the served model ID. The browser never receives a provider key and RepoNPC never accepts arbitrary URLs, local paths, shell commands, or unverified archives. This boundary prevents SSRF, supply-chain substitution, license ambiguity, and accidental disk/CPU exhaustion while still making the common Ollama path self-service.
 
 Model lifecycle is provider-owned. For Ollama, the Web Admin MAY expose a curated catalog, installed-model list, pull/progress/cancel, and delete through Ollama-native endpoints. For vLLM and generic OpenAI-compatible services, the Web Admin exposes connect/list/probe/select only; operators install or serve models on those hosts. RepoNPC MUST NOT implement an arbitrary URL/local-path model downloader or execute provider-supplied installation commands.
 
-Index and runtime query embeddings MUST use the same profile identity and semantics. Embedding credentials remain server-side secret-file/environment values on the host that performs the operation; an index builder receives an explicit frozen profile snapshot.
+Index and runtime query embeddings MUST use the same profile identity and semantics. Embedding credentials remain in protected server-side storage on the host that performs the operation; an index builder receives an explicit frozen profile snapshot plus independently provisioned secrets. A successful runtime probe does not prove that a GitHub Actions runner can reach a private provider. Section 11.5 does not change the publication topology.
 
 ### 5.5 Executable CLI
 
@@ -377,6 +414,7 @@ The installed `reponpc` console entrypoint has the following bounded commands:
 ```text
 reponpc
 reponpc serve
+reponpc admin launch-token [--data-dir <directory>]
 reponpc admin setup-code [--data-dir <directory>]
 reponpc admin set-password [--data-dir <directory>] [--username <owner>]
 reponpc admin hash-password
@@ -393,9 +431,10 @@ reponpc index publish-manifest --bundle-dir <directory>
 ```
 
 - No arguments and `serve` MUST enter the same validated FastAPI/Uvicorn startup path.
+- `admin launch-token` MUST work only for a fully validated `loopback_evaluation` configuration, replace any unused prior grant, store only a SHA-256 digest with a two-minute expiry, and print one URL whose secret is confined to the `#local-launch=` fragment. It MUST fail for production, non-loopback, or trusted-proxy configurations. The local launcher invokes it automatically after readiness.
 - `admin setup-code` MUST initialize the selected runtime database, replace any unused prior code, store only a SHA-256 digest with a 15-minute expiry, print the new 256-bit code once, and fail safely after a durable owner exists.
 - `admin hash-password` remains an OPTIONAL pre-provisioning/legacy command and MUST print only a PHC-format Argon2id hash after non-echoing confirmation.
-- `admin set-password` is host-only break-glass recovery. It discovers or accepts the sole owner explicitly, updates only the local Argon2id hash, applies the deployment-aware password policy, and never reopens setup or changes GitHub identity.
+- `admin set-password` is host-only production recovery. It discovers or accepts the sole owner explicitly, creates or updates only the local Argon2id hash, applies the production password policy, and never reopens setup or changes GitHub credentials.
 - `runtime check` verifies runtime SQLite integrity, schema, permissions, and active/previous bundle pointers without printing secrets. `runtime backup` uses an online-consistent SQLite backup (or a documented stopped-process fallback), refuses ambiguous/broad paths, and never includes provider bodies or raw session tokens.
 - `bundle status`, `bundle verify`, `bundle pin`, and `bundle unpin` inspect or change only local bundle state. Verification performs checksum/schema/model/dimension/database/smoke checks; pin/unpin is atomic and preserves the active last-known-good bundle on failure.
 - Embedding profile CRUD/model pull is intentionally Web Admin functionality; the CLI does not duplicate interactive provider management.
@@ -670,7 +709,7 @@ The following same-origin authenticated admin endpoints set `Cache-Control: no-s
 
 | Method and path | Contract |
 | --- | --- |
-| `POST /api/admin/onboarding/analysis-batches/preflight` | Validates one explicit confirmed public selection (1–50 repositories), resolves eligible immutable commits through GraphQL, predicts cache use/capacity, and creates a short-lived selection-bound `plan_id`. |
+| `POST /api/admin/onboarding/analysis-batches/preflight` | Validates one explicit confirmed public selection (1–50 repositories), resolves eligible immutable commits through bounded unauthenticated REST, predicts cache use/capacity, and creates a short-lived selection-bound `plan_id`. |
 | `POST /api/admin/onboarding/analysis-batches` | Requires a valid `plan_id` and opaque idempotency key; creates or returns the one owner-scoped active batch. |
 | `GET /api/admin/onboarding/analysis-batches/active` | Returns the active safe snapshot or `404 NOT_FOUND`. |
 | `GET /api/admin/onboarding/analysis-batches/{id}` | Returns a safe snapshot for the requesting owner only. |
@@ -701,11 +740,13 @@ JSON failures use:
 | ---: | --- | --- |
 | 400 | `VALIDATION_ERROR` | Body/query/config value invalid. |
 | 401 | `AUTHENTICATION_REQUIRED` / `INVALID_CREDENTIALS` | Admin authentication failed or missing. |
+| 401 | `LOCAL_LAUNCH_DENIED` | Local-launch grant or loopback boundary is absent, invalid, expired, replayed, or unsafe. |
 | 401 | `SETUP_DENIED` | First-owner code is absent, invalid, expired, or submitted with mismatched owner fields. |
 | 403 | `CSRF_FAILED` / `WRITE_NOT_ALLOWED` | Security policy rejected the operation. |
 | 404 | `NOT_FOUND` | Allowlisted resource does not exist. |
 | 409 | `CONFIG_CONFLICT` | Expected Git blob SHA no longer matches. |
 | 409 | `SETUP_ALREADY_COMPLETE` | A durable or explicitly pre-provisioned owner already closes first-owner setup. |
+| 410 | `GITHUB_LOGIN_REMOVED` | A retired GitHub login/setup route was called; connect GitHub from an authenticated settings session. |
 | 409 | `ANALYSIS_BATCH_ACTIVE` / `ANALYSIS_PLAN_STALE` | Another owner batch is active, or the selection-bound preflight plan expired or no longer matches. |
 | 413 | `PAYLOAD_TOO_LARGE` | Config, question, or asset limit exceeded. |
 | 422 | `CONFIG_INVALID` / `ASSET_INVALID` | Structurally valid request fails domain validation. |
@@ -715,45 +756,47 @@ JSON failures use:
 | 503 | `INDEX_UNAVAILABLE` / `MODEL_UNAVAILABLE` / `SERVICE_NOT_READY` | Required capability unavailable. |
 | 504 | `PROVIDER_TIMEOUT` | Configured model exceeded timeout. |
 
-`GITHUB_CONNECTION_REQUIRED` is a safe `503` result when the already selected public-read credential receives `401` or is unavailable; it never triggers alternate-credential selection.
+`GITHUB_RATE_LIMITED` is a safe recoverable result when anonymous REST capacity is exhausted. It includes only a sanitized retry time, never triggers credential collection or writeback-token fallback, and leaves manual continuation available.
 
 ## 11. Admin contract
 
 ### 11.1 Authentication
 
-- A new deployment starts with no product default username or password. With `REPONPC_IP_HASH_KEY` configured, `GET /api/admin/setup` reports only whether setup is required and whether an unexpired code is available.
-- The host operator runs `reponpc admin setup-code` to create a random 256-bit code valid for 15 minutes. Runtime SQLite stores only its SHA-256 digest. Reissuing replaces and invalidates the prior unused code.
-- The first-owner request supplies the code, a trimmed 1–64 character username, and a password plus confirmation. In `loopback_evaluation`, the password is 4–128 Unicode code points; in `production` or any non-loopback admin deployment it is 15–128. Fifteen is a minimum, not a maximum. No uppercase, lowercase, number, symbol, or mixed-character requirement is imposed, but new values are checked against the common/compromised-password blocklist. Code consumption, Argon2id owner-hash storage, setup deletion, and initial session creation are one transaction. Concurrent submissions can create exactly one owner.
-- After an owner exists, setup is permanently unavailable through the product API and CLI; later visits receive only the normal sign-in surface. No plaintext setup code or password enters Git, logs, responses, or runtime storage.
+- A new deployment starts with no product default username or password. `GET /api/admin/auth/methods` reports the configured access mode without exposing owner or credential state.
+- In `loopback_evaluation`, the launcher creates a random 256-bit grant only after the server is ready. Runtime SQLite stores only its SHA-256 digest and two-minute expiry; reissuing invalidates the prior unused grant. The browser URL uses `/admin#local-launch=<grant>` so the secret is not sent in the HTTP request, Referer header, or server access log.
+- The frontend reads the fragment once, immediately calls same-origin `POST /api/admin/session/local-launch`, and clears the fragment with `history.replaceState` before rendering external links. Grant consumption, creation/reuse of the sole owner, session issuance, and invalidation of competing unused grants are one transaction. Concurrent exchanges create exactly one owner and at most one successful session per grant.
+- The server accepts local launch only when the deployment profile, configured bind, public base URL, request peer, `Host`, and origin are loopback-valid and trusted-proxy interpretation is disabled. It treats forwarded headers as untrusted in this mode. Invalid, expired, replayed, cross-origin, forwarded, and non-loopback exchanges return the same safe failure.
+- A loopback browser with neither a valid session nor a launch grant receives no registration or password/GitHub login form. It sees one localized action telling it to reopen RepoNPC with the local launcher.
+- In `production`, `GET /api/admin/setup` reports only whether password setup is required and whether an unexpired code is available. The host operator runs `reponpc admin setup-code` to create a random 256-bit code valid for 15 minutes. Runtime SQLite stores only its SHA-256 digest; reissuing invalidates the prior unused code.
+- The production first-owner request supplies the code, a trimmed 1–64 character username, and a 15–128-character password plus confirmation. No character composition rule is imposed, but new values are checked against the common/compromised-password blocklist. Code consumption, Argon2id hash storage, setup deletion, and initial session creation are atomic. After an owner exists, production setup is permanently unavailable and later visits receive the password sign-in surface.
 - For explicit pre-provisioning/backward compatibility, operators MAY set `REPONPC_ADMIN_USERNAME` and a PHC-format `REPONPC_ADMIN_PASSWORD_HASH` generated by `reponpc admin hash-password`. This mode disables first-owner setup.
-- A GitHub token is not an authentication prerequisite. Without one, owner sessions work but GitHub-backed configuration, asset, and workflow operations return `SERVICE_NOT_READY`.
-- Login uses a generic failure message and exponential per-IP/account backoff.
-- Successful login creates a random 256-bit server-side session and sets `__Host-reponpc_session` with `Secure`, `HttpOnly`, `Path=/`, and `SameSite=Strict`.
+- A GitHub OAuth App or public-read PAT is neither required nor supported. Owner sessions and local/manual work remain independent; anonymous GitHub capacity affects only discovery/analysis and returns a retryable bounded state.
+- Production password login uses a generic failure message and exponential per-IP/account backoff. Local-launch failure is generic and rate-limited independently.
+- Successful password or local-launch exchange creates a random 256-bit server-side session and sets `__Host-reponpc_session` with `Secure`, `HttpOnly`, `Path=/`, and `SameSite=Strict`.
 - Idle expiration defaults to 30 minutes; absolute expiration defaults to 12 hours. Refresh rotates the session ID.
 - A random CSRF token is returned in the login/refresh JSON body, stored only in browser memory, hashed in the session row, and required as `X-CSRF-Token` on every state-changing authenticated request.
-- Logout revokes the current session. Logout-all increments the admin session epoch and requires the current local password. Because local-first ownership is mandatory, a fresh GitHub sign-in alone cannot replace that recovery proof.
-- `GET /api/admin/auth/methods` returns only `{password:{available},github:{available},setup_required}`. It does not reveal any GitHub account or link state.
-- `GET /api/admin/github/oauth/setup-guide` returns `{configured,callback_url,documentation_url,next_step}` with `Cache-Control: no-store`. The callback is the validated same-origin fixed callback; no secret, token, secret-file path, environment value, or owner identity is returned.
-- `POST /api/admin/session/github/start` and `POST /api/admin/identity/github/link/start` create separate bounded OAuth transactions and redirect to GitHub with PKCE. `POST /api/admin/setup/github/start` is retained only as a deprecated compatibility route: it MUST return a safe setup-denied/already-complete error, MUST NOT create an owner, and MUST NOT consume setup proof. One configured fixed callback, `GET /api/admin/github/callback`, dispatches only the validated login/link intent; using one registered OAuth App callback prevents broad callback allowlisting.
-- OAuth callback processing validates `state`, transaction cookie, intent, expiry, one-time consumption, token exchange, numeric `/user` identity, and reported scopes before issuing or linking the RepoNPC session. It uses only fixed return paths and never accepts a browser-provided callback/return URL.
-- `GET /api/admin/github/connections`, `PUT /api/admin/github/connections/pat`, `POST /api/admin/github/connections/{id}/check`, and `DELETE /api/admin/github/connections/{id}` expose only safe connection metadata and manage `identity_public_read` or `public_read` credentials. `DELETE /api/admin/identity/github` unlinks the identity only after recent authentication and only if another method remains.
+- Logout revokes the current session. Logout-all increments the admin session epoch; production requires the current local password, while loopback evaluation requires a fresh unconsumed local-launch grant and leaves the browser requiring relaunch.
+- `GET /api/admin/auth/methods` returns only `{mode:"local_launch"|"password",password:{available},setup_required}`. GitHub is not reported as an authentication method.
+- Authenticated `GET /api/admin/github/oauth/setup-guide` returns `{configured,callback_url,documentation_url,next_step}` with `Cache-Control: no-store`. The callback is the validated same-origin fixed callback; no secret, token, secret-file path, environment value, or owner identity is returned.
+- `POST /api/admin/github/connections/oauth/start` creates one bounded authenticated connection transaction and redirects to GitHub with PKCE. Legacy `POST /api/admin/session/github/start` and `POST /api/admin/setup/github/start` MUST return `410 GITHUB_LOGIN_REMOVED`, MUST NOT redirect, create an owner/session, or consume setup/local-launch proof. One fixed `GET /api/admin/github/callback` validates only the connection intent.
+- Legacy OAuth callback/start, connection, PAT, setup-guide, and identity endpoints MUST become non-redirecting, non-mutating `410 GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED` responses during the compatibility window and MUST be removed after that window. They MUST NOT accept, decrypt, return, or log credential material.
 - Embedding profile endpoints (`GET/POST /api/admin/embedding-profiles`, `GET/PUT/DELETE /api/admin/embedding-profiles/{id}`, `POST /api/admin/embedding-profiles/{id}/probe`, and `POST /api/admin/embedding-profiles/{id}/activate`) expose only safe metadata. They enforce one active profile, never return credentials/private URLs, and report `probe`, `reindex_required`, `reindexing`, `ready`, or `last_known_good` states. Ollama model pull/delete actions are separate provider-native operations and require explicit confirmation.
 
 ### 11.2 Endpoints
 
 | Method and path | Contract |
 | --- | --- |
-| `GET /api/admin/setup` | Public safe state `{setup_required,setup_code_available}`; never returns code, digest, path, or expiry. |
-| `POST /api/admin/setup` | Same-origin `{setup_code,username,password,password_confirmation}` -> initial session/cookie, `SETUP_DENIED`, or `SETUP_ALREADY_COMPLETE`. |
-| `POST /api/admin/session` | `{username,password}` -> `{csrf_token,expires_at,absolute_expires_at}` and cookie. |
-| `GET /api/admin/auth/methods` | Safe availability booleans for password/GitHub and setup state. |
-| `GET /api/admin/github/oauth/setup-guide` | Public safe `{configured,callback_url,documentation_url,next_step}` for host-side setup guidance; no credential or identity material. |
-| `POST /api/admin/session/github/start` | Same-origin OAuth login start -> redirect response and short-lived transaction cookie. |
-| `POST /api/admin/setup/github/start` | Deprecated compatibility route; returns a safe setup-denied/already-complete error and never creates a GitHub-only owner or consumes setup proof. |
-| `POST /api/admin/identity/github/link/start` | Authenticated recent-auth identity-link transaction -> redirect response. |
-| `GET /api/admin/github/callback` | Single fixed registered callback validates state/cookie/intent then completes login or link and redirects to a fixed `/admin` result. |
-| `DELETE /api/admin/identity/github` | Authenticated recent-auth unlink; rejects removal of the final usable method. |
-| `GET`/`PUT`/`POST`/`DELETE /api/admin/github/connections...` | Authenticated public-read connection metadata, PAT submission/check, and removal without returning token material. |
+| `GET /api/admin/setup` | Production-only public safe state `{setup_required,setup_code_available}`; loopback mode reports setup unavailable and never returns code, digest, path, or expiry. |
+| `POST /api/admin/setup` | Production-only same-origin `{setup_code,username,password,password_confirmation}` -> initial session/cookie, `SETUP_DENIED`, or `SETUP_ALREADY_COMPLETE`; rejected in loopback mode. |
+| `POST /api/admin/session/local-launch` | Loopback-only same-origin `{grant}` -> `{csrf_token,expires_at,absolute_expires_at}` and cookie; grant is consumed atomically and never returned. |
+| `POST /api/admin/session` | Production-only `{username,password}` -> `{csrf_token,expires_at,absolute_expires_at}` and cookie; rejected in loopback mode. |
+| `GET /api/admin/auth/methods` | Safe `{mode,password:{available},setup_required}` without GitHub or owner identity state. |
+| `GET /api/admin/github/oauth/setup-guide` | Authenticated safe `{configured,callback_url,documentation_url,next_step}` for host-side setup guidance; no credential or identity material. |
+| `POST /api/admin/session/github/start` | Removed login route; always `410 GITHUB_LOGIN_REMOVED` with no redirect or state change. |
+| `POST /api/admin/setup/github/start` | Removed setup route; always `410 GITHUB_LOGIN_REMOVED` with no redirect or state change. |
+| `POST /api/admin/github/connections/oauth/start` | Authenticated connection transaction -> redirect response and short-lived transaction cookie. |
+| `GET /api/admin/github/callback` | Single fixed registered callback validates session/state/cookie/connection intent, stores safe connection metadata, and redirects to a fixed `/admin` result. |
+| Legacy `/api/admin/github/connections...`, OAuth callback/start, setup-guide, and identity routes | Non-mutating `410 GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED` during the bounded compatibility window; no redirect, credential input, state mutation, or secret output. |
 | `POST /api/admin/session/refresh` | Auth + CSRF -> rotated session and CSRF token. |
 | `DELETE /api/admin/session` | Auth + CSRF -> `204`, revoke current session. |
 | `DELETE /api/admin/sessions` | Auth + CSRF + `{password?}` -> `204`, revoke all sessions. The local password is required as the recovery proof; a fresh GitHub sign-in cannot replace it. |
@@ -833,6 +876,75 @@ All routes below are authenticated same-origin admin routes with `Cache-Control:
 - Provider unavailable, invalid, timed out, or failed returns the existing `MODEL_UNAVAILABLE`, `PROVIDER_ERROR`, or `PROVIDER_TIMEOUT` code; selection and browser draft remain available and no fallback occurs.
 - Cancellation/disconnect sends no replacement success body; server cleanup remains mandatory. Failure of one repository does not erase other confirmed selections.
 
+### 11.5 Provider-neutral model setup (0.2.2)
+
+This section is the current model-configuration boundary. Where older text prohibits all browser-originated provider keys/URLs, this section authorizes only owner-entered values in the authenticated same-origin model form. Reads remain metadata-only. Existing embedding routes in section 11.2 remain the migration baseline; the implementation handoff identifies the wire-contract preparation work before application edits.
+
+#### Connection and role separation
+
+- A connection identifies one explicitly selected protocol (`ollama` native or `openai_compatible`, with the existing `vllm` preset), one API base URL, and optional authentication. The protocol is not inferred from a model name or hostname. A base URL includes any gateway prefix such as `/v1`; fixed operation paths are appended once, without guessing another service.
+- Chat and embedding have separate profile selections and capability tests. The same saved connection MAY be explicitly selected for both, but neither capability, model, nor credentials are automatically copied to another destination. A chat-only service leaves search unconfigured with a direct action to configure it.
+- Model ID is manually editable for every provider, including existing non-catalog Ollama models. An optional model list is scoped to the selected connection. Unsupported listing (`404`/`405`/`501`) permits direct capability testing of the typed ID. Authentication, timeout, rate, and malformed-list failures are surfaced safely; none silently switch services. Listing never establishes readiness by itself.
+- Chat testing uses a bounded synthetic request through the actual chat adapter and required envelope/capability validation. Embedding testing uses bounded synthetic query and passage samples and validates dimensions/finite values/normalization. Tests require explicit action, have cost/time/concurrency bounds, and never send repository content or owner drafts.
+- A new deployment, launcher, or form with no explicit configuration MUST leave both roles unconfigured. Missing model settings MUST NOT prevent process health, protected admin access, manual authoring, validation, preview, or export. Semantic chat remains unavailable until its full prerequisites pass. No model download or upstream request occurs merely because the user opens setup.
+- Public schema-v1 draft validation/export may retain an existing or explicitly labeled illustrative embedding descriptor from the public template. That descriptor is not a selected runtime connection or proof of readiness. Before a real build, replace it with the explicitly selected, verified profile identity and validate the match. This preserves manual export without adding a null descriptor, silently choosing a provider, or weakening bundle validation.
+- Explicit existing environment/secret-file settings are represented as host-managed connections with safe labels; their values are not exposed or overwritten by the UI. An owner can create a managed alternative and explicitly select it. Restarts do not reselect environment defaults over a persisted explicit selection. Incomplete host configuration reports its own recovery state, never a fallback. Existing persisted profiles/bundles survive migration; a prior implicit default is not evidence of consent to new network work.
+
+#### Secret ingress, storage, and egress
+
+- The form accepts a base URL and optional API key through a bounded authenticated request body with session, CSRF, same-origin checks, private admin topology, and `Cache-Control: no-store`. Provider requests originate only on the server. Production admin transport uses HTTPS or the established protected private tunnel; the direct loopback exception retains its strict checks.
+- Keys are write-only. The UI may show/hide only a newly typed value; responses show `key_configured` rather than key suffixes/fingerprints. No secret or private URL enters Web Storage, service-worker caches, URLs, telemetry, logs, public YAML, bundles, exports, errors, or snapshots. Clear typed keys after submission, cancellation, logout, session expiry, or form teardown. Backend validation must not echo invalid input bodies.
+- Persist managed keys through a vetted authenticated-encryption library with a host-protected key separate from the database, or an equivalent supported OS secret store. No plaintext credential table or home-grown cryptography is allowed. Secret storage failure leaves existing state intact and returns an actionable unavailable state; it cannot downgrade to plaintext or create a new registration prerequisite.
+- Endpoints and secret references are private server state. Read responses expose a display name, provider, server-issued ID/revision, configured booleans, safe model labels, and status only. Editing an endpoint uses explicit replacement input; the server does not return the prior private URL. Retain/replace/remove key intent must be distinguishable; a blank field cannot silently delete a stored key.
+- Changing protocol or destination invalidates the candidate's tests and requires a fresh explicit credential choice. A retained key MUST NOT be sent to a changed destination. Active and in-flight work retain their previous immutable connection/profile revision until an explicit verified switch; unrelated profiles sharing a connection must not be silently changed.
+- Accept only structurally validated HTTP(S) service endpoints, reject userinfo/query/fragment and unsafe paths, and use fixed protocol operations. Public API services require HTTPS. Private/loopback provider access is explicit and constrained by host egress policy; prohibit link-local/metadata/multicast/unspecified destinations and public-to-private DNS rebinding. Resolve and validate addresses at connection time and prevent redirect-based credential forwarding. This is not a generic proxy or downloader.
+- Secret rotation, backup/restore, missing encryption keys, storage permissions, atomic updates, reference cleanup, and rollback MUST be tested. GitHub public-read credentials remain retired; provider-key storage cannot reuse OAuth/PAT tables, names, or authority. Existing writeback/authentication boundaries are unchanged.
+
+#### Profile lifecycle and novice workflow
+
+- Present two independent purposes: `回答模型 / Chat model` and `搜尋模型 / Search model`. Each starts at service choice, then connection/model input, explicit test, review, and explicit use. Back/Edit preserves unrelated public drafts and saved choices; cancelling does not activate a candidate. Figma artifacts are not a prerequisite.
+- The primary form contains service type, API address, optional key, and model name. Dimensions, prefixes, connection IDs, and raw diagnostic codes belong to an optional advanced view. Unknown dimensions remain unknown until sampled; arbitrary numeric placeholders cannot be used to satisfy a required database column.
+- Saving a candidate does not activate it. Chat switches after its capability test, with in-flight requests retaining the old revision; it does not itself require an embedding reindex. Chat-model changes invalidate incompatible analysis-result caches. Embedding changes retain the existing probe/reindex/verify/smoke/atomic-switch rule and last-known-good bundle. Zero active profiles is valid during setup; at most one is active per role, and a ready role has exactly one.
+- A successful connection test, an installed model, a ready search index, and a published portfolio are distinct outcomes. Embedding candidates can request reindex without first pretending to be `ready`. A private provider unreachable from the chosen index builder must yield a publishing-specific recovery state; do not expose the provider publicly or change topology automatically.
+- Primary states use localized descriptions and a next action: unconfigured, testing, available for use, building search index, currently in use, or failed. Show retry/edit and manual continuation when appropriate; a raw `probe_failed`/`EMBEDDING_PROBE_FAILED` alone is insufficient. Configuration/test errors preserve non-secret fields and unrelated repository work.
+- Admin layout is a restrained workspace with clear navigation, aligned fields, readable state/action grouping, and responsive wrapping. The model catalog is contextual to its selected provider. Normal onboarding must not be preceded by an always-expanded technical model panel. Meet WCAG 2.2 AA, keyboard/focus/status announcements, both locales, reduced motion, and no overlap/content loss at 375/768/1024/1440 pixels and 200% zoom.
+- Ollama curated pull/progress/cancel/delete stays explicit and provider-owned; connecting an existing model is not restricted to the download catalog. Generic APIs/vLLM have no download button. RepoNPC-managed GGUF/Hugging Face execution/download remains unapproved future work, requiring a separate runtime, hardware, licensing, artifact-integrity, isolation, and distribution decision.
+
+### 11.6 Model-first guided onboarding (0.2.3)
+
+This section supersedes section 11.4's first-run sequence and section 11.5's insufficient separation of analysis selection from public activation. It preserves authenticated write-only model setup, explicit repository consent, optional/manual authoring, bilingual validation, and the existing publication topology. A profile being selected for analysis does not set its public `active` flag or mark its public search index ready.
+
+#### User journey
+
+Welcome explains the outcome and offers **Set up AI and begin** and **Build manually first**. It is not counted as a completed step. The AI route has exactly six primary steps:
+
+1. **Set up AI models:** configure `分析與回答模型 / Analysis and chat model`, then `搜尋模型 / Search model`. Each exposes service, API base URL, optional write-only key, editable model ID, explicit test, and explicit selection. A saved connection can be deliberately shared, but the two capabilities must be tested independently. Successful tests do not implicitly select models or start analysis. The step completes only when both tested revisions are selected; an existing valid selection is reusable without re-entering stored secrets.
+2. **Choose projects:** discover public metadata, select repositories, and confirm the exact set. No source or model request is caused by listing or confirmation alone. The first-run AI path reaches this step after model setup; manual discovery and returning-owner selection editing remain available without models.
+3. **Analyze projects:** summarize confirmed projects and the selected models. One primary **Start analysis** action orchestrates bounded preflight and durable batch creation under that explicit consent. Do not require users to operate a separate “prepare batch” control. Recheck prerequisites before upstream work; if the plan/selection/model identity changes or another batch exists, stop and reconcile before generation. Opening or returning to the page never starts/retries analysis. Show per-project progress, partial success, retry/cancel/recovery, and manual continuation. Internal cache/stage diagnostics remain secondary; durable batch controls are not removed from the API.
+4. **Confirm my contribution:** distinguish observed repository facts, AI inferences, and owner-authored/confirmed contribution. Only explicit confirmation can turn proposed personal claims into public configuration. Missing analysis results permit manual entry.
+5. **Complete basic information:** author the existing name, biography, greeting, and required bilingual fields. This amendment does not weaken schema-v1 or locale completeness rules or redesign character assets.
+6. **Preview and complete draft:** validate/preview without model or publication side effects, edit, copy/download, and report publication prerequisites. Draft completion, GitHub save, workflow dispatch, index validation/activation, and public availability remain separate outcomes/actions. A missing writeback credential or published bundle cannot prevent a valid local draft.
+
+The manual route skips model setup and analysis, proceeding through project selection, contribution, profile, and preview/draft. Its progress indicator counts only its four applicable steps; skipped AI work is not marked passed. Switching to AI at any point opens the missing model setup with a return destination and preserves the existing public draft. Model settings must be reachable directly in guided mode and from contextual recovery, not only through raw-YAML/advanced mode. Small viewports show the current step and count with an accessible expandable step list; the desktop indicator must wrap without clipping or presenting completion percentages as work estimates.
+
+#### Analysis dependencies and public activation
+
+- Analysis readiness is a server-owned capability for the selected chat/embedding revisions and required runtime storage/admission controls. It MUST NOT be derived solely from `/api/public/status.model.ready`, `/readyz`, a public `active` flag, model listing, or a browser-persisted boolean. A fresh live test is explicit; metadata reads do not generate probe traffic. A prior successful test is invalidated by relevant configuration/revision changes and never guarantees future upstream availability.
+- Both models are required by the current analysis algorithm: passage/query embeddings and retrieval precede chat generation. This amendment does not introduce chat-only analysis or lexical fallback. Manual work requires neither model.
+- Persist only the selected analysis references and safe validation metadata in deployment-local runtime state; resolve credentials through the existing protected connection boundary. Analysis selection is logically distinct from public active profiles and must not modify public bundle pointers. An embedding candidate can be tested and explicitly selected for analysis while awaiting its first public index. Selection itself performs no reindex, source download, generation, GitHub write, or publication.
+- The clean bootstrap path MUST construct usable analysis dependencies after model selection even when the process started without providers. Public service assembly/reindex preparation MUST NOT require an already-working public model pair merely to prepare its first candidate. Restart is not the normal transition from saved settings to usable analysis.
+- Preflight and batch acceptance bind the confirmed repository identity and selected connection/profile revisions, including complete embedding semantics and chat model identity. Work admitted under one pair retains that pair, or stops safely if it cannot be resolved; it cannot silently resolve the latest selection mid-item. Use existing bounded retention and interruption-confirmation rules. Changes invalidate incompatible plans/cache reuse; valid old results may remain labeled with their source/model identity, but are never presented as fresh results from the new pair. Owner-confirmed text is preserved.
+- Public readiness remains stricter: a compatible verified bundle, public model selections, storage and provider availability must pass the existing validation/smoke/atomic-switch requirements. Analysis's ephemeral derived index is not a published portfolio bundle. A successful analysis must not publish or activate it. Existing last-known-good public service remains unchanged while a different analysis pair is configured/tested/used.
+
+#### Recovery, compatibility, and implementation contract preparation
+
+- Distinguish missing configuration, saved-but-untested, tested-but-unselected, unavailable selected service, missing public index, and publication-only blockers. Explain the missing role and offer **Set up search model**, **Test model**, **Select model**, **Retry**, or the relevant concrete action; do not label a clean unconfigured deployment “Ollama unavailable.”
+- Contextual model editing records a safe return destination. Success/cancel returns to preserved work; cancellation does not change saved selection, and typed secrets clear under section 11.5. Completed configuration refreshes safe capability state without implicitly resubmitting analysis. Active jobs retain their frozen pair; navigation cannot duplicate or silently cancel them.
+- Migrate old `reponpc.guided-onboarding.v1` / guided-draft state conservatively: retain allowed public selection/profile/contribution fields, reconcile batches with the server, and treat browser readiness as untrusted. An old analysis-stage resume with missing models shows direct setup recovery instead of requesting a destructive reset. Existing completed drafts remain editable/exportable without repeating AI steps. Unmappable advanced YAML remains intact in advanced mode. This does not approve durable server-side portfolio drafts.
+- The authenticated additive analysis-selection contract is `GET /api/admin/analysis-selection` and `PUT`/`POST` on that path. The write body is exactly `chat_profile_id`, `embedding_profile_id`, and optional optimistic `expected_generation`; it requires the existing same-origin session and CSRF boundary. The no-store read view contains only role profile IDs, connection revisions, safe model IDs/status/test state, selection generation, eligibility, and a stable safe reason. It never returns endpoint, key, secret reference, provider body, or a public-readiness proxy. Invalid roles return `404`; unprobed roles and stale generation return `409`; unavailable selection service returns `503`.
+- Runtime SQLite retains the current explicit selection separately from public active profiles, and each accepted batch retains one secret-free pair snapshot: selection generation; each profile/connection ID and connection revision; chat provider/model identity; and complete embedding provider/identity semantics. The preflight plan and batch creation must agree on that snapshot or return `ANALYSIS_PLAN_STALE`. Cache keys derive from the frozen embedding/chat identities. An in-flight/recovered item resolves only its persisted connection revisions through the protected store; missing/deleted/rekeyed material fails safely as `MODEL_UNAVAILABLE`, never by resolving the latest selection or falling back. Existing batches created before this snapshot migration also fail safely rather than retarget.
+- Guided browser-state migration remains conservative: only serializable route/return/public-draft state is retained; model capability, secrets, and analysis readiness remain server-owned. Prefer existing registries/batch mechanisms; do not change legacy endpoint behavior or public schemas silently. Broader trust, topology, algorithm, scope, or validation changes still require a new owner decision.
+
 ## 12. Character and card asset contract
 
 ### 12.1 Custom sprite sheet
@@ -893,11 +1005,11 @@ External adapters MUST expose the identity, `embed_query`, `embed_passages`, and
 ### 13.3 Required adapters and fallback rule
 
 - `openai_compatible`: configurable base URL, key secret, chat model, embedding model, timeout, and optional headers from server-only secrets.
-- `vllm`: named preset using the `openai_compatible` transport and embedding identity. It MAY use an explicitly configured private HTTP origin. Chat and embedding have independent server-only base URL/model/key settings because a chat model does not imply `/v1/embeddings` capability. The selected model MUST appear in each configured server's `/v1/models` response before readiness; the operator remains responsible for a valid chat template and an embedding-capable embedding model.
+- `vllm`: named preset using the `openai_compatible` transport and embedding identity. It MAY use an explicitly configured private HTTP origin. Chat and embedding have independent base URL/model/key settings because a chat model does not imply `/v1/embeddings` capability. Model listing assists selection; direct bounded capability testing of the typed model is authoritative under section 11.5. The operator remains responsible for a valid chat template and an embedding-capable embedding model.
 - `ollama`: private base URL, chat model, embedding model, explicit context/output caps, and health endpoint.
 - A local sentence-transformers adapter MAY remain as an optional isolated benchmark dependency, but MUST NOT be advertised as the default or required for a production image. Production readiness requires one explicitly configured external profile from Ollama, vLLM, or a generic OpenAI-compatible embeddings service.
 
-The selected chat and embedding adapters are explicit. RepoNPC MUST NOT silently try another provider, model, or cloud endpoint after failure. Provider keys and private base URLs remain environment/secret-file values and MUST NOT enter browser requests, public/admin responses, logs, fixtures, or snapshots.
+The selected chat and embedding adapters are explicit. RepoNPC MUST NOT silently try another provider, model, or cloud endpoint after failure. Provider keys and private base URLs remain protected server state after the narrowly authorized admin input described in section 11.5. They MUST NOT enter public/admin responses, logs, exports, or snapshots. Tests use synthetic canaries only.
 
 ## 14. Bundle publication and activation
 
@@ -989,12 +1101,13 @@ An admin MAY pin a previously downloaded compatible bundle by ID. Automatic poll
 - `admin_github_credentials`: authenticated-encryption nonce/ciphertext, algorithm/key version, purpose, GitHub user ID/display login, expiry, validation time, and safe status only;
 - `admin_setup`: at most one SHA-256 setup-code digest and its creation/expiry times; deleted when consumed;
 - `embedding_profiles`: deployment-local profile ID, provider/model labels, encrypted credential reference, private endpoint reference, observed compatibility identity, active/status state, reindex generation, and timestamps; never plaintext credentials or raw provider bodies;
+- 0.2.2 adds protected model-connection revisions and independent chat-profile metadata alongside the existing embedding registry. Physical tables, migration numbers, and request DTOs must be documented in the implementation contract preparation step; no schema is implemented by this document update. Secrets are protected as specified in section 11.5 and never placed in the immutable index.
 - `admin_sessions`: token hash, CSRF hash, created/seen/idle/absolute expiry, session epoch, revoked time;
 - `rate_buckets`: HMAC-derived IP key, window/bucket counters and expiry;
 - `daily_usage`: UTC date, accepted requests, reported input/output tokens and estimated cost where configured;
 - `bundle_state`: active/previous/pinned IDs, ETags, checks and safe update error;
 - `admin_audit`: timestamp, action, target path, result commit, request ID, outcome.
-- `github_rate_state`: sanitized GraphQL/core remaining, reset, retry, and secondary-limit admission state; it contains no token or upstream response body;
+- `github_rate_state`: sanitized anonymous REST/core remaining, reset, retry, and secondary-limit admission state; it contains no token or upstream response body;
 - `analysis_batches`, `analysis_batch_items`, and `analysis_batch_events`: owner-scoped durable job state, immutable commits, bounded safe events, validated terminal result metadata, idempotency keys, and TTL expiry;
 - `analysis_cache_entries`: checksummed derived-index and validated-analysis cache metadata, identity keys, size/LRU metadata, and expiry only; raw archives, repository bodies, prompts, and provider bodies are excluded.
 
@@ -1021,18 +1134,18 @@ Structured logs contain timestamp, severity, event name, request ID, route templ
 
 ### 15.4 GitHub analysis admission and durable work (0.1.7)
 
-- GitHub public analysis performs a bounded GraphQL metadata page of no more than 100 selected repositories, then a single immutable-SHA archive request per cache miss. It never resolves trees/blobs one by one in the batch path.
+- GitHub public analysis performs bounded unauthenticated REST metadata requests for the explicitly selected repositories, then a single immutable-SHA archive request per cache miss. It never resolves trees/blobs one by one in the batch path.
 - Archive downloads stream into an item-unique staging directory. Compressed bytes, expanded bytes, regular-file count, individual file bytes, elapsed time, path normalization, duplicate paths, symbolic/hard links, devices, and cancellation are bounded before content reaches the existing filter/index pipeline.
-- The central rate state maintains distinct GraphQL and REST/core primary budgets plus a shared secondary-limit pause, leaves a documented safety reserve, honors `Retry-After` and reset timestamps, and does not poll `/rate_limit` or busy-loop while paused. Initial GitHub in-flight concurrency is one and hard-capped at two total requests.
+- The central rate state maintains the anonymous REST/core primary budget plus a shared secondary-limit pause, leaves a documented safety reserve, honors `Retry-After` and reset timestamps, and does not poll `/rate_limit` or busy-loop while paused. Initial GitHub in-flight concurrency is one and hard-capped at two total requests.
 - The initial scheduler limits whole work items to four, archive staging to one (hard maximum two after measured evidence), local filter/index to two, and GitHub API to two. Provider permits wrap only actual embedding/generation calls. A weighted fair scheduler reserves provider opportunities for public chat before `admin_single` and `admin_batch` work can consume all capacity.
 - The active-execution deadline for one repository is 120 seconds. Queueing, owner pause, and rate-reset waiting do not spend it. Cancellation/restart propagates to every stage; uninterruptible upstream output is discarded; every terminal/recovery path removes staging.
 - Batch snapshots/events and validated terminal results expire after 24 hours. Startup recovery requeues only immutable fetch/index work or verified cache work. Any item interrupted after provider generation dispatch becomes `needs_retry_confirmation` and is never automatically resubmitted.
 
-### 15.5 Private administration topology and operations CLI (0.1.9)
+### 15.5 Private administration topology and operations CLI (0.1.9, amended by 0.2.0)
 
 - The application MUST keep the admin-capable listener on loopback or a private interface by default. A reverse proxy MAY publish `/`, static assets, and `/api/public/*`, but MUST deny `/admin` and `/api/admin/*` from public Internet networks unless the operator explicitly places those routes behind a private VPN/allowlist.
 - A non-standard TCP port is not an access control and MUST NOT be presented as the security solution. The documented headless flow is `ssh -N -L <local-port>:127.0.0.1:<remote-port> user@host`, then opening the same-origin Web Admin at the local end. Tailscale/WireGuard or a firewall-restricted LAN listener are supported alternatives.
-- The bounded host CLI MUST expose bootstrap/recovery (`admin setup-code`, `admin set-password`), runtime (`runtime check`, `runtime backup <path>`), and bundle (`bundle status`, `bundle verify <id>`, `bundle pin <id>`, `bundle unpin`) commands. It MUST use explicit paths/IDs, stable safe errors, and atomic/consistent operations. It MUST NOT become a second public management protocol.
+- The bounded host CLI MUST expose loopback launch (`admin launch-token`), production bootstrap/recovery (`admin setup-code`, `admin set-password`), runtime (`runtime check`, `runtime backup <path>`), and bundle (`bundle status`, `bundle verify <id>`, `bundle pin <id>`, `bundle unpin`) commands. It MUST use explicit paths/IDs, stable safe errors, and atomic/consistent operations. It MUST NOT become a second public management protocol.
 
 ## 16. Frontend behavior
 
@@ -1046,7 +1159,8 @@ Structured logs contain timestamp, severity, event name, request ID, route templ
 - Once the backend has validated an answer and begun emitting SSE token events, the visitor UI MUST append those events progressively rather than buffering the complete SSE stream. Chat/profile failures expose a retry or status-recheck action with predictable focus, and citation rendering includes the safe evidence class and source location supplied by the server.
 - The admin UI is code-split from the visitor application and clears in-memory CSRF/config drafts on logout.
 - Disabled or unavailable admin primary actions MUST have a programmatically associated visible reason, recovery action, and unaffected local alternative where one exists. GitHub read, writeback, publication, and model-analysis readiness are independent capabilities; none may disable unrelated validation, preview, manual authoring, copy, or download.
-- GitHub setup/sign-in/link/reauthenticate buttons share one decorative mark plus one visible label. When OAuth is unavailable they remain operable and open the host-side setup guide; when configured they submit or start the normal top-level OAuth redirect. The guide is a labeled modal with focus trap, Escape close, focus return, status/error announcements, bilingual copy, responsive layout, and no secret/token inputs.
+- No GitHub OAuth or public-read PAT control appears before or after an admin session. Anonymous GitHub rate/capacity messages are contextual to discovery or analysis, bilingual, keyboard/screen-reader accessible, and include manual continuation without a credential prompt.
+- Provider-neutral chat/search setup follows section 11.5, and the model-first/manual guided order follows section 11.6. Model secrets use an isolated write-only form, never the guided public draft or raw YAML editor. Empty model configuration does not prevent access to the manual path.
 - `docs/SPRITE_FORMAT.md` MUST provide the exact grid diagram, state table, frame timing guidance, examples, validation errors, reduced-motion behavior, and an MIT-compatible template asset.
 
 ## 17. Edge cases and required behavior
@@ -1057,15 +1171,17 @@ Structured logs contain timestamp, severity, event name, request ID, route templ
 | No active external embedding profile | Admin shows setup-required/model-center state; semantic chat returns `503 MODEL_UNAVAILABLE` or `INDEX_UNAVAILABLE` per bundle state; local/manual configuration and profile CRUD remain available. No local adapter or silent fallback is selected. |
 | Embedding profile changed or probe/reindex fails | Keep the last-known-good profile/bundle active; expose `reindex_required`/safe failure and an explicit retry/recheck action. Never activate a dimension/prefix/model mismatch. |
 | Ollama model missing/pull fails | Show provider-native install/pull error and retain other local admin functions; do not fetch an arbitrary URL or silently switch model/provider. |
-| No admin owner on first boot | `/admin` explains the host `setup-code` step; no visitor can register without the 256-bit code. |
-| Setup code expired or reissued | Generic `401 SETUP_DENIED`; generate a new host code. No owner/session is partially created. |
-| OAuth not configured at a GitHub entry point | Keep the button operable, open the safe host-side setup guide, and do not redirect or collect secrets. |
+| No admin owner on first loopback boot | The launcher mints a two-minute fragment-only grant after readiness; `/admin` exchanges it atomically without a registration form. A direct visit explains how to relaunch. |
+| Local-launch grant expired, replayed, forwarded, or non-loopback | Generic `401 LOCAL_LAUNCH_DENIED`; mint a new grant through the local launcher. No owner/session is partially created and no failed value is logged. |
+| No production admin owner | `/admin` explains the host `setup-code` step; no visitor can register without the 256-bit code. |
+| Production setup code expired or reissued | Generic `401 SETUP_DENIED`; generate a new host code. No owner/session is partially created. |
+| Legacy OAuth/PAT route is requested | Return non-mutating `410 GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED`; do not redirect, accept/decrypt credentials, issue a session, or change owner/setup state. |
 | Concurrent first-owner submissions | One transaction creates exactly one owner/session; the loser receives `409 SETUP_ALREADY_COMPLETE`. |
-| OAuth state, PKCE, callback, or transaction replay invalid | Reject with a generic safe OAuth error, issue no session, consume no setup proof, and retain no plaintext token/verifier. |
-| OAuth connection revoked/expired | Preserve the normal local session until its normal expiry; mark GitHub work connection-required and do not choose another credential automatically. |
 | Active index but chat model down | Profile/card remain available; status degraded; chat `503 MODEL_UNAVAILABLE`; no provider fallback. |
 | Model unavailable before guided analysis | Preserve selection and owner text; offer immediate manual contribution without requiring preflight, batch creation, or a failed model call. |
-| No GitHub public-read connection | Public metadata discovery and all local/manual draft functions remain available; explain that authenticated analysis is unavailable and offer its connection action plus manual continuation. |
+| AI route chosen with one or both analysis roles missing | Stay in or return to guided model setup, identify the missing role and offer its direct action plus manual continuation. Do not call source/provider work or label a clean deployment as an Ollama failure. |
+| Analysis pair selected before the first public bundle | Permit explicit authenticated selected-only analysis in the same process, while `/readyz` and public chat remain unavailable until separate compatible bundle/public activation succeeds. Analysis must not publish its temporary index. |
+| Anonymous GitHub REST capacity unavailable | Keep all local/manual draft functions available, report a sanitized retry time when known, and never offer or select OAuth/PAT/writeback fallback. |
 | No GitHub writeback or publication capability | Validate, preview, copy, and download remain available; Save/Publish explains the missing capability and its setup/recovery action. |
 | Admin requested through public Internet | Reverse proxy/firewall denies `/admin` and `/api/admin`; operator is directed to loopback/SSH/VPN. A non-standard port does not bypass this rule. |
 | Embedding query service down | Exact/lexical-only fallback is allowed only if explicitly enabled and visibly reported; default is chat unavailable to preserve retrieval contract. |
@@ -1112,5 +1228,6 @@ To approve, the project owner should explicitly state that RepoNPC v1 Technical 
 - any owner-requested exceptions before application implementation starts.
 
 **Approved by:** project owner  
-**Approved on:** 2026-08-10; Phase 2 closure amendment approved 2026-08-11; first-owner onboarding, personal-deployment convenience, and guided-onboarding amendments approved 2026-08-14; vLLM provider-preset amendment approved 2026-08-15; GitHub identity/connection and bounded batch-analysis amendments approved 2026-08-16; OAuth setup-guidance UX and ENGD-001/002/003/006 amendments approved 2026-08-30
-**Approval scope:** Technical Specification 0.1.0 and OR-001 through OR-007, version 0.1.1 Phase 2 closure decisions recorded in ADR-015, version 0.1.2 first-owner onboarding recorded in OR-008/ADR-016, version 0.1.3 loopback local-launcher defaults recorded in OR-009/ADR-017, version 0.1.4 guided onboarding recorded in OR-010/ADR-018, version 0.1.5 vLLM provider preset recorded in OR-011/ADR-019, version 0.1.6 GitHub identity/public-read connection recorded in OR-012/ADR-020, version 0.1.7 immutable public-repository resolver and durable batch analysis authorized by the owner on 2026-08-16 and recorded in ADR-021, version 0.1.8 OAuth setup-guidance UX recorded in ADR-022, and version 0.1.9 external embedding profiles, deployment-aware password/private admin topology, local-first recovery, and bounded operations CLI recorded in ADR-023 through ADR-026. The owner requested an MVP delivery phase; this is a sequencing decision and does not reduce the complete v1 scope.
+**Latest amendment:** Technical Specification 0.2.3 / ENGD-011 / ADR-030 approved 2026-09-10 for sections 2.9 and 11.6. The owner explicitly confirmed the reviewed model-first flow and analysis/public-activation separation. This amendment is a documentation handoff; its implementation and acceptance remain pending. Local GGUF/Hugging Face runtime and Figma are outside this package.
+**Approved on:** 2026-08-10; Phase 2 closure amendment approved 2026-08-11; first-owner onboarding, personal-deployment convenience, and guided-onboarding amendments approved 2026-08-14; vLLM provider-preset amendment approved 2026-08-15; GitHub identity/connection and bounded batch-analysis amendments approved 2026-08-16; OAuth setup-guidance UX and ENGD-001/002/003/006 amendments approved 2026-08-30; passwordless loopback launch and connection-only GitHub amendment approved 2026-09-04; GitHub OAuth/public-read PAT retirement approved 2026-09-08; provider-neutral model setup approved 2026-09-09; model-first guided workflow approved 2026-09-10
+**Approval scope:** Technical Specification 0.1.0 and OR-001 through OR-007, version 0.1.1 Phase 2 closure decisions recorded in ADR-015, version 0.1.2 first-owner onboarding recorded in OR-008/ADR-016, version 0.1.3 loopback local-launcher defaults recorded in OR-009/ADR-017, version 0.1.4 guided onboarding recorded in OR-010/ADR-018, version 0.1.5 vLLM provider preset recorded in OR-011/ADR-019, historical version 0.1.6 GitHub identity/public-read connection recorded in OR-012/ADR-020, version 0.1.7 immutable public-repository resolver and durable batch analysis authorized by the owner on 2026-08-16 and recorded in ADR-021, historical version 0.1.8 OAuth setup-guidance UX recorded in ADR-022, version 0.1.9 external embedding profiles, deployment-aware password/private admin topology, local-first recovery, and bounded operations CLI recorded in ADR-023 through ADR-026, version 0.2.0 passwordless loopback launch plus connection-only GitHub recorded in ENGD-008/ADR-027, and version 0.2.1 OAuth/public-read PAT retirement plus anonymous REST resolution recorded in ENGD-009/ADR-028. The owner requested an MVP delivery phase; this is a sequencing decision and does not reduce the complete v1 scope except for the explicitly retired OAuth/public-read PAT capability.

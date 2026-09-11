@@ -16,10 +16,18 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
-from reponpc.admin.batch_resolver import GitHubRateResource, RateBudget
+from reponpc.admin.batch_resolver import (
+    GITHUB_ARCHIVE_BASE_URL,
+    GitHubRateResource,
+    RateBudget,
+    RepositoryMetadataHint,
+    RepositorySelection,
+    ResolvedRepository,
+)
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 
 BATCH_TTL: Final = timedelta(hours=24)
+GITHUB_RESOLUTION_TTL: Final = timedelta(hours=2)
 EVENT_REPLAY_LIMIT: Final = 200
 ACTIVE_BATCH_STATES: Final = frozenset({"queued", "running", "paused", "cancelling"})
 ITEM_TERMINAL_STATES: Final = frozenset(
@@ -46,6 +54,162 @@ class BatchRuntimeError(RuntimeError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__("analysis batch operation failed")
+
+
+class SQLiteGitHubResolutionCache:
+    """Persist safe partial/exact anonymous resolution across rate resets."""
+
+    def __init__(
+        self,
+        database: RuntimeDatabase,
+        *,
+        ttl: timedelta = GITHUB_RESOLUTION_TTL,
+        now: Callable[[], datetime] | None = None,
+    ) -> None:
+        if ttl <= timedelta(0):
+            raise ValueError("GitHub resolution cache TTL must be positive")
+        self._database = database
+        self._ttl = ttl
+        self._now = now or (lambda: datetime.now(UTC))
+
+    def metadata(self, slug: str) -> RepositoryMetadataHint | None:
+        row = self._load(_github_resolution_key("metadata", slug, None), "metadata")
+        if row is None:
+            return None
+        return RepositoryMetadataHint(
+            slug=str(row["repository_slug"]),
+            node_id=str(row["node_id"]),
+            default_branch=str(row["default_branch"]),
+            is_archived=bool(row["is_archived"]),
+        )
+
+    def resolved(self, selection: RepositorySelection) -> ResolvedRepository | None:
+        row = self._load(
+            _github_resolution_key("resolved", selection.slug, selection.ref),
+            "resolved",
+        )
+        if row is None or not _is_commit(str(row["commit_sha"] or "")):
+            return None
+        owner, name = selection.slug.split("/", 1)
+        commit = str(row["commit_sha"])
+        return ResolvedRepository(
+            slug=selection.slug,
+            node_id=str(row["node_id"]),
+            default_branch=str(row["default_branch"]),
+            commit_sha=commit,
+            is_archived=bool(row["is_archived"]),
+            archive_url=f"{GITHUB_ARCHIVE_BASE_URL}/repos/{owner}/{name}/tarball/{commit}",
+        )
+
+    def save_metadata(self, metadata: RepositoryMetadataHint) -> None:
+        self._save(
+            key=_github_resolution_key("metadata", metadata.slug, None),
+            kind="metadata",
+            slug=metadata.slug,
+            requested_ref=None,
+            node_id=metadata.node_id,
+            default_branch=metadata.default_branch,
+            commit_sha=None,
+            is_archived=metadata.is_archived,
+        )
+
+    def save_resolved(self, selection: RepositorySelection, repository: ResolvedRepository) -> None:
+        if repository.slug != selection.slug or not _is_commit(repository.commit_sha):
+            raise BatchRuntimeError("VALIDATION_ERROR")
+        self._save(
+            key=_github_resolution_key("resolved", selection.slug, selection.ref),
+            kind="resolved",
+            slug=selection.slug,
+            requested_ref=selection.ref,
+            node_id=repository.node_id,
+            default_branch=repository.default_branch,
+            commit_sha=repository.commit_sha,
+            is_archived=repository.is_archived,
+        )
+
+    def discard(self, selections: Sequence[RepositorySelection]) -> None:
+        keys = [
+            key
+            for selection in selections
+            for key in (
+                _github_resolution_key("metadata", selection.slug, None),
+                _github_resolution_key("resolved", selection.slug, selection.ref),
+            )
+        ]
+        if not keys:
+            return
+        try:
+            with self._database.connection() as connection:
+                connection.executemany(
+                    "DELETE FROM github_public_resolution_cache WHERE cache_key = ?",
+                    ((key,) for key in keys),
+                )
+        except sqlite3.Error as exc:
+            raise RuntimeDatabaseError("runtime_github_resolution_cache_failed") from exc
+
+    def _load(self, key: str, kind: str) -> sqlite3.Row | None:
+        now = _timestamp(_utc(self._now()))
+        try:
+            with self._database.connection() as connection:
+                connection.execute(
+                    "DELETE FROM github_public_resolution_cache WHERE expires_at <= ?",
+                    (now,),
+                )
+                row = connection.execute(
+                    """
+                    SELECT * FROM github_public_resolution_cache
+                    WHERE cache_key = ? AND entry_kind = ? AND expires_at > ?
+                    """,
+                    (key, kind, now),
+                ).fetchone()
+            return row
+        except sqlite3.Error as exc:
+            raise RuntimeDatabaseError("runtime_github_resolution_cache_failed") from exc
+
+    def _save(
+        self,
+        *,
+        key: str,
+        kind: str,
+        slug: str,
+        requested_ref: str | None,
+        node_id: str,
+        default_branch: str,
+        commit_sha: str | None,
+        is_archived: bool,
+    ) -> None:
+        now = _utc(self._now())
+        try:
+            with self._database.connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO github_public_resolution_cache(
+                      cache_key, entry_kind, repository_slug, requested_ref, node_id,
+                      default_branch, commit_sha, is_archived, created_at, expires_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(cache_key) DO UPDATE SET
+                      node_id = excluded.node_id,
+                      default_branch = excluded.default_branch,
+                      commit_sha = excluded.commit_sha,
+                      is_archived = excluded.is_archived,
+                      created_at = excluded.created_at,
+                      expires_at = excluded.expires_at
+                    """,
+                    (
+                        key,
+                        kind,
+                        slug,
+                        requested_ref,
+                        node_id,
+                        default_branch,
+                        commit_sha,
+                        int(is_archived),
+                        _timestamp(now),
+                        _timestamp(now + self._ttl),
+                    ),
+                )
+        except sqlite3.Error as exc:
+            raise RuntimeDatabaseError("runtime_github_resolution_cache_failed") from exc
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,8 +241,8 @@ class BatchCreateRequest:
     selection_hash: str
     idempotency_key: str
     items: tuple[BatchItemInput, ...]
-    selected_credential_id: int | None
     maximum_generation_attempts: int = 1
+    analysis_model_pair: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +308,7 @@ class ClaimedBatchItem:
     execution_elapsed_seconds: int
     execution_budget_seconds: int
     generation_attempt_count: int
+    analysis_model_pair: dict[str, object] | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,9 +329,8 @@ class SQLiteGitHubRateStateStore:
         self._database = database
         self._now = now or (lambda: datetime.now(UTC))
 
-    def load(self) -> tuple[RateBudget, RateBudget, datetime | None]:
+    def load(self) -> tuple[RateBudget, datetime | None]:
         values = {
-            GitHubRateResource.GRAPHQL: RateBudget(GitHubRateResource.GRAPHQL, None, None, None),
             GitHubRateResource.CORE: RateBudget(GitHubRateResource.CORE, None, None, None),
         }
         secondary: datetime | None = None
@@ -179,7 +343,7 @@ class SQLiteGitHubRateStateStore:
             resource = str(row["resource"])
             if resource == "secondary":
                 secondary = _parse_optional_timestamp(row["retry_at"])
-            elif resource in {GitHubRateResource.GRAPHQL, GitHubRateResource.CORE}:
+            elif resource == GitHubRateResource.CORE:
                 parsed_resource = GitHubRateResource(resource)
                 values[parsed_resource] = RateBudget(
                     resource=parsed_resource,
@@ -187,25 +351,16 @@ class SQLiteGitHubRateStateStore:
                     remaining=_optional_int(row["remaining"]),
                     reset_at=_parse_optional_timestamp(row["reset_at"]),
                 )
-        return values[GitHubRateResource.GRAPHQL], values[GitHubRateResource.CORE], secondary
+        return values[GitHubRateResource.CORE], secondary
 
     def save(
         self,
         *,
-        graphql: RateBudget,
         core: RateBudget,
         secondary_retry_at: datetime | None,
     ) -> None:
         now = _timestamp(_utc(self._now()))
         rows = (
-            (
-                GitHubRateResource.GRAPHQL,
-                graphql.remaining,
-                graphql.limit,
-                _timestamp(graphql.reset_at) if graphql.reset_at is not None else None,
-                None,
-                now,
-            ),
             (
                 GitHubRateResource.CORE,
                 core.remaining,
@@ -258,18 +413,17 @@ class BatchRuntimeStore:
     def create_batch(self, request: BatchCreateRequest) -> tuple[BatchSnapshot, bool]:
         """Create a batch once, returning an existing idempotent result if any."""
 
-        if (
-            not request.plan_id
-            or not _is_hash(request.selection_hash)
-            or request.selected_credential_id is None
-            or request.selected_credential_id <= 0
-        ):
+        if not request.plan_id or not _is_hash(request.selection_hash):
             raise BatchRuntimeError("ANALYSIS_PLAN_STALE")
         if not request.idempotency_key or len(request.idempotency_key) > 512:
             raise BatchRuntimeError("VALIDATION_ERROR")
         if not request.items or len(request.items) > 50:
             raise BatchRuntimeError("VALIDATION_ERROR")
         if not 1 <= request.maximum_generation_attempts <= 10:
+            raise BatchRuntimeError("VALIDATION_ERROR")
+        if request.analysis_model_pair is not None and not _is_analysis_model_pair(
+            request.analysis_model_pair
+        ):
             raise BatchRuntimeError("VALIDATION_ERROR")
         if len({item.slug.casefold() for item in request.items}) != len(request.items):
             raise BatchRuntimeError("VALIDATION_ERROR")
@@ -322,17 +476,22 @@ class BatchRuntimeStore:
                     """
                     INSERT INTO analysis_batches(
                       batch_id, owner_scope, plan_id, selection_hash,
-                      idempotency_key_hash, selected_credential_id, state,
+                      idempotency_key_hash, selected_credential_id, analysis_model_pair_json, state,
                       maximum_generation_attempts,
                       created_at, updated_at
-                    ) VALUES (?, 'singleton', ?, ?, ?, ?, 'queued', ?, ?, ?)
+                    ) VALUES (?, 'singleton', ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
                     """,
                     (
                         batch_id,
                         request.plan_id,
                         request.selection_hash,
                         idempotency_hash,
-                        request.selected_credential_id,
+                        None,
+                        (
+                            _safe_json(request.analysis_model_pair)
+                            if request.analysis_model_pair is not None
+                            else None
+                        ),
                         request.maximum_generation_attempts,
                         now,
                         now,
@@ -390,21 +549,6 @@ class BatchRuntimeStore:
             raise BatchRuntimeError("NOT_FOUND")
         return self.get_batch(str(row["batch_id"]))
 
-    def selected_credential_id(self, batch_id: str) -> int:
-        """Return the one immutable credential selected at batch creation."""
-
-        with self._database.connection() as connection:
-            row = connection.execute(
-                "SELECT selected_credential_id FROM analysis_batches WHERE batch_id = ?",
-                (batch_id,),
-            ).fetchone()
-        if row is None or row["selected_credential_id"] is None:
-            raise BatchRuntimeError("NOT_FOUND")
-        credential_id = int(row["selected_credential_id"])
-        if credential_id <= 0:
-            raise BatchRuntimeError("ANALYSIS_PLAN_STALE")
-        return credential_id
-
     def transition_batch(self, batch_id: str, *, action: str) -> BatchSnapshot:
         """Apply idempotent owner actions without changing terminal results."""
 
@@ -421,7 +565,9 @@ class BatchRuntimeStore:
             with self._database.connection() as connection:
                 connection.execute("BEGIN IMMEDIATE")
                 row = connection.execute(
-                    "SELECT state FROM analysis_batches WHERE batch_id = ?", (batch_id,)
+                    "SELECT state, analysis_model_pair_json FROM analysis_batches "
+                    "WHERE batch_id = ?",
+                    (batch_id,),
                 ).fetchone()
                 if row is None:
                     connection.execute("ROLLBACK")
@@ -528,7 +674,9 @@ class BatchRuntimeStore:
             with self._database.connection() as connection:
                 connection.execute("BEGIN IMMEDIATE")
                 batch = connection.execute(
-                    "SELECT state FROM analysis_batches WHERE batch_id = ?", (batch_id,)
+                    "SELECT state, analysis_model_pair_json FROM analysis_batches "
+                    "WHERE batch_id = ?",
+                    (batch_id,),
                 ).fetchone()
                 if batch is None:
                     connection.execute("ROLLBACK")
@@ -597,6 +745,7 @@ class BatchRuntimeStore:
                 int(row["execution_budget_seconds"]) - int(row["execution_elapsed_seconds"]),
             ),
             generation_attempt_count=int(row["generation_attempt_count"]),
+            analysis_model_pair=_json_object_optional(batch["analysis_model_pair_json"]),
         )
 
     def advance_item(
@@ -1064,7 +1213,13 @@ def _request_matches_existing(
     if (
         str(batch["plan_id"]) != request.plan_id
         or str(batch["selection_hash"]) != request.selection_hash
-        or int(batch["selected_credential_id"] or 0) != request.selected_credential_id
+        or batch["selected_credential_id"] is not None
+        or _optional_text(batch["analysis_model_pair_json"])
+        != (
+            _safe_json(request.analysis_model_pair)
+            if request.analysis_model_pair is not None
+            else None
+        )
         or int(batch["maximum_generation_attempts"]) != request.maximum_generation_attempts
         or len(rows) != len(request.items)
     ):
@@ -1078,6 +1233,12 @@ def _request_matches_existing(
         ):
             return False
     return True
+
+
+def _github_resolution_key(kind: str, slug: str, requested_ref: str | None) -> str:
+    return hashlib.sha256(
+        "\x1f".join((kind, slug, requested_ref or "<default>")).encode()
+    ).hexdigest()
 
 
 def _elapsed_since(started_at: object, now: str) -> int:
@@ -1129,6 +1290,16 @@ def _safe_json(value: dict[str, object]) -> str:
         return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     except (TypeError, ValueError) as exc:
         raise BatchRuntimeError("VALIDATION_ERROR") from exc
+
+
+def _is_analysis_model_pair(value: dict[str, object]) -> bool:
+    try:
+        from reponpc.admin.analysis_selection import AnalysisModelPair
+
+        AnalysisModelPair.from_safe_dict(value)
+    except Exception:
+        return False
+    return True
 
 
 def _json_object(value: str) -> dict[str, object]:

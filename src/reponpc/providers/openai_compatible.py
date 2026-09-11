@@ -34,6 +34,7 @@ _CONTEXT_OVERFLOW_CODES = frozenset(
         "prompt_too_long",
     }
 )
+_MODEL_LIST_UNSUPPORTED = frozenset({404, 405, 501})
 
 
 @dataclass(slots=True)
@@ -70,6 +71,9 @@ class OpenAICompatibleChatProvider(ChatProvider):
         except Exception:
             return ProviderHealth(False, _checked_at(), ProviderFailureCode.UNAVAILABLE)
         if response.status != 200:
+            if response.status in _MODEL_LIST_UNSUPPORTED:
+                # Listing is optional; the profile probe remains authoritative.
+                return ProviderHealth(ready=True, checked_at=_checked_at())
             return ProviderHealth(
                 ready=False,
                 checked_at=_checked_at(),

@@ -34,6 +34,7 @@ from reponpc.providers.openai_compatible import _failure_for_response
 _NORMALIZATION_ATOL = 1e-5
 _NORMALIZATION_RTOL = 1e-4
 _REQUEST_TIMEOUT_SECONDS = 30.0
+_MODEL_LIST_UNSUPPORTED = frozenset({404, 405, 501})
 
 
 class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
@@ -119,6 +120,9 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
                 ProviderFailureCode.UNAVAILABLE,
             )
         if response.status != 200:
+            if response.status in _MODEL_LIST_UNSUPPORTED:
+                # Listing is optional; an embedding sample validates readiness.
+                return ProviderHealth(ready=True, checked_at=_checked_at())
             return ProviderHealth(
                 False,
                 _checked_at(),

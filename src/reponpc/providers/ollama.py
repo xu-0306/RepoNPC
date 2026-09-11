@@ -31,6 +31,8 @@ from reponpc.providers.openai_compatible import (
     _validate_request,
 )
 
+_MODEL_LIST_UNSUPPORTED = frozenset({404, 405, 501})
+
 
 @dataclass(slots=True)
 class OllamaChatProvider(ChatProvider):
@@ -64,6 +66,9 @@ class OllamaChatProvider(ChatProvider):
         except Exception:
             return ProviderHealth(False, _checked_at(), ProviderFailureCode.UNAVAILABLE)
         if response.status != 200:
+            if response.status in _MODEL_LIST_UNSUPPORTED:
+                # Listing is optional; the profile probe remains authoritative.
+                return ProviderHealth(True, _checked_at())
             return ProviderHealth(False, _checked_at(), failure_for_status(response.status))
         try:
             payload = _json_object(response.body)

@@ -291,6 +291,27 @@ def test_embedding_health_requires_the_explicitly_selected_model(provider: objec
             "https://models.example.test/v1",
             "fixture",
             identity("openai_compatible"),
+            Transport([response(404, {"error": "unsupported"})]),
+        ),
+        OllamaEmbeddingProvider(
+            "http://ollama:11434",
+            "fixture",
+            identity("ollama"),
+            Transport([response(501, {"error": "unsupported"})]),
+        ),
+    ],
+)
+def test_embedding_health_allows_services_without_model_listing(provider: object) -> None:
+    assert provider.health().ready is True  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    "provider",
+    [
+        OpenAICompatibleEmbeddingProvider(
+            "https://models.example.test/v1",
+            "fixture",
+            identity("openai_compatible"),
             Transport([response(200, {"data": [{"id": "fixture"}]})]),
         ),
         OllamaEmbeddingProvider(

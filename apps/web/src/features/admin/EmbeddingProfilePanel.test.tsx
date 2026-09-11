@@ -18,6 +18,18 @@ describe("EmbeddingProfilePanel", () => {
             operations: ["pull", "list", "probe", "delete"],
           },
         ]}
+        connections={[
+          {
+            connection_id: "embedding-gateway",
+            display_name: "Embedding gateway",
+            provider: "openai_compatible",
+            source: "managed",
+            revision: 1,
+            endpoint_configured: true,
+            key_configured: false,
+            status: "configured",
+          },
+        ]}
         error=""
         installedModels={["qwen3-embedding:0.6b"]}
         locale="en"
@@ -48,22 +60,23 @@ describe("EmbeddingProfilePanel", () => {
 
     expect(markup).toContain("Embedding model center");
     expect(markup).toContain("qwen3-embedding:0.6b");
-    expect(markup).toContain("Recommended starter");
-    expect(markup).toContain("Approved Ollama catalog");
+    expect(markup).not.toContain("Recommended starter");
+    expect(markup).not.toContain("Approved Ollama catalog");
     expect(markup).toContain("Installed on the configured Ollama host");
-    expect(markup).toContain("Apache-2.0");
+    expect(markup).not.toContain("Apache-2.0");
     expect(markup).toContain("live probe remains authoritative");
     expect(markup).toContain("Probe");
     expect(markup).not.toContain("base_url");
     expect(markup).not.toContain("api_key");
     expect(markup).not.toContain('type="password"');
-    expect(markup).toContain('<select id="embedding-profile-model"');
+    expect(markup).toContain('id="embedding-profile-model"');
   });
 
   it("renders readable Traditional Chinese copy", () => {
     const markup = renderToStaticMarkup(
       <EmbeddingProfilePanel
         catalog={[]}
+        connections={[]}
         error=""
         installedModels={[]}
         locale="zh-TW"

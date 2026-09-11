@@ -131,13 +131,14 @@ function props(
 }
 
 describe("GuidedOnboardingView", () => {
-  it("renders the welcome outcome, semantic progress, and advanced path", () => {
+  it("renders the unnumbered welcome outcome and advanced path", () => {
     const markup = renderToStaticMarkup(<GuidedOnboardingView {...props()} />);
 
     expect(markup).toContain("Guided portfolio setup");
     expect(markup).toContain("Let RepoNPC understand your work");
-    expect(markup).toContain('aria-label="Guided setup progress"');
-    expect(markup).toContain("Start guided setup");
+    expect(markup).not.toContain('aria-label="Guided setup progress"');
+    expect(markup).toContain("Set up AI and begin");
+    expect(markup).toContain("Build manually first");
     expect(markup).toContain("Use advanced raw YAML");
     expect(markup).toContain('data-step="intro"');
   });
@@ -465,7 +466,7 @@ describe("GuidedOnboardingView", () => {
     );
 
     expect(markup).toContain("引導式作品集設定");
-    expect(markup).toContain("開始引導設定");
+    expect(markup).toContain("設定 AI 並開始");
     expect(markup).toContain('role="alert"');
     expect(markup).toContain("引導設定錯誤");
   });

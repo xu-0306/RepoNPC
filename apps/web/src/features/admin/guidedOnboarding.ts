@@ -84,6 +84,7 @@ export interface GuidedRepository {
 
 export type GuidedStep =
   | "intro"
+  | "models"
   | "repositories"
   | "analysis"
   | "contributions"
@@ -101,11 +102,17 @@ export interface GuidedOnboardingState {
   selectionConfirmed: boolean;
   profile: GuidedProfile;
   profileConfirmed: boolean;
+  modelsConfigured: boolean;
+  route: "ai" | "manual";
   rawYamlHasUnmappedChanges: boolean;
 }
 
 export type GuidedOnboardingAction =
   | { type: "START" }
+  | { type: "START_AI" }
+  | { type: "START_MANUAL" }
+  | { type: "COMPLETE_MODEL_SETUP" }
+  | { type: "SET_MODELS_CONFIGURED"; value: boolean }
   | { type: "SET_ACCOUNT"; account: string }
   | {
       type: "MERGE_REPOSITORIES";
@@ -161,13 +168,13 @@ export interface GuidedOnboardingViewProps {
   batchAnalysisActive?: boolean;
   batchCanCreate?: boolean;
   batchCreatePending?: boolean;
+  modelSetupView?: ReactNode;
   providerStatus: GuidedProviderStatus | null;
   providerStatusPending: boolean;
   onAction: (action: GuidedOnboardingAction) => void;
   onDiscover: (account: string, page: number) => void;
   onResolve: (repository: string, ref: string | null) => void;
   onAnalyze: (slug: string) => void;
-  onPrepareBatch?: () => void;
   onCreateBatch?: () => void;
   onRefreshProviderStatus: () => void;
   onSuggestContribution: (slug: string) => void;
@@ -201,12 +208,15 @@ interface PersistedGuidedOnboarding {
   selectionConfirmed: boolean;
   profile: GuidedProfile;
   profileConfirmed: boolean;
+  modelsConfigured?: boolean;
+  route?: "ai" | "manual";
   repositories: PersistedRepository[];
 }
 
 const STORAGE_LIMIT = 128 * 1024;
 const STEPS: readonly GuidedStep[] = [
   "intro",
+  "models",
   "repositories",
   "analysis",
   "contributions",
@@ -229,6 +239,8 @@ export function initialGuidedOnboardingState(
     profile: emptyGuidedProfile(),
     profileConfirmed: false,
     rawYamlHasUnmappedChanges: false,
+    modelsConfigured: false,
+    route: "ai",
   };
 }
 
@@ -303,6 +315,8 @@ export function guidedOnboardingFromConfig(
     },
     profileConfirmed: false,
     rawYamlHasUnmappedChanges: false,
+    modelsConfigured: false,
+    route: "manual",
   };
 }
 
@@ -319,7 +333,27 @@ export function guidedOnboardingReducer(
   switch (action.type) {
     case "START":
       requireStep(state, "intro");
-      return { ...state, step: "repositories", mode: "guided" };
+      return { ...state, step: "repositories", mode: "guided", route: "ai" };
+    case "START_AI":
+      requireStep(state, "intro");
+      return { ...state, step: "models", mode: "guided", route: "ai" };
+    case "START_MANUAL":
+      if (state.step !== "intro" && state.step !== "models") {
+        throw new Error("ONBOARDING_ILLEGAL_TRANSITION");
+      }
+      return {
+        ...state,
+        step: "repositories",
+        mode: "guided",
+        route: "manual",
+      };
+    case "COMPLETE_MODEL_SETUP":
+      requireStep(state, "models");
+      if (!state.modelsConfigured)
+        throw new Error("ONBOARDING_MODELS_REQUIRED");
+      return { ...state, step: "repositories" };
+    case "SET_MODELS_CONFIGURED":
+      return { ...state, modelsConfigured: action.value };
     case "SET_ACCOUNT":
       requireUnconfirmedSelection(state);
       return { ...state, githubAccount: action.account };
@@ -363,7 +397,7 @@ export function guidedOnboardingReducer(
       }
       return {
         ...state,
-        step: "analysis",
+        step: state.route === "manual" ? "contributions" : "analysis",
         selectionConfirmed: true,
         repositories: state.repositories.map((repository) => {
           const nextFingerprint = repository.selected
@@ -397,6 +431,8 @@ export function guidedOnboardingReducer(
       switch (state.step) {
         case "repositories":
           return { ...state, step: "intro" };
+        case "models":
+          return { ...state, step: "intro" };
         case "analysis":
           return {
             ...state,
@@ -404,7 +440,12 @@ export function guidedOnboardingReducer(
             selectionConfirmed: false,
           };
         case "contributions":
-          return { ...state, step: "analysis" };
+          return {
+            ...state,
+            step: state.route === "manual" ? "repositories" : "analysis",
+            selectionConfirmed:
+              state.route === "manual" ? false : state.selectionConfirmed,
+          };
         case "profile":
           return { ...state, step: "contributions", profileConfirmed: false };
         case "review":
@@ -559,6 +600,8 @@ export function serializeGuidedOnboarding(
     selectionConfirmed: state.selectionConfirmed,
     profile: cloneProfile(state.profile),
     profileConfirmed: state.profileConfirmed,
+    modelsConfigured: state.modelsConfigured,
+    route: state.route,
     repositories: selectedRepositories(state).map((repository) => ({
       slug: repository.metadata.slug,
       metadata: { ...repository.metadata },
@@ -642,6 +685,8 @@ export function parseGuidedOnboarding(
       profile,
       profileConfirmed: value.profileConfirmed,
       rawYamlHasUnmappedChanges: false,
+      modelsConfigured: value.modelsConfigured === true,
+      route: value.route === "manual" ? "manual" : "ai",
     };
   } catch {
     return null;
@@ -687,6 +732,11 @@ export function guidedErrorMessage(locale: Locale, code: string): string {
     CONCURRENCY_LIMIT: {
       "zh-TW": "已有一個分析正在進行。請等待完成後再試。",
       en: "Another analysis is already running. Wait for it to finish before retrying.",
+    },
+    ONBOARDING_MODELS_REQUIRED: {
+      "zh-TW":
+        "請先完成分析與回答模型、搜尋模型的測試與確認；也可以改走手動流程。",
+      en: "Test and select both the analysis/chat model and search model first, or continue manually.",
     },
     ONBOARDING_RAW_YAML_UNMAPPED: {
       "zh-TW":

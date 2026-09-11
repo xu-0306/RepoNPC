@@ -1,7 +1,7 @@
 # RepoNPC v1 Acceptance Criteria
 
-**Document status:** Approved through 0.1.9
-**Applies to:** RepoNPC v1 Technical Specification 0.1.9
+**Document status:** Approved through 0.2.3
+**Applies to:** RepoNPC v1 Technical Specification 0.2.3
 **Rule:** Every criterion is required unless its mapped requirement is changed through an approved specification update.
 
 ## 1. How acceptance works
@@ -135,6 +135,8 @@
 
 ### AC-015 — OpenAI-compatible and vLLM providers obey one RepoNPC contract
 
+**0.2.2 amendment:** Model-list presence is not mandatory when listing is unsupported. A typed ID must pass the actual bounded chat/embedding capability test; known missing models and failed tests remain unavailable. Provider keys/private URLs may be entered only through section 11.5's protected write-only form, never returned.
+
 **Maps to:** FR-012, NFR-005, NFR-013
 
 - **Given** mocked generic OpenAI-compatible and vLLM servers with and without streaming, system roles, structured output, usage, health, selected models, and different context caps,
@@ -214,11 +216,13 @@
 
 **Maps to:** FR-017, NFR-001, NFR-002
 
-- **Given** a fresh deployment without default credentials, host-issued/reissued/expired setup codes, concurrent first-owner attempts, loopback and production password profiles (including three/four/fourteen/fifteen-character, 128-character, Unicode, and common-password cases), repeated failures, absent/forged CSRF, cross-origin requests, expired/rotated/revoked cookies, logout-all, private/public route attempts, and cookie inspection,
+- **Given** a fresh deployment without default credentials; valid, expired, replayed, reissued, concurrent, cross-origin, forwarded, and non-loopback local-launch grants; production setup codes and password boundaries; repeated failures; absent/forged CSRF; expired/rotated/revoked cookies; logout-all; private/public route attempts; and cookie inspection,
 - **When** admin endpoints are exercised,
-- **Then** only the current 256-bit code can create exactly one owner within 15 minutes, reissue invalidates the prior code, creation/password hashing/code consumption/session issuance are atomic, setup permanently closes afterward, loopback accepts 4–128 while production/non-loopback accepts 15–128 and blocks common passwords, only valid current private/same-origin sessions succeed, backoff applies, cookies carry all required attributes, rotation invalidates the old ID, logout-all revokes all prior sessions, public proxy requests to admin routes are denied, and no plaintext password, setup code, secret, token, or hash appears in response or logs.
+- **Then** `loopback_evaluation` accepts only the current host-minted 256-bit two-minute grant under strict loopback/no-trusted-proxy conditions, consumes it atomically, creates or reuses exactly one owner, issues at most one session, clears the browser fragment, and presents no registration/password/GitHub login form; production accepts only the current 256-bit 15-minute setup code and a compliant 15–128-character non-common password; only valid private/same-origin sessions succeed; backoff/rate limits apply; cookies carry all required attributes; rotation invalidates the old ID; logout-all revokes prior sessions using profile-appropriate proof; public proxy requests to admin routes are denied; and no plaintext password, setup code, launch grant, secret, token, or hash appears in responses, logs, Referer headers, browser history, fixtures, or snapshots.
 
 ### AC-025 — Admin can validate and preview without side effects
+
+**0.2.2 clarification:** The no-secret editor rule applies to public portfolio fields/raw YAML. The isolated model-connection form is the sole provider-key ingress exception; it cannot serialize secrets into a portfolio draft.
 
 **Maps to:** FR-018, FR-022, NFR-003
 
@@ -357,6 +361,8 @@ The following criteria are normative release requirements under the owner-approv
 
 ### AC-047 — External embedding profile CRUD and single-active lifecycle
 
+**0.2.2 clarification:** Setup may have zero active profiles; a ready deployment has exactly one active embedding profile. Dimension is observed from bounded samples, while prefixes/task semantics come from reviewed presets or explicit advanced configuration, not guesses. Candidate testing and activation are separate.
+
 **Maps to:** FR-006, FR-012, FR-035, NFR-003, NFR-011
 
 - **Given** Ollama, vLLM, and generic OpenAI-compatible profile fixtures; create/read/update/delete/probe/activate requests; duplicate active attempts; invalid credentials/model IDs; changed dimensions/prefixes/normalization; provider outage; and a valid last-known-good bundle,
@@ -375,17 +381,17 @@ The following criteria are normative release requirements under the owner-approv
 
 **Maps to:** FR-017, FR-036, NFR-001, NFR-009
 
-- **Given** explicit `loopback_evaluation` and `production` profiles, boundary passwords, common-password values, public/private interface bindings, unusual ports, SSH tunnels, VPN/LAN allowlists, and reverse-proxy route rules,
-- **When** setup, login, password change, recovery, and admin-route requests run,
-- **Then** loopback evaluation accepts 4–128 code points, production/non-loopback accepts 15–128 and blocks compromised/common values without composition rules, Argon2id/session/CSRF/backoff controls remain, a non-standard port alone never grants access, SSH/VPN/private routes reach the same Web Admin, public proxies deny `/admin` and `/api/admin/*`, and visitor routes remain independently usable.
+- **Given** explicit `loopback_evaluation` and `production` profiles, loopback/non-loopback binds and public URLs, trusted-proxy settings, production boundary/common passwords, unusual ports, SSH tunnels, VPN/LAN allowlists, and reverse-proxy route rules,
+- **When** startup validation, local launch, production setup/login/password change/recovery, and admin-route requests run,
+- **Then** loopback evaluation refuses every non-loopback or proxy-trusting combination and uses only one-use launcher grants with no credential form; production/non-loopback requires 15–128 code points and blocks compromised/common values without composition rules; existing Argon2id/session/CSRF/backoff controls remain where applicable; a passwordless local owner cannot make production ready until `set-password` succeeds; a non-standard port alone never grants access; SSH/VPN/private routes reach the password-protected Web Admin; public proxies deny `/admin` and `/api/admin/*`; and visitor routes remain independently usable.
 
 ### AC-050 — Local recovery and bounded operations CLI
 
 **Maps to:** FR-029, FR-036, NFR-003, NFR-012
 
-- **Given** a fresh owner, optional GitHub link, OAuth outage/revocation, forgotten password, copied runtime database, corrupt backup, active/previous/pinned bundles, and unknown CLI paths/IDs,
+- **Given** a fresh loopback owner, a production owner, optional GitHub connection, OAuth outage/revocation, a forgotten or absent production password, copied runtime database, corrupt backup, active/previous/pinned bundles, and unknown CLI paths/IDs,
 - **When** the owner runs the host recovery or runtime/bundle commands,
-- **Then** local username/password is created before GitHub binding, the local method remains usable, `reponpc admin set-password --data-dir <dir>` changes only the local hash without reopening setup or changing GitHub identity, `runtime check/backup` are consistent and secret-safe, `bundle verify/pin/unpin` preserve last-known-good state, help/errors are stable, and no second public management protocol is required.
+- **Then** `admin launch-token` works only for a validated loopback profile and emits one fragment-only two-minute URL; production setup/password exists independently of GitHub; `reponpc admin set-password --data-dir <dir>` creates or changes only the production-capable local hash without reopening setup or changing GitHub credentials; `runtime check/backup` are consistent and secret-safe; `bundle verify/pin/unpin` preserve last-known-good state; help/errors are stable; and no second public management protocol is required.
 
 ## 10. Traceability matrix
 
@@ -407,7 +413,7 @@ The following criteria are normative release requirements under the owner-approv
 | FR-014 | AC-019, AC-034 |
 | FR-015 | AC-020, AC-037 |
 | FR-016 | AC-021, AC-022, AC-028, AC-034 |
-| FR-017 | AC-024, AC-041, AC-049 |
+| FR-017 | AC-024, AC-049, AC-050 |
 | FR-018 | AC-001, AC-025, AC-027, AC-034, AC-040 |
 | FR-019 | AC-026, AC-027 |
 | FR-020 | AC-003, AC-029, AC-037 |
@@ -419,28 +425,34 @@ The following criteria are normative release requirements under the owner-approv
 | FR-026 | AC-038 |
 | FR-027 | AC-039, AC-045 |
 | FR-028 | AC-039, AC-040 |
-| FR-029 | AC-041, AC-050 |
-| FR-030 | AC-042 |
-| FR-031 | AC-043 |
-| FR-032 | AC-044 |
+| FR-029 | AC-050 |
+| FR-030 | Legacy; AC-051 proves retirement |
+| FR-031 | AC-051 |
+| FR-032 | AC-044, AC-052 |
 | FR-033 | AC-045, AC-046 |
-| FR-034 | AC-043 |
+| FR-034 | Legacy; AC-051 proves retirement |
 | FR-035 | AC-047, AC-048 |
 | FR-036 | AC-049, AC-050 |
-| NFR-001 | AC-002, AC-004, AC-014, AC-016, AC-024, AC-027, AC-030, AC-033, AC-034, AC-037–AC-039, AC-041–AC-046, AC-048, AC-049 |
-| NFR-002 | AC-004, AC-016, AC-024, AC-035, AC-038–AC-042, AC-044–AC-046, AC-048 |
-| NFR-003 | AC-019, AC-025, AC-026, AC-029–AC-032, AC-040, AC-043, AC-047, AC-050 |
+| FR-037 | AC-051, AC-052 |
+| FR-038 | AC-053, AC-054, AC-056 |
+| FR-039 | AC-054, AC-055, AC-056 |
+| FR-040 | AC-053, AC-057 |
+| FR-041 | AC-058, AC-060 |
+| FR-042 | AC-059, AC-060 |
+| NFR-001 | AC-002, AC-004, AC-014, AC-016, AC-024, AC-027, AC-030, AC-033, AC-034, AC-037–AC-040, AC-044–AC-046, AC-048–AC-052, AC-059 |
+| NFR-002 | AC-004, AC-016, AC-024, AC-035, AC-038–AC-040, AC-044–AC-046, AC-048, AC-051, AC-052, AC-059, AC-060 |
+| NFR-003 | AC-019, AC-025, AC-026, AC-029–AC-032, AC-040, AC-047, AC-050–AC-053, AC-056–AC-060 |
 | NFR-004 | AC-009 |
 | NFR-005 | AC-015, AC-017 |
 | NFR-006 | AC-007–AC-009 |
 | NFR-007 | AC-011–AC-013 |
-| NFR-008 | AC-008, AC-009, AC-023 |
-| NFR-009 | AC-019–AC-023, AC-038, AC-040, AC-043, AC-049 |
+| NFR-008 | AC-008, AC-009, AC-023, AC-057, AC-058 |
+| NFR-009 | AC-019–AC-023, AC-038, AC-040, AC-049–AC-052, AC-057, AC-058, AC-060 |
 | NFR-010 | AC-001, AC-036, AC-037 |
-| NFR-011 | AC-003, AC-005, AC-006, AC-029, AC-036, AC-046, AC-047 |
-| NFR-012 | AC-017, AC-032, AC-035, AC-044, AC-045, AC-050 |
-| NFR-013 | AC-001, AC-005, AC-015, AC-036, AC-037, AC-042 |
-| NFR-014 | AC-018, AC-039, AC-045 |
+| NFR-011 | AC-003, AC-005, AC-006, AC-029, AC-036, AC-046, AC-047, AC-056, AC-059, AC-060 |
+| NFR-012 | AC-017, AC-032, AC-035, AC-044, AC-045, AC-050, AC-052 |
+| NFR-013 | AC-001, AC-005, AC-015, AC-036, AC-037, AC-051, AC-053–AC-060 |
+| NFR-014 | AC-018, AC-039, AC-045, AC-052, AC-054, AC-055, AC-059 |
 
 Version 0.1.9 additions:
 
@@ -450,6 +462,27 @@ Version 0.1.9 additions:
 | Deployment-aware password/private administration | AC-024, AC-036, AC-049 |
 | Local-first GitHub binding and host recovery | AC-041, AC-042, AC-050 |
 | Bounded operations CLI | AC-049, AC-050 |
+
+Version 0.2.0 corrections:
+
+| Requirement | Acceptance criteria |
+| --- | --- |
+| Passwordless one-use loopback launch | AC-024, AC-043, AC-049, AC-050 |
+| Production password/setup preservation and migration | AC-024, AC-042, AC-049, AC-050 |
+| GitHub OAuth connection-only behavior | AC-041, AC-042, AC-043 |
+
+Version 0.2.1 retirement amendment:
+
+| Requirement | Acceptance criteria |
+| --- | --- |
+| Remove OAuth and browser-entered public-read PAT product surfaces | AC-051 |
+| Migrate encrypted public-read state without affecting owner/writeback state | AC-051 |
+| Anonymous REST exact-SHA public-repository analysis | AC-044, AC-052 |
+| Recoverable anonymous GitHub rate exhaustion and manual continuation | AC-052, AC-039, AC-040 |
+
+Version 0.2.2 model-setup amendment additionally maps FR-006/FR-012/FR-035 to AC-054/AC-056, FR-025/FR-022 to AC-053/AC-057, NFR-001/002 to AC-055, NFR-003/011 to AC-056, NFR-008/009 to AC-057, NFR-012/014 to AC-054/AC-055, and NFR-013 to AC-053 through AC-057. Earlier evidence does not establish these new results.
+
+AC-041 through AC-043 are historical 0.1.6–0.2.0 criteria and are not 0.2.1 release gates. Their still-applicable owner/session/recovery/accessibility controls are covered by AC-024, AC-049 through AC-052. OAuth/PAT-specific behavior is superseded by ADR-028.
 
 Version 0.1.4 additions:
 
@@ -466,37 +499,43 @@ Version 0.1.8 strengthens FR-031/AC-043 with actionable OAuth setup guidance and
 
 The 2026-08-30 usability clarification strengthens existing FR-025, FR-027, FR-028, NFR-003, AC-019, AC-025, AC-032, and AC-040 without changing an endpoint, credential boundary, provider fallback rule, or schema: optional analysis has an immediate manual path, guided navigation is reversible with selective invalidation, and unavailable capabilities explain their cause/recovery without disabling unrelated local work.
 
-### AC-041 — GitHub OAuth creates only the same sole owner
+### AC-041 — Legacy: GitHub OAuth connects only from the authenticated sole owner
+
+**Legacy status:** Superseded by AC-051 under Technical Specification 0.2.1; retained only to identify behavior that must be removed safely.
 
 **Maps to:** FR-017, FR-029, NFR-001, NFR-002
 
-- **Given** configured and unavailable OAuth operators; valid/invalid, expired, replayed, cross-browser, and cross-intent OAuth state/PKCE transactions; linked/unlinked and renamed GitHub identities; and concurrent password/GitHub first-owner attempts,
-- **When** a first owner sets up, an existing owner signs in, or an authenticated password owner links GitHub,
-- **Then** the host proof followed by local username/password creation remains required for initial ownership, exactly one owner can be created, GitHub OAuth can be linked only from that authenticated local owner, code consumption/session issuance are atomic, `/user` numeric identity is used, wrong/unlinked identities receive only `INVALID_CREDENTIALS`, OAuth callback/session cookies carry the required scoped attributes, the local password remains available for recovery, and no token, verifier, secret, state plaintext, or identity-disclosure detail reaches browser storage, APIs, logs, fixtures, or runtime plaintext.
+- **Given** configured and unavailable OAuth operators; valid/invalid, expired, replayed, cross-browser, and wrong-intent OAuth state/PKCE transactions; local-launch and password sessions; renamed GitHub accounts; legacy login/setup OAuth requests; and missing/expired RepoNPC sessions,
+- **When** an authenticated owner connects GitHub or any unauthenticated/legacy route attempts OAuth,
+- **Then** only an existing valid RepoNPC session can start and finish the connection, `/user` numeric identity is stored as connection metadata, legacy login/setup routes return `410 GITHUB_LOGIN_REMOVED` without redirect or state change, OAuth never creates an owner or RepoNPC session, callback/transaction cookies carry the required scoped attributes, removing/revoking GitHub affects only GitHub-backed work, and no token, verifier, secret, state plaintext, or identity-disclosure detail reaches browser storage, APIs, logs, fixtures, or runtime plaintext.
 
-### AC-042 — Credential purposes, migration, and recovery fail closed
+### AC-042 — Legacy: OAuth/PAT credential purposes and migration fail closed
+
+**Legacy status:** Superseded by AC-050/AC-051 under Technical Specification 0.2.1. Local password recovery remains normative in AC-050; OAuth/PAT persistence does not.
 
 **Maps to:** FR-030, NFR-001, NFR-002, NFR-013
 
-- **Given** existing password/pre-provisioned deployments, absent/invalid encryption keys, OAuth credentials with no scope or unsafe broad scope, expired/revoked credentials, PAT submissions, writeback credentials, and an attempted final-method unlink,
+- **Given** existing password/pre-provisioned and GitHub-linked deployments, a passwordless loopback owner switching to production, absent/invalid encryption keys, OAuth credentials with no scope or unsafe broad scope, expired/revoked credentials, PAT submissions, and writeback credentials,
 - **When** migrations, OAuth/PAT persistence, validation, linking, unlinking, and GitHub-backed work run,
-- **Then** existing password sign-in remains valid, encrypted credential records never contain plaintext, OAuth/PAT credentials retain their explicit read-only purpose, writeback is never reused, a `401` requires explicit reconnection without fallback, GitHub-only ownership is rejected because local-first setup is mandatory, host-only `reponpc admin set-password` restores local access without reopening setup or changing GitHub identity, and the final local authentication method cannot be removed.
+- **Then** existing password sign-in remains valid in production, encrypted OAuth public-read credentials migrate without plaintext, identity-only login state is retired, OAuth/PAT credentials retain their explicit read-only purpose, writeback is never reused, a `401` requires explicit reconnection without fallback, GitHub cannot authenticate or recover the owner, host-only `reponpc admin set-password` makes a passwordless local owner production-capable without reopening setup or changing GitHub credentials, and a failed migration preserves the last usable authentication state.
 
-### AC-043 — Dual sign-in and connection UI is accessible and secret-safe
+### AC-043 — Legacy: Profile-aware access with GitHub connection UI
+
+**Legacy status:** Superseded by AC-049 through AC-051 under Technical Specification 0.2.1. Deployment-aware access remains normative; the GitHub connection UI must be removed.
 
 **Maps to:** FR-031, FR-034, FR-022, NFR-001, NFR-009
 
-- **Given** setup, local-password-only, dual-method, unavailable-OAuth, denial/callback-error, linking, PAT, and connection-required states in `zh-TW` and `en`,
+- **Given** loopback launch/missing-grant, production setup/password, unavailable/configured OAuth, denial/callback-error, PAT, and connection-required states in `zh-TW` and `en`,
 - **When** keyboard and assistive-technology users operate `/admin` at 375, 768, 1024, and 1440 pixels,
-- **Then** configured OAuth buttons perform a top-level PKCE redirect, while an unconfigured OAuth button remains operable and opens a labeled host-side setup dialog without redirecting or submitting secrets; the dialog exposes only the authoritative callback URL, fixed GitHub documentation link, host-secret/restart/recheck steps, and a no-secret warning, supports focus trap/Escape/focus return/status-alert semantics and reduced motion, password and GitHub pending/error state remain independent, exactly one actionable authentication error is announced, prerequisite-disabled controls explain why, focus returns to the authentication summary after callback failure, PAT input is a labeled password control cleared after submit, and no credential value appears in DOM, storage, screenshots, or tests.
+- **Then** loopback mode exchanges and removes a valid launch fragment without rendering registration/password/GitHub login controls, while a missing/failed grant presents one relaunch action; production alone renders setup or password login; GitHub controls appear only inside the authenticated settings surface; unconfigured OAuth opens a labeled host guide without redirecting or submitting secrets; recheck reports status and, only when configured, enables a distinct **Continue to GitHub** top-level PKCE action; the dialog exposes only the authoritative callback URL, fixed GitHub documentation link, host-secret/restart/recheck steps, and a no-secret warning; focus trap/Escape/focus return/status-alert/reduced-motion semantics hold; PAT input is a labeled password control cleared after submit; and no credential or launch-grant value appears in DOM after exchange, persistent storage, screenshots, or tests.
 
-### AC-044 — GitHub preflight is immutable, bounded, and credential-safe
+### AC-044 — GitHub preflight is immutable, bounded, and anonymous
 
 **Maps to:** FR-032, FR-002, FR-003, NFR-001, NFR-002, NFR-012
 
-- **Given** confirmed and unconfirmed selections; public, private, inaccessible, archived, malformed, and duplicate repositories; OAuth/PAT/writeback credential fixtures; GraphQL metadata, primary/secondary limit, `Retry-After`, reset, redirect, traversal, symlink, archive-bomb, and cancellation fixtures,
+- **Given** confirmed and unconfirmed selections; public, private, inaccessible, archived, malformed, and duplicate repositories; writeback-secret canaries; REST metadata, primary/secondary limit, `Retry-After`, reset, redirect, traversal, symlink, archive-bomb, and cancellation fixtures,
 - **When** a batch preflight and exact-SHA source fetch run,
-- **Then** no unconfirmed/ineligible repository enters analysis; one page covers at most 100 selected repositories; every accepted item records one full commit SHA and uses its immutable archive; compressed/expanded bytes, entries, paths, links, files, time, and cleanup are bounded; no per-blob batch path occurs; selected OAuth/PAT read capacity never uses writeback; a `401` changes only that selected connection to connection-required; and primary/secondary pauses produce safe retry state without busy looping.
+- **Then** no unconfirmed/ineligible repository enters analysis; every accepted item records one full commit SHA and uses its immutable archive; compressed/expanded bytes, entries, paths, links, files, time, and cleanup are bounded; no per-blob batch path occurs; discovery/resolution/archive requests contain no OAuth/PAT/writeback authorization; and primary/secondary pauses produce safe retry state without busy looping.
 
 ### AC-045 — Durable analysis batches preserve safe bounded progress
 
@@ -514,6 +553,91 @@ The 2026-08-30 usability clarification strengthens existing FR-025, FR-027, FR-0
 - **When** cache prediction/reuse and expiry cleanup run,
 - **Then** only checksummed/integrity-checked compatible derived indexes and validated normalized results are reused; every identity change misses the corresponding cache; raw source/archive/prompt/provider body never persists; and TTL/LRU cleanup removes expired entries without changing active work or prior validated results.
 
+### AC-051 — OAuth and public-read PAT surfaces retire without damaging owner or writeback state
+
+**Maps to:** FR-017, FR-019, FR-029 through FR-031, FR-034, FR-037, NFR-001 through NFR-003, NFR-009, NFR-013
+
+- **Given** clean and upgraded runtimes containing no legacy connection, a pending OAuth transaction, an encrypted `identity_public_read` credential, an encrypted `public_read` PAT, active owner/session/local-launch/password state, and an independently configured writeback token,
+- **When** the 0.2.1 migration and admin/API/configuration flows run,
+- **Then** no OAuth/public-read PAT card, input, guide, callback, redirect, start/check/delete action, or client-secret/callback/encryption-key requirement remains reachable; legacy routes return the bounded non-mutating `410` compatibility response; OAuth transactions/identities/public-read credential rows are removed without decryption or secret output; owner authentication, recovery, sessions, drafts, bundles, and writeback configuration remain valid; and no legacy secret value appears in the DOM, API, logs, fixtures, snapshots, or migration diagnostics.
+
+### AC-052 — Anonymous GitHub resolution is exact-SHA, rate-aware, and never borrows writeback authority
+
+**Maps to:** FR-026, FR-027, FR-032, FR-037, NFR-001 through NFR-003, NFR-009, NFR-012, NFR-014
+
+- **Given** public/private/missing repositories, default and explicit refs, immutable commit changes, exhausted/available REST capacity, primary and secondary limits, `Retry-After`, redirect/host manipulation, and writeback-secret canaries,
+- **When** discovery, preflight, resolution, archive fetch, cancellation, retry, and manual continuation run,
+- **Then** only fixed-origin unauthenticated REST requests resolve eligible public selections; each accepted archive is addressed by the returned validated full commit SHA; no discovery/analysis request contains an authorization header or writeback credential; rate state is centrally bounded and sanitized; exhaustion reports an accessible bilingual retry state without busy looping; and manual authoring, validation, preview, copy, and download remain immediately available.
+
+### AC-053 - Provider-neutral first boot and independent role setup
+
+**Maps to:** FR-025, FR-038, FR-040, NFR-003, NFR-013
+
+- **Given** a clean runtime with no model settings, an explicit environment setup, and a migrated persisted setup,
+- **When** the owner launches the app, opens administration, selects or skips model setup, and restarts,
+- **Then** clean setup preselects no service/model and issues no implicit model request/download; health/admin/manual authoring/validation/preview/export remain available; chat/search are separately configured; existing explicit settings and selected revisions survive without fallback; semantic readiness is false until the required tested profiles and bundle are available.
+
+### AC-054 - Typed model IDs and real capability tests work across services
+
+**Maps to:** FR-012, FR-035, FR-038, FR-039, NFR-012, NFR-014
+
+- **Given** Ollama, vLLM, and generic gateway fixtures with independent endpoints/keys/models, base-path prefixes, no-key authentication, supported/unsupported model listing, chat-only models, invalid keys, timeouts, rate limits, malformed vectors, and model-specific task presets,
+- **When** the owner explicitly tests a typed or listed model,
+- **Then** only the chosen connection and exact model receive bounded synthetic requests; listing alone never proves readiness and unsupported listing permits manual testing; actual chat/query/passage operations validate capabilities; dimensions are measured, task prefixes are explicit, limits and safe errors hold, no repository content is sent, and failed tests retain an edit/retry/manual path without fallback.
+
+### AC-055 - Write-only model credentials and network boundaries hold
+
+**Maps to:** FR-039, NFR-001, NFR-002, NFR-012
+
+- **Given** recognizable synthetic key/private-URL canaries, forged/expired sessions, absent CSRF, cross-origin calls, hostile URL/redirect/DNS fixtures, changed destinations, empty/replace/remove credential intents, and unavailable/corrupt secret storage,
+- **When** connections are created, tested, read, edited, deleted, backed up, restored, and rejected,
+- **Then** only authenticated same-origin ingress accepts typed values; the browser never directly contacts providers; stored values never appear in read/error responses, public YAML, bundles, logs, history, browser storage, exports, or recorded screenshots; key inputs clear after submission/exit; storage is protected and fails closed; changing a destination never forwards an old key; reference cleanup preserves live revisions; and GitHub/authentication secrets cannot be borrowed. URL policy covers normalized IPv4/IPv6, forbidden ranges, redirects, and DNS changes at connection time.
+
+### AC-056 - Model changes preserve active service and recover after restart
+
+**Maps to:** FR-006, FR-035, FR-038, FR-039, NFR-003, NFR-011
+
+- **Given** active chat/search revisions, a compatible bundle, candidate edits, concurrent activations, shared connections, failed/cancelled probes/reindexes, key rotation, migration failure, restart, and an index builder unable to reach a private endpoint,
+- **When** the owner saves and explicitly uses candidates,
+- **Then** saving alone cannot alter active service; chat switches only after its test while old requests complete on their revision; embedding activation requires probe/reindex/validation/smoke and an atomic switch; failed work preserves the last-known-good profile/bundle; compatible cache reuse and incompatible result invalidation follow the selected identities; restarts preserve explicit selections; unreachable builders show a publication-specific recovery path with no secret export or unapproved topology change; backups restore connection/profile/key availability using the documented protected procedure.
+
+### AC-057 - Novice model setup is readable, reversible, and accessible
+
+**Maps to:** FR-022, FR-025, FR-040, NFR-008, NFR-009
+
+- **Given** both locales, first-time and returning owners, keyboard/screen-reader use, 375/768/1024/1440-pixel widths, 200% zoom, reduced motion, and long model IDs/errors,
+- **When** they select a service, enter address/key/model, test, edit, cancel, activate/reindex, skip setup, and return to their portfolio draft,
+- **Then** the primary flow asks only service/address/key/model information, distinguishes chat from search and connection success from publication, never requires dimension/reference jargon, provides contextual recovery and manual continuation, preserves unrelated work, keeps Ollama catalog/actions conditional, and has no overlap, clipped controls, untranslated status keys, lost focus, or color-only status. Automated browser/accessibility evidence plus a dated novice walkthrough are required; Figma is not required.
+
+### AC-058 - Model-first AI flow and immediate manual flow
+
+**Maps to:** FR-025, FR-027, FR-028, FR-038, FR-040, FR-041, NFR-003, NFR-008, NFR-009
+
+- **Given** a new authenticated owner with neither model configured, one role configured, saved-but-untested profiles, tested-but-unselected profiles, and a returning owner with valid selections,
+- **When** the owner chooses AI setup or manual authoring in either locale,
+- **Then** welcome is unnumbered; AI setup follows models -> repositories -> analysis -> contributions -> profile -> preview/draft; model controls are reachable without advanced mode; both roles need successful tests and explicit selection before the first-run AI route advances; manual mode uses its four applicable steps and never marks skipped AI work passed; the single Start analysis action runs bounded preflight/create only on explicit consent; missing prerequisites explain their role and offer direct repair/manual actions; and ordinary step visits/return navigation cause no source analysis or model generation. No default Ollama/model or failed-request prerequisite is introduced.
+- **Verification:** reducer/component/API orchestration plus real-browser keyboard, focus, screen-reader/status, both locales, 375/768/1024/1440 pixels, 200% zoom and reduced motion; no clipped/wrapped-off controls. Retain AC-057's dated novice walkthrough.
+
+### AC-059 - Clean first-run analysis works before public index activation
+
+**Maps to:** FR-006, FR-012, FR-027, FR-033, FR-039, FR-042, NFR-001, NFR-002, NFR-003, NFR-011, NFR-014
+
+- **Given** a clean application runtime with no environment model, no public bundle and no active public model pair, plus controlled Ollama/OpenAI-compatible provider and public GitHub fixtures,
+- **When** the authenticated owner creates connections, tests and explicitly selects both analysis roles, confirms a repository and starts analysis through the real application wiring,
+- **Then** the same running process builds the required bounded analysis dependencies and completes embedding/retrieval/generation/validation without restart, manual database edits, preloaded runtime injection or a published bundle. The job uses only its frozen selected revisions; selection itself invokes no source/model/reindex work. Public readiness remains unavailable until a separately verified compatible public bundle/model activation; no temporary analysis index is published. An existing public last-known-good pair/bundle remains serving while a different analysis pair is selected or fails. Wrong capability, missing key-store, outage and stale revision fail safely without fallback, raw output disclosure or generation before admission controls.
+- **Verification:** application-factory/startup integration tests (not only registry mocks), first-run browser flow, canary/security tests, existing bundle atomicity/reindex regression. Record live-provider evidence separately from deterministic fixtures.
+
+### AC-060 - Recovery, revision changes and old guided state preserve work
+
+**Maps to:** FR-025, FR-028, FR-033, FR-041, FR-042, NFR-002, NFR-003, NFR-009, NFR-011, NFR-013
+
+- **Given** legacy session-only progress at every old step, completed drafts, unmappable advanced YAML, an active durable batch, partially successful analysis, changed repository selection or model/connection revisions, and session expiry,
+- **When** the owner resumes, returns to model setup, cancels, selects replacements, retries or switches between manual and AI routes,
+- **Then** allowed public draft fields and unaffected confirmed contributions survive; a missing model at old analysis state offers direct setup and a safe return without reset; completed drafts stay editable/exportable; the server owns model readiness and active-job reconciliation. Changed identities invalidate stale plans and incompatible cache reuse; active work retains its frozen pair or fails safely, never retargets/retries silently. Old validated results remain accurately labeled, not fresh results for a changed pair. Model setup success does not auto-resubmit analysis. New key/URL inputs never enter browser persistence and are cleared as specified; logout retains its existing clearing boundary. An intentional destructive reset remains separately confirmed.
+- **Verification:** migration/reducer/orchestration, batch identity/race/restart/security and real-browser recovery tests; a single-item failure cannot erase other validated results.
+
+Version 0.2.3 additionally extends AC-040/AC-053/AC-056/AC-057 with section 11.6's model-first journey and analysis/public-activation distinction. “Active profile” in public-readiness criteria continues to mean public serving state; an analysis-only selection does not satisfy it. AC-058 through AC-060 start **not-run** until the correction is implemented and observed. Prior 0.2.2 tests do not establish these outcomes.
+
 ## 11. Approval result format
 
 Release acceptance MUST report:
@@ -528,3 +652,7 @@ Release acceptance MUST report:
 No criterion may be marked passed merely because implementation exists; observable evidence is required.
 
 The current machine-readable evidence ledger is `release-evidence/acceptance-ledger.json`. It is the authoritative per-criterion status record; local implementation tests and external/manual evidence must be appended there with reproducible commands and artifact hashes.
+
+**0.2.2 evidence boundary:** AC-053 through AC-057 are not-run until implemented and observed. The current release-audit code enumerates only AC-001 through AC-052 and must be extended during implementation; a passing old audit is not coverage of this amendment. Preserve historical evidence provenance and add current candidate evidence instead of relabeling old runs.
+
+**0.2.3 evidence boundary (2026-09-10):** Release coverage must extend through AC-060, excluding legacy AC-041 through AC-043. The auditor still enumerates only AC-052 at this review. Extend both document coverage and ledger validation, with missing/duplicate-new-ID tests, during the implementation package. Source presence is not full acceptance for AC-053 through AC-057 either.
