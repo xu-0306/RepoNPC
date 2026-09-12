@@ -1,6 +1,16 @@
 # RepoNPC 管理工作區 UI 改善計劃
 
-日期：2026-09-11；依 2026-09-10 的程式審核基線整理。狀態：**依擁有者參考圖提出的設計與實作計劃，尚未實作／驗收。**
+2026-09-12 完整引導修正：拒絕建議明確要求重新填寫並確認，合併重複的貢獻確認操作；專案進階選項與多專案貢獻以原生 details 控制長度。基本資料列出具名缺漏欄位及定位連結；檢閱呈現雙語角色、摘要與逐項宣告。步驟切換會定位標題，模型頁提示先測試與確認選用，完成頁區分草稿與發布並提供剪貼簿成功／失敗回饋。共用 checkbox 尺寸、主要操作樣式與手機模型區順序一併修正。未新增 UI 套件、發布流程、持久化格式或放寬確認條件。
+
+本次驗證：web:check 通過，14 個測試檔共 84 項測試；瀏覽器 fixture 檢查專案 checkbox、進階選項收合、375px 無水平溢位、缺漏欄位 DOM 操作後焦點、雙語宣告及返回後標題焦點。自動化實體滑鼠／鍵盤觸發缺漏連結未取得穩定結果，因此不宣稱完整鍵盤或滑鼠驗收；真實 provider、發布與完整 AC 驗收仍需另行驗證。
+
+2026-09-12 互動修正：回答模型、資料查找模型及服務新增表單預設收起，透過具鍵盤操作的展開入口開啟。模型卡片保留測試按鈕並顯示待測試／可選用／失敗狀態；服務詳細資訊及 Ollama 安裝清單按需展開。儲存成功才收起表單，失敗保留輸入；回答模型與服務的編輯操作會開啟表單，取消後重設。瀏覽器 fixture 已驗證新增失敗、重試成功、卡片出現、編輯與取消，以及五種視窗寬度；此結果不代表 live provider 或完整 AC 驗收完成。
+
+日期：2026-09-11；依 2026-09-10 的程式審核基線整理。狀態：**U1 工作區外框與 U2 模型任務頁的第一個 UI 工作包已實作；U3 路線恢復與 U4 完整整合驗收仍待後續工作。**
+
+本次 UI 工作包新增安全狀態摘要、AI／manual 對應步驟列、管理頁雙語工具列，以及三欄模型設定組合；模型輸入維持空白起始，已保存 URL／key 不回填。依 2026-09-12 owner 回饋，引導頁提供具名確認的「刪除設定」，不提供公開啟用或 Ollama 檔案卸載操作；active／重建索引限制與後端引用保護維持不變。環境連線明示只是啟動設定，不表示內建、安裝或可用服務，需從環境設定修改或移除。元件測試與 deterministic browser fixture 已覆蓋 1440、1024、768、375、320 CSS px；live provider、clean-host、contextual return 與完整 AC-057／058／060 證據尚未因此標記完成。
+
+管理頁使用固定版本的 `@lobehub/icons-static-svg` 提供 Ollama、OpenAI、Qwen 與 vLLM 品牌識別；SVG 由 Vite 隨程式打包，不從 CDN 載入。授權與商標用途記錄於 repository 根目錄的 `THIRD_PARTY_NOTICES.md`。
 
 目標是讓管理者看得懂「目前做到哪裡、還缺什麼、接下來按哪裡」，並沿用參考圖的白底、紫色重點、卡片、六步導覽與像素 NPC。行為以 Approved Technical Specification 0.2.3 為準；本文件不新增 API、provider、發布拓撲或公開資料 schema。
 
@@ -19,7 +29,7 @@
 | 儲存過的完整 API URL、key 狀態 | saved card 只顯示安全名稱、provider、位址是否已設定、key 是否已設定 | URL/key write-only；不能為了照圖增加 secret read endpoint |
 | 預選 Ollama/qwen、綠色「已設定」 | 新部署為明確空狀態；依真實測試／選用結果顯示狀態 | 範例不是 runtime 選擇，儲存不等於可用 |
 | Embedding 維度、reference、raw status | 移至「技術資訊」；未測量維度顯示未知 | 不要求新手理解 dimension/prefix；不填假 1024 |
-| 停用／刪除與主要操作同樣醒目 | 主畫面聚焦測試與選用；危險操作移至清楚標示的管理區 | 避免誤刪與分析／公開啟用混淆 |
+| 停用／刪除與主要操作同樣醒目 | 卡片保留次要「刪除設定」入口與具名確認；公開啟用、實體卸載留在進階管理 | 保留基本管理能力，避免設定刪除與實體卸載混淆 |
 | 底部「儲存設定」與「下一步」 | 依當前任務明確命名，不使用同名總儲存控制多種資料 | 連線儲存、分析選用、草稿、GitHub save 與 publish 是不同操作 |
 
 ## 2. 資訊架構
@@ -35,7 +45,7 @@ Header 左側為 `RepoNPC 管理工作區` 與一句任務說明；右側為語�
 | 設定進度 | 路線與已完成適用步數；進入 AI 第一步時為完成 0/6、目前第 1 步 | 展開可存取步驟列表，不跳過必要條件 |
 | 已選專案 | 目前公開草稿已選 repository 數、是否已確認 | 返回專案選擇；保留未受影響資料 |
 | 分析與回答模型 | analysis-selection 的安全模型名、connection label、測試／選用狀態 | 開啟此角色設定並記住返回位置 |
-| 搜尋模型 | 同一個 embedding 能力的安全選用狀態 | 開啟搜尋角色設定並記住返回位置 |
+| 資料查找模型 | 同一個 embedding 能力的安全選用狀態 | 開啟資料查找角色設定並記住返回位置 |
 | 公開網站 | 已驗證 bundle／public status；無索引時顯示尚未就緒 | 顯示發布條件與既有管理入口 |
 
 摘要卡不能自己呼叫 provider health/probe 來決定綠燈；開頁只讀安全 metadata。進度只描述步驟完成，不表示剩餘工時或生成完成率。模型名稱和 connection label 應允許換行，辨識不可只依靠模型名。
@@ -67,27 +77,28 @@ RepoNPC 管理工作區       [NPC 短提示]        [語言] [說明] [管理�
 [完成 0/6] [已選專案 0] [分析：未選用] [搜尋：未選用] [公開：未就緒]
 ① 設定 AI 模型 — ② 探索與選擇 — ③ 分析 — ④ 確認貢獻 — ⑤ 基本資料 — ⑥ 預覽
 
-┌ 本次分析使用的模型 ┐ ┌ 模型連線               ┐ ┌ 此連線的模型        ┐
-│ 分析與回答         │ │ 已儲存連線卡／新增表單 │ │ 手動輸入／可選清單  │
-│ [選服務與模型]     │ │ 位址：已設定           │ │ 能力測試結果        │
-│ 狀態＋下一個動作   │ │ Key：已設定／不需要    │ │ [用於目前角色]      │
-│ 搜尋模型           │ │ [編輯連線]             │ │ [技術資訊 ▸]        │
-│ [選服務與模型]     │ │                        │ │                     │
-│ [確認用於分析]     │ │ 初次需要時展開表單     │ │ Ollama 管理按需展開 │
+┌ ① 選擇分析模型     ┐ ┌ ② 分析與回答模型       ┐ ┌ ③ 資料查找模型      ┐
+│ [回答模型]         │ │ 1. 選擇／新增服務      │ │ 1. 選擇／新增服務   │
+│ [資料查找模型]     │ │ Provider／API／Key     │ │ Provider／API／Key  │
+│ 狀態＋下一個動作   │ │ 2. 輸入模型名稱並測試  │ │ 2. 輸入模型並測試   │
+│ [確認用於分析]     │ │ 已建模型／測試結果     │ │ 已建模型／測試結果  │
+│                    │ │ [技術資訊 ▸]           │ │ [技術資訊 ▸]        │
 └────────────────────┘ └────────────────────────┘ └─────────────────────┘
 [返回] [先手動建立]                     已選用 0/2  [下一步：探索與選擇]
 ```
 
-這是資訊分區而非三個依序完成的步驟。初始沒有連線時，左欄提供兩個角色入口；中央只展開目前角色的必要表單，右欄顯示簡短指引。已有有效 selection 時，以摘要為主，不強迫重填或重測。
+這三欄是同一個模型設定任務的閱讀順序。左欄只選擇已測試模型；中央與右欄各自完整容納一種用途的服務、API、模型與測試流程，不以 role tab 隱藏另一種設定，也不把 connection/profile 的內部資料分層當成頁面資訊架構。已有有效 selection 時，以摘要為主，不強迫重填或重測。
+
+此分組遵循 [Carbon form pattern](https://carbondesignsystem.com/patterns/forms-pattern/) 將相關任務放在同一區塊、依可預期順序排列並漸進揭露額外欄位的原則；也參考 [GOV.UK question pages](https://design-system.service.gov.uk/patterns/question-pages/) 聚焦單一問題與避免重複輸入的做法。模型領域上，[Dify model provider documentation](https://docs.dify.ai/en/develop-plugin/dev-guides-and-walkthroughs/creating-new-model-provider) 明確區分 provider credentials 與 model-specific configuration；RepoNPC 保留這個安全資料邊界，但不將它直接映射成首次設定頁的兩個分離工作區。
 
 ## 3. 模型設定互動
 
 ### 3.1 初次設定
 
-1. 選擇目前要設定的角色：分析與回答，或搜尋。
-2. 明確選已有連線或新增連線；服務選項為現有 Ollama、OpenAI-compatible、vLLM preset，初始空白。
-3. 新連線表單依序為名稱、服務、API 位址、可選 API key；模型欄位保留手動輸入。placeholder 只作例子，不當作送出值。
-4. 「儲存連線」僅儲存候選資料。「測試模型」是另外的明確動作，以當前角色實際 capability probe 為準。
+1. 分析與回答、資料查找兩個設定區塊同時可見；各區塊依序完成服務與模型，不要求使用者先切換角色或理解 connection/profile 名詞。
+2. 每個用途先明確選已有服務或新增服務；服務選項為現有 Ollama、OpenAI-compatible、vLLM preset，初始空白。owner-managed 服務可明確共用，host-managed chat/embedding 只出現在對應用途。
+3. 新服務表單依序為名稱、服務、API 位址、可選 API key；同區塊緊接模型服務選擇與模型名稱。placeholder 只作例子，不當作送出值。
+4. 「儲存連線」僅儲存候選服務，畫面以編號與連續區塊引導使用者接著建立模型。「測試模型」是另外的明確動作，以當前用途實際 capability probe 為準。
 5. 成功後顯示模型、安全服務名稱、已驗證用途與下一步。先建立本地待選 pair，只有按「確認用於分析」才提交目前 API 所需的兩個 profile IDs 與 generation。
 6. server 回報兩角色 eligible 後才可「下一步：探索與選擇」。模型已測但未選用要明說，不能只用綠色勾號。
 
@@ -120,12 +131,12 @@ RepoNPC 管理工作區       [NPC 短提示]        [語言] [說明] [管理�
 
 | 實際狀況 | 繁中主要文案 | 英文主要文案 | 下一個動作 |
 | --- | --- | --- | --- |
-| 無 connection/profile | 尚未設定搜尋模型 | Set up a search model | 設定搜尋模型 |
+| 無 connection/profile | 尚未設定資料查找模型 | Set up a content finder | 設定資料查找模型 |
 | 已儲存，未 probe | 已儲存，尚未測試 | Saved; test required | 測試模型 |
 | probe 執行中 | 正在測試搜尋能力… | Testing search capability… | 顯示 busy，阻止重複提交 |
 | 測試成功，尚未選用 | 測試通過，尚未選用 | Test passed; not selected | 確認用於分析 |
 | pair eligible | 已選用，可用於分析 | Selected for analysis | 下一步 |
-| 只缺其中一個角色 | 還需要設定搜尋模型 | Search model still needed | 直接進入缺少的角色 |
+| 只缺其中一個角色 | 還需要設定資料查找模型 | Content finder still needed | 直接進入缺少的角色 |
 | 連線／模型 revision 改變 | 設定已變更，請重新測試並選用 | Settings changed; test and select again | 測試／選用；保留原工作 |
 | 選定服務暫時不可用 | 目前無法連線，設定已保留 | Connection unavailable; settings kept | 重試／編輯／手動繼續 |
 | 分析可用，但無公開索引 | 分析模型可用；公開搜尋尚未就緒 | Analysis available; public search not ready | 繼續分析；另看發布條件 |
@@ -225,8 +236,12 @@ U1 的純外框可在修復期間先做靜態審視；U2/U3 的完成聲明必�
 
 完成此計劃需交付實作 diff、before/after 畫面、上述情境測試結果與剩餘 blocker。精確的字級／間距可在實作中微調；新 hosted service、GGUF/HF runtime、公開管理入口、額外搜尋演算法及發布拓撲變更均不屬此計劃。
 
-## 9. 本次交付界線
+## 9. 實作註記
 
-本次只新增本計劃與審核文件，尚未改 UI。設計依擁有者附圖、現有元件／樣式、已批准規格與 W3C 說明整理；`ui-ux-pro-max` 的本機 design-search 腳本路徑不完整，未使用其自動產生結果。這不影響採用附圖作為視覺方向。
+管理工作區已依本計劃開始實作，並維持既有 API、安全與發布契約。介面預設採「舒適」112.5% 根字級，頁首顯示設定可切換 100%、112.5% 與 125%；選項只以本機 `localStorage` 保存非敏感的顯示偏好，不保存模型、端點或金鑰資料。管理路由會在 React 啟動前套用偏好，避免載入時尺寸閃動。
 
-沒有新增必須先回答的阻塞問題。擁有者可直接用這份計劃安排下一個 UI 工作包；本次不將提案自動標為 Approved，也不修改既有 AC 的驗收狀態。
+模型品牌圖示使用隨程式打包的 `@lobehub/icons-static-svg` SVG。所有 import 都加上 Vite `?no-inline`，使小型 SVG 也輸出成同源 hashed asset；這避免正式環境 `img-src 'self'` CSP 阻擋預設的 `data:` URL，同時不新增執行時外部請求。授權資訊記錄於 `THIRD_PARTY_NOTICES.md`。
+
+面向一般使用者的 embedding 角色命名為「資料查找模型 / Content finder」，並以「整理作品內容，找出回答依據」說明用途；`embedding`、維度與 prefix 等術語只放在技術資訊。模型步驟中的 host-managed environment connection 改稱「主機提供的服務」，明確標示它只是可用連線、不代表模型已建立、測試或選用；回答與資料查找頁各只顯示該用途的 environment connection，共用的 owner-managed 連線仍可在兩邊選取。
+
+沒有新增必須先回答的阻塞問題；實際完成狀態仍以本文件驗收清單與測試／browser evidence 為準。

@@ -695,6 +695,89 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
         name="analysis-batch-model-pair",
         statements=("ALTER TABLE analysis_batches ADD COLUMN analysis_model_pair_json TEXT",),
     ),
+    Migration(
+        version=19,
+        name="embedding-candidate-unknown-dimension",
+        statements=(
+            # Rebuild the parent and its two referencing tables in the same
+            # migration transaction. Preserve references instead of allowing
+            # ON DELETE SET NULL to erase the selected pair during the rebuild.
+            "CREATE TABLE embedding_switch_intent_saved AS SELECT * FROM embedding_switch_intent",
+            "CREATE TABLE analysis_model_selection_saved AS SELECT * FROM analysis_model_selection",
+            "DROP TABLE embedding_switch_intent",
+            "DROP TABLE analysis_model_selection",
+            """
+            CREATE TABLE embedding_profiles_new (
+                profile_id TEXT PRIMARY KEY CHECK(length(profile_id) BETWEEN 1 AND 64),
+                provider TEXT NOT NULL CHECK(provider IN ('ollama', 'openai_compatible', 'vllm')),
+                model_id TEXT NOT NULL CHECK(length(model_id) BETWEEN 1 AND 256),
+                dimension INTEGER CHECK(dimension IS NULL OR dimension BETWEEN 1 AND 65536),
+                normalized INTEGER NOT NULL CHECK(normalized IN (0, 1)),
+                query_prefix TEXT NOT NULL CHECK(length(query_prefix) <= 128),
+                passage_prefix TEXT NOT NULL CHECK(length(passage_prefix) <= 128),
+                connection_reference TEXT NOT NULL
+                    CHECK(length(connection_reference) BETWEEN 1 AND 64),
+                status TEXT NOT NULL CHECK(status IN (
+                    'probe', 'reindex_required', 'reindexing', 'ready',
+                    'last_known_good', 'probe_failed'
+                )),
+                active INTEGER NOT NULL CHECK(active IN (0, 1))
+                    CHECK(active = 0 OR dimension IS NOT NULL),
+                observed_adapter TEXT, observed_model_id TEXT, observed_dimension INTEGER,
+                last_error_code TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                last_probed_at TEXT,
+                reindex_generation INTEGER NOT NULL DEFAULT 0,
+                reindex_started_at TEXT, reindex_completed_at TEXT, bundle_id TEXT,
+                connection_revision INTEGER NOT NULL DEFAULT 0 CHECK(connection_revision >= 0)
+            )
+            """,
+            "INSERT INTO embedding_profiles_new SELECT * FROM embedding_profiles",
+            "DROP TABLE embedding_profiles",
+            "ALTER TABLE embedding_profiles_new RENAME TO embedding_profiles",
+            "CREATE UNIQUE INDEX embedding_profiles_one_active_idx "
+            "ON embedding_profiles(active) WHERE active = 1",
+            """
+            CREATE TABLE embedding_switch_intent (
+                state_key TEXT PRIMARY KEY CHECK(state_key = 'current'),
+                generation INTEGER NOT NULL CHECK(generation >= 1),
+                from_profile_id TEXT REFERENCES embedding_profiles(profile_id),
+                from_bundle_id TEXT,
+                to_profile_id TEXT NOT NULL REFERENCES embedding_profiles(profile_id),
+                to_bundle_id TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """,
+            "INSERT INTO embedding_switch_intent SELECT * FROM embedding_switch_intent_saved",
+            """
+            CREATE TABLE analysis_model_selection (
+                selection_key TEXT PRIMARY KEY CHECK(selection_key = 'current'),
+                chat_profile_id TEXT REFERENCES chat_profiles(profile_id) ON DELETE SET NULL,
+                chat_connection_revision INTEGER
+                    CHECK(chat_connection_revision IS NULL OR chat_connection_revision >= 1),
+                embedding_profile_id TEXT
+                    REFERENCES embedding_profiles(profile_id) ON DELETE SET NULL,
+                embedding_connection_revision INTEGER
+                    CHECK(embedding_connection_revision IS NULL
+                          OR embedding_connection_revision >= 0),
+                selection_generation INTEGER NOT NULL DEFAULT 0 CHECK(selection_generation >= 0),
+                updated_at TEXT NOT NULL
+            )
+            """,
+            "INSERT INTO analysis_model_selection SELECT * FROM analysis_model_selection_saved",
+            "DROP TABLE embedding_switch_intent_saved",
+            "DROP TABLE analysis_model_selection_saved",
+        ),
+    ),
+    Migration(
+        version=20,
+        name="admin_probe_provider_messages",
+        statements=(
+            "ALTER TABLE chat_profiles ADD COLUMN last_error_message TEXT "
+            "CHECK(last_error_message IS NULL OR length(last_error_message) <= 2000)",
+            "ALTER TABLE embedding_profiles ADD COLUMN last_error_message TEXT "
+            "CHECK(last_error_message IS NULL OR length(last_error_message) <= 2000)",
+        ),
+    ),
 )
 
 

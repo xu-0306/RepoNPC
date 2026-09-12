@@ -13,6 +13,7 @@ from enum import StrEnum
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from reponpc.indexing.sources import EmbeddingProvider
+from reponpc.providers.error_messages import MAX_ERROR_MESSAGE_CHARS
 
 
 class ProviderFailureCode(StrEnum):
@@ -27,12 +28,28 @@ class ProviderFailureCode(StrEnum):
 
 
 class ProviderError(RuntimeError):
-    """Safe provider failure that never reflects an upstream response body."""
+    """Safe exception text with optional bounded admin-only provider diagnostics."""
 
-    def __init__(self, code: ProviderFailureCode) -> None:
+    def __init__(
+        self,
+        code: ProviderFailureCode,
+        *,
+        upstream_status: int | None = None,
+        upstream_message: str | None = None,
+    ) -> None:
         if not isinstance(code, ProviderFailureCode):
             raise TypeError("code must be a ProviderFailureCode")
+        if upstream_status is not None and (
+            type(upstream_status) is not int or not 100 <= upstream_status <= 599
+        ):
+            raise ValueError("upstream_status must be an HTTP status integer")
         self.code = code
+        self.upstream_status = upstream_status
+        if upstream_message is not None and (
+            not isinstance(upstream_message, str) or len(upstream_message) > MAX_ERROR_MESSAGE_CHARS
+        ):
+            raise ValueError("upstream_message must be bounded redacted text")
+        self.upstream_message = upstream_message
         super().__init__("model provider failed")
 
 

@@ -99,7 +99,7 @@ describe("AdminWorkspace", () => {
     );
     expect(conflictMarkup).toContain("saving is disabled");
     expect(conflictMarkup).toMatch(
-      /<button[^>]*disabled[^>]*>Save configuration<\/button>/,
+      /<button[^>]*disabled[^>]*>Save to GitHub<\/button>/,
     );
 
     const signedOutMarkup = renderToStaticMarkup(
@@ -125,7 +125,7 @@ describe("AdminWorkspace", () => {
     );
 
     expect(markup).toMatch(
-      /<button[^>]*disabled[^>]*>Save configuration<\/button>/,
+      /<button[^>]*disabled[^>]*>Save to GitHub<\/button>/,
     );
   });
 
@@ -137,7 +137,7 @@ describe("AdminWorkspace", () => {
     expect(markup).toMatch(/<button[^>]*>Validate configuration<\/button>/);
     expect(markup).toMatch(/<button[^>]*>Preview changes<\/button>/);
     expect(markup).toMatch(
-      /<button[^>]*disabled[^>]*>Save configuration<\/button>/,
+      /<button[^>]*disabled[^>]*>Save to GitHub<\/button>/,
     );
     expect(markup).toMatch(
       /<button[^>]*disabled[^>]*>Request index publication<\/button>/,
@@ -166,6 +166,21 @@ describe("AdminWorkspace", () => {
     expect(zhMarkup).toContain("RepoNPC 管理工作區");
     expect(zhMarkup).toContain("未儲存預覽");
     expect(zhMarkup).toContain("README 複製片段");
+  });
+
+  it("renders the localized workspace shell and language controls", () => {
+    const markup = renderToStaticMarkup(
+      <AdminWorkspace {...props({ onLocaleChange: vi.fn() })} />,
+    );
+
+    expect(markup).toContain("Set up AI models and sources");
+    expect(markup).toContain("Follow the steps");
+    expect(markup).toContain('aria-label="Interface language"');
+    expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain("Setup guide");
+    expect(markup).toContain('aria-label="Display settings"');
+    expect(markup).toContain("Comfortable (default, 112.5%)");
+    expect(markup).toContain("Administrator");
   });
 
   it("defaults to guided content and keeps raw YAML behind advanced mode", () => {

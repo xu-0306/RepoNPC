@@ -18,11 +18,14 @@ from reponpc.admin.model_connections import (
     ModelConnectionRegistry,
     ProtectedModelSecretStore,
 )
-from reponpc.providers.contracts import ProviderResult
+from reponpc.providers.contracts import ProviderCapabilities, ProviderResult
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 
 
 class _ProbeProvider:
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(False, True, True, True, True, 8192, 1024)
+
     def generate(self, *_args: object, **_kwargs: object) -> ProviderResult:
         return ProviderResult('{"ok":true}', "stop", None, None, 1.0)
 
@@ -152,9 +155,7 @@ def test_database_commit_failure_restores_previous_runtime_and_active_profile(
         def in_transaction(self) -> bool:
             return self.delegate.in_transaction
 
-        def execute(
-            self, statement: str, parameters: tuple[object, ...] = ()
-        ) -> sqlite3.Cursor:
+        def execute(self, statement: str, parameters: tuple[object, ...] = ()) -> sqlite3.Cursor:
             if statement == "COMMIT":
                 raise sqlite3.OperationalError("synthetic commit failure")
             return self.delegate.execute(statement, parameters)
@@ -182,9 +183,7 @@ def test_database_commit_failure_restores_previous_runtime_and_active_profile(
     )
     runtime_model = ["bootstrap"]
 
-    def switch_first_runtime(
-        profile: ChatProfile, _provider: object
-    ) -> Callable[[], None]:
+    def switch_first_runtime(profile: ChatProfile, _provider: object) -> Callable[[], None]:
         prior = runtime_model[0]
         runtime_model[0] = profile.model_id
         return lambda: runtime_model.__setitem__(0, prior)

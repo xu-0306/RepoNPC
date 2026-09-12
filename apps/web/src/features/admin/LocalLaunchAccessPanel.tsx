@@ -1,3 +1,5 @@
+import { AdminAccessLayout } from "./AdminAccessLayout";
+
 type LocalLaunchAccessPanelProps = {
   locale: "zh-TW" | "en";
   state: "checking" | "relaunch";
@@ -24,18 +26,22 @@ export function LocalLaunchAccessPanel({
 }: LocalLaunchAccessPanelProps) {
   const text = copy[locale];
 
-  if (state === "checking") {
-    return (
-      <p aria-live="polite" role="status">
-        {text.checking}
-      </p>
-    );
-  }
-
   return (
-    <section aria-labelledby="local-launch-relaunch-heading">
-      <h1 id="local-launch-relaunch-heading">{text.relaunchHeading}</h1>
-      <p>{text.relaunchBody}</p>
-    </section>
+    <AdminAccessLayout
+      locale={locale}
+      mode={state}
+      headingId="local-launch-relaunch-heading"
+      title={state === "checking" ? "RepoNPC" : text.relaunchHeading}
+    >
+      {state === "checking" ? (
+        <p className="admin-auth__status" role="status" aria-live="polite">
+          {text.checking}
+        </p>
+      ) : (
+        <div className="admin-auth__content">
+          <p className="admin-auth__intro">{text.relaunchBody}</p>
+        </div>
+      )}
+    </AdminAccessLayout>
   );
 }

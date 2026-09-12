@@ -16,6 +16,7 @@ from reponpc.providers.contracts import (
     ProviderHealth,
     RuntimeEmbeddingProvider,
 )
+from reponpc.providers.error_messages import provider_error_message
 from reponpc.providers.http_transport import (
     ProviderHttpTransport,
     ProviderOrigin,
@@ -28,6 +29,7 @@ from reponpc.providers.openai_embeddings import (
     _json_bytes,
     _json_object,
     _prefix_once,
+    _sample_dimension,
     _validate_normalization,
     _validated_row,
 )
@@ -52,24 +54,32 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
         self,
         base_url: str,
         model: str,
-        identity: EmbeddingIdentity,
+        identity: EmbeddingIdentity | None,
         transport: ProviderHttpTransport | None = None,
+        *,
+        allow_dimension_discovery: bool = False,
+        query_prefix: str = "",
+        passage_prefix: str = "",
     ) -> None:
         if not isinstance(base_url, str) or not base_url:
             raise ValueError("embedding base URL must be non-empty")
         if not isinstance(model, str) or not model:
             raise ValueError("embedding model must be non-empty")
-        if not isinstance(identity, EmbeddingIdentity):
+        if not isinstance(identity, EmbeddingIdentity) and not (
+            identity is None and allow_dimension_discovery
+        ):
             raise TypeError("embedding identity is required")
-        if identity.adapter != "ollama":
+        if identity is not None and identity.adapter != "ollama":
             raise ValueError("embedding identity adapter does not match Ollama provider")
-        if identity.model_id != model:
+        if identity is not None and identity.model_id != model:
             raise ValueError("embedding identity model does not match configured model")
-        if identity.normalized is not True:
+        if identity is not None and identity.normalized is not True:
             raise ValueError("normalized embeddings are required")
 
         self._model = model
         self._identity = identity
+        self._query_prefix = identity.query_prefix if identity else query_prefix
+        self._passage_prefix = identity.passage_prefix if identity else passage_prefix
         self._transport = transport or UrllibProviderHttpTransport()
         self._origin = ProviderOrigin(base_url, allow_private_http=True)
 
@@ -79,13 +89,15 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
         return f"{type(self).__name__}(model={self._model!r}, identity={self._identity!r})"
 
     def identity(self) -> EmbeddingIdentity:
+        if self._identity is None:
+            raise ProviderError(ProviderFailureCode.INVALID_RESPONSE)
         return self._identity
 
     def embed_query(self, texts: list[str]) -> NDArray[np.float32]:
-        return self._embed(texts, self._identity.query_prefix)
+        return self._embed(texts, self._query_prefix)
 
     def embed_passages(self, texts: list[str]) -> NDArray[np.float32]:
-        return self._embed(texts, self._identity.passage_prefix)
+        return self._embed(texts, self._passage_prefix)
 
     def health(self) -> ProviderHealth:
         try:
@@ -168,7 +180,7 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
             except InterruptedError:
                 raise OllamaPullCancelled from None
             if status != 200:
-                raise ProviderError(failure_for_status(status))
+                raise ProviderError(failure_for_status(status), upstream_status=status)
             return
 
         progress(None, None)
@@ -197,7 +209,9 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
         except Exception:
             raise ProviderError(ProviderFailureCode.UNAVAILABLE) from None
         if response.status != 200:
-            raise ProviderError(failure_for_status(response.status))
+            raise ProviderError(
+                failure_for_status(response.status), upstream_status=response.status
+            )
         try:
             return ollama_model_ids(_json_object(response.body))
         except (UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
@@ -238,13 +252,15 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
         except Exception:
             raise ProviderError(ProviderFailureCode.UNAVAILABLE) from None
         if response.status != 200:
-            raise ProviderError(failure_for_status(response.status))
+            raise ProviderError(
+                failure_for_status(response.status), upstream_status=response.status
+            )
 
     def _embed(self, texts: list[str], prefix: str) -> NDArray[np.float32]:
         if not isinstance(texts, list) or any(not isinstance(text, str) for text in texts):
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE)
         if not texts:
-            return np.empty((0, self._identity.dimension), dtype=np.float32)
+            return np.empty((0, self.identity().dimension), dtype=np.float32)
 
         request = {
             "input": [_prefix_once(text, prefix) for text in texts],
@@ -267,17 +283,30 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
         except Exception:
             raise ProviderError(ProviderFailureCode.UNAVAILABLE) from None
         if response.status != 200:
-            raise ProviderError(failure_for_status(response.status))
+            raise ProviderError(
+                failure_for_status(response.status),
+                upstream_status=response.status,
+                upstream_message=provider_error_message(
+                    response.body, response.headers, private_values=(self._origin.base_url,)
+                ),
+            )
         try:
             payload = _json_object(response.body)
             raw_vectors = payload["embeddings"]
             if not isinstance(raw_vectors, list) or len(raw_vectors) != len(texts):
                 raise ValueError
-            matrix = _parse_vectors(raw_vectors, len(texts), self._identity.dimension)
+            dimension = (
+                self._identity.dimension if self._identity else _sample_dimension(raw_vectors[0])
+            )
+            matrix = _parse_vectors(raw_vectors, len(texts), dimension)
         except ProviderError:
             raise
         except (KeyError, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
+        if self._identity is None:
+            self._identity = EmbeddingIdentity(
+                "ollama", self._model, dimension, True, self._query_prefix, self._passage_prefix
+            )
         return matrix
 
 

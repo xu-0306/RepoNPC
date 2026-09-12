@@ -12,6 +12,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@lobehub/icons-static-svg": "1.91.0",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },

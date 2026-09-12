@@ -69,6 +69,37 @@ const metadata: RepositoryMetadata = {
   html_url: "https://github.com/octocat/demo",
 };
 
+describe("discovery account changes", () => {
+  it("restarts pagination while preserving explicitly collected projects", () => {
+    const original = guidedOnboardingReducer(
+      {
+        ...initialGuidedOnboardingState(),
+        step: "repositories",
+        githubAccount: "first-account",
+      },
+      {
+        type: "MERGE_REPOSITORIES",
+        repositories: [metadata],
+        page: 5,
+        hasMore: false,
+      },
+    );
+    const next = guidedOnboardingReducer(original, {
+      type: "SET_ACCOUNT",
+      account: "second-account",
+    });
+    expect(next.discoveryPage).toBe(0);
+    expect(next.discoveryHasMore).toBe(true);
+    expect(next.repositories).toBe(original.repositories);
+    expect(
+      guidedOnboardingReducer(original, {
+        type: "SET_ACCOUNT",
+        account: "first-account",
+      }),
+    ).toBe(original);
+  });
+});
+
 const proposal: ContributionProposal = {
   role: { "zh-TW": "共同維護者", en: "Co-maintainer" },
   summary: { "zh-TW": "維護公開模組", en: "Maintained public modules" },

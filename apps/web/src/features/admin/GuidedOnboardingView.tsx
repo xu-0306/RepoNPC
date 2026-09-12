@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 
 import type { Locale } from "../../i18n/messages";
@@ -14,6 +14,28 @@ import {
   type RepositoryFact,
 } from "./guidedOnboarding";
 import type { GuidedOnboardingViewProps } from "./guidedOnboarding";
+import {
+  AdminStatusCards,
+  type AdminWorkspaceStatus,
+} from "./AdminStatusCards";
+import { OnboardingStepper } from "./OnboardingStepper";
+import { CheckboxField } from "./CheckboxField";
+
+const EMPTY_WORKSPACE_STATUS: AdminWorkspaceStatus = {
+  chat: {
+    model: null,
+    connection: null,
+    provider: null,
+    state: "unconfigured",
+  },
+  embedding: {
+    model: null,
+    connection: null,
+    provider: null,
+    state: "unconfigured",
+  },
+  publicBundleId: null,
+};
 
 type Copy = {
   product: string;
@@ -28,6 +50,7 @@ type Copy = {
   modelsHeading: string;
   modelsDescription: string;
   confirmModels: string;
+  modelsRequired: string;
   advanced: string;
   advancedDescription: string;
   progress: string;
@@ -165,20 +188,22 @@ const COPY: Record<Locale, Copy> = {
     title: "引導式作品集設定",
     introTitle: "讓 RepoNPC 認識你的作品",
     introBody:
-      "選擇公開的 GitHub repository，檢視可驗證的 repository facts，再由你確認自己的貢獻。最後會產生可預覽、複製或下載的雙語設定檔。",
+      "選擇公開的 GitHub 專案，檢視專案中可確認的資訊，再由你確認自己的貢獻。最後會產生可預覽、複製或下載的雙語設定檔。",
     outcome: "你會得到",
     outcomeItems: [
-      "清楚分開的 repository facts 與模型推論",
-      "只在你確認或編輯後才成為 OWNER_ASSERTION 的個人敘述",
-      "不需要 GitHub token 也能驗證、預覽、複製或下載的 YAML 草稿",
+      "清楚分開的專案中可確認的資訊與 AI 推論",
+      "只在你確認或編輯後才會成為你已確認的個人貢獻",
+      "不需要 GitHub 寫入權杖也能驗證、預覽、複製或下載的設定草稿",
     ],
     start: "開始引導設定",
     startAi: "設定 AI 並開始",
     startManual: "先手動建立作品集",
     modelsHeading: "設定 AI 模型",
     modelsDescription:
-      "先分別測試分析與回答模型、搜尋模型，再選擇要用於分析。這不會啟用公開網站模型。",
+      "先分別測試分析與回答模型、資料查找模型，再選擇要用於分析。資料查找模型會整理作品內容，協助找到回答的參考依據。這不會改變公開網站使用的模型。",
     confirmModels: "完成模型設定並選擇專案",
+    modelsRequired:
+      "請先測試回答模型與資料查找模型，再於選擇區按「確認用於分析」。",
     advanced: "使用進階 raw YAML",
     advancedDescription: "熟悉 schema 的使用者可以直接編輯 reponpc.yml。",
     progress: "引導設定進度",
@@ -192,112 +217,116 @@ const COPY: Record<Locale, Copy> = {
       review: "檢閱",
       draft: "草稿完成",
     },
-    accountHeading: "探索公開 repositories",
+    accountHeading: "探索公開專案",
     accountLabel: "GitHub 使用者名稱或個人檔案 URL",
-    accountHelp:
-      "只會讀取公開 metadata；勾選並確認前不會下載 source 或呼叫模型。",
-    discover: "探索 repositories",
+    accountHelp: "只會讀取公開專案資訊；勾選並確認前不會下載程式碼或呼叫模型。",
+    discover: "探索專案",
     discoverAgain: "載入下一頁",
-    searchLabel: "篩選已載入的 repositories",
-    noMatches: "沒有符合篩選條件的 repository。",
-    discoveryComplete: "已完成最多五頁的探索，或沒有更多公開 repositories。",
-    manualHeading: "手動加入 repository",
-    repositoryLabel: "repository slug 或 GitHub URL",
+    searchLabel: "篩選已載入的專案",
+    noMatches: "沒有符合篩選條件的專案。",
+    discoveryComplete: "已完成最多五頁的探索，或沒有更多公開專案。",
+    manualHeading: "手動加入專案",
+    repositoryLabel: "專案識別字串或 GitHub 網址",
     repositoryHelp: "格式為 owner/name 或 https://github.com/owner/name。",
-    refLabel: "ref（分支、標籤或 commit SHA）",
+    refLabel: "版本（分支、標籤或 commit SHA）",
     refOptional: "可選",
-    resolve: "解析 repository",
-    repositoryHeading: "公開 repository",
+    resolve: "解析專案",
+    repositoryHeading: "公開專案",
     repositoryCount: (selected, total) => `已選 ${selected} 個，共 ${total} 個`,
-    repositoryDescription: "使用鍵盤勾選你想呈現的 repositories。",
+    repositoryDescription: "使用鍵盤勾選你想呈現的專案。",
     selected: "已選取",
     archived: "已封存",
     fork: "fork",
     languageLabel: "語言",
     defaultBranchLabel: "預設分支",
     githubLabel: "GitHub",
-    optionsLegend: "Repository 選項",
+    optionsLegend: "專案選項",
     includeLabel: "包含路徑（逗號分隔）",
     excludeLabel: "排除路徑（逗號分隔）",
-    noRepositories: "目前沒有 repository metadata。請先探索或手動加入。",
+    noRepositories: "目前沒有專案資訊。請先探索或手動加入。",
     confirmSelection: "確認選取並繼續分析",
-    selectionRequired: "至少勾選一個 repository 後才能繼續。",
+    selectionRequired: "至少勾選一個專案後才能繼續。",
     selectionLocked: "選取已確認；你可以在後續步驟返回編輯。",
-    analysisHeading: "逐一分析已確認的 repositories",
+    analysisHeading: "分析已選專案",
     analysisDescription:
-      "每次只分析一個已確認的公開 repository。facts 與 inference 會保留清楚的證據分類。",
+      "分析你已確認的公開專案；完成後檢視專案中可確認的資訊與 AI 推論，再填寫自己的貢獻。",
     providerHeading: "模型連線",
     providerReady: (provider) => `已連線：${provider}`,
     providerNotReady: (provider) =>
-      `${provider} 尚未就緒。Repository 探索仍可使用；分析失敗後可改用手動填寫。`,
+      `${provider} 尚未就緒。專案探索仍可使用；分析失敗後可改用手動填寫。`,
     providerUnknown: "尚未取得模型連線狀態。",
     providerManaged:
       "Ollama、vLLM 與 OpenAI-compatible 的連線資料由伺服器管理，API 金鑰與私人網址不會傳到瀏覽器。",
     providerLastChecked: "最後檢查",
     refreshProvider: "重新檢查",
     checkingProvider: "正在檢查模型連線…",
-    analyze: "分析 repository",
+    analyze: "分析專案",
     analyzing: "分析中…",
     analyzed: "分析完成",
     unavailable: "分析不可用",
-    analysisRequired: "請先確認 repository 選取。",
-    analysisRunning: "此 repository 正在分析；完成後才可再次操作。",
+    analysisRequired: "請先確認專案選取。",
+    analysisRunning: "此專案正在分析；完成後才可再次操作。",
     analysisComplete: "已取得分析結果；如需更新可明確重新分析。",
     retryAnalysis: "重新分析",
     prepareAnalysis: "準備批次分析",
     createBatch: "開始批次分析",
     batchPreflightRequired: "請先完成可用的分析前檢查。",
     batchCreationPending: "正在建立批次分析。",
-    continueContributions: "檢視 facts 並填寫貢獻",
+    continueContributions: "檢視專案中可確認的資訊並填寫貢獻",
     continueManually: "略過分析，手動填寫貢獻",
     back: "返回",
-    editSelection: "編輯 repository 選擇",
+    editSelection: "編輯專案選擇",
     startOver: "重新開始",
     startOverConfirm: "重新開始會清除目前尚未儲存的引導內容。確定繼續嗎？",
     navigationBlockedByBatch:
       "目前批次分析仍在執行。請先在下方取消批次，等待狀態更新後再返回、編輯選擇或重新開始。",
-    factsHeading: "REPOSITORY_FACT｜repository facts",
-    factsDescription:
-      "直接來自已固定 commit 的 repository 內容；不代表個人貢獻。",
-    noFacts: "沒有可顯示的 repository facts。",
-    inferenceHeading: "MODEL_INFERENCE｜模型推論",
+    factsHeading: "專案中可確認的資訊",
+    factsDescription: "直接來自已固定 commit 的專案內容；不代表個人貢獻。",
+    noFacts: "沒有可顯示的專案中可確認資訊。",
+    inferenceHeading: "AI 推論",
     inferenceDescription:
-      "由模型根據 evidence 提出的推論；不會自動成為 owner assertion。",
-    noInferences: "沒有模型推論。",
+      "AI 根據參考依據提出的推論；不會自動成為你已確認的個人貢獻。",
+    noInferences: "沒有 AI 推論。",
     skipped: (count) => `已略過 ${count} 個不符合安全規則的項目`,
-    contributionsHeading: "你對這個 repository 的貢獻",
+    contributionsHeading: "你對這個專案的貢獻",
     contributionsDescription:
-      "請用自己的話描述工作與不應歸屬給你的內容。模型建議只是草稿，必須由你確認或編輯。",
-    ownerStatementLabel: "原始 owner statement",
+      "請用自己的話描述工作與不應歸屬給你的內容。AI 建議只是草稿，必須由你確認或編輯。",
+    ownerStatementLabel: "你的貢獻說明",
     ownerStatementHelp:
-      "原文會一直顯示在建議旁邊；這裡不會由 repository 內容推斷你的身分。",
+      "原文會一直顯示在建議旁邊；專案內容無法證明你的身分或角色。",
     suggest: "產生可編輯建議",
     suggesting: "產生建議中…",
     manualEntry: "手動輸入貢獻",
-    manualEntryHelp: "模型不可用時，你仍可直接填寫雙語角色、摘要與宣告。",
-    statementRequired: "先填寫 owner statement 才能請求建議。",
-    proposalHeading: "模型建議（尚未確認）",
+    manualEntryHelp: "模型不可用時，你仍可直接填寫雙語角色、摘要與貢獻描述。",
+    statementRequired: "先填寫你的貢獻說明才能請求建議。",
+    proposalHeading: "AI 建議（尚未確認）",
     proposalDescription:
-      "以下欄位可以編輯；按下接受或儲存編輯後接受，才會成為 OWNER_ASSERTION。",
-    originalStatement: "你的原始敘述",
-    proposedAssertionsHeading: "OWNER_ASSERTION｜提議中的 owner assertions",
-    proposedAssertionsDescription: "這些內容仍是提議，尚未進入 YAML。",
+      "以下欄位可以編輯；只有你明確確認或編輯後接受，才會成為你已確認的個人貢獻。",
+    originalStatement: "你的原始貢獻說明",
+    proposedAssertionsHeading: "待你確認的個人貢獻",
+    proposedAssertionsDescription: "這些內容仍是草稿，尚未進入 YAML。",
     roleLabel: "角色",
     summaryLabel: "摘要",
-    claimsHeading: "宣告",
-    claimLabel: (kind) => `${kind} 宣告`,
-    accept: "接受建議",
+    claimsHeading: "貢獻描述",
+    claimLabel: (kind) =>
+      ({
+        role: "角色",
+        responsibility: "負責內容",
+        achievement: "成果",
+        context: "背景",
+      })[kind] ?? kind,
+    accept: "確認這份貢獻",
     saveEditsAndAccept: "儲存編輯並接受",
-    reject: "拒絕建議",
-    proposalRequired: "先產生建議，或拒絕後自行填寫新的 statement。",
-    assertionConfirmed: "此 repository 的貢獻已由你確認為 OWNER_ASSERTION。",
+    reject: "拒絕並重新填寫",
+    proposalRequired: "先產生建議，或拒絕後重新填寫你的貢獻說明。",
+    assertionConfirmed: "此專案的貢獻已由你確認。",
     confirmationRequired:
-      "每個已選 repository 都需要確認或拒絕建議後才能檢閱。",
+      "每個已選專案都需要確認貢獻後才能繼續。拒絕建議後，請重新填寫並確認。",
     profileHeading: "填寫基本資料",
     profileDescription:
-      "這些公開文字會成為完整 YAML 草稿的一部分；請提供中英文內容，不要讓模型替你猜測個人資料。",
+      "這些公開文字會成為完整設定草稿的一部分；請提供中英文內容，不要讓模型替你猜測個人資料。",
     displayNameLabel: "顯示名稱",
-    headlineLabel: "標題",
+    headlineLabel: "一句話介紹自己",
     bioLabel: "簡介",
     greetingLabel: "問候語",
     profileLocale: (locale) => (locale === "zh-TW" ? "繁體中文" : "English"),
@@ -306,13 +335,13 @@ const COPY: Record<Locale, Copy> = {
     continueReview: "繼續檢閱草稿",
     reviewHeading: "檢閱已確認內容",
     reviewDescription:
-      "再次確認哪些文字會進入 schema-v1 YAML；未確認的 inference 不會進入草稿。",
+      "再次確認哪些文字會進入設定草稿；尚未確認的 AI 推論不會進入草稿。",
     confirmed: "已確認",
     notConfirmed: "尚未確認",
     createDraft: "建立完整 YAML 草稿",
     draftHeading: "草稿已準備好",
     draftDescription:
-      "草稿可先通過既有 validation/preview；儲存到 GitHub 是另一個明確動作。",
+      "草稿可先通過既有的驗證與預覽；儲存到 GitHub 是另一個明確動作。",
     copyDraft: "複製 YAML",
     downloadDraft: "下載 YAML",
     draftReady: "YAML 草稿已建立，可在進階模式中檢視。",
@@ -324,34 +353,37 @@ const COPY: Record<Locale, Copy> = {
     disabledBusy: "目前操作進行中，請稍候。",
     disabledNeedsAccount: "輸入 GitHub 使用者名稱或 URL 後才能探索。",
     disabledSelectionConfirmed: "選取已確認；不能在此步驟再修改。",
-    disabledNoSelection: "至少選取一個 repository 後才能繼續。",
+    disabledNoSelection: "至少選取一個專案後才能繼續。",
     disabledAnalysisRunning: "等待目前分析完成。",
-    disabledNeedsAnalysis: "完成所有已選 repository 的分析後才能繼續。",
-    disabledNeedsStatement: "填寫原始 owner statement 後才能產生建議。",
+    disabledNeedsAnalysis: "完成所有已選專案的分析後才能繼續。",
+    disabledNeedsStatement: "填寫原始貢獻說明後才能產生建議。",
     disabledNeedsProposal: "先產生一份模型建議，或完成可確認的貢獻文字。",
     disabledNeedsBilingualContribution:
       "請完成繁體中文與 English 的角色和摘要後才能接受。",
-    disabledNeedsConfirmation: "先明確接受、編輯並接受，或拒絕每份建議。",
+    disabledNeedsConfirmation:
+      "請確認每個專案的貢獻；拒絕建議後仍需重新填寫並確認。",
   },
   en: {
     product: "RepoNPC",
     title: "Guided portfolio setup",
     introTitle: "Let RepoNPC understand your work",
     introBody:
-      "Choose public GitHub repositories, inspect verifiable repository facts, and confirm your own contribution. The result is a complete bilingual configuration draft that you can preview, copy, or download.",
+      "Choose public GitHub projects, review information you can verify from them, and confirm your own contribution. The result is a complete bilingual configuration draft that you can validate, preview, copy, or download.",
     outcome: "You will get",
     outcomeItems: [
-      "Repository facts kept separate from model inferences",
-      "Personal text becomes OWNER_ASSERTION only after you accept or edit it",
-      "A schema-v1 YAML draft that works without a GitHub writeback token",
+      "Project information you can verify, kept separate from AI inferences",
+      "Your confirmed contribution appears only after you accept or edit it",
+      "A YAML configuration draft that works without a GitHub writeback token",
     ],
     start: "Start guided setup",
     startAi: "Set up AI and begin",
     startManual: "Build manually first",
     modelsHeading: "Set up AI models",
     modelsDescription:
-      "Test the analysis/chat model and search model separately, then explicitly choose them for analysis. This does not change the public website model.",
+      "Test the analysis/chat model and content finder separately, then choose them for analysis. The content finder organizes project content and locates supporting information for answers. This does not change the model used by the public website.",
     confirmModels: "Finish model setup and choose projects",
+    modelsRequired:
+      "Test both models, then select them and choose Use for analysis in the selection panel.",
     advanced: "Use advanced raw YAML",
     advancedDescription: "Experienced owners can edit reponpc.yml directly.",
     progress: "Guided setup progress",
@@ -365,61 +397,60 @@ const COPY: Record<Locale, Copy> = {
       review: "Review",
       draft: "Draft ready",
     },
-    accountHeading: "Discover public repositories",
+    accountHeading: "Discover public projects",
     accountLabel: "GitHub username or profile URL",
     accountHelp:
-      "Only public metadata is read; no source or model call happens before checkbox confirmation.",
-    discover: "Discover repositories",
+      "Only public project information is read; no code is downloaded and no model call happens before you confirm the checkboxes.",
+    discover: "Discover projects",
     discoverAgain: "Load next page",
-    searchLabel: "Filter loaded repositories",
-    noMatches: "No loaded repository matches this filter.",
+    searchLabel: "Filter loaded projects",
+    noMatches: "No loaded project matches this filter.",
     discoveryComplete:
-      "Discovery reached five pages or GitHub has no more public repositories.",
-    manualHeading: "Add a repository manually",
-    repositoryLabel: "Repository slug or GitHub URL",
+      "Discovery reached five pages or GitHub has no more public projects.",
+    manualHeading: "Add a project manually",
+    repositoryLabel: "Project identifier or GitHub URL",
     repositoryHelp: "Use owner/name or https://github.com/owner/name.",
-    refLabel: "Ref (branch, tag, or commit SHA)",
+    refLabel: "Version (branch, tag, or commit SHA)",
     refOptional: "optional",
-    resolve: "Resolve repository",
-    repositoryHeading: "Public repositories",
+    resolve: "Resolve project",
+    repositoryHeading: "Public projects",
     repositoryCount: (selected, total) => `${selected} selected of ${total}`,
     repositoryDescription:
-      "Use the keyboard to check the repositories you want to present.",
+      "Use the keyboard to choose the projects you want to present.",
     selected: "Selected",
     archived: "archived",
     fork: "fork",
     languageLabel: "Language",
     defaultBranchLabel: "Default branch",
     githubLabel: "GitHub",
-    optionsLegend: "Repository options",
+    optionsLegend: "Project options",
     includeLabel: "Include paths (comma separated)",
     excludeLabel: "Exclude paths (comma separated)",
     noRepositories:
-      "No repository metadata yet. Discover an account or add one manually.",
+      "No project information yet. Discover an account or add one manually.",
     confirmSelection: "Confirm selection and continue to analysis",
-    selectionRequired: "Select at least one repository before continuing.",
+    selectionRequired: "Select at least one project before continuing.",
     selectionLocked:
       "Selection is confirmed. You can return and edit it from later steps.",
-    analysisHeading: "Analyze confirmed repositories one at a time",
+    analysisHeading: "Analyze selected projects",
     analysisDescription:
-      "Each request analyzes one confirmed public repository. Facts and inferences remain visibly classified.",
+      "Analyze confirmed public projects, then review information you can verify from each project and AI inferences before describing your contribution.",
     providerHeading: "Model connection",
     providerReady: (provider) => `Connected: ${provider}`,
     providerNotReady: (provider) =>
-      `${provider} is not ready. Repository discovery still works; after an analysis failure you can continue with manual entry.`,
+      `${provider} is not ready. Project discovery still works; after an analysis failure you can continue with manual entry.`,
     providerUnknown: "The model connection status is unavailable.",
     providerManaged:
       "Ollama, vLLM, and OpenAI-compatible connection details are managed by the server. API keys and private URLs are never sent to the browser.",
     providerLastChecked: "Last checked",
     refreshProvider: "Recheck",
     checkingProvider: "Checking the model connection…",
-    analyze: "Analyze repository",
+    analyze: "Analyze project",
     analyzing: "Analyzing…",
     analyzed: "Analysis complete",
     unavailable: "Analysis unavailable",
-    analysisRequired: "Confirm your repository selection first.",
-    analysisRunning:
-      "This repository is being analyzed; wait for it to finish.",
+    analysisRequired: "Confirm your project selection first.",
+    analysisRunning: "This project is being analyzed; wait for it to finish.",
     analysisComplete:
       "Analysis is complete; explicitly retry if you want a fresh result.",
     retryAnalysis: "Analyze again",
@@ -427,62 +458,69 @@ const COPY: Record<Locale, Copy> = {
     createBatch: "Start batch analysis",
     batchPreflightRequired: "Complete an available preflight before starting.",
     batchCreationPending: "Creating the analysis batch.",
-    continueContributions: "Review facts and describe contribution",
+    continueContributions:
+      "Review information you can verify and describe contribution",
     continueManually: "Skip analysis and enter contribution manually",
     back: "Back",
-    editSelection: "Edit repository selection",
+    editSelection: "Edit project selection",
     startOver: "Start over",
     startOverConfirm:
       "Starting over clears the unsaved guided setup. Continue?",
     navigationBlockedByBatch:
       "A batch analysis is still running. Cancel it below and wait for the status update before going back, editing the selection, or starting over.",
-    factsHeading: "REPOSITORY_FACT | Repository facts",
+    factsHeading: "Project information you can verify",
     factsDescription:
-      "Directly observed at the pinned commit; they do not prove personal contribution.",
-    noFacts: "No repository facts to display.",
-    inferenceHeading: "MODEL_INFERENCE | Model inferences",
+      "Directly observed at the pinned commit; it does not prove personal contribution.",
+    noFacts: "No verifiable project information to display.",
+    inferenceHeading: "AI inferences",
     inferenceDescription:
-      "Model proposals grounded in evidence; they never become owner assertions automatically.",
-    noInferences: "No model inferences.",
+      "AI suggestions grounded in supporting information; they never become your confirmed contribution automatically.",
+    noInferences: "No AI inferences.",
     skipped: (count) => `${count} items were skipped by safety rules`,
-    contributionsHeading: "Your contribution to this repository",
+    contributionsHeading: "Your contribution to this project",
     contributionsDescription:
-      "Describe your work and boundaries in your own words. Model suggestions are drafts that require explicit confirmation or editing.",
-    ownerStatementLabel: "Original owner statement",
+      "Describe your work and boundaries in your own words. AI suggestions are drafts that require explicit confirmation or editing.",
+    ownerStatementLabel: "Your contribution description",
     ownerStatementHelp:
-      "The original text stays beside every proposal; repository content cannot establish your identity or role.",
+      "The original text stays beside every suggestion; project content cannot establish your identity or role.",
     suggest: "Generate editable suggestion",
     suggesting: "Generating suggestion…",
     manualEntry: "Enter contribution manually",
     manualEntryHelp:
-      "When the model is unavailable, fill in bilingual role, summary, and claims yourself.",
+      "When the model is unavailable, fill in the bilingual role, summary, and contribution descriptions yourself.",
     statementRequired:
-      "Enter an owner statement before requesting a suggestion.",
-    proposalHeading: "Model proposal (unconfirmed)",
+      "Enter your contribution description before requesting a suggestion.",
+    proposalHeading: "AI suggestion (unconfirmed)",
     proposalDescription:
-      "Edit these fields, then accept the proposal. Only explicit acceptance creates OWNER_ASSERTION text.",
-    originalStatement: "Your original statement",
-    proposedAssertionsHeading: "OWNER_ASSERTION | Proposed owner assertions",
+      "Edit these fields, then explicitly confirm the suggestion. Only explicit confirmation makes this your confirmed contribution.",
+    originalStatement: "Your original contribution description",
+    proposedAssertionsHeading:
+      "Personal contribution awaiting your confirmation",
     proposedAssertionsDescription:
       "These are proposals only and are not in YAML yet.",
     roleLabel: "Role",
     summaryLabel: "Summary",
-    claimsHeading: "Claims",
-    claimLabel: (kind) => `${kind} claim`,
-    accept: "Accept proposal",
+    claimsHeading: "Contribution descriptions",
+    claimLabel: (kind) =>
+      ({
+        role: "Role",
+        responsibility: "Responsibilities",
+        achievement: "Achievement",
+        context: "Context",
+      })[kind] ?? kind,
+    accept: "Confirm contribution",
     saveEditsAndAccept: "Save edits and accept",
-    reject: "Reject proposal",
+    reject: "Reject and rewrite",
     proposalRequired:
-      "Generate a proposal first, or reject it and write a new statement.",
-    assertionConfirmed:
-      "This repository contribution is confirmed as OWNER_ASSERTION.",
+      "Generate a suggestion first, or reject it and write a new contribution description.",
+    assertionConfirmed: "You confirmed this project's contribution.",
     confirmationRequired:
-      "Every selected repository needs an explicit accept/edit-and-accept or reject action before review.",
+      "Confirm a contribution for every selected project. After rejecting a suggestion, rewrite and confirm it before continuing.",
     profileHeading: "Add your basic profile",
     profileDescription:
       "These public fields become part of the complete YAML draft. Supply both languages; do not ask a model to guess personal profile details.",
     displayNameLabel: "Display name",
-    headlineLabel: "Headline",
+    headlineLabel: "One-line introduction",
     bioLabel: "Bio",
     greetingLabel: "Greeting",
     profileLocale: (locale) =>
@@ -493,13 +531,13 @@ const COPY: Record<Locale, Copy> = {
     continueReview: "Continue to draft review",
     reviewHeading: "Review confirmed content",
     reviewDescription:
-      "Confirm which text enters the schema-v1 YAML; unconfirmed inferences stay out of the draft.",
+      "Confirm which text enters the configuration draft; unconfirmed AI inferences stay out of the draft.",
     confirmed: "Confirmed",
     notConfirmed: "Not confirmed",
     createDraft: "Create complete YAML draft",
     draftHeading: "Draft ready",
     draftDescription:
-      "Run the existing validation/preview first; saving to GitHub remains a separate explicit action.",
+      "Run the existing checks and preview first; saving to GitHub remains a separate explicit action.",
     copyDraft: "Copy YAML",
     downloadDraft: "Download YAML",
     draftReady: "The YAML draft is ready to inspect in advanced mode.",
@@ -511,21 +549,21 @@ const COPY: Record<Locale, Copy> = {
     errorHeading: "Guided setup error",
     disabledBusy: "An operation is in progress; wait a moment.",
     disabledNeedsAccount:
-      "Enter a GitHub username or URL before discovering repositories.",
+      "Enter a GitHub username or URL before discovering projects.",
     disabledSelectionConfirmed:
       "Selection is confirmed and cannot be edited at this step.",
-    disabledNoSelection: "Select at least one repository before continuing.",
+    disabledNoSelection: "Select at least one project before continuing.",
     disabledAnalysisRunning: "Wait for the current analysis to finish.",
     disabledNeedsAnalysis:
-      "Complete analysis for every selected repository before continuing.",
+      "Complete analysis for every selected project before continuing.",
     disabledNeedsStatement:
-      "Enter the original owner statement before generating a proposal.",
+      "Enter your contribution description before generating a suggestion.",
     disabledNeedsProposal:
       "Generate a proposal first, or finish contribution text that can be confirmed.",
     disabledNeedsBilingualContribution:
       "Complete both Traditional Chinese and English role and summary fields before accepting.",
     disabledNeedsConfirmation:
-      "Explicitly accept, edit and accept, or reject every proposal first.",
+      "Confirm each project's contribution. Rejected suggestions must be rewritten and confirmed before continuing.",
   },
 };
 
@@ -819,22 +857,20 @@ function RepositoryRow({
       data-slug={repository.metadata.slug}
     >
       <div className="guided-onboarding__repository-header">
-        <label htmlFor={`guided-repository-${slugId}`}>
-          <input
-            checked={repository.selected}
-            disabled={selectionLocked || busy}
-            id={`guided-repository-${slugId}`}
-            onChange={() =>
-              onAction({
-                type: "TOGGLE_REPOSITORY",
-                slug: repository.metadata.slug,
-              })
-            }
-            type="checkbox"
-          />
+        <CheckboxField
+          checked={repository.selected}
+          disabled={selectionLocked || busy}
+          id={`guided-repository-${slugId}`}
+          onChange={() =>
+            onAction({
+              type: "TOGGLE_REPOSITORY",
+              slug: repository.metadata.slug,
+            })
+          }
+        >
           <strong>{repository.metadata.name}</strong>
           <code>{repository.metadata.slug}</code>
-        </label>
+        </CheckboxField>
         <span>
           {repository.selected ? copy.selected : ""}
           {repository.metadata.is_archived ? ` · ${copy.archived}` : ""}
@@ -865,33 +901,36 @@ function RepositoryRow({
         </dd>
       </dl>
       {!selectionLocked && (
-        <fieldset disabled={busy}>
-          <legend>{copy.optionsLegend}</legend>
-          <label htmlFor={`guided-ref-${slugId}`}>
-            {copy.refLabel} ({copy.refOptional})
-            <input
-              id={`guided-ref-${slugId}`}
-              onChange={(event) => optionChange("ref", event)}
-              value={repository.ref ?? ""}
-            />
-          </label>
-          <label htmlFor={`guided-include-${slugId}`}>
-            {copy.includeLabel}
-            <input
-              id={`guided-include-${slugId}`}
-              onChange={(event) => optionChange("include", event)}
-              value={repository.include.join(", ")}
-            />
-          </label>
-          <label htmlFor={`guided-exclude-${slugId}`}>
-            {copy.excludeLabel}
-            <input
-              id={`guided-exclude-${slugId}`}
-              onChange={(event) => optionChange("exclude", event)}
-              value={repository.exclude.join(", ")}
-            />
-          </label>
-        </fieldset>
+        <details>
+          <summary>{copy.optionsLegend}</summary>
+          <fieldset disabled={busy}>
+            <legend>{copy.optionsLegend}</legend>
+            <label htmlFor={`guided-ref-${slugId}`}>
+              {copy.refLabel} ({copy.refOptional})
+              <input
+                id={`guided-ref-${slugId}`}
+                onChange={(event) => optionChange("ref", event)}
+                value={repository.ref ?? ""}
+              />
+            </label>
+            <label htmlFor={`guided-include-${slugId}`}>
+              {copy.includeLabel}
+              <input
+                id={`guided-include-${slugId}`}
+                onChange={(event) => optionChange("include", event)}
+                value={repository.include.join(", ")}
+              />
+            </label>
+            <label htmlFor={`guided-exclude-${slugId}`}>
+              {copy.excludeLabel}
+              <input
+                id={`guided-exclude-${slugId}`}
+                onChange={(event) => optionChange("exclude", event)}
+                value={repository.exclude.join(", ")}
+              />
+            </label>
+          </fieldset>
+        </details>
       )}
       {selectionLocked && <p>{copy.selectionLocked}</p>}
       {state.step === "analysis" && (
@@ -1160,22 +1199,11 @@ function ContributionEditor({
                   : undefined
               }
               disabled={Boolean(proposalDisabledReason)}
+              className="ux-primary"
               onClick={() => confirmContribution(proposal)}
               type="button"
             >
               {copy.accept}
-            </button>
-            <button
-              aria-describedby={
-                proposalDisabledReason
-                  ? `guided-proposal-reason-${slugId}`
-                  : undefined
-              }
-              disabled={Boolean(proposalDisabledReason)}
-              onClick={() => confirmContribution(proposal)}
-              type="button"
-            >
-              {copy.saveEditsAndAccept}
             </button>
             <button
               disabled={busy}
@@ -1200,52 +1228,6 @@ function ContributionEditor({
         <p>{copy.proposalRequired}</p>
       )}
     </article>
-  );
-}
-
-function Progress({
-  state,
-  copy,
-}: {
-  state: GuidedOnboardingState;
-  copy: Copy;
-}) {
-  const steps: readonly GuidedStep[] =
-    state.route === "manual"
-      ? ["repositories", "contributions", "profile", "review"]
-      : [
-          "models",
-          "repositories",
-          "analysis",
-          "contributions",
-          "profile",
-          "review",
-        ];
-  const current = steps.indexOf(state.step);
-  if (current < 0) return null;
-  return (
-    <section
-      aria-label={copy.progress}
-      className="guided-onboarding__progress"
-      data-current-step={state.step}
-    >
-      <p>
-        {copy.progress}: {current + 1}/{steps.length}
-      </p>
-      <progress max={steps.length} value={current + 1}>
-        {current + 1}/{steps.length}
-      </progress>
-      <ol>
-        {steps.map((step, index) => (
-          <li
-            aria-current={step === state.step ? "step" : undefined}
-            key={step}
-          >
-            <span>{index + 1}</span> {copy.steps[step]}
-          </li>
-        ))}
-      </ol>
-    </section>
   );
 }
 
@@ -1320,7 +1302,7 @@ function ModelsStep({
   const reason = busy
     ? copy.disabledBusy
     : !state.modelsConfigured
-      ? copy.confirmModels
+      ? copy.modelsRequired
       : null;
   return (
     <section
@@ -1334,6 +1316,7 @@ function ModelsStep({
         aria-describedby={reason ? "guided-models-reason" : undefined}
         disabled={Boolean(reason) || busy}
         onClick={() => onAction({ type: "COMPLETE_MODEL_SETUP" })}
+        className="ux-primary"
         type="button"
       >
         {copy.confirmModels}
@@ -1368,7 +1351,6 @@ function RepositoriesStep({
   onResolve: GuidedOnboardingViewProps["onResolve"];
 }) {
   const [search, setSearch] = useState("");
-  const [lastDiscoverAccount, setLastDiscoverAccount] = useState("");
   const selectedCount = selectedRepositories(state).length;
   const accountMissing = state.githubAccount.trim().length === 0;
   const discoveryFinished =
@@ -1432,11 +1414,7 @@ function RepositoriesStep({
         disabled={Boolean(discoverReason)}
         onClick={() => {
           const account = state.githubAccount.trim();
-          const page =
-            lastDiscoverAccount === account && state.discoveryPage > 0
-              ? state.discoveryPage + 1
-              : 1;
-          setLastDiscoverAccount(account);
+          const page = state.discoveryPage + 1;
           onDiscover(account, page);
         }}
         type="button"
@@ -1702,6 +1680,7 @@ function AnalysisStep({
         }
         disabled={Boolean(continueReason)}
         onClick={() => onAction({ type: "CONTINUE_TO_CONTRIBUTIONS" })}
+        className="ux-primary"
         type="button"
       >
         {allTerminal || batchAnalysisTerminal
@@ -1744,15 +1723,32 @@ function ContributionsStep({
     >
       <h2 id="guided-contributions-heading">{copy.contributionsHeading}</h2>
       <p>{copy.contributionsDescription}</p>
-      {repositories.map((repository) => (
-        <ContributionEditor
-          busy={busy}
-          copy={copy}
-          key={repository.metadata.slug}
-          onAction={onAction}
-          onSuggestContribution={onSuggestContribution}
-          repository={repository}
-        />
+      <p role="status">
+        {copy.confirmed}:{" "}
+        {
+          repositories.filter(
+            (repository) => repository.confirmedContribution !== null,
+          ).length
+        }
+        /{repositories.length}
+      </p>
+      {repositories.map((repository, index) => (
+        <details key={repository.metadata.slug} open={index === 0}>
+          <summary>
+            {repository.metadata.slug} ·{" "}
+            {repository.confirmedContribution
+              ? copy.confirmed
+              : copy.notConfirmed}
+          </summary>
+          <ContributionEditor
+            busy={busy}
+            copy={copy}
+            key={repository.metadata.slug}
+            onAction={onAction}
+            onSuggestContribution={onSuggestContribution}
+            repository={repository}
+          />
+        </details>
       ))}
       <button
         aria-describedby={
@@ -1760,6 +1756,7 @@ function ContributionsStep({
         }
         disabled={Boolean(continueReason)}
         onClick={() => onAction({ type: "CONTINUE_TO_PROFILE" })}
+        className="ux-primary"
         type="button"
       >
         {copy.profileHeading}
@@ -1782,6 +1779,20 @@ function ProfileStep({
 }) {
   const profile = state.profile;
   const complete = profileIsComplete(profile);
+  const missing = [
+    {
+      id: "guided-profile-display-name",
+      label: copy.displayNameLabel,
+      value: profile.displayName,
+    },
+    ...(["headline", "bio", "greeting"] as const).flatMap((field) =>
+      (["zh-TW", "en"] as const).map((language) => ({
+        id: `guided-profile-${field}-${language}`,
+        label: `${copy[`${field}Label`]} (${copy.profileLocale(language)})`,
+        value: localized(profile[field], language),
+      })),
+    ),
+  ].filter((field) => !field.value.trim());
   const confirmationReason = busy
     ? copy.disabledBusy
     : !complete
@@ -1799,11 +1810,32 @@ function ProfileStep({
     >
       <h2 id="guided-profile-heading">{copy.profileHeading}</h2>
       <p>{copy.profileDescription}</p>
+      {missing.length > 0 && (
+        <aside className="ux-missing-fields" aria-label={copy.profileRequired}>
+          <p>{copy.profileRequired}</p>
+          <ul>
+            {missing.map((field) => (
+              <li key={field.id}>
+                <a
+                  href={`#${field.id}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    document.getElementById(field.id)?.focus();
+                  }}
+                >
+                  {field.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </aside>
+      )}
       <label htmlFor="guided-profile-display-name">
         {copy.displayNameLabel}
         <input
           disabled={busy}
           id="guided-profile-display-name"
+          required
           onChange={(event) =>
             setProfile(profileWithDisplayName(profile, event.target.value))
           }
@@ -1820,6 +1852,7 @@ function ProfileStep({
             {copy.profileLocale(profileLocale)}
             <input
               id={`guided-profile-headline-${profileLocale}`}
+              required
               onChange={(event) =>
                 setProfile(
                   profileWithField(
@@ -1845,6 +1878,7 @@ function ProfileStep({
             {copy.profileLocale(profileLocale)}
             <textarea
               id={`guided-profile-bio-${profileLocale}`}
+              required
               onChange={(event) =>
                 setProfile(
                   profileWithField(
@@ -1871,6 +1905,7 @@ function ProfileStep({
             {copy.profileLocale(profileLocale)}
             <textarea
               id={`guided-profile-greeting-${profileLocale}`}
+              required
               onChange={(event) =>
                 setProfile(
                   profileWithField(
@@ -1893,6 +1928,7 @@ function ProfileStep({
         }
         disabled={Boolean(confirmationReason)}
         onClick={() => onAction({ type: "CONFIRM_PROFILE" })}
+        className="ux-primary"
         type="button"
       >
         {copy.confirmProfile}
@@ -1907,11 +1943,13 @@ function ReviewStep({
   copy,
   busy,
   onCreateDraft,
+  onAction,
 }: {
   state: GuidedOnboardingState;
   copy: Copy;
   busy: boolean;
   onCreateDraft: GuidedOnboardingViewProps["onCreateDraft"];
+  onAction: GuidedOnboardingViewProps["onAction"];
 }) {
   const repositories = selectedRepositories(state);
   return (
@@ -1951,10 +1989,38 @@ function ReviewStep({
             {repository.confirmedContribution ? (
               <>
                 <span>{copy.confirmed}</span>
-                <p>{localized(repository.confirmedContribution.role, "en")}</p>
-                <p>
-                  {localized(repository.confirmedContribution.summary, "en")}
-                </p>
+                {(["zh-TW", "en"] as const).map((language) => (
+                  <section
+                    className="ux-review-item"
+                    lang={language}
+                    key={language}
+                  >
+                    <h4>{copy.profileLocale(language)}</h4>
+                    <dl>
+                      <dt>{copy.roleLabel}</dt>
+                      <dd>
+                        {localized(
+                          repository.confirmedContribution!.role,
+                          language,
+                        )}
+                      </dd>
+                      <dt>{copy.summaryLabel}</dt>
+                      <dd>
+                        {localized(
+                          repository.confirmedContribution!.summary,
+                          language,
+                        )}
+                      </dd>
+                    </dl>
+                    <ul>
+                      {repository.confirmedContribution!.claims.map((claim) => (
+                        <li key={claim.id}>
+                          {localized(claim.statement, language)}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
               </>
             ) : (
               <span>{copy.notConfirmed}</span>
@@ -1962,7 +2028,19 @@ function ReviewStep({
           </li>
         ))}
       </ul>
-      <button disabled={busy} onClick={onCreateDraft} type="button">
+      <button
+        disabled={busy}
+        onClick={() => onAction({ type: "GO_BACK" })}
+        type="button"
+      >
+        {copy.back} · {copy.profileHeading}
+      </button>
+      <button
+        className="ux-primary"
+        disabled={busy}
+        onClick={onCreateDraft}
+        type="button"
+      >
         {copy.createDraft}
       </button>
     </section>
@@ -1972,6 +2050,7 @@ function ReviewStep({
 function DraftStep({
   state,
   copy,
+  locale,
   busy,
   onAction,
   onCopyDraft,
@@ -1979,11 +2058,16 @@ function DraftStep({
 }: {
   state: GuidedOnboardingState;
   copy: Copy;
+  locale: Locale;
   busy: boolean;
   onAction: GuidedOnboardingViewProps["onAction"];
   onCopyDraft: GuidedOnboardingViewProps["onCopyDraft"];
   onDownloadDraft: GuidedOnboardingViewProps["onDownloadDraft"];
 }) {
+  const [copyStatus, setCopyStatus] = useState<
+    "idle" | "pending" | "done" | "failed"
+  >("idle");
+  const chinese = locale === "zh-TW";
   return (
     <section
       aria-labelledby="guided-draft-heading"
@@ -1991,15 +2075,50 @@ function DraftStep({
     >
       <h2 id="guided-draft-heading">{copy.draftHeading}</h2>
       <p>{copy.draftDescription}</p>
+      <p>
+        {chinese
+          ? "設定草稿已完成，尚未發布。你可以下載保存，或進入進階模式驗證與預覽。"
+          : "Your configuration draft is complete but not published. Download it, or open advanced mode to validate and preview."}
+      </p>
       <p role="status">{copy.draftReady}</p>
       <div className="guided-onboarding__draft-actions">
-        <button disabled={busy} onClick={onCopyDraft} type="button">
-          {copy.copyDraft}
+        <button
+          disabled={busy || copyStatus === "pending"}
+          onClick={async () => {
+            setCopyStatus("pending");
+            try {
+              await onCopyDraft();
+              setCopyStatus("done");
+            } catch {
+              setCopyStatus("failed");
+            }
+          }}
+          type="button"
+        >
+          {copyStatus === "done"
+            ? chinese
+              ? "已複製"
+              : "Copied"
+            : copy.copyDraft}
         </button>
         <button disabled={busy} onClick={onDownloadDraft} type="button">
           {copy.downloadDraft}
         </button>
       </div>
+      {copyStatus === "done" && (
+        <p role="status">
+          {chinese
+            ? "設定草稿已複製到剪貼簿。"
+            : "Configuration copied to clipboard."}
+        </p>
+      )}
+      {copyStatus === "failed" && (
+        <p role="alert">
+          {chinese
+            ? "無法使用剪貼簿，請改用下載 YAML。"
+            : "Clipboard unavailable. Download the YAML instead."}
+        </p>
+      )}
       {state.rawYamlHasUnmappedChanges && (
         <p role="alert">{copy.rawYamlWarning}</p>
       )}
@@ -2044,7 +2163,16 @@ export function GuidedOnboardingView({
   onCreateDraft,
   onCopyDraft,
   onDownloadDraft,
-}: GuidedOnboardingViewProps) {
+  workspaceStatus,
+}: GuidedOnboardingViewProps & { workspaceStatus?: AdminWorkspaceStatus }) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const previousStep = useRef(state.step);
+  useEffect(() => {
+    if (previousStep.current !== state.step) {
+      headingRef.current?.focus();
+      previousStep.current = state.step;
+    }
+  }, [state.step]);
   const copy = COPY[locale];
   const error = errorCode ? guidedErrorMessage(locale, errorCode) : "";
   const navigationBatchActive =
@@ -2060,10 +2188,19 @@ export function GuidedOnboardingView({
       data-step={state.step}
       lang={locale}
     >
+      <AdminStatusCards
+        locale={locale}
+        state={state}
+        status={workspaceStatus ?? EMPTY_WORKSPACE_STATUS}
+      />
       <header className="guided-onboarding__header">
         <p className="guided-onboarding__eyebrow">{copy.product}</p>
-        <h2 id="guided-onboarding-heading">{copy.title}</h2>
-        {state.mode === "guided" && <Progress copy={copy} state={state} />}
+        <h2 id="guided-onboarding-heading" ref={headingRef} tabIndex={-1}>
+          {copy.title} · {copy.steps[state.step]}
+        </h2>
+        {state.mode === "guided" && (
+          <OnboardingStepper copy={copy} locale={locale} state={state} />
+        )}
         {state.step !== "intro" && (
           <div className="guided-onboarding__navigation-actions">
             <button
@@ -2221,6 +2358,7 @@ export function GuidedOnboardingView({
             <ReviewStep
               busy={busy}
               copy={copy}
+              onAction={onAction}
               onCreateDraft={onCreateDraft}
               state={state}
             />
@@ -2229,6 +2367,7 @@ export function GuidedOnboardingView({
             <DraftStep
               busy={busy}
               copy={copy}
+              locale={locale}
               onAction={onAction}
               onCopyDraft={onCopyDraft}
               onDownloadDraft={onDownloadDraft}

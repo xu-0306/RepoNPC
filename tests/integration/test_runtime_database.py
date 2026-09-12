@@ -23,7 +23,7 @@ def test_runtime_database_is_idempotent_and_separate_from_index_data(tmp_path: P
 
     assert database.database_path == tmp_path / "runtime-data" / "runtime.sqlite"
     assert database.database_path.exists()
-    assert database.schema_version() == 18
+    assert database.schema_version() == 20
     assert {
         "runtime_schema_migrations",
         "admin_sessions",
@@ -72,17 +72,37 @@ def test_failed_migration_rolls_back_every_statement(tmp_path: Path) -> None:
     assert database.schema_version() == 0
 
 
+def test_provider_message_migration_is_atomic(tmp_path: Path) -> None:
+    database = RuntimeDatabase(tmp_path / "provider-message-rollback")
+    previous = tuple(m for m in MIGRATIONS if m.version < 20)
+    database.initialize(migrations=previous)
+    migration = next(m for m in MIGRATIONS if m.version == 20)
+    broken = Migration(
+        version=20, name=migration.name, statements=(migration.statements[0], "INVALID SQL")
+    )
+    with pytest.raises(RuntimeDatabaseError):
+        database.initialize(migrations=(*previous, broken))
+    assert database.schema_version() == 19
+    with database.connection() as connection:
+        for table in ("chat_profiles", "embedding_profiles"):
+            assert "last_error_message" not in {
+                row[1] for row in connection.execute(f"PRAGMA table_info({table})")
+            }
+    database.initialize()
+    assert database.schema_version() == 20
+
+
 def test_concurrent_initialization_creates_one_versioned_schema(tmp_path: Path) -> None:
     database = RuntimeDatabase(tmp_path / "concurrent", busy_timeout_ms=10_000)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         list(executor.map(lambda _unused: database.initialize(), range(2)))
 
-    assert database.schema_version() == 18
+    assert database.schema_version() == 20
     with database.connection() as connection:
         versions = connection.execute("SELECT version FROM runtime_schema_migrations").fetchall()
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()
-    assert [row[0] for row in versions] == list(range(1, 19))
+        assert [row[0] for row in versions] == list(range(1, 21))
     assert foreign_keys is not None and foreign_keys[0] == 1
 
 
@@ -133,13 +153,13 @@ def test_concurrent_initialization_across_database_owners_is_safe(tmp_path: Path
 
         database = RuntimeDatabase(data_dir)
         database.initialize()
-        assert database.schema_version() == 18
+        assert database.schema_version() == 20
         with database.connection() as connection:
             versions = connection.execute(
                 "SELECT version FROM runtime_schema_migrations"
             ).fetchall()
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()
-            assert [row[0] for row in versions] == list(range(1, 19))
+            assert [row[0] for row in versions] == list(range(1, 21))
         assert journal_mode is not None and journal_mode[0] == "wal"
 
 

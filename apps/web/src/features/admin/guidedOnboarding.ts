@@ -356,7 +356,13 @@ export function guidedOnboardingReducer(
       return { ...state, modelsConfigured: action.value };
     case "SET_ACCOUNT":
       requireUnconfirmedSelection(state);
-      return { ...state, githubAccount: action.account };
+      if (state.githubAccount === action.account) return state;
+      return {
+        ...state,
+        githubAccount: action.account,
+        discoveryPage: 0,
+        discoveryHasMore: true,
+      };
     case "MERGE_REPOSITORIES":
       requireUnconfirmedSelection(state);
       return {
@@ -735,8 +741,8 @@ export function guidedErrorMessage(locale: Locale, code: string): string {
     },
     ONBOARDING_MODELS_REQUIRED: {
       "zh-TW":
-        "請先完成分析與回答模型、搜尋模型的測試與確認；也可以改走手動流程。",
-      en: "Test and select both the analysis/chat model and search model first, or continue manually.",
+        "請先完成分析與回答模型、資料查找模型的測試與確認；也可以改走手動流程。",
+      en: "Test and select both the analysis/chat model and content finder first, or continue manually.",
     },
     ONBOARDING_RAW_YAML_UNMAPPED: {
       "zh-TW":

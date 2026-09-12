@@ -13,7 +13,7 @@ RepoNPC 是一個開源、自託管的互動式 GitHub 作品集。你挑選想�
 
 最後檢閱：2026-09-10
 
-模型連線、回答模型與搜尋模型的基礎程式已加入目前 working tree，但首次使用流程尚未正確串接。**規格 0.2.3 / ADR-030** 已核准改為「先設定兩種模型，再選專案並分析」，同時保留立即手動建立作品集的路線。管理員專案分析可在正式索引發布前執行；訪客問答仍需通過正式 bundle 驗證與啟用。修正交接請讀 [模型優先引導實作交接](docs/ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md)，前一版連線／秘密設計見 [模型設定實作交接](docs/MODEL_SETUP_IMPLEMENTATION_HANDOFF.md)。Figma 暫不處理；GGUF／Hugging Face 本地 runtime 仍是後續研究。
+模型連線、回答模型與資料查找模型（技術上為 embedding model）的服務管理、測試與模型優先設定引導已整合至目前 working tree。**規格 0.2.3 / ADR-030** 已核准改為「先設定兩種模型，再選專案並分析」，同時保留立即手動建立作品集的路線。管理員專案分析可在正式索引發布前執行；訪客問答仍需通過正式 bundle 驗證與啟用。修正交接請讀 [模型優先引導實作交接](docs/ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md)，前一版連線／秘密設計見 [模型設定實作交接](docs/MODEL_SETUP_IMPLEMENTATION_HANDOFF.md)。Figma 暫不處理；GGUF／Hugging Face 本地 runtime 仍是後續研究。
 
 ## 30 秒了解 RepoNPC
 
@@ -283,3 +283,13 @@ pnpm run web:check
 ## 授權
 
 `pyproject.toml` 目前宣告為 MIT。正式對外發布前仍應以 repository 根目錄中的 `LICENSE` 檔案為準。
+
+## 新手模型設定修復（2026-09-12）
+
+模型設定的操作順序為「新增服務 → 新增模型 → 測試模型 → 確認用於分析」。已有服務可直接新增模型；資料查找模型的維度留空即可，測試成功時才自動取得。測試不會自動啟用公開網站。失敗卡片顯示 HTTP 狀態或明確的逾時／連線說明，並保留設定供編輯或重試。
+
+只改服務名稱時保留原網址與金鑰；更換網址是獨立選項。新輸入的金鑰會在送出或收合表單後清除。舊的泛用錯誤沒有保留原 HTTP 狀態，須再按一次測試才有新診斷。
+
+此次資料庫升級包含 runtime migration 19 與後續 migration 20，首次載入新版後端時交易式升級。保留舊資料與模型選擇，失敗會回復；正式 bundle 格式不變。完整修復清單與證據見 [UI／UX 修復紀錄](docs/UI_UX_REVIEW_2026-09-12.md)。
+
+模型測試失敗會顯示實際 HTTP 狀態碼與服務商錯誤原文，不翻譯或推測原因。原文會遮蔽已知金鑰及私人網址，並限制長度；無可顯示文字時會明確提示。舊版本未保存的原文需按「測試模型」重新取得。詳見 [錯誤原文修正紀錄](docs/PROVIDER_ERROR_MESSAGES_2026-09-12.md)。

@@ -8,15 +8,18 @@ import sqlite3
 import uuid
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from reponpc.admin.model_connections import ModelConnectionRegistry
+from reponpc.admin.model_probe_errors import provider_probe_error_code
 from reponpc.providers.contracts import (
     ChatProvider,
+    ProviderError,
     ProviderMessage,
     ProviderResult,
 )
+from reponpc.providers.response_diagnostics import ProviderResponseError, ResponseIssue
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 
 _PROFILE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
@@ -57,6 +60,7 @@ class ChatProfile:
     created_at: str
     updated_at: str
     last_probed_at: str | None
+    last_error_message: str | None = field(default=None, repr=False)
 
     def safe_dict(self) -> dict[str, object]:
         return {
@@ -68,6 +72,7 @@ class ChatProfile:
             "active": self.active,
             "observed_model_id": self.observed_model_id,
             "last_error_code": self.last_error_code,
+            "last_error_message": self.last_error_message,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "last_probed_at": self.last_probed_at,
@@ -159,7 +164,8 @@ class ChatProfileRegistry:
                 """
                 UPDATE chat_profiles SET connection_id = ?, connection_revision = ?,
                   model_id = ?, status = 'probe', observed_model_id = NULL,
-                  last_error_code = NULL, updated_at = ?, last_probed_at = NULL
+                  last_error_code = NULL, last_error_message = NULL,
+                  updated_at = ?, last_probed_at = NULL
                 WHERE profile_id = ?
                 """,
                 (connection.connection_id, connection.revision, values.model_id, now, profile_id),
@@ -175,9 +181,10 @@ class ChatProfileRegistry:
 
     def probe(self, profile_id: str) -> ChatProfile:
         profile = self.get(profile_id)
-        provider = self._provider_resolver(profile)
         error_code: str | None = None
+        error_message: str | None = None
         try:
+            provider = self._provider_resolver(profile)
             if provider is None:
                 raise ChatProfileError("CHAT_CONNECTION_REQUIRED")
             result = provider.generate(
@@ -188,14 +195,23 @@ class ChatProfileRegistry:
                     "required": ["ok"],
                     "additionalProperties": False,
                 },
-                max_output_tokens=32,
+                max_output_tokens=provider.capabilities().max_output_tokens,
                 timeout=10.0,
             )
+            if result.finish_reason == "length":
+                raise ProviderResponseError(ResponseIssue.OUTPUT_LIMIT)
             payload = _result_object(result)
             if payload.get("ok") is not True:
                 raise ChatProfileError("CHAT_PROBE_INVALID_RESPONSE")
         except ChatProfileError as exc:
             error_code = exc.code
+        except ProviderError as exc:
+            error_code = provider_probe_error_code(exc)
+            error_message = (
+                exc.diagnostic_message
+                if isinstance(exc, ProviderResponseError)
+                else exc.upstream_message
+            )
         except Exception:
             error_code = "CHAT_PROBE_FAILED"
         now = _time(self._now())
@@ -210,13 +226,14 @@ class ChatProfileRegistry:
             connection.execute(
                 """
                 UPDATE chat_profiles SET status = ?, observed_model_id = ?,
-                  last_error_code = ?, updated_at = ?, last_probed_at = ?
+                  last_error_code = ?, last_error_message = ?, updated_at = ?, last_probed_at = ?
                 WHERE profile_id = ?
                 """,
                 (
                     status,
                     profile.model_id if error_code is None else None,
                     error_code,
+                    error_message,
                     now,
                     now,
                     profile_id,
@@ -292,6 +309,9 @@ def _profile(row: sqlite3.Row) -> ChatProfile:
         active=bool(row["active"]),
         observed_model_id=str(row["observed_model_id"]) if row["observed_model_id"] else None,
         last_error_code=str(row["last_error_code"]) if row["last_error_code"] else None,
+        last_error_message=row["last_error_message"]
+        if "last_error_message" in row.keys()  # noqa: SIM118 - sqlite3.Row iterates values.
+        else None,
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
         last_probed_at=str(row["last_probed_at"]) if row["last_probed_at"] else None,

@@ -42,11 +42,12 @@ class ModelConnectionInput:
 
     display_name: str
     provider: str
-    base_url: str
+    base_url: str | None
     api_key: str | None = None
     credential_action: str = "retain"
+    endpoint_action: str = "replace"
 
-    def validate(self) -> None:
+    def validate(self, *, allow_retain: bool = False) -> None:
         if (
             not isinstance(self.display_name, str)
             or not isinstance(self.provider, str)
@@ -54,9 +55,14 @@ class ModelConnectionInput:
             or len(self.display_name) > 120
             or self.provider not in _PROVIDERS
             or self.credential_action not in {"retain", "replace", "remove"}
+            or self.endpoint_action not in {"retain", "replace"}
         ):
             raise ModelConnectionError("VALIDATION_ERROR")
-        validate_provider_base_url(self.base_url, provider=self.provider)
+        if self.endpoint_action == "retain":
+            if not allow_retain or self.base_url is not None:
+                raise ModelConnectionError("VALIDATION_ERROR")
+        else:
+            validate_provider_base_url(self.base_url, provider=self.provider)
         if self.api_key is not None and (
             not isinstance(self.api_key, str) or len(self.api_key) > 4096
         ):
@@ -248,6 +254,8 @@ class ModelConnectionRegistry:
         self, values: ModelConnectionInput, *, connection_id: str | None = None
     ) -> ModelConnection:
         values.validate()
+        if values.base_url is None:
+            raise ModelConnectionError("VALIDATION_ERROR")
         if values.credential_action == "remove":
             raise ModelConnectionError("VALIDATION_ERROR")
         identifier = connection_id or f"conn-{uuid.uuid4().hex[:16]}"
@@ -392,15 +400,20 @@ class ModelConnectionRegistry:
 
     def update(self, connection_id: str, values: ModelConnectionInput) -> ModelConnection:
         current = self.get(connection_id)
-        values.validate()
+        values.validate(allow_retain=True)
         # Every revision update must prove the existing encrypted lineage is
         # still recoverable.  A replacement credential must not bootstrap a
         # new key beside unreadable historical ciphertext.
         current_secret = self.secret_for(connection_id, current.revision)
+        base_url = (
+            current_secret.base_url if values.endpoint_action == "retain" else values.base_url
+        )
+        if base_url is None:
+            raise ModelConnectionError("VALIDATION_ERROR")
         if values.credential_action == "retain":
             if values.provider != current.provider:
                 raise ModelConnectionError("CREDENTIAL_REPLACE_REQUIRED")
-            if values.base_url != current_secret.base_url:
+            if base_url != current_secret.base_url:
                 raise ModelConnectionError("CREDENTIAL_REPLACE_REQUIRED")
         api_key = (
             values.api_key
@@ -409,9 +422,24 @@ class ModelConnectionRegistry:
             if values.credential_action == "remove"
             else current_secret.api_key
         )
+        if (
+            values.provider == current.provider
+            and base_url == current_secret.base_url
+            and api_key == current_secret.api_key
+        ):
+            # A display-label edit does not change a tested connection identity.
+            with self._database.connection() as connection:
+                updated = connection.execute(
+                    "UPDATE model_connections SET display_name = ?, updated_at = ? "
+                    "WHERE connection_id = ? AND revision = ?",
+                    (values.display_name.strip(), _now(), connection_id, current.revision),
+                )
+                if updated.rowcount != 1:
+                    raise ModelConnectionError("MODEL_CONNECTION_SAVE_FAILED")
+            return self.get(connection_id)
         revision = current.revision + 1
         secret_ref = f"model-connection:{connection_id}:{revision}"
-        ciphertext = self._secret_store.encrypt(ModelConnectionSecret(values.base_url, api_key))
+        ciphertext = self._secret_store.encrypt(ModelConnectionSecret(base_url, api_key))
         now = _now()
         try:
             with self._database.connection() as connection:
@@ -514,21 +542,24 @@ class ModelConnectionRegistry:
         ]
         try:
             with self._database.connection() as connection:
-                connection.execute("BEGIN IMMEDIATE")
-                for reference, ciphertext in encrypted:
-                    connection.execute(
-                        "UPDATE model_connection_secrets SET ciphertext = ? WHERE secret_ref = ?",
-                        (ciphertext, reference),
-                    )
-                connection.execute("COMMIT")
+                try:
+                    connection.execute("BEGIN IMMEDIATE")
+                    for reference, ciphertext in encrypted:
+                        connection.execute(
+                            "UPDATE model_connection_secrets SET ciphertext = ? "
+                            "WHERE secret_ref = ?",
+                            (ciphertext, reference),
+                        )
+                    connection.execute("COMMIT")
+                except Exception:
+                    _rollback(connection)
+                    raise
         except Exception:
-            if "connection" in locals():
-                _rollback(connection)
             self._secret_store.install_key(previous_key)
             raise ModelConnectionError("MODEL_SECRET_STORAGE_UNAVAILABLE") from None
 
 
-def validate_provider_base_url(base_url: str, *, provider: str) -> None:
+def validate_provider_base_url(base_url: str | None, *, provider: str) -> None:
     if (
         provider not in _PROVIDERS
         or not isinstance(base_url, str)

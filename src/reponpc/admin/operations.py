@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import base64
 import sqlite3
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -74,6 +75,7 @@ class AdminOperations:
     analysis_selection: AnalysisSelectionRegistry | None = None
     embedding_reindex: EmbeddingReindexCoordinator | None = None
     ollama_model_operations: OllamaModelOperationCoordinator | None = None
+    connection_model_lister: Callable[[str], tuple[str, ...]] | None = None
 
     def read_config(self) -> GitFile:
         return self._github().read_config()
@@ -225,6 +227,18 @@ class AdminOperations:
     def get_model_connection(self, connection_id: str) -> ModelConnection:
         return self._model_connections().get(connection_id)
 
+    def model_connection_edit_endpoint(self, connection_id: str) -> dict[str, object]:
+        registry = self._model_connections()
+        connection = registry.get(connection_id)
+        if connection.source != "managed":
+            raise ModelConnectionError("NOT_FOUND")
+        secret = registry.secret_for(connection_id, connection.revision)
+        return {
+            "connection_id": connection.connection_id,
+            "revision": connection.revision,
+            "base_url": secret.base_url,
+        }
+
     def create_model_connection(
         self, values: ModelConnectionInput, *, connection_id: str | None = None
     ) -> ModelConnection:
@@ -265,12 +279,25 @@ class AdminOperations:
         return self._embedding_profiles().get(profile_id)
 
     def create_embedding_profile(self, values: EmbeddingProfileInput) -> EmbeddingProfile:
-        return self._embedding_profiles().create(values)
+        return self._embedding_profiles().create(self._bind_embedding_connection(values))
 
     def update_embedding_profile(
         self, profile_id: str, values: EmbeddingProfileInput
     ) -> EmbeddingProfile:
-        return self._embedding_profiles().update(profile_id, values)
+        return self._embedding_profiles().update(
+            profile_id, self._bind_embedding_connection(values)
+        )
+
+    def _bind_embedding_connection(self, values: EmbeddingProfileInput) -> EmbeddingProfileInput:
+        if self.model_connections is None or values.connection_reference == "environment":
+            return values
+        try:
+            connection = self.model_connections.get(values.connection_reference)
+        except ModelConnectionError:
+            raise EmbeddingProfileError("EMBEDDING_CONNECTION_REQUIRED") from None
+        if connection.provider != values.provider:
+            raise EmbeddingProfileError("VALIDATION_ERROR")
+        return replace(values, connection_revision=connection.revision)
 
     def delete_embedding_profile(self, profile_id: str) -> None:
         self._embedding_profiles().delete(profile_id)
@@ -305,7 +332,13 @@ class AdminOperations:
             return self.embedding_reindex.queue(profile_id)
         return self._embedding_profiles().activate(profile_id)
 
-    def installed_ollama_embedding_models(self) -> tuple[str, ...]:
+    def installed_ollama_embedding_models(
+        self, connection_id: str | None = None
+    ) -> tuple[str, ...]:
+        if connection_id is not None:
+            if self.connection_model_lister is None:
+                raise EmbeddingProfileError("EMBEDDING_CONNECTION_REQUIRED")
+            return self.connection_model_lister(connection_id)
         return self._embedding_profiles().installed_ollama_models()
 
     def ollama_embedding_model_action(

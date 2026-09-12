@@ -92,7 +92,7 @@ class LogoutAllRequest(_StrictRequest):
 class EmbeddingProfileRequest(_StrictRequest):
     provider: Literal["ollama", "openai_compatible", "vllm"]
     model_id: str = Field(min_length=1, max_length=256)
-    dimension: int = Field(ge=1, le=65536)
+    dimension: int | None = Field(default=None, ge=1, le=65536)
     normalized: bool = True
     query_prefix: str = Field(default="query: ", max_length=128)
     passage_prefix: str = Field(default="passage: ", max_length=128)
@@ -108,9 +108,10 @@ class EmbeddingProfileRequest(_StrictRequest):
 class ModelConnectionRequest(_StrictRequest):
     display_name: str = Field(min_length=1, max_length=120)
     provider: Literal["ollama", "openai_compatible", "vllm"]
-    base_url: str = Field(min_length=1, max_length=2048)
+    base_url: str | None = Field(default=None, min_length=1, max_length=2048)
     api_key: str | None = Field(default=None, max_length=4096)
     credential_action: Literal["retain", "replace", "remove"] = "retain"
+    endpoint_action: Literal["retain", "replace"] = "replace"
 
     def connection_input(self) -> ModelConnectionInput:
         return ModelConnectionInput(**self.model_dump())
@@ -453,6 +454,28 @@ def create_admin_router(
             return _model_connection_error(request, exc)
         return _model_connection_response(connection.safe_dict())
 
+    @router.post("/model-connections/{connection_id}/edit-endpoint")
+    async def read_model_connection_edit_endpoint(
+        request: Request,
+        connection_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            endpoint = await asyncio.to_thread(
+                configured.model_connection_edit_endpoint, connection_id
+            )
+        except ModelConnectionError as exc:
+            return _model_connection_error(request, exc)
+        return _model_connection_response(endpoint)
+
     @router.put("/model-connections/{connection_id}")
     async def update_model_connection(
         request: Request,
@@ -717,6 +740,9 @@ def create_admin_router(
     async def list_installed_embedding_models(
         request: Request,
         session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        connection_id: str | None = Query(
+            default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        ),
     ) -> Response:
         boundary = protected(request, session_token)
         if isinstance(boundary, JSONResponse):
@@ -726,7 +752,9 @@ def create_admin_router(
             return origin_error
         configured, _session_hash = boundary
         try:
-            models = await asyncio.to_thread(configured.installed_ollama_embedding_models)
+            models = await asyncio.to_thread(
+                configured.installed_ollama_embedding_models, connection_id
+            )
         except EmbeddingProfileError as exc:
             return _embedding_profile_error(request, exc)
         return _embedding_profile_response({"provider": "ollama", "models": models})
@@ -1994,6 +2022,7 @@ def _embedding_profile_payload(profile: EmbeddingProfile) -> dict[str, object]:
             else None
         ),
         "last_error_code": profile.last_error_code,
+        "last_error_message": profile.last_error_message,
         "created_at": profile.created_at,
         "updated_at": profile.updated_at,
         "last_probed_at": profile.last_probed_at,

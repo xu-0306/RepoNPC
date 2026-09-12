@@ -17,6 +17,7 @@ from reponpc.providers.contracts import (
     ProviderUsage,
     ResponseSchema,
 )
+from reponpc.providers.error_messages import provider_error_message
 from reponpc.providers.http_transport import (
     ProviderHttpTransport,
     ProviderOrigin,
@@ -30,6 +31,7 @@ from reponpc.providers.openai_compatible import (
     _json_object,
     _validate_request,
 )
+from reponpc.providers.response_diagnostics import ProviderResponseError, ResponseIssue
 
 _MODEL_LIST_UNSUPPORTED = frozenset({404, 405, 501})
 
@@ -109,21 +111,34 @@ class OllamaChatProvider(ChatProvider):
             timeout=timeout,
         )
         if response.status != 200:
-            raise ProviderError(failure_for_status(response.status))
+            raise ProviderError(
+                failure_for_status(response.status),
+                upstream_status=response.status,
+                upstream_message=provider_error_message(
+                    response.body, response.headers, private_values=(self.base_url,)
+                ),
+            )
+        issue = ResponseIssue.JSON
         try:
             payload = _json_object(response.body)
+            issue = ResponseIssue.MESSAGE
             message = payload["message"]
             if not isinstance(message, dict):
                 raise ValueError
+            finish_reason = payload.get("done_reason", "stop")
+            issue = ResponseIssue.CONTENT
             content = message.get("content")
+            if content in (None, "") and finish_reason == "length":
+                raise ProviderResponseError(ResponseIssue.OUTPUT_LIMIT)
             if not isinstance(content, str) or not content:
                 raise ValueError
-            finish_reason = payload.get("done_reason", "stop")
+            issue = ResponseIssue.FINISH_REASON
             if not isinstance(finish_reason, str) or not finish_reason:
                 raise ValueError
+            issue = ResponseIssue.USAGE
             usage = _ollama_usage(payload) if self.capabilities_config.usage_reporting else None
         except (KeyError, ValueError, TypeError) as exc:
-            raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from exc
+            raise ProviderResponseError(issue) from exc
         return ProviderResult(
             content=content,
             finish_reason=finish_reason,

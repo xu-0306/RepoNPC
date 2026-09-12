@@ -106,9 +106,7 @@ def test_batch_accepts_a_frozen_pair_with_legal_empty_embedding_prefixes(tmp_pat
     )
 
     store = _store(tmp_path, Clock())
-    batch, created = store.create_batch(
-        replace(_request(), analysis_model_pair=pair.safe_dict())
-    )
+    batch, created = store.create_batch(replace(_request(), analysis_model_pair=pair.safe_dict()))
 
     assert created is True
     assert batch.state == "queued"

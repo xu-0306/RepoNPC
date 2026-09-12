@@ -1,0 +1,286 @@
+{
+  "date": "2026-09-12",
+  "scope": "Synthetic fixtures using production React components and CSS; root font-size 200% is text enlargement, not browser zoom.",
+  "cases": [
+    {
+      "scenario": "models",
+      "locale": "zh",
+      "enlarged": false,
+      "width": 320,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "zh",
+      "enlarged": false,
+      "width": 375,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "zh",
+      "enlarged": false,
+      "width": 768,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "zh",
+      "enlarged": false,
+      "width": 1024,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "zh",
+      "enlarged": false,
+      "width": 1440,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "zh",
+      "enlarged": true,
+      "width": 320,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "zh",
+      "enlarged": true,
+      "width": 375,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "zh",
+      "enlarged": true,
+      "width": 768,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "zh",
+      "enlarged": true,
+      "width": 1024,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "zh",
+      "enlarged": true,
+      "width": 1440,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "en",
+      "enlarged": false,
+      "width": 320,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "en",
+      "enlarged": false,
+      "width": 375,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "en",
+      "enlarged": false,
+      "width": 768,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "en",
+      "enlarged": false,
+      "width": 1024,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "en",
+      "enlarged": false,
+      "width": 1440,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "en",
+      "enlarged": true,
+      "width": 320,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "en",
+      "enlarged": true,
+      "width": 375,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "en",
+      "enlarged": true,
+      "width": 768,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "en",
+      "enlarged": true,
+      "width": 1024,
+      "pass": true
+    },
+    {
+      "scenario": "models",
+      "locale": "en",
+      "enlarged": true,
+      "width": 1440,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "zh",
+      "enlarged": false,
+      "width": 320,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "zh",
+      "enlarged": false,
+      "width": 375,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "zh",
+      "enlarged": false,
+      "width": 768,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "zh",
+      "enlarged": false,
+      "width": 1024,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "zh",
+      "enlarged": false,
+      "width": 1440,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "zh",
+      "enlarged": true,
+      "width": 320,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "zh",
+      "enlarged": true,
+      "width": 375,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "zh",
+      "enlarged": true,
+      "width": 768,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "zh",
+      "enlarged": true,
+      "width": 1024,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "zh",
+      "enlarged": true,
+      "width": 1440,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "en",
+      "enlarged": false,
+      "width": 320,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "en",
+      "enlarged": false,
+      "width": 375,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "en",
+      "enlarged": false,
+      "width": 768,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "en",
+      "enlarged": false,
+      "width": 1024,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "en",
+      "enlarged": false,
+      "width": 1440,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "en",
+      "enlarged": true,
+      "width": 320,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "en",
+      "enlarged": true,
+      "width": 375,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "en",
+      "enlarged": true,
+      "width": 768,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "en",
+      "enlarged": true,
+      "width": 1024,
+      "pass": true
+    },
+    {
+      "scenario": "repositories",
+      "locale": "en",
+      "enlarged": true,
+      "width": 1440,
+      "pass": true
+    }
+  ]
+}

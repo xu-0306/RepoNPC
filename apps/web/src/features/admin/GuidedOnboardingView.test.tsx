@@ -156,7 +156,7 @@ describe("GuidedOnboardingView", () => {
     expect(markup).toContain("octocat/demo");
     expect(markup).toContain("Confirm selection and continue to analysis");
     expect(markup).toContain("1 selected of 1");
-    expect(markup).toContain("Use the keyboard to check");
+    expect(markup).toContain("Use the keyboard to choose");
 
     const emptySelection = renderToStaticMarkup(
       <GuidedOnboardingView
@@ -170,7 +170,7 @@ describe("GuidedOnboardingView", () => {
       />,
     );
     expect(emptySelection).toContain(
-      "Select at least one repository before continuing.",
+      "Select at least one project before continuing.",
     );
   });
 
@@ -203,7 +203,7 @@ describe("GuidedOnboardingView", () => {
       />,
     );
     expect(finishedMarkup).toContain(
-      "Discovery reached five pages or GitHub has no more public repositories.",
+      "Discovery reached five pages or GitHub has no more public projects.",
     );
   });
 
@@ -216,8 +216,8 @@ describe("GuidedOnboardingView", () => {
 
     expect(markup).toContain('data-evidence-class="REPOSITORY_FACT"');
     expect(markup).toContain('data-evidence-class="MODEL_INFERENCE"');
-    expect(markup).toContain("REPOSITORY_FACT | Repository facts");
-    expect(markup).toContain("MODEL_INFERENCE | Model inferences");
+    expect(markup).toContain("Project information you can verify");
+    expect(markup).toContain("AI inferences");
     expect(markup).toContain("E_fact_1");
     expect(markup).toContain("The repository may provide a reusable parser.");
   });
@@ -261,9 +261,11 @@ describe("GuidedOnboardingView", () => {
       />,
     );
 
-    expect(markup).toContain("Review facts and describe contribution");
+    expect(markup).toContain(
+      "Review information you can verify and describe contribution",
+    );
     expect(markup).not.toContain(
-      "Complete analysis for every selected repository before continuing.",
+      "Complete analysis for every selected project before continuing.",
     );
   });
 
@@ -287,7 +289,7 @@ describe("GuidedOnboardingView", () => {
     expect(activeMarkup).toContain("Start batch analysis");
     expect(activeMarkup).not.toContain("Model connection");
     expect(activeMarkup).toMatch(
-      /<button[^>]*disabled[^>]*>Review facts and describe contribution<\/button>/,
+      /<button[^>]*disabled[^>]*>Review information you can verify and describe contribution<\/button>/,
     );
     expect(activeMarkup).toMatch(/<button[^>]*disabled[^>]*>Back<\/button>/);
     expect(activeMarkup).toMatch(
@@ -310,10 +312,10 @@ describe("GuidedOnboardingView", () => {
       />,
     );
     expect(terminalMarkup).toMatch(
-      /<button[^>]*>Review facts and describe contribution<\/button>/,
+      /<button[^>]*>Review information you can verify and describe contribution<\/button>/,
     );
     expect(terminalMarkup).not.toMatch(
-      /<button[^>]*disabled[^>]*>Review facts and describe contribution<\/button>/,
+      /<button[^>]*disabled[^>]*>Review information you can verify and describe contribution<\/button>/,
     );
     expect(terminalMarkup).toMatch(/<button[^>]*>Back<\/button>/);
   });
@@ -325,18 +327,20 @@ describe("GuidedOnboardingView", () => {
       />,
     );
 
-    expect(markup).toContain("Your original statement");
+    expect(markup).toContain("Your original contribution description");
     expect(markup).toContain('data-evidence-class="OWNER_ASSERTION"');
-    expect(markup).toContain("Proposed owner assertions");
+    expect(markup).toContain(
+      "Personal contribution awaiting your confirmation",
+    );
     expect(markup).toContain('id="guided-role-octocat-demo-zh-TW"');
     expect(markup).toContain('id="guided-role-octocat-demo-en"');
     expect(markup).toContain('id="guided-summary-octocat-demo-zh-TW"');
     expect(markup).toContain('id="guided-summary-octocat-demo-en"');
-    expect(markup).toContain("Accept proposal");
-    expect(markup).toContain("Save edits and accept");
-    expect(markup).toContain("Reject proposal");
+    expect(markup).toContain("Confirm contribution");
+    expect(markup).not.toContain(">Save edits and accept<");
+    expect(markup).toContain("Reject and rewrite");
     expect(markup).toContain(
-      "Only explicit acceptance creates OWNER_ASSERTION",
+      "Only explicit confirmation makes this your confirmed contribution",
     );
   });
 
@@ -359,7 +363,7 @@ describe("GuidedOnboardingView", () => {
     );
     expect(markup).toContain("Enter contribution manually");
     expect(markup).not.toContain(
-      "Complete analysis for every selected repository",
+      "Complete analysis for every selected project",
     );
 
     const incompleteMarkup = renderToStaticMarkup(
@@ -405,6 +409,8 @@ describe("GuidedOnboardingView", () => {
     expect(empty).toContain('id="guided-profile-bio-en"');
     expect(empty).toContain('id="guided-profile-greeting-zh-TW"');
     expect(empty).toContain('id="guided-profile-greeting-en"');
+    expect(empty).toContain('href="#guided-profile-headline-en"');
+    expect(empty).toContain('class="ux-missing-fields"');
     expect(empty).toContain(
       "Complete every bilingual profile field before continuing.",
     );
@@ -415,6 +421,7 @@ describe("GuidedOnboardingView", () => {
       />,
     );
     expect(complete).toContain("Confirm profile and review draft");
+    expect(complete).not.toContain('class="ux-missing-fields"');
     expect(complete).not.toContain(
       "Complete every bilingual profile field before continuing.",
     );
@@ -443,6 +450,10 @@ describe("GuidedOnboardingView", () => {
     expect(reviewMarkup).toContain("Review confirmed content");
     expect(reviewMarkup).toContain("Create complete YAML draft");
     expect(reviewMarkup).toContain("Confirmed");
+    expect(reviewMarkup).toContain("共同維護者");
+    expect(reviewMarkup).toContain("Co-maintainer");
+    expect(reviewMarkup).toContain("維護 parser");
+    expect(reviewMarkup).toContain("Maintained the parser");
 
     const draftMarkup = renderToStaticMarkup(
       <GuidedOnboardingView

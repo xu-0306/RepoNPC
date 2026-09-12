@@ -13,6 +13,7 @@ import {
   type AdminStatus,
   type AdminValidation,
 } from "./AdminWorkspace";
+import { AdminAccessLayout } from "./AdminAccessLayout";
 import {
   BatchAnalysisPanel,
   type BatchActionState,
@@ -36,6 +37,7 @@ import {
   AnalysisSelectionPanel,
   type AnalysisSelectionView,
 } from "./AnalysisSelectionPanel";
+import type { AdminModelState, AdminWorkspaceStatus } from "./AdminStatusCards";
 import {
   batchDuration,
   preflightState,
@@ -53,6 +55,9 @@ import {
   type ModelConnectionDraft,
   type ModelConnectionView,
 } from "./ModelConnectionPanel";
+import { ModelSetupRequests, replaceSetting } from "./modelSetupRequests";
+import { TransientNotice } from "./TransientNotice";
+import { ModelSetupWorkspace } from "./ModelSetupWorkspace";
 import { GuidedOnboardingView } from "./GuidedOnboardingView";
 import { LocalLaunchAccessPanel } from "./LocalLaunchAccessPanel";
 import {
@@ -487,30 +492,82 @@ export function adminDataErrorMessage(locale: Locale, error: unknown): string {
 
 function embeddingProfileErrorMessage(locale: Locale, error: unknown): string {
   const code = error instanceof Error ? error.message : "REQUEST_FAILED";
+  if (
+    code === "EMBEDDING_PROFILE_ACTIVE_REQUIRED" ||
+    code === "EMBEDDING_REINDEX_ACTIVE"
+  ) {
+    return copyFor(
+      locale,
+      "模型正在供公開網站使用或重建索引，無法刪除。請重新整理狀態，等待索引完成，並先切換公開模型。",
+      "The model is active on the public site or rebuilding the index and cannot be deleted. Refresh its status, wait for indexing to finish, and switch the public model first.",
+    );
+  }
   if (code === "EMBEDDING_REINDEX_REQUIRED") {
     return copyFor(
       locale,
-      "此 profile 尚未通過 probe 或與目前 bundle 不相容；已保留上一個可用 profile。",
-      "This profile has not passed its probe or is incompatible with the current bundle. The last known-good profile was preserved.",
+      "這個資料查找模型尚未通過測試，或與目前公開資料不相容；已保留上一個可用模型。",
+      "This content finder has not passed testing or is incompatible with the current public data. The last known-good model was preserved.",
     );
   }
   if (code === "EMBEDDING_CONNECTION_REQUIRED") {
     return copyFor(
       locale,
-      "此連線參照尚未由伺服器設定；RepoNPC 不會自動改用其他 provider。",
-      "This connection reference is not configured by the server. RepoNPC will not switch providers automatically.",
+      "這個服務連線尚未由伺服器設定；RepoNPC 不會自動改用其他服務。",
+      "This service connection is not configured by the server. RepoNPC will not switch services automatically.",
     );
   }
   return copyFor(
     locale,
-    "Embedding profile 操作失敗；請檢查安全狀態碼後再試一次。",
-    "The embedding profile operation failed. Check the safe status code and try again.",
+    "資料查找模型操作未完成。請確認已選服務與模型名稱，並檢查網路及登入狀態後重試。",
+    "The content finder operation could not finish. Check the selected service, model name, network, and sign-in before retrying.",
   );
+}
+
+function modelConnectionErrorMessage(locale: Locale, error: unknown): string {
+  const code = error instanceof Error ? error.message : "REQUEST_FAILED";
+  const messages: Record<string, [string, string]> = {
+    CREDENTIAL_REPLACE_REQUIRED: [
+      "更換網址或連線方式時，請重新填入此服務的 API key，或選擇移除金鑰後再儲存。",
+      "When changing a service URL or connection type, enter a new API key for that service or choose to remove the key before saving.",
+    ],
+    MODEL_CONNECTION_IN_USE: [
+      "有模型仍使用此服務。請先編輯那些模型改用其他服務，或刪除不需要的模型設定。",
+      "Models still use this service. Edit those models to use another service, or delete model settings you no longer need.",
+    ],
+    MODEL_SECRET_STORAGE_UNAVAILABLE: [
+      "無法讀取受保護的服務設定。請檢查本機金鑰檔與存取權限，原設定不會被覆寫。",
+      "Protected service settings could not be read. Check the local key file and access permissions; existing settings will not be overwritten.",
+    ],
+    INVALID_PROVIDER_URL: [
+      "服務網址格式不正確，請從服務商複製完整 API 位址。",
+      "The service URL is invalid. Copy the complete API address from your provider.",
+    ],
+    INSECURE_PROVIDER_URL: [
+      "網路服務需要 https 網址，請確認服務商提供的 API 位址。",
+      "Internet services require an https URL. Check the API address supplied by your provider.",
+    ],
+    VALIDATION_ERROR: [
+      "請檢查服務名稱、連線方式與網址；如果剛送出過，請重新填入金鑰再試。",
+      "Check the service name, connection type, and URL. If you already submitted the form, re-enter the key before retrying.",
+    ],
+  };
+  const message = Object.hasOwn(messages, code) ? messages[code] : null;
+  return message
+    ? copyFor(locale, message[0], message[1])
+    : copyFor(
+        locale,
+        "服務設定操作未完成。請確認網路與登入狀態，再重新操作；需要金鑰時請重新填入。",
+        "The service setting could not be changed. Check your network and sign-in, then retry; re-enter the key if needed.",
+      );
 }
 
 function chatProfileErrorMessage(locale: Locale, error: unknown): string {
   const code = error instanceof Error ? error.message : "REQUEST_FAILED";
   const messages: Record<string, [string, string]> = {
+    CHAT_PROFILE_ACTIVE_IMMUTABLE: [
+      "公開網站正在使用此模型，無法修改或刪除。請先到進階設定切換公開模型。",
+      "The public site uses this model, so it cannot be edited or deleted. Switch the public model in advanced settings first.",
+    ],
     CHAT_CONNECTION_REQUIRED: [
       "Chat 服務尚未設定，請先選擇可用的模型服務。",
       "This Chat service is not configured. Choose a configured model service first.",
@@ -533,8 +590,8 @@ function chatProfileErrorMessage(locale: Locale, error: unknown): string {
     ? copyFor(locale, message[0], message[1])
     : copyFor(
         locale,
-        "Chat 模型操作失敗，請檢查狀態後重試。",
-        "The Chat model operation failed. Check its safe status and try again.",
+        "模型操作未完成。請確認網路連線，查看模型卡片上的說明後重試。",
+        "The model operation did not finish. Check your connection and the message on the model card, then retry.",
       );
 }
 
@@ -584,259 +641,249 @@ export function AdminAccessPanel({
           : copyFor(locale, "管理介面", "admin console");
 
   return (
-    <main className="admin-auth-shell" lang={locale}>
-      <section
-        aria-labelledby="admin-access-heading"
-        className="admin-auth-card"
-        data-mode={mode}
-      >
-        <header className="admin-auth__header">
-          <p className="admin-auth__eyebrow">
-            {copyFor(locale, "本機管理主控台", "Local admin console")}
-          </p>
-          <h1
-            className="admin-auth__title"
-            id="admin-access-heading"
-            tabIndex={-1}
-          >
-            <span className="admin-auth__product">RepoNPC</span>
-            <span className="admin-auth__title-action">{title}</span>
-          </h1>
-        </header>
+    <AdminAccessLayout
+      locale={locale}
+      mode={mode}
+      headingId="admin-access-heading"
+      title={
+        <>
+          <span className="admin-auth__product">RepoNPC</span>
+          <span className="admin-auth__title-action">{title}</span>
+        </>
+      }
+    >
+      {error && (
+        <p className="admin-auth__alert" role="alert">
+          {error}
+        </p>
+      )}
 
-        {error && (
-          <p className="admin-auth__alert" role="alert">
-            {error}
-          </p>
-        )}
+      {mode === "loading" && (
+        <p className="admin-auth__status" role="status">
+          {copyFor(
+            locale,
+            "正在確認這台裝置的首次設定狀態…",
+            "Checking first-time setup status for this device…",
+          )}
+        </p>
+      )}
 
-        {mode === "loading" && (
-          <p className="admin-auth__status" role="status">
+      {mode === "unavailable" && (
+        <div className="admin-auth__content">
+          <p className="admin-auth__intro">
             {copyFor(
               locale,
-              "正在確認這台裝置的首次設定狀態…",
-              "Checking first-time setup status for this device…",
+              "目前無法確認管理員是否已建立。請確認服務正在執行後再試一次。",
+              "RepoNPC could not confirm whether an administrator exists. Check that the service is running, then try again.",
             )}
           </p>
-        )}
+          <button
+            className="admin-auth__secondary-action"
+            disabled={busy}
+            onClick={onRefreshSetupStatus}
+            type="button"
+          >
+            {copyFor(locale, "重新檢查", "Check again")}
+          </button>
+        </div>
+      )}
 
-        {mode === "unavailable" && (
-          <div className="admin-auth__content">
-            <p className="admin-auth__intro">
-              {copyFor(
-                locale,
-                "目前無法確認管理員是否已建立。請確認服務正在執行後再試一次。",
-                "RepoNPC could not confirm whether an administrator exists. Check that the service is running, then try again.",
-              )}
-            </p>
-            <button
-              className="admin-auth__secondary-action"
-              disabled={busy}
-              onClick={onRefreshSetupStatus}
-              type="button"
-            >
-              {copyFor(locale, "重新檢查", "Check again")}
+      {mode === "recovery" && (
+        <div className="admin-auth__content">
+          <p className="admin-auth__intro">
+            {copyFor(
+              locale,
+              "這個資料目錄已有管理員，但目前沒有可用的 production 密碼。請在部署主機執行下方命令設定新密碼，再重新檢查。",
+              "This data directory has an administrator, but no production password is available. Run the command below on the deployment host to set a new password, then check again.",
+            )}
+          </p>
+          <code>reponpc admin set-password --data-dir &lt;dir&gt;</code>
+          <button
+            className="admin-auth__secondary-action"
+            disabled={busy}
+            onClick={onRefreshSetupStatus}
+            type="button"
+          >
+            {copyFor(
+              locale,
+              "設定密碼後重新檢查",
+              "Check after setting password",
+            )}
+          </button>
+        </div>
+      )}
+
+      {mode === "setup" && (
+        <div className="admin-auth__content">
+          <p className="admin-auth__intro">
+            {copyFor(
+              locale,
+              "這裡沒有預設帳密。請使用啟動視窗顯示的一次性設定碼，建立只屬於這個本機資料目錄的管理員。",
+              "There are no default credentials. Use the one-time code shown by the launcher to create the administrator for this local data directory.",
+            )}
+          </p>
+          <p className="admin-auth__status" role="status">
+            {setupStatus?.setup_code_available
+              ? copyFor(
+                  locale,
+                  "設定碼已就緒，現在可以建立管理員。",
+                  "The setup code is ready. You can create the administrator now.",
+                )
+              : copyFor(
+                  locale,
+                  "尚未產生設定碼。請重新執行一鍵啟動腳本取得一次性設定碼。",
+                  "No setup code is available. Run the one-click launcher again to obtain one.",
+                )}
+          </p>
+          <form className="admin-auth__form" onSubmit={onSetupOwner}>
+            <div className="admin-auth__field">
+              <label htmlFor="admin-setup-code">
+                {copyFor(locale, "一次性設定碼", "One-time setup code")}
+              </label>
+              <input
+                autoComplete="one-time-code"
+                id="admin-setup-code"
+                onChange={(event) => onSetupCodeChange(event.target.value)}
+                required
+                spellCheck={false}
+                value={setupCode}
+              />
+            </div>
+            <div className="admin-auth__field">
+              <label htmlFor="admin-setup-username">
+                {copyFor(locale, "管理員帳號", "Administrator username")}
+              </label>
+              <input
+                autoComplete="username"
+                id="admin-setup-username"
+                maxLength={64}
+                onChange={(event) => onUsernameChange(event.target.value)}
+                required
+                spellCheck={false}
+                value={username}
+              />
+            </div>
+            <div className="admin-auth__field">
+              <label htmlFor="admin-setup-password">
+                {copyFor(locale, "密碼", "Password")}
+              </label>
+              <input
+                aria-describedby="admin-password-requirements"
+                autoComplete="new-password"
+                id="admin-setup-password"
+                maxLength={128}
+                onChange={(event) => onSetupPasswordChange(event.target.value)}
+                required
+                type="password"
+                value={setupPassword}
+              />
+              <small
+                className="admin-auth__field-help"
+                id="admin-password-requirements"
+              >
+                {copyFor(
+                  locale,
+                  "僅限 loopback evaluation 時至少 4 個字元；production 至少 15 個字元，兩者上限皆為 128。不限制大小寫、數字或符號，常見密碼會被拒絕。",
+                  "Loopback evaluation accepts 4–128 characters; production requires 15–128. Character composition is optional and common passwords are blocked.",
+                )}
+              </small>
+            </div>
+            <div className="admin-auth__field">
+              <label htmlFor="admin-setup-password-confirmation">
+                {copyFor(locale, "確認密碼", "Confirm password")}
+              </label>
+              <input
+                autoComplete="new-password"
+                id="admin-setup-password-confirmation"
+                maxLength={128}
+                onChange={(event) =>
+                  onSetupPasswordConfirmationChange(event.target.value)
+                }
+                required
+                type="password"
+                value={setupPasswordConfirmation}
+              />
+            </div>
+            <button disabled={busy} type="submit">
+              {busy
+                ? copyFor(locale, "建立中…", "Creating…")
+                : copyFor(locale, "建立我的管理員", "Create my administrator")}
             </button>
-          </div>
-        )}
+          </form>
+          <p className="admin-auth__privacy-note">
+            {copyFor(
+              locale,
+              "帳號、密碼雜湊與登入工作階段都留在 runtime-data 本機資料中，不會寫入 GitHub。",
+              "The username, password hash, and sessions stay in local runtime-data and are never written to GitHub.",
+            )}
+          </p>
+        </div>
+      )}
 
-        {mode === "recovery" && (
-          <div className="admin-auth__content">
-            <p className="admin-auth__intro">
-              {copyFor(
-                locale,
-                "這個資料目錄已有管理員，但目前沒有可用的 production 密碼。請在部署主機執行下方命令設定新密碼，再重新檢查。",
-                "This data directory has an administrator, but no production password is available. Run the command below on the deployment host to set a new password, then check again.",
-              )}
-            </p>
-            <code>reponpc admin set-password --data-dir &lt;dir&gt;</code>
-            <button
-              className="admin-auth__secondary-action"
-              disabled={busy}
-              onClick={onRefreshSetupStatus}
-              type="button"
-            >
-              {copyFor(
-                locale,
-                "設定密碼後重新檢查",
-                "Check after setting password",
-              )}
+      {mode === "login" && (
+        <div className="admin-auth__content">
+          <p className="admin-auth__intro">
+            {copyFor(
+              locale,
+              "這個本機資料目錄已完成首次設定。請使用你建立的管理員帳密登入。",
+              "First-time setup is complete for this local data directory. Sign in with the administrator credentials you created.",
+            )}
+          </p>
+          <form className="admin-auth__form" onSubmit={onLogin}>
+            <div className="admin-auth__field">
+              <label htmlFor="admin-username">
+                {copyFor(locale, "管理員帳號", "Username")}
+              </label>
+              <input
+                autoComplete="username"
+                id="admin-username"
+                maxLength={64}
+                onChange={(event) => onUsernameChange(event.target.value)}
+                required
+                spellCheck={false}
+                value={username}
+              />
+            </div>
+            <div className="admin-auth__field">
+              <label htmlFor="admin-password">
+                {copyFor(locale, "密碼", "Password")}
+              </label>
+              <input
+                autoComplete="current-password"
+                id="admin-password"
+                maxLength={1024}
+                onChange={(event) => onPasswordChange(event.target.value)}
+                required
+                type="password"
+                value={password}
+              />
+            </div>
+            <button disabled={busy} type="submit">
+              {busy
+                ? copyFor(locale, "登入中…", "Signing in…")
+                : copyFor(locale, "登入管理介面", "Sign in to admin")}
             </button>
-          </div>
-        )}
-
-        {mode === "setup" && (
-          <div className="admin-auth__content">
-            <p className="admin-auth__intro">
-              {copyFor(
-                locale,
-                "這裡沒有預設帳密。請使用啟動視窗顯示的一次性設定碼，建立只屬於這個本機資料目錄的管理員。",
-                "There are no default credentials. Use the one-time code shown by the launcher to create the administrator for this local data directory.",
-              )}
-            </p>
-            <p className="admin-auth__status" role="status">
-              {setupStatus?.setup_code_available
-                ? copyFor(
-                    locale,
-                    "設定碼已就緒，現在可以建立管理員。",
-                    "The setup code is ready. You can create the administrator now.",
-                  )
-                : copyFor(
-                    locale,
-                    "尚未產生設定碼。請重新執行一鍵啟動腳本取得一次性設定碼。",
-                    "No setup code is available. Run the one-click launcher again to obtain one.",
-                  )}
-            </p>
-            <form className="admin-auth__form" onSubmit={onSetupOwner}>
-              <div className="admin-auth__field">
-                <label htmlFor="admin-setup-code">
-                  {copyFor(locale, "一次性設定碼", "One-time setup code")}
-                </label>
-                <input
-                  autoComplete="one-time-code"
-                  id="admin-setup-code"
-                  onChange={(event) => onSetupCodeChange(event.target.value)}
-                  required
-                  spellCheck={false}
-                  value={setupCode}
-                />
-              </div>
-              <div className="admin-auth__field">
-                <label htmlFor="admin-setup-username">
-                  {copyFor(locale, "管理員帳號", "Administrator username")}
-                </label>
-                <input
-                  autoComplete="username"
-                  id="admin-setup-username"
-                  maxLength={64}
-                  onChange={(event) => onUsernameChange(event.target.value)}
-                  required
-                  spellCheck={false}
-                  value={username}
-                />
-              </div>
-              <div className="admin-auth__field">
-                <label htmlFor="admin-setup-password">
-                  {copyFor(locale, "密碼", "Password")}
-                </label>
-                <input
-                  aria-describedby="admin-password-requirements"
-                  autoComplete="new-password"
-                  id="admin-setup-password"
-                  maxLength={128}
-                  onChange={(event) =>
-                    onSetupPasswordChange(event.target.value)
-                  }
-                  required
-                  type="password"
-                  value={setupPassword}
-                />
-                <small
-                  className="admin-auth__field-help"
-                  id="admin-password-requirements"
-                >
-                  {copyFor(
-                    locale,
-                    "僅限 loopback evaluation 時至少 4 個字元；production 至少 15 個字元，兩者上限皆為 128。不限制大小寫、數字或符號，常見密碼會被拒絕。",
-                    "Loopback evaluation accepts 4–128 characters; production requires 15–128. Character composition is optional and common passwords are blocked.",
-                  )}
-                </small>
-              </div>
-              <div className="admin-auth__field">
-                <label htmlFor="admin-setup-password-confirmation">
-                  {copyFor(locale, "確認密碼", "Confirm password")}
-                </label>
-                <input
-                  autoComplete="new-password"
-                  id="admin-setup-password-confirmation"
-                  maxLength={128}
-                  onChange={(event) =>
-                    onSetupPasswordConfirmationChange(event.target.value)
-                  }
-                  required
-                  type="password"
-                  value={setupPasswordConfirmation}
-                />
-              </div>
-              <button disabled={busy} type="submit">
-                {busy
-                  ? copyFor(locale, "建立中…", "Creating…")
-                  : copyFor(
-                      locale,
-                      "建立我的管理員",
-                      "Create my administrator",
-                    )}
-              </button>
-            </form>
-            <p className="admin-auth__privacy-note">
-              {copyFor(
-                locale,
-                "帳號、密碼雜湊與登入工作階段都留在 runtime-data 本機資料中，不會寫入 GitHub。",
-                "The username, password hash, and sessions stay in local runtime-data and are never written to GitHub.",
-              )}
-            </p>
-          </div>
-        )}
-
-        {mode === "login" && (
-          <div className="admin-auth__content">
-            <p className="admin-auth__intro">
-              {copyFor(
-                locale,
-                "這個本機資料目錄已完成首次設定。請使用你建立的管理員帳密登入。",
-                "First-time setup is complete for this local data directory. Sign in with the administrator credentials you created.",
-              )}
-            </p>
-            <form className="admin-auth__form" onSubmit={onLogin}>
-              <div className="admin-auth__field">
-                <label htmlFor="admin-username">
-                  {copyFor(locale, "管理員帳號", "Username")}
-                </label>
-                <input
-                  autoComplete="username"
-                  id="admin-username"
-                  maxLength={64}
-                  onChange={(event) => onUsernameChange(event.target.value)}
-                  required
-                  spellCheck={false}
-                  value={username}
-                />
-              </div>
-              <div className="admin-auth__field">
-                <label htmlFor="admin-password">
-                  {copyFor(locale, "密碼", "Password")}
-                </label>
-                <input
-                  autoComplete="current-password"
-                  id="admin-password"
-                  maxLength={1024}
-                  onChange={(event) => onPasswordChange(event.target.value)}
-                  required
-                  type="password"
-                  value={password}
-                />
-              </div>
-              <button disabled={busy} type="submit">
-                {busy
-                  ? copyFor(locale, "登入中…", "Signing in…")
-                  : copyFor(locale, "登入管理介面", "Sign in to admin")}
-              </button>
-            </form>
-            <p className="admin-auth__privacy-note">
-              {copyFor(
-                locale,
-                "RepoNPC 沒有預設帳密。這組帳密由首次設定者建立，只保存在本機，不會推送到 GitHub。",
-                "RepoNPC has no default credentials. They were created during first-time setup, stay local, and are never pushed to GitHub.",
-              )}
-            </p>
-          </div>
-        )}
-      </section>
-    </main>
+          </form>
+          <p className="admin-auth__privacy-note">
+            {copyFor(
+              locale,
+              "RepoNPC 沒有預設帳密。這組帳密由首次設定者建立，只保存在本機，不會推送到 GitHub。",
+              "RepoNPC has no default credentials. They were created during first-time setup, stay local, and are never pushed to GitHub.",
+            )}
+          </p>
+        </div>
+      )}
+    </AdminAccessLayout>
   );
 }
 
-export function AdminPage({ locale }: { locale: Locale }) {
+export function AdminPage({
+  locale,
+  onLocaleChange,
+}: {
+  locale: Locale;
+  onLocaleChange?: (locale: Locale) => void;
+}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [setupCode, setSetupCode] = useState("");
@@ -864,15 +911,67 @@ export function AdminPage({ locale }: { locale: Locale }) {
   const [embeddingModelCatalog, setEmbeddingModelCatalog] = useState<
     EmbeddingModelCatalogEntry[]
   >([]);
-  const [installedEmbeddingModels, setInstalledEmbeddingModels] = useState<
-    string[]
-  >([]);
-  const [embeddingProfilesPending, setEmbeddingProfilesPending] =
-    useState(false);
-  const [embeddingProfilesError, setEmbeddingProfilesError] = useState("");
   const [modelConnections, setModelConnections] = useState<
     ModelConnectionView[]
   >([]);
+  const [installedState, setInstalledState] = useState<{
+    connectionId: string;
+    connectionRevision: number | null;
+    status: "idle" | "loading" | "loaded" | "failed";
+    models: string[];
+  }>({
+    connectionId: "",
+    connectionRevision: null,
+    status: "idle",
+    models: [],
+  });
+  const installedGeneration = useRef(0);
+  useEffect(() => {
+    if (!installedState.connectionId) return;
+    const current = modelConnections.find(
+      (item) => item.connection_id === installedState.connectionId,
+    );
+    if (
+      !current ||
+      current.provider !== "ollama" ||
+      current.revision !== installedState.connectionRevision
+    ) {
+      installedGeneration.current += 1;
+      setInstalledState({
+        connectionId: "",
+        connectionRevision: null,
+        status: "idle",
+        models: [],
+      });
+    }
+  }, [
+    modelConnections,
+    installedState.connectionId,
+    installedState.connectionRevision,
+  ]);
+  const modelRequests = useRef({
+    chat: new ModelSetupRequests(),
+    embedding: new ModelSetupRequests(),
+    connection: new ModelSetupRequests(),
+    selection: new ModelSetupRequests(),
+  });
+  const [chatProfilesLoading, setChatProfilesLoading] = useState(false);
+  const [embeddingProfilesLoading, setEmbeddingProfilesLoading] =
+    useState(false);
+  const [modelConnectionsLoading, setModelConnectionsLoading] = useState(false);
+  const [chatProfilesNotice, setChatProfilesNotice] = useState("");
+  const [embeddingProfilesNotice, setEmbeddingProfilesNotice] = useState("");
+  const [modelConnectionsNotice, setModelConnectionsNotice] = useState("");
+  const [serviceSaveNotice, setServiceSaveNotice] = useState<{
+    id: number;
+    message: string;
+  } | null>(null);
+  const serviceSaveSequence = useRef(0);
+  const [chatProbeId, setChatProbeId] = useState<string | null>(null);
+  const [embeddingProbeId, setEmbeddingProbeId] = useState<string | null>(null);
+  const [embeddingProfilesPending, setEmbeddingProfilesPending] =
+    useState(false);
+  const [embeddingProfilesError, setEmbeddingProfilesError] = useState("");
   const [modelConnectionsPending, setModelConnectionsPending] = useState(false);
   const [modelConnectionsError, setModelConnectionsError] = useState("");
   const [chatProfiles, setChatProfiles] = useState<ChatProfileView[]>([]);
@@ -1084,91 +1183,134 @@ export function AdminPage({ locale }: { locale: Locale }) {
   }, [request]);
 
   const refreshEmbeddingProfiles = useCallback(async () => {
-    setEmbeddingProfilesPending(true);
+    setEmbeddingProfilesLoading(true);
+    setEmbeddingProfilesNotice("");
     try {
-      const [profilesResult, catalogResult, installedResult] =
-        await Promise.all([
-          request<{ profiles: EmbeddingProfileView[] }>(
+      await modelRequests.current.embedding.read(
+        async () => {
+          const profiles = await request<{ profiles: EmbeddingProfileView[] }>(
             "/api/admin/embedding-profiles",
-          ),
-          request<{ models: EmbeddingModelCatalogEntry[] }>(
-            "/api/admin/embedding-models/catalog",
-          ),
-          request<{ provider: "ollama"; models: string[] }>(
-            "/api/admin/embedding-models/installed",
-          ).catch(() => ({ provider: "ollama" as const, models: [] })),
-        ]);
-      setEmbeddingProfiles(profilesResult.profiles);
-      setEmbeddingModelCatalog(catalogResult.models);
-      setInstalledEmbeddingModels(installedResult.models);
-      setEmbeddingProfilesError("");
+          );
+          const catalog = await request<{
+            models: EmbeddingModelCatalogEntry[];
+          }>("/api/admin/embedding-models/catalog").catch(() => ({
+            models: [],
+          }));
+          return { profiles, catalog };
+        },
+        ({ profiles, catalog }) => {
+          setEmbeddingProfiles(profiles.profiles);
+          setEmbeddingModelCatalog(catalog.models);
+        },
+      );
     } catch {
-      setEmbeddingProfilesError(
+      setEmbeddingProfilesNotice(
         copyFor(
           locale,
-          "無法讀取 embedding profiles。請確認 runtime database 與模型設定後再試一次。",
-          "Embedding profiles could not be loaded. Check the runtime database and model configuration, then try again.",
+          "清單更新失敗，已完成的操作仍然保留。請按「重新整理」再讀取。",
+          "The list could not refresh. Completed changes are kept. Use Refresh to load it again.",
         ),
       );
     } finally {
-      setEmbeddingProfilesPending(false);
+      setEmbeddingProfilesLoading(false);
     }
   }, [locale, request]);
 
   const refreshModelConnections = useCallback(async () => {
-    setModelConnectionsPending(true);
+    setModelConnectionsLoading(true);
+    setModelConnectionsNotice("");
     try {
-      const result = await request<{ connections: ModelConnectionView[] }>(
-        "/api/admin/model-connections",
+      await modelRequests.current.connection.read(
+        () =>
+          request<{ connections: ModelConnectionView[] }>(
+            "/api/admin/model-connections",
+          ),
+        (value) => setModelConnections(value.connections),
       );
-      setModelConnections(result.connections);
-      setModelConnectionsError("");
     } catch {
-      setModelConnectionsError(
+      setModelConnectionsNotice(
         copyFor(
           locale,
-          "無法載入模型連線，請稍後再試。",
-          "Model connections could not be loaded. Try again.",
+          "服務清單更新失敗，已完成的操作仍然保留。請按「重新整理」再讀取。",
+          "The service list could not refresh. Completed changes are kept. Use Refresh to load it again.",
         ),
       );
     } finally {
-      setModelConnectionsPending(false);
+      setModelConnectionsLoading(false);
     }
   }, [locale, request]);
 
   const refreshChatProfiles = useCallback(async () => {
-    setChatProfilesPending(true);
+    setChatProfilesLoading(true);
+    setChatProfilesNotice("");
     try {
-      const result = await request<{ profiles: ChatProfileView[] }>(
-        "/api/admin/chat-profiles",
+      await modelRequests.current.chat.read(
+        () =>
+          request<{ profiles: ChatProfileView[] }>("/api/admin/chat-profiles"),
+        (value) => setChatProfiles(value.profiles),
       );
-      setChatProfiles(result.profiles);
-      setChatProfilesError("");
     } catch {
-      setChatProfilesError(
+      setChatProfilesNotice(
         copyFor(
           locale,
-          "L�k���J Chat �ҫ��A���դ@���C",
-          "Chat models could not be loaded. Try again.",
+          "清單更新失敗，已完成的操作仍然保留。請按「重新整理」再讀取。",
+          "The list could not refresh. Completed changes are kept. Use Refresh to load it again.",
         ),
       );
     } finally {
-      setChatProfilesPending(false);
+      setChatProfilesLoading(false);
     }
   }, [locale, request]);
 
+  async function loadInstalledModels(connectionId: string) {
+    const connection = modelConnections.find(
+      (item) => item.connection_id === connectionId,
+    );
+    if (!connection || connection.provider !== "ollama") return;
+    const connectionRevision = connection.revision;
+    const generation = ++installedGeneration.current;
+    setInstalledState({
+      connectionId,
+      connectionRevision,
+      status: "loading",
+      models: [],
+    });
+    try {
+      const result = await request<{ models: string[] }>(
+        `/api/admin/embedding-models/installed?connection_id=${encodeURIComponent(connectionId)}`,
+      );
+      if (generation === installedGeneration.current)
+        setInstalledState({
+          connectionId,
+          connectionRevision,
+          status: "loaded",
+          models: result.models,
+        });
+    } catch {
+      if (generation === installedGeneration.current)
+        setInstalledState({
+          connectionId,
+          connectionRevision,
+          status: "failed",
+          models: [],
+        });
+    }
+  }
+
   const refreshAnalysisSelection = useCallback(async () => {
     try {
-      const value = await request<AnalysisSelectionView>(
-        "/api/admin/analysis-selection",
-      );
-      setAnalysisSelection(value);
-      setAnalysisSelectionError("");
-      setGuidedState((current) =>
-        guidedOnboardingReducer(current, {
-          type: "SET_MODELS_CONFIGURED",
-          value: value.eligible,
-        }),
+      await modelRequests.current.selection.read(
+        () => request<AnalysisSelectionView>("/api/admin/analysis-selection"),
+        (value) => {
+          setAnalysisSelection(value);
+          setAnalysisSelectionError("");
+          setGuidedState((current) =>
+            guidedOnboardingReducer(current, {
+              type: "SET_MODELS_CONFIGURED",
+              value: value.eligible,
+            }),
+          );
+        },
       );
     } catch {
       setAnalysisSelection(null);
@@ -1196,29 +1338,41 @@ export function AdminPage({ locale }: { locale: Locale }) {
     setAnalysisSelectionPending(true);
     setAnalysisSelectionError("");
     try {
-      const value = await request<AnalysisSelectionView>(
-        "/api/admin/analysis-selection",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            chat_profile_id: chatProfileId,
-            embedding_profile_id: embeddingProfileId,
-            expected_generation: generation,
+      await modelRequests.current.selection.mutate(
+        () =>
+          request<AnalysisSelectionView>("/api/admin/analysis-selection", {
+            method: "POST",
+            body: JSON.stringify({
+              chat_profile_id: chatProfileId,
+              embedding_profile_id: embeddingProfileId,
+              expected_generation: generation,
+            }),
           }),
+        (value) => {
+          setAnalysisSelection(value);
+          setGuidedState((current) =>
+            guidedOnboardingReducer(current, {
+              type: "SET_MODELS_CONFIGURED",
+              value: value.eligible,
+            }),
+          );
         },
       );
-      setAnalysisSelection(value);
-      setGuidedState((current) =>
-        guidedOnboardingReducer(current, {
-          type: "SET_MODELS_CONFIGURED",
-          value: value.eligible,
-        }),
-      );
     } catch (error) {
-      setAnalysisSelectionError(
-        error instanceof Error ? error.message : "REQUEST_FAILED",
-      );
       await refreshAnalysisSelection();
+      setAnalysisSelectionError(
+        error instanceof Error && error.message.includes("STALE")
+          ? copyFor(
+              locale,
+              "模型或服務設定已變更，請依目前狀態重新選擇並確認。",
+              "Model or service settings changed. Review the current status, then select and confirm again.",
+            )
+          : copyFor(
+              locale,
+              "未能確認操作回應，已嘗試重新讀取目前狀態。請查看模型卡片；若仍無法選用，請確認連線後重試。",
+              "The operation response could not be confirmed. We tried to reload the current status. Check the model cards and your connection before retrying.",
+            ),
+      );
     } finally {
       setAnalysisSelectionPending(false);
     }
@@ -1620,89 +1774,139 @@ export function AdminPage({ locale }: { locale: Locale }) {
     }
   }
 
-  async function createEmbeddingProfile(draft: EmbeddingProfileDraft) {
+  function applyChatProfile(saved: ChatProfileView) {
+    setChatProfiles((current) =>
+      replaceSetting(
+        saved.active ? current.map((p) => ({ ...p, active: false })) : current,
+        saved,
+        "profile_id",
+      ),
+    );
+  }
+  function applyEmbeddingProfile(saved: EmbeddingProfileView) {
+    setEmbeddingProfiles((current) =>
+      replaceSetting(
+        saved.active ? current.map((p) => ({ ...p, active: false })) : current,
+        saved,
+        "profile_id",
+      ),
+    );
+  }
+  function applyModelConnection(saved: ModelConnectionView) {
+    setModelConnections((current) =>
+      replaceSetting(current, saved, "connection_id"),
+    );
+  }
+  async function saveEmbeddingProfile(
+    draft: EmbeddingProfileDraft,
+    profileId?: string,
+  ) {
     setEmbeddingProfilesPending(true);
     setEmbeddingProfilesError("");
     try {
-      await request<EmbeddingProfileView>("/api/admin/embedding-profiles", {
-        method: "POST",
-        body: JSON.stringify(draft),
-      });
+      await modelRequests.current.embedding.mutate(
+        () =>
+          request<EmbeddingProfileView>(
+            "/api/admin/embedding-profiles" +
+              (profileId ? "/" + encodeURIComponent(profileId) : ""),
+            { method: profileId ? "PUT" : "POST", body: JSON.stringify(draft) },
+          ),
+        applyEmbeddingProfile,
+      );
       await refreshEmbeddingProfiles();
+      await refreshAnalysisSelection();
     } catch (error) {
       setEmbeddingProfilesError(embeddingProfileErrorMessage(locale, error));
     } finally {
       setEmbeddingProfilesPending(false);
     }
   }
-
-  async function createModelConnection(draft: ModelConnectionDraft) {
-    setModelConnectionsPending(true);
-    setModelConnectionsError("");
-    try {
-      await request<ModelConnectionView>("/api/admin/model-connections", {
-        method: "POST",
-        body: JSON.stringify(draft),
-      });
-      await refreshModelConnections();
-    } catch (error) {
-      setModelConnectionsError(
-        error instanceof Error ? error.message : "REQUEST_FAILED",
-      );
-    } finally {
-      setModelConnectionsPending(false);
-    }
+  async function createEmbeddingProfile(draft: EmbeddingProfileDraft) {
+    await saveEmbeddingProfile(draft);
   }
 
-  async function deleteModelConnection(connectionId: string) {
-    setModelConnectionsPending(true);
-    setModelConnectionsError("");
-    try {
-      await request<void>(
-        "/api/admin/model-connections/" + encodeURIComponent(connectionId),
-        { method: "DELETE" },
-      );
-      await refreshModelConnections();
-    } catch (error) {
-      setModelConnectionsError(
-        error instanceof Error ? error.message : "REQUEST_FAILED",
-      );
-    } finally {
-      setModelConnectionsPending(false);
-    }
-  }
-
-  async function updateModelConnection(
-    connectionId: string,
+  async function saveModelConnection(
     draft: ModelConnectionDraft,
+    connectionId?: string,
   ) {
     setModelConnectionsPending(true);
     setModelConnectionsError("");
+    setServiceSaveNotice(null);
     try {
-      await request<ModelConnectionView>(
-        "/api/admin/model-connections/" + encodeURIComponent(connectionId),
-        { method: "PUT", body: JSON.stringify(draft) },
+      await modelRequests.current.connection.mutate(
+        () =>
+          request<ModelConnectionView>(
+            "/api/admin/model-connections" +
+              (connectionId ? "/" + encodeURIComponent(connectionId) : ""),
+            {
+              method: connectionId ? "PUT" : "POST",
+              body: JSON.stringify(draft),
+            },
+          ),
+        applyModelConnection,
       );
+      setServiceSaveNotice({
+        id: ++serviceSaveSequence.current,
+        message: connectionId
+          ? copyFor(locale, "服務已更新", "Service updated")
+          : copyFor(locale, "服務已儲存", "Service saved"),
+      });
       await refreshModelConnections();
-      await refreshChatProfiles();
       await refreshAnalysisSelection();
     } catch (error) {
-      setModelConnectionsError(
-        error instanceof Error ? error.message : "REQUEST_FAILED",
+      setModelConnectionsError(modelConnectionErrorMessage(locale, error));
+    } finally {
+      setModelConnectionsPending(false);
+    }
+  }
+  async function createModelConnection(draft: ModelConnectionDraft) {
+    await saveModelConnection(draft);
+  }
+  async function updateModelConnection(
+    id: string,
+    draft: ModelConnectionDraft,
+  ) {
+    await saveModelConnection(draft, id);
+  }
+
+  async function deleteModelConnection(connectionId: string) {
+    setServiceSaveNotice(null);
+    setModelConnectionsPending(true);
+    setModelConnectionsError("");
+    try {
+      await modelRequests.current.connection.mutate(
+        () =>
+          request<void>(
+            "/api/admin/model-connections/" + encodeURIComponent(connectionId),
+            { method: "DELETE" },
+          ),
+        () =>
+          setModelConnections((current) =>
+            current.filter((c) => c.connection_id !== connectionId),
+          ),
       );
+      await refreshModelConnections();
+      await refreshAnalysisSelection();
+    } catch (error) {
+      setModelConnectionsError(modelConnectionErrorMessage(locale, error));
     } finally {
       setModelConnectionsPending(false);
     }
   }
 
-  async function createChatProfile(draft: ChatProfileDraft) {
+  async function saveChatProfile(draft: ChatProfileDraft, profileId?: string) {
     setChatProfilesPending(true);
     setChatProfilesError("");
     try {
-      await request<ChatProfileView>("/api/admin/chat-profiles", {
-        method: "POST",
-        body: JSON.stringify(draft),
-      });
+      await modelRequests.current.chat.mutate(
+        () =>
+          request<ChatProfileView>(
+            "/api/admin/chat-profiles" +
+              (profileId ? "/" + encodeURIComponent(profileId) : ""),
+            { method: profileId ? "PUT" : "POST", body: JSON.stringify(draft) },
+          ),
+        applyChatProfile,
+      );
       await refreshChatProfiles();
       await refreshAnalysisSelection();
     } catch (error) {
@@ -1710,6 +1914,12 @@ export function AdminPage({ locale }: { locale: Locale }) {
     } finally {
       setChatProfilesPending(false);
     }
+  }
+  async function createChatProfile(draft: ChatProfileDraft) {
+    await saveChatProfile(draft);
+  }
+  async function updateChatProfile(id: string, draft: ChatProfileDraft) {
+    await saveChatProfile(draft, id);
   }
 
   async function actOnChatProfile(
@@ -1718,34 +1928,29 @@ export function AdminPage({ locale }: { locale: Locale }) {
   ) {
     setChatProfilesPending(true);
     setChatProfilesError("");
+    setChatProbeId(action === "probe" ? profileId : null);
     try {
-      await request<ChatProfileView>(
-        `/api/admin/chat-profiles/${encodeURIComponent(profileId)}${
-          action === "delete" ? "" : `/${action}`
-        }`,
-        { method: action === "delete" ? "DELETE" : "POST" },
+      await modelRequests.current.chat.mutate(
+        () =>
+          request<ChatProfileView>(
+            `/api/admin/chat-profiles/${encodeURIComponent(profileId)}${action === "delete" ? "" : `/${action}`}`,
+            { method: action === "delete" ? "DELETE" : "POST" },
+          ),
+        (saved) => {
+          if (action === "delete")
+            setChatProfiles((current) =>
+              current.filter((p) => p.profile_id !== profileId),
+            );
+          else applyChatProfile(saved);
+        },
       );
       await refreshChatProfiles();
+      await refreshAnalysisSelection();
     } catch (error) {
       setChatProfilesError(chatProfileErrorMessage(locale, error));
     } finally {
       setChatProfilesPending(false);
-    }
-  }
-
-  async function updateChatProfile(profileId: string, draft: ChatProfileDraft) {
-    setChatProfilesPending(true);
-    setChatProfilesError("");
-    try {
-      await request<ChatProfileView>(
-        "/api/admin/chat-profiles/" + encodeURIComponent(profileId),
-        { method: "PUT", body: JSON.stringify(draft) },
-      );
-      await refreshChatProfiles();
-    } catch (error) {
-      setChatProfilesError(chatProfileErrorMessage(locale, error));
-    } finally {
-      setChatProfilesPending(false);
+      setChatProbeId(null);
     }
   }
 
@@ -1755,12 +1960,21 @@ export function AdminPage({ locale }: { locale: Locale }) {
   ) {
     setEmbeddingProfilesPending(true);
     setEmbeddingProfilesError("");
+    setEmbeddingProbeId(action === "probe" ? profileId : null);
     try {
-      await request<EmbeddingProfileView>(
-        `/api/admin/embedding-profiles/${encodeURIComponent(profileId)}${
-          action === "delete" ? "" : `/${action}`
-        }`,
-        { method: action === "delete" ? "DELETE" : "POST" },
+      await modelRequests.current.embedding.mutate(
+        () =>
+          request<EmbeddingProfileView>(
+            `/api/admin/embedding-profiles/${encodeURIComponent(profileId)}${action === "delete" ? "" : `/${action}`}`,
+            { method: action === "delete" ? "DELETE" : "POST" },
+          ),
+        (saved) => {
+          if (action === "delete")
+            setEmbeddingProfiles((current) =>
+              current.filter((p) => p.profile_id !== profileId),
+            );
+          else applyEmbeddingProfile(saved);
+        },
       );
       await refreshEmbeddingProfiles();
       await refreshAnalysisSelection();
@@ -1768,6 +1982,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
       setEmbeddingProfilesError(embeddingProfileErrorMessage(locale, error));
     } finally {
       setEmbeddingProfilesPending(false);
+      setEmbeddingProbeId(null);
     }
   }
 
@@ -2150,7 +2365,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
   }
 
   async function copyGuidedDraft() {
-    if (!draft) return;
+    if (!draft) throw new Error("DRAFT_NOT_READY");
     await navigator.clipboard.writeText(draft);
   }
 
@@ -2348,60 +2563,189 @@ export function AdminPage({ locale }: { locale: Locale }) {
     );
   }
 
+  const connectionsForPurpose = (purpose: "chat" | "embedding") =>
+    modelConnections.filter(
+      (connection) =>
+        connection.source === "managed" ||
+        connection.connection_id === `environment-${purpose}`,
+    );
+  const connectionPanel = (
+    managementActions: boolean,
+    purpose?: "chat" | "embedding",
+  ) => (
+    <ModelConnectionPanel
+      onReadEndpoint={(connectionId) =>
+        request<{ connection_id: string; revision: number; base_url: string }>(
+          `/api/admin/model-connections/${encodeURIComponent(connectionId)}/edit-endpoint`,
+          { method: "POST" },
+        )
+      }
+      connections={modelConnections}
+      error={modelConnectionsError}
+      locale={locale}
+      managementActions={managementActions}
+      onCreate={(value) => void createModelConnection(value)}
+      onDelete={(value) => void deleteModelConnection(value)}
+      onRefresh={() => void refreshModelConnections()}
+      onUpdate={(connectionId, value) =>
+        void updateModelConnection(connectionId, value)
+      }
+      pending={modelConnectionsPending || modelConnectionsLoading}
+      notice={modelConnectionsNotice}
+      purpose={purpose}
+    />
+  );
+  const chatPanel = (managementActions: boolean) => (
+    <ChatProfilePanel
+      connections={connectionsForPurpose("chat")}
+      error={chatProfilesError}
+      locale={locale}
+      managementActions={managementActions}
+      onActivate={(profileId) => void actOnChatProfile(profileId, "activate")}
+      onCreate={(profile) => void createChatProfile(profile)}
+      onDelete={(profileId) => void actOnChatProfile(profileId, "delete")}
+      onUpdate={(profileId, profile) =>
+        void updateChatProfile(profileId, profile)
+      }
+      onProbe={(profileId) => void actOnChatProfile(profileId, "probe")}
+      onRefresh={() => void refreshChatProfiles()}
+      pending={chatProfilesPending || chatProfilesLoading}
+      pendingProfileId={chatProbeId}
+      notice={chatProfilesNotice}
+      profiles={chatProfiles}
+    />
+  );
+  const embeddingPanel = (managementActions: boolean) => (
+    <EmbeddingProfilePanel
+      catalog={embeddingModelCatalog}
+      connections={connectionsForPurpose("embedding")}
+      error={embeddingProfilesError}
+      installedModels={[]}
+      installedState={installedState}
+      onLoadInstalled={(connectionId) => void loadInstalledModels(connectionId)}
+      onUpdate={(profileId, draft) =>
+        void saveEmbeddingProfile(draft, profileId)
+      }
+      locale={locale}
+      managementActions={managementActions}
+      onActivate={(profileId) =>
+        void actOnEmbeddingProfile(profileId, "activate")
+      }
+      onCreate={(profile) => void createEmbeddingProfile(profile)}
+      onDelete={(profileId) => void actOnEmbeddingProfile(profileId, "delete")}
+      onOllamaDelete={(profileId) =>
+        void actOnOllamaEmbeddingModel(profileId, "delete")
+      }
+      onOllamaPull={(profileId) =>
+        void actOnOllamaEmbeddingModel(profileId, "pull")
+      }
+      onProbe={(profileId) => void actOnEmbeddingProfile(profileId, "probe")}
+      onRefresh={() => void refreshEmbeddingProfiles()}
+      pending={embeddingProfilesPending || embeddingProfilesLoading}
+      pendingProfileId={embeddingProbeId}
+      notice={embeddingProfilesNotice}
+      profiles={embeddingProfiles}
+    />
+  );
   const modelPanels = (
-    <>
-      <ModelConnectionPanel
-        connections={modelConnections}
-        error={modelConnectionsError}
-        locale={locale}
-        onCreate={(value) => void createModelConnection(value)}
-        onDelete={(value) => void deleteModelConnection(value)}
-        onRefresh={() => void refreshModelConnections()}
-        onUpdate={(connectionId, value) =>
-          void updateModelConnection(connectionId, value)
-        }
-        pending={modelConnectionsPending}
-      />
-      <ChatProfilePanel
-        connections={modelConnections}
-        error={chatProfilesError}
-        locale={locale}
-        onActivate={(profileId) => void actOnChatProfile(profileId, "activate")}
-        onCreate={(profile) => void createChatProfile(profile)}
-        onDelete={(profileId) => void actOnChatProfile(profileId, "delete")}
-        onUpdate={(profileId, profile) =>
-          void updateChatProfile(profileId, profile)
-        }
-        onProbe={(profileId) => void actOnChatProfile(profileId, "probe")}
-        onRefresh={() => void refreshChatProfiles()}
-        pending={chatProfilesPending}
-        profiles={chatProfiles}
-      />
-      <EmbeddingProfilePanel
-        catalog={embeddingModelCatalog}
-        connections={modelConnections}
-        error={embeddingProfilesError}
-        installedModels={installedEmbeddingModels}
-        locale={locale}
-        onActivate={(profileId) =>
-          void actOnEmbeddingProfile(profileId, "activate")
-        }
-        onCreate={(profile) => void createEmbeddingProfile(profile)}
-        onDelete={(profileId) =>
-          void actOnEmbeddingProfile(profileId, "delete")
-        }
-        onOllamaDelete={(profileId) =>
-          void actOnOllamaEmbeddingModel(profileId, "delete")
-        }
-        onOllamaPull={(profileId) =>
-          void actOnOllamaEmbeddingModel(profileId, "pull")
-        }
-        onProbe={(profileId) => void actOnEmbeddingProfile(profileId, "probe")}
-        onRefresh={() => void refreshEmbeddingProfiles()}
-        pending={embeddingProfilesPending}
-        profiles={embeddingProfiles}
-      />
-    </>
+    <div className="admin-model-management">
+      {connectionPanel(true)}
+      {chatPanel(true)}
+      {embeddingPanel(true)}
+    </div>
+  );
+  const selectedChatId = analysisSelection?.selection.chat_profile_id ?? null;
+  const selectedEmbeddingId =
+    analysisSelection?.selection.embedding_profile_id ?? null;
+  const selectedChat = selectedChatId
+    ? chatProfiles.find((profile) => profile.profile_id === selectedChatId)
+    : null;
+  const selectedEmbedding = selectedEmbeddingId
+    ? embeddingProfiles.find(
+        (profile) => profile.profile_id === selectedEmbeddingId,
+      )
+    : null;
+  const displayedChat =
+    selectedChat ??
+    chatProfiles.find(
+      (profile) => profile.status === "ready" && profile.last_probed_at,
+    ) ??
+    chatProfiles[0] ??
+    null;
+  const displayedEmbedding =
+    selectedEmbedding ??
+    embeddingProfiles.find(
+      (profile) => profile.last_probed_at && !profile.last_error_code,
+    ) ??
+    embeddingProfiles[0] ??
+    null;
+  const modelState = (
+    selected: boolean,
+    profile: ChatProfileView | EmbeddingProfileView | null | undefined,
+    pending: boolean,
+  ): AdminModelState => {
+    if (pending) return "testing";
+    if (!profile) return "unconfigured";
+    if (profile.last_error_code || profile.status === "probe_failed") {
+      return "unavailable";
+    }
+    if (selected && analysisSelection?.eligible) return "selected";
+    if (profile.last_probed_at) return "tested";
+    return "unconfigured";
+  };
+  const connectionName = (connectionId: string | null | undefined) =>
+    modelConnections.find(
+      (connection) => connection.connection_id === connectionId,
+    )?.display_name ?? null;
+  const connectionProvider = (connectionId: string | null | undefined) =>
+    modelConnections.find(
+      (connection) => connection.connection_id === connectionId,
+    )?.provider ?? null;
+  const workspaceStatus: AdminWorkspaceStatus = {
+    chat: {
+      model: displayedChat?.model_id ?? null,
+      connection: connectionName(displayedChat?.connection_id),
+      provider: connectionProvider(displayedChat?.connection_id),
+      state: modelState(
+        displayedChat?.profile_id === selectedChatId,
+        displayedChat,
+        chatProbeId === displayedChat?.profile_id,
+      ),
+    },
+    embedding: {
+      model: displayedEmbedding?.model_id ?? null,
+      connection: connectionName(displayedEmbedding?.connection_reference),
+      provider: displayedEmbedding?.provider ?? null,
+      state: modelState(
+        displayedEmbedding?.profile_id === selectedEmbeddingId,
+        displayedEmbedding,
+        embeddingProbeId === displayedEmbedding?.profile_id,
+      ),
+    },
+    publicBundleId: status?.active_bundle_id ?? null,
+  };
+  const guidedModelSetup = (
+    <ModelSetupWorkspace
+      chatConnectionView={connectionPanel(false, "chat")}
+      chatView={chatPanel(false)}
+      embeddingConnectionView={connectionPanel(false, "embedding")}
+      embeddingView={embeddingPanel(false)}
+      locale={locale}
+      selectionView={
+        <AnalysisSelectionPanel
+          connections={modelConnections}
+          chatProfiles={chatProfiles}
+          embeddingProfiles={embeddingProfiles}
+          error={analysisSelectionError}
+          locale={locale}
+          onSelect={(chatId, embeddingId, generation) =>
+            void selectAnalysisModels(chatId, embeddingId, generation)
+          }
+          pending={analysisSelectionPending}
+          value={analysisSelection}
+        />
+      }
+    />
   );
 
   return (
@@ -2416,6 +2760,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
         githubOperationsReady={githubOperationsReady}
         guidedView={
           <GuidedOnboardingView
+            workspaceStatus={workspaceStatus}
             batchAnalysisActive={
               batchSnapshot !== null && !isTerminalBatch(batchSnapshot.status)
             }
@@ -2446,22 +2791,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
               !batchCreatePending
             }
             batchCreatePending={batchCreatePending}
-            modelSetupView={
-              <>
-                <AnalysisSelectionPanel
-                  chatProfiles={chatProfiles}
-                  embeddingProfiles={embeddingProfiles}
-                  error={analysisSelectionError}
-                  locale={locale}
-                  onSelect={(chatId, embeddingId, generation) =>
-                    void selectAnalysisModels(chatId, embeddingId, generation)
-                  }
-                  pending={analysisSelectionPending}
-                  value={analysisSelection}
-                />
-                {modelPanels}
-              </>
-            }
+            modelSetupView={guidedModelSetup}
             busy={busy}
             errorCode={adminErrors.guidedCode}
             locale={locale}
@@ -2470,7 +2800,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
             onAction={applyGuidedAction}
             onAnalyze={(slug) => void analyzeRepository(slug)}
             onCreateBatch={() => void createAnalysisBatch()}
-            onCopyDraft={() => void copyGuidedDraft()}
+            onCopyDraft={copyGuidedDraft}
             onCreateDraft={() => void createGuidedDraft()}
             onDiscover={(account, page) =>
               void discoverRepositories(account, page)
@@ -2486,6 +2816,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
         }
         locale={locale}
         notice={adminErrors.globalMessage}
+        onLocaleChange={onLocaleChange}
         onCopy={() =>
           void navigator.clipboard.writeText(snippet?.markdown ?? "")
         }
@@ -2493,6 +2824,7 @@ export function AdminPage({ locale }: { locale: Locale }) {
         onDraftChange={(value) => {
           setDraft(value);
           setValidation(null);
+          setPreview(null);
           setConflict(false);
           setGuidedState((current) =>
             guidedOnboardingReducer(current, {
@@ -2516,6 +2848,12 @@ export function AdminPage({ locale }: { locale: Locale }) {
         status={status}
         validation={validation}
       />
+      {serviceSaveNotice && (
+        <TransientNotice
+          key={serviceSaveNotice.id}
+          message={serviceSaveNotice.message}
+        />
+      )}
     </>
   );
 }

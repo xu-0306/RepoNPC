@@ -39,7 +39,11 @@ from reponpc.admin.batch_runtime import (
 )
 from reponpc.admin.batches import AnalysisBatchService, BatchStageGates
 from reponpc.admin.chat_profiles import ChatProfile, ChatProfileRegistry
-from reponpc.admin.embedding_profiles import EmbeddingProfile, EmbeddingProfileRegistry
+from reponpc.admin.embedding_profiles import (
+    EmbeddingProfile,
+    EmbeddingProfileError,
+    EmbeddingProfileRegistry,
+)
 from reponpc.admin.embedding_reindex import (
     EmbeddingReindexCoordinator,
     ProductionFrozenProfileBuilder,
@@ -74,6 +78,7 @@ from reponpc.providers import (
     OpenAICompatibleChatProvider,
     OpenAICompatibleEmbeddingProvider,
     ProviderCapabilities,
+    ProviderError,
     RuntimeEmbeddingProvider,
 )
 from reponpc.providers.runtime import ProviderRuntime
@@ -539,7 +544,10 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
                 connection.provider,
                 secret.base_url,
                 secret.api_key,
-                profile.identity,
+                profile.identity if profile.dimension is not None else None,
+                model=profile.model_id,
+                query_prefix=profile.query_prefix,
+                passage_prefix=profile.passage_prefix,
             )
         except ModelConnectionError:
             return None
@@ -686,6 +694,22 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
     app.state.chat_profile_registry = chat_profiles
     model_operations = OllamaModelOperationCoordinator(embedding_profiles)
     app.state.ollama_model_operations = model_operations
+
+    def list_connection_models(connection_id: str) -> tuple[str, ...]:
+        try:
+            connection = model_connections.get(connection_id)
+            if connection.provider != "ollama":
+                raise EmbeddingProfileError("VALIDATION_ERROR")
+            secret = model_connections.secret_for(connection_id, connection.revision)
+            provider = OllamaEmbeddingProvider(
+                secret.base_url, "model-list", None, allow_dimension_discovery=True
+            )
+            return provider.installed_models()
+        except ModelConnectionError:
+            raise EmbeddingProfileError("EMBEDDING_CONNECTION_REQUIRED") from None
+        except ProviderError:
+            raise EmbeddingProfileError("EMBEDDING_MODEL_OPERATION_FAILED") from None
+
     app.state.admin_operations = AdminOperations(
         github=github,
         database=runtime_database,
@@ -697,6 +721,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         chat_profiles=chat_profiles,
         analysis_selection=analysis_selection,
         ollama_model_operations=model_operations,
+        connection_model_lister=list_connection_models,
     )
 
 
@@ -921,7 +946,8 @@ def _environment_embedding_provider(
     profile: EmbeddingProfile,
 ) -> RuntimeEmbeddingProvider | None:
     if (
-        profile.connection_reference not in {"environment", "environment-embedding"}
+        profile.dimension is None
+        or profile.connection_reference not in {"environment", "environment-embedding"}
         or profile.provider != settings.embedding_provider
     ):
         return None
@@ -993,17 +1019,34 @@ def _embedding_provider_from_connection(
     provider: str,
     base_url: str,
     api_key: str | None,
-    identity: EmbeddingIdentity,
+    identity: EmbeddingIdentity | None,
+    *,
+    model: str | None = None,
+    query_prefix: str = "",
+    passage_prefix: str = "",
 ) -> RuntimeEmbeddingProvider:
+    model_id = identity.model_id if identity else model
+    if not model_id:
+        raise ValueError("embedding model is required")
     if provider == "ollama":
-        return OllamaEmbeddingProvider(base_url, identity.model_id, identity)
+        return OllamaEmbeddingProvider(
+            base_url,
+            model_id,
+            identity,
+            allow_dimension_discovery=identity is None,
+            query_prefix=query_prefix,
+            passage_prefix=passage_prefix,
+        )
     if provider in {"openai_compatible", "vllm"}:
         return OpenAICompatibleEmbeddingProvider(
             base_url,
-            identity.model_id,
+            model_id,
             identity,
             api_key=api_key,
             allow_private_http=provider == "vllm",
+            allow_dimension_discovery=identity is None,
+            query_prefix=query_prefix,
+            passage_prefix=passage_prefix,
         )
     raise ValueError("unsupported embedding provider")
 

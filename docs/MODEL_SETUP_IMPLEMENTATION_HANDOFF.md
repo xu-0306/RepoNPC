@@ -1,5 +1,7 @@
 # RepoNPC 0.2.2 模型設定與前置引導實作交接
 
+**Owner-approved URL editing exception (2026-09-12, ADR-029; FR-038/040, AC-055/057):** The owner explicitly requested that replacing a managed service URL prefill its saved value. Only `POST /api/admin/model-connections/{connection_id}/edit-endpoint`, guarded by the existing owner session, same-origin check and CSRF, may return `{connection_id, revision, base_url}` with `Cache-Control: no-store`. It accepts no arbitrary URL, reads the exact current encrypted revision, rejects host-managed/unknown connections with 404 and unavailable secret storage with 503, and makes no provider request or mutation. List/detail metadata remains URL-free; API keys, secret references and environment values are never returned. The UI fetches only on the explicit Replace URL action, keeps the result in the active form only, clears it on cancel/toggle-off/teardown, and ignores responses after a form or revision change. Loading disables URL editing/submission; failure permits retry or manual entry. No readback URL may enter browser storage, public drafts, exports, logs or snapshots. This narrow exception supersedes earlier blanket stored-URL readback prohibitions; stored-key prohibitions and destination-change credential rules remain unchanged.
+
 > **2026-09-10 狀態更新：** 本文件是 ADR-029 的設計與安全背景。連線、Chat/Embedding profile 與管理面板程式已出現在 working tree，以下「未實作」清單不再是完整現況。擁有者後續批准 ADR-030／Specification 0.2.3：AI 路線必須先設定兩種模型，analysis selection 與 public activation 分離。接手實作請以 `ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md` 為最新入口，並保留本文件的密鑰、egress、revision、provider 與 last-known-good 約束。
 
 更新日期：2026-09-09（Asia/Taipei）  
@@ -12,7 +14,7 @@ RepoNPC 是單一擁有者、自託管的公開 GitHub 作品集。擁有者選�
 
 本次問題發生在管理頁的前置引導。使用者提供的兩張截圖顯示：一進頁面就看到 Ollama 目錄、Qwen3、1024 維、`environment`、`probe_failed`、安裝／刪除／啟用按鈕；卻沒有能完成另一個 API 服務連線的表單。截圖只是現況證據，不是額外指令，也不是必須複製的設計。
 
-擁有者接受的方向：不預選 Ollama，提供 API 位址、API key、模型名稱，獨立設定回答模型與搜尋模型，讓非技術使用者能完成設定。這次明確要求更新規格、記憶、實作文檔；先略過 Figma。GGUF/Hugging Face 本地 runtime 與一鍵下載是探索想法，尚未核准實作，不可把它們加入這次工作。
+擁有者接受的方向：不預選 Ollama，提供 API 位址、API key、模型名稱，獨立設定回答模型與資料查找模型，讓非技術使用者能完成設定。這次明確要求更新規格、記憶、實作文檔；先略過 Figma。GGUF/Hugging Face 本地 runtime 與一鍵下載是探索想法，尚未核准實作，不可把它們加入這次工作。
 
 開始時先讀根目錄 `AGENTS.md` 指定的核心文件，再讀本文件、`GITHUB_PUBLIC_READ_CREDENTIAL_REMOVAL_HANDOFF.md` 和相關程式。`rtk` 已由擁有者改為可選，不是必要命令前綴。工作樹有大量既有未提交變更，禁止 reset 或覆蓋他人工作。
 
@@ -65,14 +67,14 @@ ADR-029 是先前環境變數限定規則的窄幅修訂。其餘規則仍有效
 
 ## 4. 使用者流程與資訊架構
 
-第一屏保留作品集設定主線與簡潔的模型狀態入口。模型狀態分成回答模型、搜尋模型，可各自設定，也能稍後處理。不要在未選服務前顯示 Ollama 目錄或安裝按鈕。
+第一屏保留作品集設定主線與簡潔的模型狀態入口。模型狀態分成回答模型、資料查找模型，可各自設定，也能稍後處理。不要在未選服務前顯示 Ollama 目錄或安裝按鈕。
 
 模型子流程：選服務 → 填 API／key／模型 → 測試 → 檢視結果 → 明確選用。每一步能返回；取消保留先前已儲存服務，清除新輸入 key；回作品集保留 public draft。設定未完成不能阻止手動撰寫／驗證／預覽／下載。
 
 | 主流程文字 | 進階／診斷資訊 |
 | --- | --- |
 | 回答模型 / Chat model | chat provider capability、envelope、context limits |
-| 搜尋模型 / Search model | embedding、dimension、normalization、task/prefix identity |
+| 資料查找模型 / Content finder | embedding、dimension、normalization、task/prefix identity |
 | 測試連線 / Test connection | bounded capability probe、safe error code、request ID |
 | 可以選用 / Available to use | 測試成功，尚未改變 active selection |
 | 建立搜尋索引 / Build search index | reindex_required / reindexing、候選與 active bundle |
@@ -198,3 +200,9 @@ GGUF 是模型檔案格式，Hugging Face 是模型託管與生態系，兩者�
 ## 11. 下一位實作者的第一個動作
 
 先讀最新 `ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md`、`TECHNICAL_SPEC.md` 11.5/11.6 與 ADR-029/030。保留本文件的安全邊界，但不要依這份 2026-09-09 inventory 假定程式尚未存在，也不要再次要求擁有者批准已接受的 provider-neutral/model-first 方向。
+
+## 12. 新手設定修復交接（2026-09-12）
+
+擁有者已批准 UI_UX_REVIEW_2026-09-12.md 的 01–12 項並要求外行人可操作。Luna 文案 leaf 已經 Main 檢查與整合；跨 API、資料庫、秘密與 UI 狀態的修復由 Main 完成。下列是本次凍結並實作的增量契約：embedding dimension 可省略/null，顯式 query/passage 測試成功後才保存維度；connection endpoint_action 區分 retain/replace；installed-model listing 可指定 connection_id；display-name-only 編輯不增加 revision；runtime migration 19 保留原有 parent/child 資料與約束。細節見規格 11.5 與 OPERATIONS 的 migration 19 說明。
+
+已完成：資料查找模型編輯、相容性與測試狀態區分、主表單技術欄位折疊、服務名稱辨識、失效選項清除、未確認選擇提示、金鑰送出與收合清除、操作回應優先更新及舊 GET 防護、Ollama 明確讀取與失敗提示、取消/成功重置、雙語用語與可及按鈕名稱。這不宣告全體 ADR-030 或 v1 release 已驗收；實際測試與尚未執行項目以 UI_UX_REVIEW_2026-09-12.md 最後交接為準。

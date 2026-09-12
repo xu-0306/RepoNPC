@@ -80,6 +80,34 @@ def fixture_response(scenario: dict[str, Any]) -> ProviderHttpResponse:
     return ProviderHttpResponse(scenario["status"], {}, encoded)
 
 
+@pytest.mark.parametrize("encoding", ["utf-8", "utf-8-sig", "utf-16", "utf-32"])
+@pytest.mark.parametrize("adapter", ["openai_compatible", "ollama"])
+def test_chat_json_wire_encoding_is_not_confused_with_answer_format(
+    adapter: str, encoding: str
+) -> None:
+    content = '{"answer_markdown":"你好 Ω"}'
+    payload = (
+        {"choices": [{"message": {"content": content}, "finish_reason": "stop"}]}
+        if adapter == "openai_compatible"
+        else {"message": {"content": content}, "done_reason": "stop"}
+    )
+    transport = RecordingTransport(
+        [
+            ProviderHttpResponse(
+                200,
+                {"Content-Type": "application/json"},
+                json.dumps(payload, ensure_ascii=False).encode(encoding),
+            )
+        ]
+    )
+    cls = OpenAICompatibleChatProvider if adapter == "openai_compatible" else OllamaChatProvider
+    provider = cls(
+        "https://models.example.test/v1", "arbitrary/model", CAPABILITIES, transport=transport
+    )
+    assert provider.generate(MESSAGES, SCHEMA, 100, 3.0).content == content
+    assert len(transport.requests) == 1
+
+
 def test_openai_adapter_buffers_structured_output_and_usage_without_streaming() -> None:
     transport = RecordingTransport(
         [

@@ -18,6 +18,7 @@ from reponpc.providers.contracts import (
     ProviderUsage,
     ResponseSchema,
 )
+from reponpc.providers.error_messages import provider_error_message
 from reponpc.providers.http_transport import (
     ProviderHttpTransport,
     ProviderOrigin,
@@ -25,6 +26,7 @@ from reponpc.providers.http_transport import (
     failure_for_status,
 )
 from reponpc.providers.model_catalog import openai_model_available
+from reponpc.providers.response_diagnostics import ProviderResponseError, ResponseIssue
 
 _CONTEXT_OVERFLOW_CODES = frozenset(
     {
@@ -125,29 +127,46 @@ class OpenAICompatibleChatProvider(ChatProvider):
             timeout=timeout,
         )
         if response.status != 200:
-            raise ProviderError(_failure_for_response(response.status, response.body))
+            raise ProviderError(
+                _failure_for_response(response.status, response.body),
+                upstream_status=response.status,
+                upstream_message=provider_error_message(
+                    response.body, response.headers, private_values=(self.base_url, self.api_key)
+                ),
+            )
+        issue = ResponseIssue.JSON
         try:
             payload = _json_object(response.body)
+            issue = ResponseIssue.CHOICES
             choices = payload["choices"]
             if not isinstance(choices, list) or len(choices) != 1:
                 raise ValueError
+            issue = ResponseIssue.MESSAGE
             choice = choices[0]
             if not isinstance(choice, dict) or not isinstance(choice.get("message"), dict):
                 raise ValueError
+            # Check termination before content: an exhausted output budget can
+            # produce no visible text at all, even with a successful HTTP call.
+            finish_reason = choice.get("finish_reason")
+            issue = ResponseIssue.CONTENT
             content = choice["message"].get("content")
+            if content in (None, "") and finish_reason == "length":
+                raise ProviderResponseError(ResponseIssue.OUTPUT_LIMIT)
             if not isinstance(content, (str, dict)) or not content:
                 raise ValueError
-            finish_reason = choice.get("finish_reason")
+            issue = ResponseIssue.FINISH_REASON
             if not isinstance(finish_reason, str) or not finish_reason:
                 raise ValueError
+            issue = ResponseIssue.USAGE
             usage = (
                 _usage(payload.get("usage")) if self.capabilities_config.usage_reporting else None
             )
+            issue = ResponseIssue.REQUEST_ID
             request_id = payload.get("id")
             if request_id is not None and not isinstance(request_id, str):
                 raise ValueError
         except (KeyError, ValueError, TypeError) as exc:
-            raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from exc
+            raise ProviderResponseError(issue) from exc
         return ProviderResult(
             content=content,
             finish_reason=finish_reason,
@@ -216,7 +235,9 @@ def _failure_for_response(status: int, body: bytes) -> ProviderFailureCode:
 
 def _json_object(body: bytes) -> dict[str, Any]:
     try:
-        payload = json.loads(body.decode("utf-8"))
+        # Match JSON byte decoding used by HTTP clients (including BOM and
+        # Unicode encoding detection); answer validation is a separate layer.
+        payload = json.loads(body)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError from exc
     if not isinstance(payload, dict):

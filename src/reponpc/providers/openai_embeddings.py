@@ -22,6 +22,7 @@ from reponpc.providers.contracts import (
     ProviderHealth,
     RuntimeEmbeddingProvider,
 )
+from reponpc.providers.error_messages import provider_error_message
 from reponpc.providers.http_transport import (
     ProviderHttpTransport,
     ProviderOrigin,
@@ -50,23 +51,28 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
         self,
         base_url: str,
         model: str,
-        identity: EmbeddingIdentity,
+        identity: EmbeddingIdentity | None,
         transport: ProviderHttpTransport | None = None,
         *,
         api_key: str | None = None,
         allow_private_http: bool = False,
+        allow_dimension_discovery: bool = False,
+        query_prefix: str = "",
+        passage_prefix: str = "",
     ) -> None:
         if not isinstance(base_url, str) or not base_url:
             raise ValueError("embedding base URL must be non-empty")
         if not isinstance(model, str) or not model:
             raise ValueError("embedding model must be non-empty")
-        if not isinstance(identity, EmbeddingIdentity):
+        if not isinstance(identity, EmbeddingIdentity) and not (
+            identity is None and allow_dimension_discovery
+        ):
             raise TypeError("embedding identity is required")
-        if identity.adapter != "openai_compatible":
+        if identity is not None and identity.adapter != "openai_compatible":
             raise ValueError("embedding identity adapter does not match OpenAI-compatible provider")
-        if identity.model_id != model:
+        if identity is not None and identity.model_id != model:
             raise ValueError("embedding identity model does not match configured model")
-        if identity.normalized is not True:
+        if identity is not None and identity.normalized is not True:
             raise ValueError("normalized embeddings are required")
         if api_key is not None and not isinstance(api_key, str):
             raise ValueError("embedding API key must be text")
@@ -75,6 +81,8 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
 
         self._model = model
         self._identity = identity
+        self._query_prefix = identity.query_prefix if identity else query_prefix
+        self._passage_prefix = identity.passage_prefix if identity else passage_prefix
         self._transport = transport or UrllibProviderHttpTransport()
         self._api_key = api_key
         self._origin = ProviderOrigin(base_url, allow_private_http)
@@ -88,17 +96,19 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
     def identity(self) -> EmbeddingIdentity:
         """Return the exact configured, immutable embedding identity."""
 
+        if self._identity is None:
+            raise ProviderError(ProviderFailureCode.INVALID_RESPONSE)
         return self._identity
 
     def embed_query(self, texts: list[str]) -> NDArray[np.float32]:
         """Embed raw query text with the configured query prefix exactly once."""
 
-        return self._embed(texts, self._identity.query_prefix)
+        return self._embed(texts, self._query_prefix)
 
     def embed_passages(self, texts: list[str]) -> NDArray[np.float32]:
         """Embed raw passage text with the configured passage prefix exactly once."""
 
-        return self._embed(texts, self._identity.passage_prefix)
+        return self._embed(texts, self._passage_prefix)
 
     def health(self) -> ProviderHealth:
         """Check the selected service through its safe model-list endpoint."""
@@ -144,7 +154,7 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
         if not isinstance(texts, list) or any(not isinstance(text, str) for text in texts):
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE)
         if not texts:
-            return np.empty((0, self._identity.dimension), dtype=np.float32)
+            return np.empty((0, self.identity().dimension), dtype=np.float32)
 
         request = {
             "encoding_format": "float",
@@ -164,17 +174,39 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
         except Exception:
             raise ProviderError(ProviderFailureCode.UNAVAILABLE) from None
         if response.status != 200:
-            raise ProviderError(_failure_for_response(response.status, response.body))
+            raise ProviderError(
+                _failure_for_response(response.status, response.body),
+                upstream_status=response.status,
+                upstream_message=provider_error_message(
+                    response.body,
+                    response.headers,
+                    private_values=(self._origin.base_url, self._api_key),
+                ),
+            )
         try:
             payload = _json_object(response.body)
             records = payload["data"]
             if not isinstance(records, list) or len(records) != len(texts):
                 raise ValueError
-            matrix = _parse_records(records, len(texts), self._identity.dimension)
+            dimension = (
+                self._identity.dimension
+                if self._identity
+                else _sample_dimension(records[0]["embedding"])
+            )
+            matrix = _parse_records(records, len(texts), dimension)
         except ProviderError:
             raise
         except (KeyError, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
+        if self._identity is None:
+            self._identity = EmbeddingIdentity(
+                "openai_compatible",
+                self._model,
+                dimension,
+                True,
+                self._query_prefix,
+                self._passage_prefix,
+            )
         return matrix
 
     def _headers(self, additional: dict[str, str] | None = None) -> dict[str, str]:
@@ -184,6 +216,12 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
         if additional:
             headers.update(additional)
         return headers
+
+
+def _sample_dimension(vector: object) -> int:
+    if not isinstance(vector, list) or not 1 <= len(vector) <= 65536:
+        raise ProviderError(ProviderFailureCode.INVALID_RESPONSE)
+    return len(vector)
 
 
 def _parse_records(records: list[Any], count: int, dimension: int) -> NDArray[np.float32]:

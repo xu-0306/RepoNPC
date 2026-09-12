@@ -14,6 +14,7 @@ import {
   type CharacterState,
 } from "../features/character/CharacterRenderer";
 import { messages, type Locale } from "../i18n/messages";
+import { AdminAccessLayout } from "../features/admin/AdminAccessLayout";
 import {
   VisitorConversation,
   type Citation,
@@ -58,6 +59,7 @@ interface PublicProfile {
 }
 
 export function App() {
+  const adminRoute = window.location.pathname.startsWith("/admin");
   const [locale, setLocale] = useState<Locale>("zh-TW");
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<VisitorTurn[]>([]);
@@ -139,10 +141,23 @@ export function App() {
     return () => controller.abort();
   }, [locale, profileReload]);
 
-  if (window.location.pathname.startsWith("/admin")) {
+  if (adminRoute) {
     return (
-      <Suspense fallback={<p role="status">{copy.adminLoading}</p>}>
-        <AdminPage locale={locale} />
+      <Suspense
+        fallback={
+          <AdminAccessLayout
+            locale={locale}
+            title="RepoNPC"
+            headingId="admin-loading-heading"
+            mode="loading"
+          >
+            <p className="admin-auth__status" role="status">
+              {copy.adminLoading}
+            </p>
+          </AdminAccessLayout>
+        }
+      >
+        <AdminPage locale={locale} onLocaleChange={setLocale} />
       </Suspense>
     );
   }
@@ -379,7 +394,10 @@ export function App() {
                 <button
                   disabled={!chatAvailable || pending}
                   key={suggestion}
-                  onClick={() => setQuestion(suggestion)}
+                  onClick={() => {
+                    setQuestion(suggestion);
+                    questionInput.current?.focus();
+                  }}
                   type="button"
                 >
                   {suggestion}

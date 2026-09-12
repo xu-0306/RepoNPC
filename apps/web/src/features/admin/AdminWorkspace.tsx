@@ -1,4 +1,13 @@
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
+
+import {
+  ADMIN_UI_SCALES,
+  applyAdminUiScale,
+  persistAdminUiScale,
+  readAdminUiScale,
+  type AdminUiScale,
+} from "./adminUiScale";
 
 export type AdminLocale = "zh-TW" | "en";
 
@@ -80,6 +89,7 @@ export interface AdminWorkspaceProps {
   onCopy: () => void;
   onDispatch: () => void;
   onLogout: () => void;
+  onLocaleChange?: (locale: AdminLocale) => void;
   guidedView?: ReactNode;
   embeddingProfileView?: ReactNode;
   advancedMode?: boolean;
@@ -89,13 +99,25 @@ export interface AdminWorkspaceProps {
 const COPY = {
   "zh-TW": {
     title: "RepoNPC 管理工作區",
+    subtitle: "設定 AI 模型與資料來源，打造專屬的知識庫問答助手。",
+    guideMessage: "跟著步驟設定，很快就能完成囉！",
+    help: "使用說明",
+    administrator: "管理員",
+    language: "介面語言",
+    displaySettings: "顯示設定",
+    interfaceSize: "介面大小",
+    scaleLabels: {
+      standard: "標準（100%）",
+      comfortable: "舒適（預設，112.5%）",
+      large: "大型（125%）",
+    },
     authRequired: "請先登入管理員工作階段，才能編輯公開設定。",
     draftHeading: "公開設定草稿",
     draftLabel: "reponpc.yml 原始 YAML",
     draftHelp: "這份草稿尚未寫入 GitHub。儲存前請先驗證內容。",
     validate: "驗證設定",
     preview: "預覽變更",
-    save: "儲存設定",
+    save: "儲存到 GitHub",
     logout: "登出",
     validationHeading: "驗證結果",
     valid: "設定驗證通過。",
@@ -111,9 +133,9 @@ const COPY = {
     cardAlt: "未儲存的 RepoNPC 卡片預覽",
     characterAlt: "未儲存的角色預覽",
     statusHeading: "發布狀態",
-    activeBundle: "目前 bundle",
-    previousBundle: "上一個 bundle",
-    pinnedBundle: "固定 bundle",
+    activeBundle: "目前網站資料版本",
+    previousBundle: "上一個網站資料版本",
+    pinnedBundle: "固定使用的資料版本",
     lastChecked: "上次檢查",
     updateError: "更新錯誤",
     none: "無",
@@ -129,6 +151,19 @@ const COPY = {
   },
   en: {
     title: "RepoNPC admin workspace",
+    subtitle:
+      "Set up AI models and sources for your evidence-backed portfolio assistant.",
+    guideMessage: "Follow the steps—you'll have a working draft soon.",
+    help: "Setup guide",
+    administrator: "Administrator",
+    language: "Interface language",
+    displaySettings: "Display settings",
+    interfaceSize: "Interface size",
+    scaleLabels: {
+      standard: "Standard (100%)",
+      comfortable: "Comfortable (default, 112.5%)",
+      large: "Large (125%)",
+    },
     authRequired:
       "Sign in to an admin session before editing public configuration.",
     draftHeading: "Public configuration draft",
@@ -137,7 +172,7 @@ const COPY = {
       "This draft has not been written to GitHub. Validate it before saving.",
     validate: "Validate configuration",
     preview: "Preview changes",
-    save: "Save configuration",
+    save: "Save to GitHub",
     logout: "Log out",
     validationHeading: "Validation result",
     valid: "Configuration validation passed.",
@@ -154,9 +189,9 @@ const COPY = {
     cardAlt: "Unsaved RepoNPC card preview",
     characterAlt: "Unsaved character preview",
     statusHeading: "Publication status",
-    activeBundle: "Active bundle",
-    previousBundle: "Previous bundle",
-    pinnedBundle: "Pinned bundle",
+    activeBundle: "Current website data version",
+    previousBundle: "Previous website data version",
+    pinnedBundle: "Pinned website data version",
     lastChecked: "Last checked",
     updateError: "Update error",
     none: "None",
@@ -232,12 +267,28 @@ export function AdminWorkspace({
   onCopy,
   onDispatch,
   onLogout,
+  onLocaleChange,
   guidedView,
   embeddingProfileView,
   advancedMode = false,
   onAdvancedModeChange,
 }: AdminWorkspaceProps) {
   const copy = COPY[locale];
+  const [uiScale, setUiScale] = useState<AdminUiScale>(readAdminUiScale);
+  const displaySettingsRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    function closeOutside(event: PointerEvent) {
+      const panel = displaySettingsRef.current;
+      if (
+        panel?.open &&
+        event.target instanceof Node &&
+        !panel.contains(event.target)
+      )
+        panel.open = false;
+    }
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, []);
   const errors = issueList(validation?.errors, "error");
   const warnings = issueList(validation?.warnings, "warning");
   const hasConflict = isConflict(conflict);
@@ -251,6 +302,11 @@ export function AdminWorkspace({
   const snippetValue = snippetText(snippet);
   const dispatchDisabled = !authenticated || !githubOperationsReady || busy;
 
+  useEffect(() => {
+    applyAdminUiScale(uiScale);
+    persistAdminUiScale(uiScale);
+  }, [uiScale]);
+
   function handleDraftChange(event: ChangeEvent<HTMLTextAreaElement>) {
     onDraftChange(event.target.value);
   }
@@ -258,15 +314,102 @@ export function AdminWorkspace({
   return (
     <main aria-busy={busy} className="admin-workspace" lang={locale}>
       <header className="admin-workspace__header">
-        <div>
-          <p className="eyebrow">RepoNPC</p>
+        <div className="admin-workspace__brand">
           <h1 className="admin-workspace__title">{copy.title}</h1>
+          <p className="admin-workspace__subtitle">{copy.subtitle}</p>
         </div>
-        {authenticated && (
-          <button disabled={busy} onClick={onLogout} type="button">
-            {copy.logout}
-          </button>
-        )}
+        <div className="admin-workspace__guide" aria-hidden="true">
+          <span className="admin-workspace__npc">
+            <span />
+          </span>
+          <span className="admin-workspace__speech">{copy.guideMessage}</span>
+        </div>
+        <div className="admin-workspace__utilities">
+          {onLocaleChange && (
+            <div
+              aria-label={copy.language}
+              className="admin-workspace__locale"
+              role="group"
+            >
+              {(["zh-TW", "en"] as const).map((option) => (
+                <button
+                  aria-label={option === "zh-TW" ? "繁體中文" : "English"}
+                  aria-pressed={locale === option}
+                  disabled={busy}
+                  key={option}
+                  onClick={() => onLocaleChange(option)}
+                  type="button"
+                >
+                  {option === "zh-TW" ? "中" : "EN"}
+                </button>
+              ))}
+            </div>
+          )}
+          <details
+            className="admin-display-settings"
+            ref={displaySettingsRef}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && event.currentTarget.open) {
+                event.preventDefault();
+                event.currentTarget.open = false;
+                event.currentTarget.querySelector("summary")?.focus();
+              }
+            }}
+          >
+            <summary aria-label={copy.displaySettings}>
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M4 7h10M18 7h2M10 17h10M4 17h2M14 4v6M10 14v6" />
+              </svg>
+              <span>{copy.displaySettings}</span>
+            </summary>
+            <div className="admin-display-settings__panel">
+              <label htmlFor="admin-interface-scale">
+                {copy.interfaceSize}
+                <select
+                  disabled={busy}
+                  id="admin-interface-scale"
+                  onChange={(event) =>
+                    setUiScale(event.target.value as AdminUiScale)
+                  }
+                  value={uiScale}
+                >
+                  {ADMIN_UI_SCALES.map((scale) => (
+                    <option key={scale} value={scale}>
+                      {copy.scaleLabels[scale]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </details>
+          <a
+            className="admin-workspace__help"
+            href={
+              advancedMode
+                ? "#admin-draft-heading"
+                : "#guided-onboarding-heading"
+            }
+          >
+            <span aria-hidden="true">?</span>
+            {copy.help}
+          </a>
+          {authenticated && (
+            <>
+              <span className="admin-workspace__owner">
+                <span aria-hidden="true">R</span>
+                {copy.administrator}
+              </span>
+              <button
+                className="admin-workspace__logout"
+                disabled={busy}
+                onClick={onLogout}
+                type="button"
+              >
+                {copy.logout}
+              </button>
+            </>
+          )}
+        </div>
       </header>
 
       {notice && (!guidedView || advancedMode) && (
@@ -308,7 +451,10 @@ export function AdminWorkspace({
 
       {(!guidedView || advancedMode) && (
         <>
-          <section aria-labelledby="admin-draft-heading">
+          <section
+            aria-labelledby="admin-draft-heading"
+            className="admin-surface"
+          >
             <h2 id="admin-draft-heading">{copy.draftHeading}</h2>
             <label htmlFor="admin-config-draft">{copy.draftLabel}</label>
             <p id="admin-draft-help">{copy.draftHelp}</p>
@@ -350,7 +496,10 @@ export function AdminWorkspace({
             {busy && <p role="status">{copy.busy}</p>}
           </section>
 
-          <section aria-labelledby="admin-validation-heading">
+          <section
+            aria-labelledby="admin-validation-heading"
+            className="admin-surface"
+          >
             <h2 id="admin-validation-heading">{copy.validationHeading}</h2>
             {validation?.valid === true && errors.length === 0 && (
               <p role="status">{copy.valid}</p>
@@ -385,7 +534,10 @@ export function AdminWorkspace({
           )}
 
           {preview && (
-            <section aria-labelledby="admin-preview-heading">
+            <section
+              aria-labelledby="admin-preview-heading"
+              className="admin-surface"
+            >
               <h2 id="admin-preview-heading">{copy.previewHeading}</h2>
               <p role="status">{copy.unsaved}</p>
               {profile && (
@@ -434,7 +586,10 @@ export function AdminWorkspace({
             </section>
           )}
 
-          <section aria-labelledby="admin-status-heading">
+          <section
+            aria-labelledby="admin-status-heading"
+            className="admin-surface"
+          >
             <h2 id="admin-status-heading">{copy.statusHeading}</h2>
             <dl>
               <StatusRow
@@ -473,7 +628,10 @@ export function AdminWorkspace({
           </section>
 
           {snippetValue && (
-            <section aria-labelledby="admin-snippet-heading">
+            <section
+              aria-labelledby="admin-snippet-heading"
+              className="admin-surface"
+            >
               <h2 id="admin-snippet-heading">{copy.snippetHeading}</h2>
               <label htmlFor="admin-readme-snippet">{copy.snippetLabel}</label>
               <textarea

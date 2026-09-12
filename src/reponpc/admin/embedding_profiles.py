@@ -7,7 +7,7 @@ import re
 import sqlite3
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from hashlib import sha256
 from threading import RLock
@@ -15,8 +15,10 @@ from typing import Protocol
 
 import numpy as np
 
+from reponpc.admin.model_probe_errors import provider_probe_error_code
 from reponpc.bundles.manager import ActivationTransition
 from reponpc.indexing.sources import EmbeddingIdentity
+from reponpc.providers.contracts import ProviderError
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 
 _PROFILE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
@@ -79,7 +81,7 @@ class ProbeEmbeddingProvider(Protocol):
 class EmbeddingProfileInput:
     provider: str
     model_id: str
-    dimension: int
+    dimension: int | None
     normalized: bool
     query_prefix: str
     passage_prefix: str
@@ -91,7 +93,10 @@ class EmbeddingProfileInput:
             self.provider not in _PROVIDERS
             or not self.normalized
             or not 1 <= len(self.model_id) <= 256
-            or not 1 <= self.dimension <= 65536
+            or (
+                self.dimension is not None
+                and (type(self.dimension) is not int or not 1 <= self.dimension <= 65536)
+            )
             or len(self.query_prefix) > 128
             or len(self.passage_prefix) > 128
             or not _CONNECTION_REFERENCE.fullmatch(self.connection_reference)
@@ -102,6 +107,8 @@ class EmbeddingProfileInput:
 
     @property
     def identity(self) -> EmbeddingIdentity:
+        if self.dimension is None:
+            raise EmbeddingProfileError("EMBEDDING_PROBE_REQUIRED")
         return EmbeddingIdentity(
             adapter=("openai_compatible" if self.provider == "vllm" else self.provider),
             model_id=self.model_id,
@@ -117,7 +124,7 @@ class EmbeddingProfile:
     profile_id: str
     provider: str
     model_id: str
-    dimension: int
+    dimension: int | None
     normalized: bool
     query_prefix: str
     passage_prefix: str
@@ -136,9 +143,12 @@ class EmbeddingProfile:
     reindex_started_at: str | None
     reindex_completed_at: str | None
     bundle_id: str | None
+    last_error_message: str | None = field(default=None, repr=False)
 
     @property
     def identity(self) -> EmbeddingIdentity:
+        if self.dimension is None:
+            raise EmbeddingProfileError("EMBEDDING_PROBE_REQUIRED")
         return EmbeddingIdentity(
             adapter=("openai_compatible" if self.provider == "vllm" else self.provider),
             model_id=self.model_id,
@@ -257,7 +267,8 @@ class EmbeddingProfileRegistry:
                           connection_reference = ?, connection_revision = ?,
                           status = 'reindex_required', observed_adapter = NULL,
                           observed_model_id = NULL, observed_dimension = NULL,
-                          last_error_code = NULL, updated_at = ?, last_probed_at = NULL
+                          last_error_code = NULL, last_error_message = NULL,
+                          updated_at = ?, last_probed_at = NULL
                         WHERE profile_id = ? AND active = 0
                         """,
                         (
@@ -347,7 +358,8 @@ class EmbeddingProfileRegistry:
                   connection_revision = ?,
                   status = 'reindex_required', observed_adapter = NULL,
                   observed_model_id = NULL, observed_dimension = NULL,
-                  last_error_code = NULL, updated_at = ?, last_probed_at = NULL
+                  last_error_code = NULL, last_error_message = NULL,
+                  updated_at = ?, last_probed_at = NULL
                 WHERE profile_id = ?
                 """,
                 (
@@ -376,23 +388,28 @@ class EmbeddingProfileRegistry:
 
     def probe(self, profile_id: str) -> EmbeddingProfile:
         profile = self.get(profile_id)
-        provider = self._provider_resolver(profile)
         now = _time(self._now())
         error_code: str | None = None
+        error_message: str | None = None
         observed: EmbeddingIdentity | None = None
         try:
+            provider = self._provider_resolver(profile)
             if provider is None:
                 raise EmbeddingProfileError("EMBEDDING_CONNECTION_REQUIRED")
+            query = provider.embed_query(["RepoNPC embedding readiness query"])
             observed = provider.identity()
-            for output in (
-                provider.embed_query(["RepoNPC embedding readiness query"]),
-                provider.embed_passages(["RepoNPC embedding readiness passage"]),
-            ):
+            for output in (query, provider.embed_passages(["RepoNPC embedding readiness passage"])):
                 _validate_probe_vector(output, observed.dimension)
-            if observed != profile.identity:
+            if (
+                observed
+                != replace(profile, dimension=profile.dimension or observed.dimension).identity
+            ):
                 raise EmbeddingProfileError("EMBEDDING_PROFILE_IDENTITY_MISMATCH")
         except EmbeddingProfileError as exc:
             error_code = exc.code
+        except ProviderError as exc:
+            error_code = provider_probe_error_code(exc)
+            error_message = exc.upstream_message
         except Exception:
             error_code = "EMBEDDING_PROBE_FAILED"
 
@@ -402,7 +419,8 @@ class EmbeddingProfileRegistry:
             else "probe_failed"
             if error_code is not None
             else "ready"
-            if self._activation_compatible(profile)
+            if observed is not None
+            and self._activation_compatible(replace(profile, dimension=observed.dimension))
             else "last_known_good"
             if profile.active
             else "reindex_required"
@@ -410,19 +428,25 @@ class EmbeddingProfileRegistry:
         with self._database.connection() as connection:
             connection.execute(
                 """
-                UPDATE embedding_profiles SET status = ?, observed_adapter = ?,
+                UPDATE embedding_profiles SET dimension = CASE WHEN ? THEN ? ELSE dimension END,
+                  status = ?, observed_adapter = ?,
                   observed_model_id = ?, observed_dimension = ?, last_error_code = ?,
-                  updated_at = ?, last_probed_at = ? WHERE profile_id = ?
+                  last_error_message = ?,
+                  updated_at = ?, last_probed_at = ? WHERE profile_id = ? AND updated_at = ?
                 """,
                 (
+                    error_code is None,
+                    observed.dimension if observed else None,
                     status,
                     observed.adapter if observed else None,
                     observed.model_id if observed else None,
                     observed.dimension if observed else None,
                     error_code,
+                    error_message,
                     now,
                     now,
                     profile_id,
+                    profile.updated_at,
                 ),
             )
         return self.get(profile_id)
@@ -480,7 +504,7 @@ class EmbeddingProfileRegistry:
                         UPDATE embedding_profiles SET status = 'reindexing',
                           reindex_generation = reindex_generation + 1,
                           reindex_started_at = ?, reindex_completed_at = NULL,
-                          last_error_code = NULL, updated_at = ?
+                          last_error_code = NULL, last_error_message = NULL, updated_at = ?
                         WHERE profile_id = ?
                         """,
                         (now, now, profile_id),
@@ -504,7 +528,8 @@ class EmbeddingProfileRegistry:
             connection.execute(
                 """
                 UPDATE embedding_profiles SET status = 'reindex_required',
-                  last_error_code = ?, reindex_completed_at = ?, updated_at = ?
+                  last_error_code = ?, last_error_message = NULL,
+                  reindex_completed_at = ?, updated_at = ?
                 WHERE profile_id = ? AND reindex_generation = ?
                   AND active = 0 AND status = 'reindexing'
                 """,
@@ -566,7 +591,7 @@ class EmbeddingProfileRegistry:
                 connection.execute(
                     """
                     UPDATE embedding_profiles SET active = 1, status = 'ready',
-                      bundle_id = ?, last_error_code = NULL,
+                      bundle_id = ?, last_error_code = NULL, last_error_message = NULL,
                       reindex_completed_at = ?, updated_at = ?
                     WHERE profile_id = ?
                     """,
@@ -651,6 +676,7 @@ class EmbeddingProfileRegistry:
                 """
                 UPDATE embedding_profiles SET status = 'reindex_required',
                   last_error_code = 'EMBEDDING_REINDEX_INTERRUPTED',
+                  last_error_message = NULL,
                   reindex_completed_at = ?, updated_at = ?
                 WHERE status = 'reindexing' AND active = 0
                 """,
@@ -674,7 +700,8 @@ class EmbeddingProfileRegistry:
                 if current is not None:
                     connection.execute(
                         "UPDATE embedding_profiles SET active = 0, status = 'reindex_required', "
-                        "last_error_code = 'EMBEDDING_BUNDLE_UNAVAILABLE', updated_at = ? "
+                        "last_error_code = 'EMBEDDING_BUNDLE_UNAVAILABLE', "
+                        "last_error_message = NULL, updated_at = ? "
                         "WHERE profile_id = ?",
                         (now, str(current["profile_id"])),
                     )
@@ -724,7 +751,8 @@ class EmbeddingProfileRegistry:
                 )
                 connection.execute(
                     "UPDATE embedding_profiles SET active = 1, status = 'ready', "
-                    "bundle_id = ?, last_error_code = NULL, updated_at = ? "
+                    "bundle_id = ?, last_error_code = NULL, last_error_message = NULL, "
+                    "updated_at = ? "
                     "WHERE profile_id = ?",
                     (bundle_id, now, str(selected["profile_id"])),
                 )
@@ -829,6 +857,7 @@ class EmbeddingProfileRegistry:
         with self._database.connection() as connection:
             connection.execute(
                 "UPDATE embedding_profiles SET status = ?, last_error_code = NULL, "
+                "last_error_message = NULL, "
                 "updated_at = ?, last_probed_at = NULL WHERE profile_id = ?",
                 ("probe" if action == "pull" else "probe_failed", now, profile_id),
             )
@@ -840,7 +869,7 @@ def _profile(row: sqlite3.Row) -> EmbeddingProfile:
         profile_id=str(row["profile_id"]),
         provider=str(row["provider"]),
         model_id=str(row["model_id"]),
-        dimension=int(row["dimension"]),
+        dimension=int(row["dimension"]) if row["dimension"] is not None else None,
         normalized=bool(row["normalized"]),
         query_prefix=str(row["query_prefix"]),
         passage_prefix=str(row["passage_prefix"]),
@@ -852,6 +881,9 @@ def _profile(row: sqlite3.Row) -> EmbeddingProfile:
         observed_model_id=(str(row["observed_model_id"]) if row["observed_model_id"] else None),
         observed_dimension=(int(row["observed_dimension"]) if row["observed_dimension"] else None),
         last_error_code=(str(row["last_error_code"]) if row["last_error_code"] else None),
+        last_error_message=row["last_error_message"]
+        if "last_error_message" in row.keys()  # noqa: SIM118 - sqlite3.Row iterates values.
+        else None,
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
         last_probed_at=(str(row["last_probed_at"]) if row["last_probed_at"] else None),
