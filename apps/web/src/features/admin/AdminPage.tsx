@@ -55,11 +55,20 @@ import {
   type ModelConnectionDraft,
   type ModelConnectionView,
 } from "./ModelConnectionPanel";
-import { ModelSetupRequests, replaceSetting } from "./modelSetupRequests";
+import {
+  ModelSetupRequests,
+  refreshAfterModelConnectionSave,
+  replaceSetting,
+} from "./modelSetupRequests";
 import { TransientNotice } from "./TransientNotice";
 import { ModelSetupWorkspace } from "./ModelSetupWorkspace";
 import { GuidedOnboardingView } from "./GuidedOnboardingView";
 import { LocalLaunchAccessPanel } from "./LocalLaunchAccessPanel";
+import {
+  restoreExistingAdminSession,
+  type AdminAuthMethodsBody,
+  type AdminSessionBody,
+} from "./adminSessionBootstrap";
 import {
   guidedOnboardingReducer,
   guidedOnboardingFromConfig,
@@ -75,19 +84,9 @@ import {
 } from "./guidedOnboarding";
 import type { Locale } from "../../i18n/messages";
 
-interface SessionBody {
-  csrf_token: string;
-}
-
 interface SetupStatusBody {
   setup_required: boolean;
   setup_code_available: boolean;
-}
-
-interface AuthMethodsBody {
-  mode: "local_launch" | "password";
-  password: { available: boolean };
-  setup_required: boolean;
 }
 
 interface AdminAccessPanelProps {
@@ -529,6 +528,10 @@ function modelConnectionErrorMessage(locale: Locale, error: unknown): string {
     CREDENTIAL_REPLACE_REQUIRED: [
       "更換網址或連線方式時，請重新填入此服務的 API key，或選擇移除金鑰後再儲存。",
       "When changing a service URL or connection type, enter a new API key for that service or choose to remove the key before saving.",
+    ],
+    HOST_CONNECTION_REPLACEMENT_REQUIRED: [
+      "環境預設連線的原始網址不會顯示；請輸入完整的新服務網址後再儲存。",
+      "The original environment URL is not displayed. Enter the complete replacement service URL before saving.",
     ],
     MODEL_CONNECTION_IN_USE: [
       "有模型仍使用此服務。請先編輯那些模型改用其他服務，或刪除不需要的模型設定。",
@@ -1413,7 +1416,7 @@ export function AdminPage({
         const body = JSON.stringify({ grant });
         grant = null;
         try {
-          const session = await request<SessionBody>(
+          const session = await request<AdminSessionBody>(
             "/api/admin/session/local-launch",
             { method: "POST", body },
           );
@@ -1426,14 +1429,23 @@ export function AdminPage({
       }
 
       try {
-        const methods = await request<AuthMethodsBody>(
-          "/api/admin/auth/methods",
+        const { methods, session } = await restoreExistingAdminSession(
+          () => request<AdminAuthMethodsBody>("/api/admin/auth/methods"),
+          () =>
+            request<AdminSessionBody>("/api/admin/session/resume", {
+              method: "POST",
+            }),
         );
+        setPasswordAvailable(methods.password.available);
+        if (session !== null) {
+          setAccessState(methods.mode);
+          setCsrfToken(session.csrf_token);
+          return;
+        }
         if (methods.mode === "local_launch") {
           setAccessState("local_launch");
           return;
         }
-        setPasswordAvailable(methods.password.available);
         setAccessState("password");
         await refreshSetupStatus();
       } catch {
@@ -1718,7 +1730,7 @@ export function AdminPage({
     setBusy(true);
     dispatchAdminError({ type: "CLEAR_GLOBAL_ERROR" });
     try {
-      const session = await request<SessionBody>("/api/admin/session", {
+      const session = await request<AdminSessionBody>("/api/admin/session", {
         method: "POST",
         body: JSON.stringify({ username, password }),
       });
@@ -1740,7 +1752,7 @@ export function AdminPage({
     setBusy(true);
     dispatchAdminError({ type: "CLEAR_GLOBAL_ERROR" });
     try {
-      const session = await request<SessionBody>("/api/admin/setup", {
+      const session = await request<AdminSessionBody>("/api/admin/setup", {
         method: "POST",
         body: JSON.stringify({
           setup_code: setupCode,
@@ -1851,8 +1863,12 @@ export function AdminPage({
           ? copyFor(locale, "服務已更新", "Service updated")
           : copyFor(locale, "服務已儲存", "Service saved"),
       });
-      await refreshModelConnections();
-      await refreshAnalysisSelection();
+      await refreshAfterModelConnectionSave(Boolean(connectionId), {
+        connections: refreshModelConnections,
+        chatProfiles: refreshChatProfiles,
+        embeddingProfiles: refreshEmbeddingProfiles,
+        analysisSelection: refreshAnalysisSelection,
+      });
     } catch (error) {
       setModelConnectionsError(modelConnectionErrorMessage(locale, error));
     } finally {

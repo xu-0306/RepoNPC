@@ -56,7 +56,9 @@ const COPY = {
     hostChat: "環境預設連線（回答）",
     hostEmbedding: "環境預設連線（資料查找）",
     hostManaged:
-      "這只是啟動環境中的連線設定，不是 RepoNPC 內建的 AI 服務，也不代表 Ollama 等服務已安裝、啟動或可用。請先新增模型並測試。此連線由環境設定管理；修改或移除需調整啟動環境設定。",
+      "這只是啟動環境中的連線設定，不是 RepoNPC 內建的 AI 服務，也不代表 Ollama 等服務已安裝、啟動或可用。你可以在這裡覆寫或刪除；變更會優先於啟動環境並在重啟後保留。",
+    hostReplacement:
+      "為避免揭露啟動環境中的私有設定，原網址不會顯示。請輸入完整的新服務網址；儲存後這筆連線會改由你管理。",
     connectionDetails: "連線資訊",
     addService: "新增 AI 服務",
     editService: "編輯 AI 服務",
@@ -89,7 +91,9 @@ const COPY = {
     hostChat: "Environment connection (answers)",
     hostEmbedding: "Environment connection (content finding)",
     hostManaged:
-      "This is a connection setting from the startup environment, not a built-in AI service. It does not mean Ollama or another service is installed, running, or available. Add and test a model first. To change or remove this connection, update the startup environment settings.",
+      "This is a connection setting from the startup environment, not a built-in AI service. It does not mean Ollama or another service is installed, running, or available. You can replace or delete it here; your change takes priority over the startup environment and persists across restarts.",
+    hostReplacement:
+      "The original environment URL is not displayed, so private host settings stay protected. Enter the complete replacement URL; after saving, this connection is managed by you.",
     connectionDetails: "Connection details",
     addService: "Add an AI service",
     editService: "Edit AI service",
@@ -220,12 +224,19 @@ export function ModelConnectionPanel({
   const providerChanged = Boolean(
     editingConnection && editingConnection.provider !== provider,
   );
+  const editingHostConnection = editingConnection?.source === "host-managed";
   const Heading = purpose ? "h4" : "h2";
   const heading = purpose
     ? purpose === "chat"
       ? copy.chatHeading
       : copy.embeddingHeading
     : copy.heading;
+  const connectionTitle = (connection: ModelConnectionView) =>
+    connection.source === "host-managed"
+      ? connection.connection_id === "environment-chat"
+        ? copy.hostChat
+        : copy.hostEmbedding
+      : connection.display_name;
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -256,7 +267,7 @@ export function ModelConnectionPanel({
     setProvider(connection.provider);
     setBaseUrl("");
     setApiKey("");
-    setReplaceAddress(false);
+    setReplaceAddress(connection.source === "host-managed");
     setRemoveKey(false);
   }
 
@@ -281,13 +292,7 @@ export function ModelConnectionPanel({
             <li className="model-card" key={connection.connection_id}>
               <div className="model-card__heading">
                 <ProviderBrandIcon provider={connection.provider} />
-                <strong>
-                  {connection.source === "host-managed"
-                    ? connection.connection_id === "environment-chat"
-                      ? copy.hostChat
-                      : copy.hostEmbedding
-                    : connection.display_name}
-                </strong>
+                <strong>{connectionTitle(connection)}</strong>
                 <span className="model-card__provider">
                   {connection.provider === "openai_compatible"
                     ? "OpenAI-compatible"
@@ -310,25 +315,21 @@ export function ModelConnectionPanel({
                   <ConnectionMetadata connection={connection} copy={copy} />
                 </details>
               )}
-              {connection.source === "managed" && (
-                <>
-                  <button
-                    aria-label={`${copy.edit} ${connection.display_name}`}
-                    disabled={pending}
-                    onClick={() => edit(connection)}
-                    type="button"
-                  >
-                    {copy.edit}
-                  </button>
-                  <DeleteSettingButton
-                    locale={locale}
-                    name={connection.display_name}
-                    kind="connection"
-                    pending={pending}
-                    onDelete={() => onDelete(connection.connection_id)}
-                  />
-                </>
-              )}
+              <button
+                aria-label={`${copy.edit} ${connectionTitle(connection)}`}
+                disabled={pending}
+                onClick={() => edit(connection)}
+                type="button"
+              >
+                {copy.edit}
+              </button>
+              <DeleteSettingButton
+                locale={locale}
+                name={connectionTitle(connection)}
+                kind="connection"
+                pending={pending}
+                onDelete={() => onDelete(connection.connection_id)}
+              />
             </li>
           ))}
         </ul>
@@ -349,6 +350,9 @@ export function ModelConnectionPanel({
               ? "從服務商的設定頁複製服務網址與 API key。金鑰只用於連線，送出或離開表單後會清除輸入；重試時請重新填入。"
               : "Copy the service URL and API key from your provider's settings. The typed key clears after submission or leaving this form; enter it again when retrying."}
           </p>
+          {editingHostConnection && (
+            <p className="model-card__note">{copy.hostReplacement}</p>
+          )}
           <label htmlFor={`model-connection-name${idSuffix}`}>
             {copy.name}
             <input
@@ -383,7 +387,7 @@ export function ModelConnectionPanel({
               <option value="openai_compatible">OpenAI-compatible</option>
             </select>
           </label>
-          {editingId && (
+          {editingId && !editingHostConnection && (
             <CheckboxField
               id={`model-connection-replace-address${idSuffix}`}
               checked={replaceAddress}
@@ -448,9 +452,13 @@ export function ModelConnectionPanel({
           )}
           {editingId && replaceAddress && (
             <p>
-              {locale === "zh-TW"
-                ? "更換網址或連線方式時，請填入此服務的新金鑰，或明確選擇移除金鑰。之後需要更新模型設定並重新測試。"
-                : "When changing the URL or connection type, enter a new key for that service or explicitly remove the key. Then update and retest its model settings."}
+              {editingHostConnection && !editingConnection.key_configured
+                ? locale === "zh-TW"
+                  ? "這筆環境連線目前沒有已設定的金鑰；若新網址也不需要金鑰，可保持空白。之後需要更新模型設定並重新測試。"
+                  : "This environment connection has no configured key. Leave the key blank if the new URL also needs no key. Then update and retest its model settings."
+                : locale === "zh-TW"
+                  ? "更換網址或連線方式時，請填入此服務的新金鑰，或明確選擇移除金鑰。之後需要更新模型設定並重新測試。"
+                  : "When changing the URL or connection type, enter a new key for that service or explicitly remove the key. Then update and retest its model settings."}
             </p>
           )}
           <label htmlFor={`model-connection-key${idSuffix}`}>

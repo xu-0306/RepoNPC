@@ -122,6 +122,16 @@ class ModelConnectionSecret:
         return "ModelConnectionSecret(<redacted>)"
 
 
+@dataclass(frozen=True, slots=True)
+class ModelConnectionRevision:
+    """One immutable connection revision with private material kept redacted."""
+
+    connection_id: str
+    revision: int
+    provider: str
+    secret: ModelConnectionSecret
+
+
 class ProtectedModelSecretStore:
     """Fernet-backed store with host-local key material separate from SQLite."""
 
@@ -288,10 +298,10 @@ class ModelConnectionRegistry:
                 connection.execute(
                     """
                     INSERT INTO model_connection_secrets(
-                      secret_ref, connection_id, revision, ciphertext, created_at
-                    ) VALUES (?, ?, 1, ?, ?)
+                      secret_ref, connection_id, revision, ciphertext, created_at, provider
+                    ) VALUES (?, ?, 1, ?, ?, ?)
                     """,
-                    (secret_ref, identifier, ciphertext, now),
+                    (secret_ref, identifier, ciphertext, now, values.provider),
                 )
                 connection.execute("COMMIT")
         except ModelConnectionError:
@@ -308,8 +318,8 @@ class ModelConnectionRegistry:
         provider: str,
         base_url: str,
         api_key: str | None,
-    ) -> ModelConnection:
-        """Mirror explicit deployment settings without exposing or overwriting them."""
+    ) -> ModelConnection | None:
+        """Mirror deployment settings unless the owner replaced or disabled them."""
 
         _validate_connection_id(connection_id)
         values = ModelConnectionInput(
@@ -321,6 +331,18 @@ class ModelConnectionRegistry:
         )
         values.validate()
         current: ModelConnection | None = None
+        with self._database.connection() as connection:
+            override = connection.execute(
+                "SELECT state FROM host_managed_connection_overrides WHERE connection_id = ?",
+                (connection_id,),
+            ).fetchone()
+            current_row = connection.execute(
+                "SELECT * FROM model_connections WHERE connection_id = ?", (connection_id,)
+            ).fetchone()
+        if override is not None:
+            if str(override["state"]) == "disabled" or current_row is None:
+                return None
+            return _connection(current_row)
         try:
             current = self.get(connection_id)
         except ModelConnectionError as exc:
@@ -387,9 +409,16 @@ class ModelConnectionRegistry:
                     )
                 connection.execute(
                     "INSERT INTO model_connection_secrets("
-                    "secret_ref, connection_id, revision, ciphertext, created_at) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (secret_ref, connection_id, revision, ciphertext, now),
+                    "secret_ref, connection_id, revision, ciphertext, created_at, provider) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (secret_ref, connection_id, revision, ciphertext, now, provider),
+                )
+                _rebind_safe_dependents(
+                    connection,
+                    connection_id=connection_id,
+                    revision=revision,
+                    provider=provider,
+                    now=now,
                 )
                 connection.execute("COMMIT")
         except ModelConnectionError:
@@ -401,6 +430,8 @@ class ModelConnectionRegistry:
     def update(self, connection_id: str, values: ModelConnectionInput) -> ModelConnection:
         current = self.get(connection_id)
         values.validate(allow_retain=True)
+        if current.source == "host-managed" and values.endpoint_action != "replace":
+            raise ModelConnectionError("HOST_CONNECTION_REPLACEMENT_REQUIRED")
         # Every revision update must prove the existing encrypted lineage is
         # still recoverable.  A replacement credential must not bootstrap a
         # new key beside unreadable historical ciphertext.
@@ -411,9 +442,12 @@ class ModelConnectionRegistry:
         if base_url is None:
             raise ModelConnectionError("VALIDATION_ERROR")
         if values.credential_action == "retain":
-            if values.provider != current.provider:
-                raise ModelConnectionError("CREDENTIAL_REPLACE_REQUIRED")
-            if base_url != current_secret.base_url:
+            destination_changed = (
+                values.provider != current.provider or base_url != current_secret.base_url
+            )
+            if destination_changed and (
+                current_secret.api_key is not None or current.source != "host-managed"
+            ):
                 raise ModelConnectionError("CREDENTIAL_REPLACE_REQUIRED")
         api_key = (
             values.api_key
@@ -428,14 +462,27 @@ class ModelConnectionRegistry:
             and api_key == current_secret.api_key
         ):
             # A display-label edit does not change a tested connection identity.
-            with self._database.connection() as connection:
-                updated = connection.execute(
-                    "UPDATE model_connections SET display_name = ?, updated_at = ? "
-                    "WHERE connection_id = ? AND revision = ?",
-                    (values.display_name.strip(), _now(), connection_id, current.revision),
-                )
-                if updated.rowcount != 1:
-                    raise ModelConnectionError("MODEL_CONNECTION_SAVE_FAILED")
+            try:
+                with self._database.connection() as connection:
+                    try:
+                        connection.execute("BEGIN IMMEDIATE")
+                        updated = connection.execute(
+                            "UPDATE model_connections SET display_name = ?, source = 'managed', "
+                            "updated_at = ? WHERE connection_id = ? AND revision = ?",
+                            (values.display_name.strip(), _now(), connection_id, current.revision),
+                        )
+                        if updated.rowcount != 1:
+                            raise ModelConnectionError("MODEL_CONNECTION_SAVE_FAILED")
+                        if current.source == "host-managed":
+                            _save_host_override(connection, connection_id, "managed")
+                        connection.execute("COMMIT")
+                    except Exception:
+                        _rollback(connection)
+                        raise
+            except ModelConnectionError:
+                raise
+            except Exception:
+                raise ModelConnectionError("MODEL_CONNECTION_SAVE_FAILED") from None
             return self.get(connection_id)
         revision = current.revision + 1
         secret_ref = f"model-connection:{connection_id}:{revision}"
@@ -447,7 +494,8 @@ class ModelConnectionRegistry:
                 connection.execute(
                     """
                     UPDATE model_connections SET
-                      display_name = ?, provider = ?, revision = ?, secret_ref = ?,
+                      display_name = ?, provider = ?, source = 'managed', revision = ?,
+                      secret_ref = ?,
                       endpoint_configured = 1, key_configured = ?, status = 'configured',
                       updated_at = ? WHERE connection_id = ?
                     """,
@@ -461,13 +509,22 @@ class ModelConnectionRegistry:
                         connection_id,
                     ),
                 )
+                if current.source == "host-managed":
+                    _save_host_override(connection, connection_id, "managed")
                 connection.execute(
                     """
                     INSERT INTO model_connection_secrets(
-                      secret_ref, connection_id, revision, ciphertext, created_at
-                    ) VALUES (?, ?, ?, ?, ?)
+                      secret_ref, connection_id, revision, ciphertext, created_at, provider
+                    ) VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (secret_ref, connection_id, revision, ciphertext, now),
+                    (secret_ref, connection_id, revision, ciphertext, now, values.provider),
+                )
+                _rebind_safe_dependents(
+                    connection,
+                    connection_id=connection_id,
+                    revision=revision,
+                    provider=values.provider,
+                    now=now,
                 )
                 connection.execute("COMMIT")
         except ModelConnectionError:
@@ -477,7 +534,7 @@ class ModelConnectionRegistry:
         return self.get(connection_id)
 
     def delete(self, connection_id: str) -> None:
-        self.get(connection_id)
+        current = self.get(connection_id)
         with self._database.connection() as connection:
             try:
                 connection.execute("BEGIN IMMEDIATE")
@@ -497,6 +554,12 @@ class ModelConnectionRegistry:
                     is not None
                 ):
                     raise ModelConnectionError("MODEL_CONNECTION_IN_USE")
+                override = connection.execute(
+                    "SELECT 1 FROM host_managed_connection_overrides WHERE connection_id = ?",
+                    (connection_id,),
+                ).fetchone()
+                if current.source == "host-managed" or override is not None:
+                    _save_host_override(connection, connection_id, "disabled")
                 connection.execute(
                     "DELETE FROM model_connections WHERE connection_id = ?", (connection_id,)
                 )
@@ -508,20 +571,30 @@ class ModelConnectionRegistry:
                 _rollback(connection)
                 raise ModelConnectionError("MODEL_CONNECTION_DELETE_FAILED") from None
 
-    def secret_for(self, connection_id: str, revision: int | None = None) -> ModelConnectionSecret:
+    def revision_for(
+        self, connection_id: str, revision: int | None = None
+    ) -> ModelConnectionRevision:
         current = self.get(connection_id)
         selected_revision = current.revision if revision is None else revision
         with self._database.connection() as connection:
             row = connection.execute(
                 """
-                SELECT ciphertext FROM model_connection_secrets
+                SELECT provider, ciphertext FROM model_connection_secrets
                 WHERE connection_id = ? AND revision = ?
                 """,
                 (connection_id, selected_revision),
             ).fetchone()
-        if row is None:
+        if row is None or row["provider"] not in _PROVIDERS:
             raise ModelConnectionError("MODEL_SECRET_STORAGE_UNAVAILABLE")
-        return self._secret_store.decrypt(bytes(row["ciphertext"]))
+        return ModelConnectionRevision(
+            connection_id=connection_id,
+            revision=selected_revision,
+            provider=str(row["provider"]),
+            secret=self._secret_store.decrypt(bytes(row["ciphertext"])),
+        )
+
+    def secret_for(self, connection_id: str, revision: int | None = None) -> ModelConnectionSecret:
+        return self.revision_for(connection_id, revision).secret
 
     def rotate_key(self) -> None:
         material: list[tuple[str, ModelConnectionSecret]] = []
@@ -633,6 +706,76 @@ def _validate_connection_id(value: str) -> None:
         or any(not (char.isalnum() or char in "_.-") for char in value)
     ):
         raise ModelConnectionError("VALIDATION_ERROR")
+
+
+def _save_host_override(connection: sqlite3.Connection, connection_id: str, state: str) -> None:
+    connection.execute(
+        """
+        INSERT INTO host_managed_connection_overrides(connection_id, state, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(connection_id) DO UPDATE SET
+          state = excluded.state, updated_at = excluded.updated_at
+        """,
+        (connection_id, state, _now()),
+    )
+
+
+def _rebind_safe_dependents(
+    connection: sqlite3.Connection,
+    *,
+    connection_id: str,
+    revision: int,
+    provider: str,
+    now: str,
+) -> None:
+    """Move editable candidates to a new revision without retargeting serving work."""
+
+    connection.execute(
+        """
+        UPDATE chat_profiles SET
+          connection_revision = ?, status = 'probe', observed_model_id = NULL,
+          last_error_code = NULL, last_error_message = NULL,
+          updated_at = ?, last_probed_at = NULL
+        WHERE connection_id = ? AND active = 0
+          AND status IN ('probe', 'ready', 'probe_failed')
+          AND connection_revision <> ?
+        """,
+        (revision, now, connection_id, revision),
+    )
+    connection.execute(
+        """
+        UPDATE embedding_profiles SET
+          provider = ?, connection_revision = ?, status = 'reindex_required',
+          observed_adapter = NULL, observed_model_id = NULL, observed_dimension = NULL,
+          last_error_code = NULL, last_error_message = NULL,
+          updated_at = ?, last_probed_at = NULL
+        WHERE connection_reference = ? AND active = 0
+          AND status IN ('probe', 'reindex_required', 'ready', 'probe_failed')
+          AND (connection_revision <> ? OR provider <> ?)
+        """,
+        (provider, revision, now, connection_id, revision, provider),
+    )
+    # Keep the selected profile IDs/revisions so the UI can explain what went
+    # stale, but advance the generation exactly once to reject saved plans.
+    connection.execute(
+        """
+        UPDATE analysis_model_selection SET
+          selection_generation = selection_generation + 1, updated_at = ?
+        WHERE selection_key = 'current' AND (
+          EXISTS (
+            SELECT 1 FROM chat_profiles
+            WHERE chat_profiles.profile_id = analysis_model_selection.chat_profile_id
+              AND chat_profiles.connection_id = ?
+          ) OR EXISTS (
+            SELECT 1 FROM embedding_profiles
+            WHERE embedding_profiles.profile_id
+                = analysis_model_selection.embedding_profile_id
+              AND embedding_profiles.connection_reference = ?
+          )
+        )
+        """,
+        (now, connection_id, connection_id),
+    )
 
 
 def _connection(row: sqlite3.Row) -> ModelConnection:

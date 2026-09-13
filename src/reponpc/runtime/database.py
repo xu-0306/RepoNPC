@@ -778,6 +778,109 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             "CHECK(last_error_message IS NULL OR length(last_error_message) <= 2000)",
         ),
     ),
+    Migration(
+        version=21,
+        name="host_managed_connection_overrides",
+        statements=(
+            """
+            CREATE TABLE host_managed_connection_overrides (
+                connection_id TEXT PRIMARY KEY
+                    CHECK(length(connection_id) BETWEEN 1 AND 64),
+                state TEXT NOT NULL CHECK(state IN ('managed', 'disabled')),
+                updated_at TEXT NOT NULL
+            )
+            """,
+        ),
+    ),
+    Migration(
+        version=22,
+        name="model_connection_revision_rebinding",
+        statements=(
+            """
+            ALTER TABLE model_connection_secrets ADD COLUMN provider TEXT
+                CHECK(provider IS NULL OR provider IN ('ollama', 'openai_compatible', 'vllm'))
+            """,
+            """
+            UPDATE model_connection_secrets SET provider = (
+              SELECT model_connections.provider FROM model_connections
+              WHERE model_connections.connection_id = model_connection_secrets.connection_id
+            ) WHERE provider IS NULL
+            """,
+            """
+            UPDATE chat_profiles SET
+              connection_revision = (
+                SELECT model_connections.revision FROM model_connections
+                WHERE model_connections.connection_id = chat_profiles.connection_id
+              ),
+              status = 'probe', observed_model_id = NULL,
+              last_error_code = NULL, last_error_message = NULL,
+              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+              last_probed_at = NULL
+            WHERE active = 0 AND status IN ('probe', 'ready', 'probe_failed')
+              AND EXISTS (
+                SELECT 1 FROM model_connections
+                WHERE model_connections.connection_id = chat_profiles.connection_id
+                  AND model_connections.revision <> chat_profiles.connection_revision
+              )
+            """,
+            """
+            UPDATE embedding_profiles SET
+              provider = (
+                SELECT model_connections.provider FROM model_connections
+                WHERE model_connections.connection_id = embedding_profiles.connection_reference
+              ),
+              connection_revision = (
+                SELECT model_connections.revision FROM model_connections
+                WHERE model_connections.connection_id = embedding_profiles.connection_reference
+              ),
+              status = 'reindex_required', observed_adapter = NULL,
+              observed_model_id = NULL, observed_dimension = NULL,
+              last_error_code = NULL, last_error_message = NULL,
+              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+              last_probed_at = NULL
+            WHERE active = 0
+              AND status IN ('probe', 'reindex_required', 'ready', 'probe_failed')
+              AND EXISTS (
+                SELECT 1 FROM model_connections
+                WHERE model_connections.connection_id = embedding_profiles.connection_reference
+                  AND (
+                    model_connections.revision <> embedding_profiles.connection_revision
+                    OR model_connections.provider <> embedding_profiles.provider
+                  )
+              )
+            """,
+            """
+            UPDATE analysis_model_selection SET
+              selection_generation = selection_generation + 1,
+              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE selection_key = 'current' AND (
+              EXISTS (
+                SELECT 1 FROM chat_profiles
+                JOIN model_connections
+                  ON model_connections.connection_id = chat_profiles.connection_id
+                WHERE chat_profiles.profile_id = analysis_model_selection.chat_profile_id
+                  AND (
+                    chat_profiles.connection_revision
+                      <> analysis_model_selection.chat_connection_revision
+                    OR model_connections.revision <> chat_profiles.connection_revision
+                  )
+              ) OR EXISTS (
+                SELECT 1 FROM embedding_profiles
+                JOIN model_connections
+                  ON model_connections.connection_id = embedding_profiles.connection_reference
+                WHERE embedding_profiles.profile_id
+                    = analysis_model_selection.embedding_profile_id
+                  AND (
+                    embedding_profiles.connection_revision
+                      <> analysis_model_selection.embedding_connection_revision
+                    OR model_connections.revision <> embedding_profiles.connection_revision
+                    OR model_connections.provider <> embedding_profiles.provider
+                  )
+              )
+            )
+            """,
+        ),
+    ),
 )
 
 

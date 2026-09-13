@@ -65,6 +65,36 @@ def test_login_sets_host_cookie_and_never_returns_session_token(tmp_path: Path) 
     assert all(response.json()["csrf_token"] != value for value in stored)
 
 
+def test_production_page_reload_resumes_only_a_valid_same_origin_cookie(tmp_path: Path) -> None:
+    app, _database = _app(tmp_path)
+    with TestClient(app, base_url=ORIGIN) as client:
+        login = _login(client)
+        resumed = client.post(
+            "/api/admin/session/resume",
+            headers={"Origin": ORIGIN},
+            content=b"",
+        )
+        refreshed = client.post(
+            "/api/admin/session/refresh",
+            headers={
+                "Origin": ORIGIN,
+                "X-CSRF-Token": resumed.json()["csrf_token"],
+            },
+        )
+        client.cookies.clear()
+        missing = client.post(
+            "/api/admin/session/resume",
+            headers={"Origin": ORIGIN},
+            content=b"",
+        )
+
+    assert login.status_code == resumed.status_code == refreshed.status_code == 200
+    assert resumed.headers["cache-control"] == "no-store"
+    assert "set-cookie" not in resumed.headers
+    assert missing.status_code == 401
+    assert missing.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+
+
 def test_setup_status_exposes_only_safe_booleans(tmp_path: Path) -> None:
     app, database, _service = _setup_app(tmp_path)
     setup_code = issue_admin_setup_code(database, now=datetime(2026, 8, 13, tzinfo=UTC))

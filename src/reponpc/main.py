@@ -534,16 +534,15 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         if profile.connection_reference == "environment":
             return None
         try:
-            connection = model_connections.get(profile.connection_reference)
-            if connection.revision != profile.connection_revision:
-                return None
-            secret = model_connections.secret_for(
-                connection.connection_id, profile.connection_revision
+            revision = model_connections.revision_for(
+                profile.connection_reference, profile.connection_revision
             )
+            if revision.provider != profile.provider:
+                return None
             return _embedding_provider_from_connection(
-                connection.provider,
-                secret.base_url,
-                secret.api_key,
+                revision.provider,
+                revision.secret.base_url,
+                revision.secret.api_key,
                 profile.identity if profile.dimension is not None else None,
                 model=profile.model_id,
                 query_prefix=profile.query_prefix,
@@ -598,32 +597,29 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         )
         if role == "embedding":
             environment_embedding_connection = connection
-    if settings.embedding_provider in {"ollama", "openai_compatible", "vllm"}:
+    if (
+        settings.embedding_provider in {"ollama", "openai_compatible", "vllm"}
+        and environment_embedding_connection is not None
+        and environment_embedding_connection.source == "host-managed"
+    ):
         embedding_profiles.ensure_environment_profile(
             provider=settings.embedding_provider,
             identity=embedding_identity,
-            connection_reference=(
-                environment_embedding_connection.connection_id
-                if environment_embedding_connection is not None
-                else "environment"
-            ),
-            connection_revision=(
-                environment_embedding_connection.revision
-                if environment_embedding_connection is not None
-                else 0
-            ),
+            connection_reference=environment_embedding_connection.connection_id,
+            connection_revision=environment_embedding_connection.revision,
         )
 
     def resolve_chat_profile(profile: ChatProfile) -> ChatProvider | None:
         try:
-            connection = model_connections.get(profile.connection_id)
-            if connection.revision != profile.connection_revision:
-                return None
-            secret = model_connections.secret_for(
+            revision = model_connections.revision_for(
                 profile.connection_id, profile.connection_revision
             )
             return _chat_provider_from_connection(
-                settings, connection.provider, profile.model_id, secret.base_url, secret.api_key
+                settings,
+                revision.provider,
+                profile.model_id,
+                revision.secret.base_url,
+                revision.secret.api_key,
             )
         except ModelConnectionError:
             return None
@@ -663,24 +659,29 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         """Resolve only the connection revisions captured by a batch."""
 
         try:
-            chat_secret = model_connections.secret_for(
+            chat_revision = model_connections.revision_for(
                 pair.chat_connection_id, pair.chat_connection_revision
             )
-            embedding_secret = model_connections.secret_for(
+            embedding_revision = model_connections.revision_for(
                 pair.embedding_connection_id, pair.embedding_connection_revision
             )
+            if (
+                chat_revision.provider != pair.chat_provider
+                or embedding_revision.provider != pair.embedding_provider
+            ):
+                return None
             return ProviderRuntime(
                 chat=_chat_provider_from_connection(
                     settings,
                     pair.chat_provider,
                     pair.chat_model_id,
-                    chat_secret.base_url,
-                    chat_secret.api_key,
+                    chat_revision.secret.base_url,
+                    chat_revision.secret.api_key,
                 ),
                 embedding=_embedding_provider_from_connection(
                     pair.embedding_provider,
-                    embedding_secret.base_url,
-                    embedding_secret.api_key,
+                    embedding_revision.secret.base_url,
+                    embedding_revision.secret.api_key,
                     pair.embedding_identity,
                 ),
             )
@@ -947,7 +948,7 @@ def _environment_embedding_provider(
 ) -> RuntimeEmbeddingProvider | None:
     if (
         profile.dimension is None
-        or profile.connection_reference not in {"environment", "environment-embedding"}
+        or profile.connection_reference != "environment"
         or profile.provider != settings.embedding_provider
     ):
         return None

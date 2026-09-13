@@ -23,7 +23,7 @@ def test_runtime_database_is_idempotent_and_separate_from_index_data(tmp_path: P
 
     assert database.database_path == tmp_path / "runtime-data" / "runtime.sqlite"
     assert database.database_path.exists()
-    assert database.schema_version() == 20
+    assert database.schema_version() == 22
     assert {
         "runtime_schema_migrations",
         "admin_sessions",
@@ -47,6 +47,7 @@ def test_runtime_database_is_idempotent_and_separate_from_index_data(tmp_path: P
         "github_public_resolution_cache",
         "model_connections",
         "model_connection_secrets",
+        "host_managed_connection_overrides",
         "chat_profiles",
     } <= table_names(database)
     with pytest.raises(RuntimeDatabaseError, match="runtime storage is unavailable"):
@@ -89,7 +90,189 @@ def test_provider_message_migration_is_atomic(tmp_path: Path) -> None:
                 row[1] for row in connection.execute(f"PRAGMA table_info({table})")
             }
     database.initialize()
+    assert database.schema_version() == 22
+
+
+def test_host_connection_override_migration_is_atomic(tmp_path: Path) -> None:
+    database = RuntimeDatabase(tmp_path / "host-override-rollback")
+    previous = tuple(m for m in MIGRATIONS if m.version < 21)
+    database.initialize(migrations=previous)
+    migration = next(m for m in MIGRATIONS if m.version == 21)
+    broken = Migration(
+        version=21,
+        name=migration.name,
+        statements=(*migration.statements, "INVALID SQL"),
+    )
+
+    with pytest.raises(RuntimeDatabaseError):
+        database.initialize(migrations=(*previous, broken))
+
     assert database.schema_version() == 20
+    assert "host_managed_connection_overrides" not in table_names(database)
+    database.initialize()
+    assert database.schema_version() == 22
+
+
+def test_connection_revision_rebinding_migration_repairs_safe_candidates(
+    tmp_path: Path,
+) -> None:
+    database = RuntimeDatabase(tmp_path / "connection-rebinding")
+    previous = tuple(m for m in MIGRATIONS if m.version < 22)
+    database.initialize(migrations=previous)
+    with database.connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO model_connections(
+              connection_id, display_name, provider, source, revision, secret_ref,
+              endpoint_configured, key_configured, status, created_at, updated_at
+            ) VALUES (
+              'environment-embedding', 'Environment embedding', 'ollama', 'managed', 2,
+              'model-connection:environment-embedding:2', 1, 0, 'configured', 'now', 'now'
+            )
+            """
+        )
+        connection.executemany(
+            """
+            INSERT INTO model_connection_secrets(
+              secret_ref, connection_id, revision, ciphertext, created_at
+            ) VALUES (?, 'environment-embedding', ?, X'01', 'now')
+            """,
+            (
+                ("model-connection:environment-embedding:1", 1),
+                ("model-connection:environment-embedding:2", 2),
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO chat_profiles(
+              profile_id, connection_id, connection_revision, model_id, status, active,
+              observed_model_id, last_error_code, last_error_message, created_at,
+              updated_at, last_probed_at
+            ) VALUES (
+              'chat-safe', 'environment-embedding', 1, 'chat-model', 'probe_failed', 0,
+              'chat-model', 'PROVIDER_TIMEOUT', 'old error', 'now', 'now', 'now'
+            )
+            """
+        )
+        connection.executemany(
+            """
+            INSERT INTO embedding_profiles(
+              profile_id, provider, model_id, dimension, normalized, query_prefix,
+              passage_prefix, connection_reference, connection_revision, status, active,
+              observed_adapter, observed_model_id, observed_dimension, last_error_code,
+              last_error_message, created_at, updated_at, last_probed_at
+            ) VALUES (?, 'ollama', ?, 4096, 1, '', '', 'environment-embedding', 1, ?, ?,
+                      'ollama', ?, 4096, ?, ?, 'now', 'now', 'now')
+            """,
+            (
+                (
+                    "embedding-safe",
+                    "qwen3-embedding:8b",
+                    "probe_failed",
+                    0,
+                    "qwen3-embedding:8b",
+                    "EMBEDDING_CONNECTION_REQUIRED",
+                    "old error",
+                ),
+                (
+                    "embedding-active",
+                    "active-model",
+                    "ready",
+                    1,
+                    "active-model",
+                    None,
+                    None,
+                ),
+                (
+                    "embedding-building",
+                    "building-model",
+                    "reindexing",
+                    0,
+                    "building-model",
+                    None,
+                    None,
+                ),
+            ),
+        )
+        connection.execute(
+            """
+            UPDATE analysis_model_selection SET
+              chat_profile_id = 'chat-safe', chat_connection_revision = 1,
+              embedding_profile_id = 'embedding-safe', embedding_connection_revision = 1,
+              selection_generation = 4, updated_at = 'now'
+            WHERE selection_key = 'current'
+            """
+        )
+
+    database.initialize()
+
+    assert database.schema_version() == 22
+    with database.connection() as connection:
+        revisions = connection.execute(
+            "SELECT revision, provider FROM model_connection_secrets ORDER BY revision"
+        ).fetchall()
+        chat = connection.execute(
+            "SELECT * FROM chat_profiles WHERE profile_id = 'chat-safe'"
+        ).fetchone()
+        embedding = connection.execute(
+            "SELECT * FROM embedding_profiles WHERE profile_id = 'embedding-safe'"
+        ).fetchone()
+        protected = connection.execute(
+            "SELECT profile_id, connection_revision FROM embedding_profiles "
+            "WHERE profile_id <> 'embedding-safe' ORDER BY profile_id"
+        ).fetchall()
+        selection = connection.execute(
+            "SELECT * FROM analysis_model_selection WHERE selection_key = 'current'"
+        ).fetchone()
+    assert [(row["revision"], row["provider"]) for row in revisions] == [
+        (1, "ollama"),
+        (2, "ollama"),
+    ]
+    assert chat is not None
+    assert (chat["connection_revision"], chat["status"], chat["last_probed_at"]) == (
+        2,
+        "probe",
+        None,
+    )
+    assert embedding is not None
+    assert (
+        embedding["connection_revision"],
+        embedding["status"],
+        embedding["last_error_code"],
+        embedding["last_probed_at"],
+    ) == (2, "reindex_required", None, None)
+    assert [(row["profile_id"], row["connection_revision"]) for row in protected] == [
+        ("embedding-active", 1),
+        ("embedding-building", 1),
+    ]
+    assert selection is not None
+    assert selection["selection_generation"] == 5
+    assert selection["chat_connection_revision"] == 1
+    assert selection["embedding_connection_revision"] == 1
+
+
+def test_connection_revision_rebinding_migration_is_atomic(tmp_path: Path) -> None:
+    database = RuntimeDatabase(tmp_path / "connection-rebinding-rollback")
+    previous = tuple(m for m in MIGRATIONS if m.version < 22)
+    database.initialize(migrations=previous)
+    migration = next(m for m in MIGRATIONS if m.version == 22)
+    broken = Migration(
+        version=22,
+        name=migration.name,
+        statements=(*migration.statements, "INVALID SQL"),
+    )
+
+    with pytest.raises(RuntimeDatabaseError):
+        database.initialize(migrations=(*previous, broken))
+
+    assert database.schema_version() == 21
+    with database.connection() as connection:
+        columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(model_connection_secrets)")
+        }
+    assert "provider" not in columns
+    database.initialize()
+    assert database.schema_version() == 22
 
 
 def test_concurrent_initialization_creates_one_versioned_schema(tmp_path: Path) -> None:
@@ -98,11 +281,11 @@ def test_concurrent_initialization_creates_one_versioned_schema(tmp_path: Path) 
     with ThreadPoolExecutor(max_workers=2) as executor:
         list(executor.map(lambda _unused: database.initialize(), range(2)))
 
-    assert database.schema_version() == 20
+    assert database.schema_version() == 22
     with database.connection() as connection:
         versions = connection.execute("SELECT version FROM runtime_schema_migrations").fetchall()
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()
-        assert [row[0] for row in versions] == list(range(1, 21))
+        assert [row[0] for row in versions] == list(range(1, 23))
     assert foreign_keys is not None and foreign_keys[0] == 1
 
 
@@ -153,13 +336,13 @@ def test_concurrent_initialization_across_database_owners_is_safe(tmp_path: Path
 
         database = RuntimeDatabase(data_dir)
         database.initialize()
-        assert database.schema_version() == 20
+        assert database.schema_version() == 22
         with database.connection() as connection:
             versions = connection.execute(
                 "SELECT version FROM runtime_schema_migrations"
             ).fetchall()
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()
-            assert [row[0] for row in versions] == list(range(1, 21))
+            assert [row[0] for row in versions] == list(range(1, 23))
         assert journal_mode is not None and journal_mode[0] == "wal"
 
 

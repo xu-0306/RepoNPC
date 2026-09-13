@@ -32,3 +32,19 @@ export function replaceSetting<T>(values: T[], saved: T, key: keyof T): T[] {
     ? values.map((value) => (value[key] === saved[key] ? saved : value))
     : [...values, saved];
 }
+
+export async function refreshAfterModelConnectionSave(
+  updated: boolean,
+  refresh: {
+    connections: () => Promise<void>;
+    chatProfiles: () => Promise<void>;
+    embeddingProfiles: () => Promise<void>;
+    analysisSelection: () => Promise<void>;
+  },
+): Promise<void> {
+  await Promise.all([
+    refresh.connections(),
+    refresh.analysisSelection(),
+    ...(updated ? [refresh.chatProfiles(), refresh.embeddingProfiles()] : []),
+  ]);
+}

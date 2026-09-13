@@ -87,6 +87,162 @@ def test_create_update_and_remove_are_revisioned_and_write_only(tmp_path: Path) 
     assert all(CANARY_KEY.encode() not in bytes(row[0]) for row in ciphertext)
 
 
+def test_effective_update_rebinds_only_safe_candidates_and_invalidates_selection(
+    tmp_path: Path,
+) -> None:
+    registry, database = _registry(tmp_path)
+    model_connection = registry.create(_values())
+    with database.connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO chat_profiles(
+              profile_id, connection_id, connection_revision, model_id, status, active,
+              observed_model_id, last_error_code, last_error_message, created_at,
+              updated_at, last_probed_at
+            ) VALUES
+              ('chat-candidate', ?, 1, 'chat-model', 'probe_failed', 0,
+               'old-chat', 'PROVIDER_TIMEOUT', 'old error', 'now', 'now', 'now'),
+              ('chat-active', ?, 1, 'active-chat', 'ready', 1,
+               'active-chat', NULL, NULL, 'now', 'now', 'now'),
+              ('chat-previous', ?, 1, 'previous-chat', 'last_known_good', 0,
+               'previous-chat', NULL, NULL, 'now', 'now', 'now')
+            """,
+            (model_connection.connection_id,) * 3,
+        )
+        connection.execute(
+            """
+            INSERT INTO embedding_profiles(
+              profile_id, provider, model_id, dimension, normalized, query_prefix,
+              passage_prefix, connection_reference, connection_revision, status, active,
+              observed_adapter, observed_model_id, observed_dimension, last_error_code,
+              last_error_message, created_at, updated_at, last_probed_at
+            ) VALUES
+              ('embedding-candidate', 'openai_compatible', 'embed-model', 1536, 1, '', '',
+               ?, 1, 'probe_failed', 0, 'openai_compatible', 'embed-model', 1536,
+               'PROVIDER_TIMEOUT', 'old error', 'now', 'now', 'now'),
+              ('embedding-active', 'openai_compatible', 'active-embed', 1536, 1, '', '',
+               ?, 1, 'ready', 1, 'openai_compatible', 'active-embed', 1536,
+               NULL, NULL, 'now', 'now', 'now'),
+              ('embedding-reindexing', 'openai_compatible', 'building-embed', 1536, 1, '', '',
+               ?, 1, 'reindexing', 0, 'openai_compatible', 'building-embed', 1536,
+               NULL, NULL, 'now', 'now', 'now'),
+              ('embedding-previous', 'openai_compatible', 'previous-embed', 1536, 1, '', '',
+               ?, 1, 'last_known_good', 0, 'openai_compatible', 'previous-embed', 1536,
+               NULL, NULL, 'now', 'now', 'now')
+            """,
+            (model_connection.connection_id,) * 4,
+        )
+        connection.execute(
+            """
+            UPDATE analysis_model_selection SET
+              chat_profile_id = 'chat-candidate', chat_connection_revision = 1,
+              embedding_profile_id = 'embedding-candidate',
+              embedding_connection_revision = 1, selection_generation = 7,
+              updated_at = 'now'
+            WHERE selection_key = 'current'
+            """
+        )
+
+    updated = registry.update(
+        model_connection.connection_id,
+        ModelConnectionInput(
+            display_name="Local Ollama",
+            provider="ollama",
+            base_url="http://127.0.0.1:11434",
+            credential_action="remove",
+        ),
+    )
+
+    assert updated.revision == 2
+    assert registry.revision_for(updated.connection_id, 1).provider == "openai_compatible"
+    assert registry.revision_for(updated.connection_id, 2).provider == "ollama"
+    with database.connection() as connection:
+        chat_rows = {
+            row["profile_id"]: row
+            for row in connection.execute("SELECT * FROM chat_profiles").fetchall()
+        }
+        embedding_rows = {
+            row["profile_id"]: row
+            for row in connection.execute("SELECT * FROM embedding_profiles").fetchall()
+        }
+        selection = connection.execute(
+            "SELECT * FROM analysis_model_selection WHERE selection_key = 'current'"
+        ).fetchone()
+
+    candidate = chat_rows["chat-candidate"]
+    assert (candidate["connection_revision"], candidate["status"]) == (2, "probe")
+    assert candidate["observed_model_id"] is None
+    assert candidate["last_error_code"] is None
+    assert candidate["last_error_message"] is None
+    assert candidate["last_probed_at"] is None
+    assert chat_rows["chat-active"]["connection_revision"] == 1
+    assert chat_rows["chat-previous"]["connection_revision"] == 1
+
+    embedding_candidate = embedding_rows["embedding-candidate"]
+    assert (
+        embedding_candidate["provider"],
+        embedding_candidate["connection_revision"],
+        embedding_candidate["status"],
+    ) == ("ollama", 2, "reindex_required")
+    assert embedding_candidate["observed_adapter"] is None
+    assert embedding_candidate["observed_model_id"] is None
+    assert embedding_candidate["observed_dimension"] is None
+    assert embedding_candidate["last_error_code"] is None
+    assert embedding_candidate["last_error_message"] is None
+    assert embedding_candidate["last_probed_at"] is None
+    assert embedding_rows["embedding-active"]["connection_revision"] == 1
+    assert embedding_rows["embedding-reindexing"]["connection_revision"] == 1
+    assert embedding_rows["embedding-previous"]["connection_revision"] == 1
+
+    assert selection is not None
+    assert selection["selection_generation"] == 8
+    assert selection["chat_connection_revision"] == 1
+    assert selection["embedding_connection_revision"] == 1
+
+
+def test_host_managed_refresh_rebinds_a_safe_environment_candidate(tmp_path: Path) -> None:
+    registry, database = _registry(tmp_path)
+    model_connection = registry.ensure_host_managed(
+        "environment-embedding",
+        display_name="Environment embedding",
+        provider="ollama",
+        base_url="http://127.0.0.1:11434",
+        api_key=None,
+    )
+    assert model_connection is not None
+    with database.connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO embedding_profiles(
+              profile_id, provider, model_id, dimension, normalized, query_prefix,
+              passage_prefix, connection_reference, connection_revision, status, active,
+              created_at, updated_at
+            ) VALUES (
+              'environment', 'ollama', 'qwen3-embedding:8b', NULL, 1, '', '',
+              'environment-embedding', 1, 'probe_failed', 0, 'now', 'now'
+            )
+            """
+        )
+
+    refreshed = registry.ensure_host_managed(
+        "environment-embedding",
+        display_name="Environment embedding",
+        provider="ollama",
+        base_url="http://127.0.0.1:22434",
+        api_key=None,
+    )
+
+    assert refreshed is not None and refreshed.revision == 2
+    with database.connection() as connection:
+        profile = connection.execute(
+            "SELECT * FROM embedding_profiles WHERE profile_id = 'environment'"
+        ).fetchone()
+    assert profile is not None
+    assert profile["connection_revision"] == 2
+    assert profile["status"] == "reindex_required"
+    assert profile["last_probed_at"] is None
+
+
 def test_corrupt_secret_fails_closed_and_rotation_preserves_all_revisions(tmp_path: Path) -> None:
     registry, database = _registry(tmp_path)
     connection = registry.create(_values())
@@ -170,6 +326,128 @@ def test_connection_delete_rejects_any_profile_reference(tmp_path: Path) -> None
         registry.delete(connection.connection_id)
     assert raised.value.code == "MODEL_CONNECTION_IN_USE"
     assert registry.get(connection.connection_id).connection_id == connection.connection_id
+
+
+def test_host_managed_connection_can_be_replaced_and_disabled_across_restart(
+    tmp_path: Path,
+) -> None:
+    registry, database = _registry(tmp_path)
+    created = registry.ensure_host_managed(
+        "environment-chat",
+        display_name="Environment chat",
+        provider="ollama",
+        base_url="http://127.0.0.1:11434",
+        api_key=None,
+    )
+    assert created is not None and created.source == "host-managed"
+
+    replaced = registry.update(
+        created.connection_id,
+        ModelConnectionInput(
+            display_name="My Ollama",
+            provider="ollama",
+            base_url="http://127.0.0.1:22434",
+            credential_action="retain",
+        ),
+    )
+    assert replaced.source == "managed"
+    assert replaced.revision == 2
+    assert registry.secret_for(replaced.connection_id).base_url == "http://127.0.0.1:22434"
+    assert (
+        registry.ensure_host_managed(
+            "environment-chat",
+            display_name="Environment chat",
+            provider="ollama",
+            base_url="http://127.0.0.1:11434",
+            api_key=None,
+        )
+        == replaced
+    )
+
+    registry.delete(replaced.connection_id)
+    assert (
+        registry.ensure_host_managed(
+            "environment-chat",
+            display_name="Environment chat",
+            provider="ollama",
+            base_url="http://127.0.0.1:11434",
+            api_key=None,
+        )
+        is None
+    )
+
+    direct = registry.ensure_host_managed(
+        "environment-embedding",
+        display_name="Environment embedding",
+        provider="ollama",
+        base_url="http://127.0.0.1:11434",
+        api_key=None,
+    )
+    assert direct is not None and direct.source == "host-managed"
+    registry.delete(direct.connection_id)
+    assert (
+        registry.ensure_host_managed(
+            "environment-embedding",
+            display_name="Environment embedding",
+            provider="ollama",
+            base_url="http://127.0.0.1:11434",
+            api_key=None,
+        )
+        is None
+    )
+    assert registry.list() == ()
+    with database.connection() as connection:
+        states = connection.execute(
+            "SELECT connection_id, state FROM host_managed_connection_overrides "
+            "ORDER BY connection_id"
+        ).fetchall()
+    assert [(row["connection_id"], row["state"]) for row in states] == [
+        ("environment-chat", "disabled"),
+        ("environment-embedding", "disabled"),
+    ]
+
+
+def test_host_managed_connection_requires_explicit_replacement_url(tmp_path: Path) -> None:
+    registry, _database = _registry(tmp_path)
+    created = registry.ensure_host_managed(
+        "environment-chat",
+        display_name="Environment chat",
+        provider="ollama",
+        base_url="http://127.0.0.1:11434",
+        api_key=None,
+    )
+    assert created is not None
+
+    with pytest.raises(ModelConnectionError) as raised:
+        registry.update(
+            created.connection_id,
+            ModelConnectionInput(
+                display_name="Renamed",
+                provider="ollama",
+                base_url=None,
+                endpoint_action="retain",
+                credential_action="retain",
+            ),
+        )
+
+    assert raised.value.code == "HOST_CONNECTION_REPLACEMENT_REQUIRED"
+    assert registry.get(created.connection_id) == created
+
+
+def test_managed_no_key_destination_change_still_requires_explicit_intent(
+    tmp_path: Path,
+) -> None:
+    registry, _database = _registry(tmp_path)
+    created = registry.create(_values(key=None, action="retain"))
+
+    with pytest.raises(ModelConnectionError) as raised:
+        registry.update(
+            created.connection_id,
+            _values(url="https://other.example.test/v1", key=None, action="retain"),
+        )
+
+    assert raised.value.code == "CREDENTIAL_REPLACE_REQUIRED"
+    assert registry.get(created.connection_id) == created
 
 
 @pytest.mark.parametrize(

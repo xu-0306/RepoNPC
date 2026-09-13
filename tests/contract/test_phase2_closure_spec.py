@@ -15,7 +15,7 @@ def test_technical_spec_freezes_phase2_closure_contracts() -> None:
     specification = _read("docs/TECHNICAL_SPEC.md")
 
     assert "| Status | **Approved** |" in specification
-    assert "| Version | 0.2.3 |" in specification
+    assert "| Version | 0.2.6 |" in specification
     assert "Version 0.1.1 records the owner-approved Phase 2 closure boundary" in specification
     assert "reponpc index publish-manifest --bundle-dir <directory>" in specification
     assert "MUST NOT mutate the remote stable manifest" in specification
@@ -30,7 +30,7 @@ def test_acceptance_and_adr_require_derived_formal_evidence() -> None:
     acceptance = _read("docs/ACCEPTANCE_CRITERIA.md")
     decisions = _read("docs/DECISIONS.md")
 
-    assert "Technical Specification 0.2.3" in acceptance
+    assert "Technical Specification 0.2.6" in acceptance
     assert "Docker inspection and an access probe prove" in acceptance
     assert "host controller derives every pass/provenance boolean" in acceptance
     assert "## ADR-015:" in decisions
@@ -98,3 +98,48 @@ def test_model_first_onboarding_contract_is_traceable() -> None:
 
     assert "0.2.3" in handoff
     assert "H0" in handoff and "H4" in handoff
+
+
+def test_environment_connection_controls_are_normative_and_secret_safe() -> None:
+    specification = _read("docs/TECHNICAL_SPEC.md")
+    acceptance = _read("docs/ACCEPTANCE_CRITERIA.md")
+    decisions = _read("docs/DECISIONS.md")
+    security = _read("docs/SECURITY.md")
+    operations = _read("docs/OPERATIONS.md")
+
+    assert "## ADR-031:" in decisions
+    assert "HOST_CONNECTION_REPLACEMENT_REQUIRED" in specification
+    assert "host_managed_connection_overrides" in decisions
+    assert "host-managed cards" in acceptance.lower()
+    assert "environment URL/key remain unreadable" in security
+    assert "http://127.0.0.1:22434" in operations
+
+
+def test_connection_updates_rebind_only_safe_candidates() -> None:
+    specification = _read("docs/TECHNICAL_SPEC.md")
+    acceptance = _read("docs/ACCEPTANCE_CRITERIA.md")
+    decisions = _read("docs/DECISIONS.md")
+    security = _read("docs/SECURITY.md")
+    operations = _read("docs/OPERATIONS.md")
+
+    assert "## ADR-032:" in decisions
+    assert "directly referencing candidates" in specification
+    assert "previous last-known-good" in specification
+    assert "selection generation" in decisions
+    assert "Migration 22" in acceptance
+    assert "No automatic retest" in security
+    assert "do not edit-save each model again" in operations
+
+
+def test_valid_admin_sessions_resume_after_a_page_reload_without_grant_replay() -> None:
+    specification = _read("docs/TECHNICAL_SPEC.md")
+    acceptance = _read("docs/ACCEPTANCE_CRITERIA.md")
+    decisions = _read("docs/DECISIONS.md")
+    security = _read("docs/SECURITY.md")
+    operations = _read("docs/OPERATIONS.md")
+
+    assert "## ADR-033:" in decisions
+    assert "POST /api/admin/session/resume" in specification
+    assert "reloading a page with a still-valid session resumes it" in acceptance
+    assert "domain-separated" in security
+    assert "does not require another launcher grant" in operations

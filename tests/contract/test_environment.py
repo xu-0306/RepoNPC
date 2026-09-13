@@ -10,6 +10,12 @@ import pytest
 
 import reponpc.config.environment as environment
 import reponpc.main as main
+from reponpc.admin.embedding_profiles import EmbeddingProfileInput
+from reponpc.admin.model_connections import (
+    ModelConnectionInput,
+    ModelConnectionRegistry,
+    ProtectedModelSecretStore,
+)
 from reponpc.config.environment import (
     EnvironmentIssue,
     EnvironmentValidationError,
@@ -205,6 +211,119 @@ def test_first_owner_mode_needs_no_default_username_or_github_token(
         main.app.state.admin_operations.onboarding._source_resolver.rate_limiter
         is main.app.state.github_rate_limiter
     )
+
+
+def test_admin_startup_honors_disabled_environment_embedding_connection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_dir = tmp_path / "data"
+    settings = load_environment(
+        deployment_environment(
+            REPONPC_DATA_DIR=str(data_dir),
+            REPONPC_EMBEDDING_PROVIDER="ollama",
+            REPONPC_IP_HASH_KEY="ip-hmac-canary",
+        ),
+        secret_roots=(tmp_path,),
+    )
+    database = RuntimeDatabase(data_dir)
+    database.initialize()
+    registry = ModelConnectionRegistry(
+        database,
+        ProtectedModelSecretStore(data_dir / "model-secrets" / "master.key"),
+    )
+    connection = registry.ensure_host_managed(
+        "environment-embedding",
+        display_name="Environment embedding",
+        provider=settings.embedding_provider,
+        base_url=settings.embedding_base_url or "",
+        api_key=None,
+    )
+    assert connection is not None
+    registry.delete(connection.connection_id)
+
+    monkeypatch.setattr(
+        main.app.state, "admin_session_service", main.app.state.admin_session_service
+    )
+    monkeypatch.setattr(main.app.state, "admin_operations", main.app.state.admin_operations)
+    monkeypatch.setattr(main.app.state, "admin_origins", main.app.state.admin_origins)
+    monkeypatch.setattr(main.app.state, "github_rate_limiter", main.app.state.github_rate_limiter)
+    main._configure_admin(settings, database)
+
+    operations = main.app.state.admin_operations
+    assert operations is not None and operations.model_connections is not None
+    assert operations.embedding_profiles is not None
+    assert all(
+        item.connection_id != "environment-embedding"
+        for item in operations.model_connections.list()
+    )
+    assert all(item.profile_id != "environment" for item in operations.embedding_profiles.list())
+
+
+def test_admin_restart_preserves_owner_managed_environment_embedding_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_dir = tmp_path / "data"
+    settings = load_environment(
+        deployment_environment(
+            REPONPC_DATA_DIR=str(data_dir),
+            REPONPC_EMBEDDING_PROVIDER="ollama",
+            REPONPC_EMBEDDING_MODEL="environment-default-model",
+            REPONPC_EMBEDDING_DIMENSION="1024",
+            REPONPC_IP_HASH_KEY="ip-hmac-canary",
+        ),
+        secret_roots=(tmp_path,),
+    )
+    database = RuntimeDatabase(data_dir)
+    database.initialize()
+    for attribute in (
+        "admin_session_service",
+        "admin_operations",
+        "admin_origins",
+        "github_rate_limiter",
+    ):
+        monkeypatch.setattr(main.app.state, attribute, getattr(main.app.state, attribute))
+    main._configure_admin(settings, database)
+
+    operations = main.app.state.admin_operations
+    assert operations is not None
+    connections = operations.model_connections
+    profiles = operations.embedding_profiles
+    assert connections is not None and profiles is not None
+    connection = connections.get("environment-embedding")
+    replaced = connections.update(
+        connection.connection_id,
+        ModelConnectionInput(
+            display_name="Owner Ollama",
+            provider="ollama",
+            base_url="http://127.0.0.1:22434",
+            credential_action="retain",
+        ),
+    )
+    profiles.update(
+        "environment",
+        EmbeddingProfileInput(
+            provider="ollama",
+            model_id="owner-selected-model",
+            dimension=4096,
+            normalized=True,
+            query_prefix="query: ",
+            passage_prefix="passage: ",
+            connection_reference=replaced.connection_id,
+            connection_revision=replaced.revision,
+        ),
+    )
+
+    main._configure_admin(settings, database)
+
+    restarted = main.app.state.admin_operations
+    assert restarted is not None
+    persisted_connection = restarted.model_connections.get("environment-embedding")
+    persisted_profile = restarted.embedding_profiles.get("environment")
+    assert persisted_connection.source == "managed"
+    assert persisted_connection.revision == replaced.revision
+    assert persisted_profile.model_id == "owner-selected-model"
+    assert persisted_profile.dimension == 4096
+    assert persisted_profile.connection_revision == replaced.revision
 
 
 def test_retired_github_public_read_settings_warn_and_are_never_loaded(tmp_path: Path) -> None:

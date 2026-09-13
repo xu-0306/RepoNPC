@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { ModelSetupRequests, replaceSetting } from "./modelSetupRequests";
+import { describe, expect, it, vi } from "vitest";
+import {
+  ModelSetupRequests,
+  refreshAfterModelConnectionSave,
+  replaceSetting,
+} from "./modelSetupRequests";
 
 describe("model setting response ordering", () => {
   it("keeps the returned probe result when a preceding read arrives late and a later refresh fails", async () => {
@@ -87,5 +91,37 @@ describe("model setting response ordering", () => {
     ).rejects.toThrow("offline");
     expect(calls).toBe(1);
     expect(applied).toBe(false);
+  });
+
+  it("refreshes dependent model cards after a connection update", async () => {
+    const refresh = {
+      connections: vi.fn(async () => undefined),
+      chatProfiles: vi.fn(async () => undefined),
+      embeddingProfiles: vi.fn(async () => undefined),
+      analysisSelection: vi.fn(async () => undefined),
+    };
+
+    await refreshAfterModelConnectionSave(true, refresh);
+
+    expect(refresh.connections).toHaveBeenCalledOnce();
+    expect(refresh.chatProfiles).toHaveBeenCalledOnce();
+    expect(refresh.embeddingProfiles).toHaveBeenCalledOnce();
+    expect(refresh.analysisSelection).toHaveBeenCalledOnce();
+  });
+
+  it("does not reload unrelated profile lists after creating a connection", async () => {
+    const refresh = {
+      connections: vi.fn(async () => undefined),
+      chatProfiles: vi.fn(async () => undefined),
+      embeddingProfiles: vi.fn(async () => undefined),
+      analysisSelection: vi.fn(async () => undefined),
+    };
+
+    await refreshAfterModelConnectionSave(false, refresh);
+
+    expect(refresh.connections).toHaveBeenCalledOnce();
+    expect(refresh.chatProfiles).not.toHaveBeenCalled();
+    expect(refresh.embeddingProfiles).not.toHaveBeenCalled();
+    expect(refresh.analysisSelection).toHaveBeenCalledOnce();
   });
 });

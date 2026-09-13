@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -276,3 +276,6 @@ def test_environment_connection_resolves_changed_model_from_frozen_profile(
     assert provider is not None
     assert provider.identity() == profile.identity
     assert provider.__class__.__name__ == "OllamaEmbeddingProvider"
+
+    managed_profile = replace(profile, connection_reference="environment-embedding")
+    assert _environment_embedding_provider(settings, managed_profile) is None

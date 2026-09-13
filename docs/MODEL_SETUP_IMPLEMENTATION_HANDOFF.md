@@ -2,6 +2,10 @@
 
 **Owner-approved URL editing exception (2026-09-12, ADR-029; FR-038/040, AC-055/057):** The owner explicitly requested that replacing a managed service URL prefill its saved value. Only `POST /api/admin/model-connections/{connection_id}/edit-endpoint`, guarded by the existing owner session, same-origin check and CSRF, may return `{connection_id, revision, base_url}` with `Cache-Control: no-store`. It accepts no arbitrary URL, reads the exact current encrypted revision, rejects host-managed/unknown connections with 404 and unavailable secret storage with 503, and makes no provider request or mutation. List/detail metadata remains URL-free; API keys, secret references and environment values are never returned. The UI fetches only on the explicit Replace URL action, keeps the result in the active form only, clears it on cancel/toggle-off/teardown, and ignores responses after a form or revision change. Loading disables URL editing/submission; failure permits retry or manual entry. No readback URL may enter browser storage, public drafts, exports, logs or snapshots. This narrow exception supersedes earlier blanket stored-URL readback prohibitions; stored-key prohibitions and destination-change credential rules remain unchanged.
 
+> **2026-09-12 ADR-031 correction:** Host-managed cards now expose edit/delete. The first edit requires a complete new URL, never reads the environment URL/key, and promotes the protected revision to owner-managed so startup cannot overwrite it. Reference-safe deletion stores a secret-free durable suppression marker and prevents startup recreation. Runtime migration 21 and Technical Specification 0.2.4 are authoritative where this historical handoff said to create a separate alternative.
+
+> **2026-09-13 ADR-032 correction:** Effective connection updates atomically rebind directly dependent editable candidates, clear their probe evidence, invalidate affected analysis selection generation and refresh model cards. Public-active, previous last-known-good, reindexing and frozen work retain historical provider revisions. Runtime migration 22 repairs candidates stranded by earlier updates. Technical Specification 0.2.5 is authoritative; no separate profile edit-save or automatic probe is required/allowed.
+
 > **2026-09-10 狀態更新：** 本文件是 ADR-029 的設計與安全背景。連線、Chat/Embedding profile 與管理面板程式已出現在 working tree，以下「未實作」清單不再是完整現況。擁有者後續批准 ADR-030／Specification 0.2.3：AI 路線必須先設定兩種模型，analysis selection 與 public activation 分離。接手實作請以 `ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md` 為最新入口，並保留本文件的密鑰、egress、revision、provider 與 last-known-good 約束。
 
 更新日期：2026-09-09（Asia/Taipei）  
@@ -107,7 +111,7 @@ UI 採安靜的工作區：穩定導覽、欄位對齊、適當間距、清楚�
 1. 所有寫入、測試、列模型與啟用必須有 owner session；會消耗上游容量或改變狀態的操作需 CSRF／same-origin。只有明確動作發出上游請求，開頁只讀安全 metadata。
 2. 新 base URL 綁協定與完整 base path，`/v1` 只拼一次；key 只附加在經驗證目標的授權 header。不要接受任意 header 字典、shell command 或下載 URL。
 3. HTTP 私有來源須有顯式選擇與 host egress policy。處理 IPv4/IPv6、DNS rebinding、metadata IP、redirect、timeout/bytes；不能只檢查 URL 字串後讓 transport 自己重新解析到另一個 IP。
-4. Key/endpoint input 與 response DTO 分離。變更目的地不可沿用 stored key；共享 connection 的編輯建立新 revision，不直接修改其他 active profiles。清理等到沒有 active/previous/in-flight references。
+4. Key/endpoint input 與 response DTO 分離。變更目的地不可沿用 stored key；共享 connection 的編輯建立新 revision，並只在同一交易重綁直接引用且可安全修改的 candidate profiles、清除舊測試證據。不可改寫 active、previous last-known-good、reindexing 或 frozen work；歷史 revision 必須保存 provider 並等到沒有 live reference 才清理。
 5. 選 model list 不立即測試；沒有 listing 支援時仍可手動測試。401／429／timeout 不可轉成空清單掩蓋錯誤。能力測試可通過而 listing 不可用，但只有實際成功的能力可被標記可用。
 6. Chat test 用固定合成提示及 bounded envelope validation，embedding test 涵蓋 query/passages。Dim 可量測，prefix／pooling／task semantics 不可由向量猜測；preset 或進階設定必須明確，unknown 模型不得強加 E5 prefixes。
 7. Candidate save 不消耗模型容量、不下載、不重建、不發布。Test 不能 activate。Embedding activate 必須能從已測試但需要 reindex 的狀態進入既有 coordinator，失敗保留舊版本。

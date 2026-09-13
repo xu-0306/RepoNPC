@@ -393,6 +393,32 @@ def create_admin_router(
             }
         )
 
+    @router.post("/session/resume")
+    async def resume_session(
+        request: Request,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        configured = service(request)
+        if isinstance(configured, JSONResponse):
+            return configured
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        if await request.body():
+            return _auth_error(request, AdminAuthError("AUTHENTICATION_REQUIRED"))
+        if configured.deployment_profile == "loopback_evaluation" and not local_launch_boundary(
+            request, configured
+        ):
+            return _auth_error(request, AdminAuthError("AUTHENTICATION_REQUIRED"))
+        try:
+            session = configured.resume(session_token=session_token or "")
+        except AdminAuthError as exc:
+            return _auth_error(request, exc)
+        return JSONResponse(
+            _session_body(session),
+            headers={"Cache-Control": "no-store"},
+        )
+
     @router.get("/model-connections")
     async def list_model_connections(
         request: Request,
@@ -1783,6 +1809,7 @@ def _model_connection_error(request: Request, error: ModelConnectionError) -> JS
     status_code = {
         "NOT_FOUND": 404,
         "CREDENTIAL_REPLACE_REQUIRED": 409,
+        "HOST_CONNECTION_REPLACEMENT_REQUIRED": 409,
         "MODEL_CONNECTION_IN_USE": 409,
         "MODEL_SECRET_STORAGE_UNAVAILABLE": 503,
         "SERVICE_NOT_READY": 503,

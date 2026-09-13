@@ -157,6 +157,67 @@ def test_edit_endpoint_denies_host_managed_and_unknown_connections(tmp_path, mon
             assert URL not in result.text and KEY not in result.text
 
 
+def test_owner_can_replace_and_delete_host_managed_connection(tmp_path, monkeypatch):
+    app, _, connections, _, _ = application(tmp_path, monkeypatch)
+    saved = connections.ensure_host_managed(
+        "environment-chat",
+        display_name="Environment chat",
+        provider="ollama",
+        base_url="http://127.0.0.1:11434",
+        api_key=None,
+    )
+    assert saved is not None
+    route = f"/api/admin/model-connections/{saved.connection_id}"
+    replacement_url = "http://127.0.0.1:22434"
+
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        retained = client.put(
+            route,
+            headers=headers,
+            json={
+                "display_name": "My Ollama",
+                "provider": "ollama",
+                "endpoint_action": "retain",
+                "credential_action": "retain",
+            },
+        )
+        assert retained.status_code == 409
+        assert retained.json()["error"]["code"] == "HOST_CONNECTION_REPLACEMENT_REQUIRED"
+
+        replaced = client.put(
+            route,
+            headers=headers,
+            json={
+                "display_name": "My Ollama",
+                "provider": "ollama",
+                "base_url": replacement_url,
+                "endpoint_action": "replace",
+                "credential_action": "retain",
+            },
+        )
+        assert replaced.status_code == 200
+        assert replaced.json()["source"] == "managed"
+        assert replacement_url not in replaced.text
+        assert connections.secret_for(saved.connection_id).base_url == replacement_url
+
+        endpoint = client.post(f"{route}/edit-endpoint", headers=headers)
+        assert endpoint.status_code == 200
+        assert endpoint.json()["base_url"] == replacement_url
+        assert client.delete(route, headers=headers).status_code == 204
+
+    assert (
+        connections.ensure_host_managed(
+            "environment-chat",
+            display_name="Environment chat",
+            provider="ollama",
+            base_url="http://127.0.0.1:11434",
+            api_key=None,
+        )
+        is None
+    )
+
+
 def test_edit_endpoint_secret_store_failure_has_no_private_values(tmp_path, monkeypatch):
     app, _, connections, _, _ = application(tmp_path, monkeypatch)
     saved = connections.create(
@@ -334,6 +395,58 @@ def test_failed_discovery_keeps_dimension_unknown_then_retest_recovers(
             f"/api/admin/embedding-profiles/{profile_id}/probe", headers=headers
         ).json()
         assert passed["dimension"] == 3 and passed["last_error_code"] is None
+
+
+def test_connection_update_rebinds_candidate_and_allows_explicit_retest(tmp_path, monkeypatch):
+    app, _, connections, _, state = application(tmp_path, monkeypatch)
+    model_connection = connections.create(ModelConnectionInput("Fixture", "openai_compatible", URL))
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        created = client.post(
+            "/api/admin/embedding-profiles",
+            headers=headers,
+            json={
+                "provider": "openai_compatible",
+                "model_id": "fixture-model",
+                "connection_reference": model_connection.connection_id,
+            },
+        )
+        assert created.status_code == 201
+        profile_id = created.json()["profile_id"]
+        first_probe = client.post(
+            f"/api/admin/embedding-profiles/{profile_id}/probe", headers=headers
+        )
+        assert first_probe.status_code == 200
+        assert first_probe.json()["dimension"] == 3
+        assert state["calls"] == 2
+
+        changed = client.put(
+            f"/api/admin/model-connections/{model_connection.connection_id}",
+            headers=headers,
+            json={
+                "display_name": "Changed fixture",
+                "provider": "openai_compatible",
+                "endpoint_action": "replace",
+                "base_url": "https://changed-model.example.test/v1",
+                "credential_action": "remove",
+            },
+        )
+        assert changed.status_code == 200
+        assert changed.json()["revision"] == 2
+        rebound = client.get(f"/api/admin/embedding-profiles/{profile_id}", headers=headers).json()
+        assert rebound["connection_revision"] == 2
+        assert rebound["status"] == "reindex_required"
+        assert rebound["last_probed_at"] is None
+        assert rebound["last_error_code"] is None
+        assert state["calls"] == 2
+
+        retested = client.post(f"/api/admin/embedding-profiles/{profile_id}/probe", headers=headers)
+        assert retested.status_code == 200
+        assert retested.json()["connection_revision"] == 2
+        assert retested.json()["dimension"] == 3
+        assert retested.json()["last_error_code"] is None
+        assert state["calls"] == 4
+        assert URL not in changed.text + rebound.__repr__() + retested.text
 
 
 def test_private_endpoint_retention_and_label_edit_do_not_invalidate_tests(tmp_path, monkeypatch):

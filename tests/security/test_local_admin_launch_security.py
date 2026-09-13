@@ -35,6 +35,14 @@ def _exchange(client: TestClient, grant: str, **headers: str):
     )
 
 
+def _resume(client: TestClient, session_cookie: str, **headers: str):
+    return client.post(
+        "/api/admin/session/resume",
+        headers={"Cookie": session_cookie, "Origin": ORIGIN, **headers},
+        content=b"",
+    )
+
+
 def test_local_launch_exchange_sets_session_cookie_without_reflecting_grant(
     tmp_path: Path,
 ) -> None:
@@ -58,6 +66,89 @@ def test_local_launch_exchange_sets_session_cookie_without_reflecting_grant(
     cookie = response.headers["set-cookie"]
     assert cookie.startswith("__Host-reponpc_session=")
     assert all(flag in cookie for flag in ("HttpOnly", "Path=/", "SameSite=strict", "Secure"))
+
+
+def test_page_reload_resumes_the_existing_session_without_creating_or_consuming_one(
+    tmp_path: Path,
+) -> None:
+    app, database = _local_app(tmp_path)
+    grant = issue_admin_local_launch_grant(
+        database,
+        deployment_profile="loopback_evaluation",
+        now=NOW,
+    )
+
+    with TestClient(app, base_url=ORIGIN, client=("127.0.0.1", 54321)) as client:
+        launched = _exchange(client, grant)
+        session_cookie = launched.headers["set-cookie"].split(";", 1)[0]
+        resumed = _resume(client, session_cookie)
+        refreshed = client.post(
+            "/api/admin/session/refresh",
+            headers={
+                "Cookie": session_cookie,
+                "Origin": ORIGIN,
+                "X-CSRF-Token": resumed.json()["csrf_token"],
+            },
+        )
+
+    assert resumed.status_code == 200
+    assert set(resumed.json()) == {"csrf_token", "expires_at", "absolute_expires_at"}
+    assert resumed.headers["cache-control"] == "no-store"
+    assert "set-cookie" not in resumed.headers
+    assert grant not in resumed.text
+    assert refreshed.status_code == 200
+    with database.connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM admin_sessions").fetchone()[0] == 2
+        stored_grant = connection.execute(
+            "SELECT consumed_at FROM admin_local_launch_grants WHERE state_key = 'current'"
+        ).fetchone()
+    assert stored_grant is not None and stored_grant["consumed_at"] is not None
+
+
+def test_session_resume_rejects_missing_cookie_body_and_invalid_local_boundary(
+    tmp_path: Path,
+) -> None:
+    app, database = _local_app(tmp_path)
+    grant = issue_admin_local_launch_grant(
+        database,
+        deployment_profile="loopback_evaluation",
+        now=NOW,
+    )
+
+    with TestClient(app, base_url=ORIGIN, client=("127.0.0.1", 54321)) as client:
+        launched = _exchange(client, grant)
+        session_cookie = launched.headers["set-cookie"].split(";", 1)[0]
+        missing = client.post(
+            "/api/admin/session/resume",
+            headers={"Origin": ORIGIN},
+            content=b"",
+        )
+        body_grant = "must-not-be-consumed-or-reflected"
+        nonempty = client.post(
+            "/api/admin/session/resume",
+            headers={"Cookie": session_cookie, "Origin": ORIGIN},
+            json={"grant": body_grant},
+        )
+        forwarded = _resume(
+            client,
+            session_cookie,
+            **{"X-Forwarded-For": "127.0.0.1"},
+        )
+        cross_origin = _resume(
+            client,
+            session_cookie,
+            Origin="http://attacker.example",
+        )
+
+    assert missing.status_code == 401
+    assert missing.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+    assert nonempty.status_code == 401
+    assert nonempty.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+    assert body_grant not in nonempty.text
+    assert forwarded.status_code == 401
+    assert forwarded.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+    assert cross_origin.status_code == 403
+    assert cross_origin.json()["error"]["code"] == "CSRF_FAILED"
 
 
 def test_local_launch_replay_and_unknown_grants_have_one_generic_failure(

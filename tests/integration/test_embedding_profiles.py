@@ -355,6 +355,49 @@ def test_environment_profile_requires_probe_before_it_can_be_active(tmp_path: Pa
     assert registry.active_matches(IDENTITY) is False
 
 
+def test_unknown_dimension_candidate_does_not_block_environment_profile_sync(
+    tmp_path: Path,
+) -> None:
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    registry = EmbeddingProfileRegistry(
+        database=database,
+        provider_resolver=lambda _profile: ProbeProvider(),
+        activation_compatible=lambda _profile: True,
+        now=lambda: datetime(2026, 8, 31, tzinfo=UTC),
+    )
+    profile = registry.ensure_environment_profile(
+        provider="ollama",
+        identity=IDENTITY,
+        connection_reference="environment-embedding",
+        connection_revision=1,
+    )
+    registry.update(
+        profile.profile_id,
+        EmbeddingProfileInput(
+            provider="ollama",
+            model_id="qwen3-embedding:8b",
+            dimension=None,
+            normalized=True,
+            query_prefix="query: ",
+            passage_prefix="passage: ",
+            connection_reference="environment-embedding",
+            connection_revision=1,
+        ),
+    )
+
+    restored = registry.ensure_environment_profile(
+        provider="ollama",
+        identity=IDENTITY,
+        connection_reference="environment-embedding",
+        connection_revision=1,
+    )
+
+    assert restored.profile_id == "environment"
+    assert restored.identity == IDENTITY
+    assert restored.status == "reindex_required"
+
+
 def test_probe_requires_a_compatible_verified_bundle_before_ready(tmp_path: Path) -> None:
     database = RuntimeDatabase(tmp_path)
     database.initialize()

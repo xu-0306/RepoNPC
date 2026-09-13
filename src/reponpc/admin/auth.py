@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import secrets
@@ -18,7 +19,7 @@ from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 
 SESSION_COOKIE: Final = "__Host-reponpc_session"
 SESSION_BYTES: Final = 32
-CSRF_BYTES: Final = 32
+CSRF_HMAC_DOMAIN: Final = b"RepoNPC admin session CSRF v1\x00"
 SETUP_CODE_BYTES: Final = 32
 SETUP_CODE_TTL: Final = timedelta(minutes=15)
 LOCAL_LAUNCH_GRANT_BYTES: Final = 32
@@ -372,6 +373,32 @@ class AdminSessionService:
     def authorize(self, *, session_token: str, csrf_token: str | None = None) -> SessionAuthority:
         """Validate current durable authority and optionally the CSRF token."""
 
+        authority, _idle_expires_at, _absolute_expires_at = self._authorize_session(
+            session_token=session_token,
+            csrf_token=csrf_token,
+        )
+        return authority
+
+    def resume(self, *, session_token: str) -> AdminSession:
+        """Reissue memory-only CSRF metadata for a still-valid cookie session."""
+
+        _authority, idle_expires_at, absolute_expires_at = self._authorize_session(
+            session_token=session_token,
+            csrf_token=None,
+        )
+        return AdminSession(
+            session_token=session_token,
+            csrf_token=self._session_csrf_token(session_token),
+            expires_at=idle_expires_at,
+            absolute_expires_at=absolute_expires_at,
+        )
+
+    def _authorize_session(
+        self,
+        *,
+        session_token: str,
+        csrf_token: str | None,
+    ) -> tuple[SessionAuthority, str, str]:
         if not session_token:
             raise AdminAuthError("AUTHENTICATION_REQUIRED")
         now = self._utc_now()
@@ -391,11 +418,16 @@ class AdminSessionService:
                 if row is None or not self._row_active(row, epoch, now):
                     self._rollback(connection)
                     raise AdminAuthError("AUTHENTICATION_REQUIRED")
-                if csrf_token is not None and not hmac.compare_digest(
-                    str(row["csrf_hash"]), _token_hash(csrf_token)
-                ):
-                    self._rollback(connection)
-                    raise AdminAuthError("CSRF_FAILED")
+                if csrf_token is not None:
+                    supplied_csrf_hash = _token_hash(csrf_token)
+                    stored_matches = hmac.compare_digest(str(row["csrf_hash"]), supplied_csrf_hash)
+                    resumed_matches = hmac.compare_digest(
+                        _token_hash(self._session_csrf_token(session_token)),
+                        supplied_csrf_hash,
+                    )
+                    if not (stored_matches or resumed_matches):
+                        self._rollback(connection)
+                        raise AdminAuthError("CSRF_FAILED")
                 idle_expires_at = min(
                     now + self._idle,
                     _parse_time(str(row["absolute_expires_at"])),
@@ -406,7 +438,11 @@ class AdminSessionService:
                     (_time(now), _time(idle_expires_at), session_hash),
                 )
                 connection.execute("COMMIT")
-                return SessionAuthority(session_hash=session_hash, session_epoch=epoch)
+                return (
+                    SessionAuthority(session_hash=session_hash, session_epoch=epoch),
+                    _time(idle_expires_at),
+                    str(row["absolute_expires_at"]),
+                )
             except AdminAuthError:
                 raise
             except sqlite3.Error as exc:
@@ -570,7 +606,7 @@ class AdminSessionService:
         idle = min(now + self._idle, absolute)
         for _ in range(3):
             session_token = secrets.token_urlsafe(SESSION_BYTES)
-            csrf_token = secrets.token_urlsafe(CSRF_BYTES)
+            csrf_token = self._session_csrf_token(session_token)
             try:
                 connection.execute(
                     """
@@ -599,6 +635,14 @@ class AdminSessionService:
             except sqlite3.IntegrityError:
                 continue
         raise RuntimeDatabaseError("runtime_admin_session_failed")
+
+    def _session_csrf_token(self, session_token: str) -> str:
+        digest = hmac.new(
+            self._identity_hmac_key,
+            CSRF_HMAC_DOMAIN + session_token.encode("utf-8"),
+            hashlib.sha256,
+        ).digest()
+        return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
     def _record_failure(self, identity: str, now: datetime) -> int:
         with self._database.connection() as connection:

@@ -204,15 +204,17 @@ class EmbeddingProfileRegistry:
                     "SELECT * FROM embedding_profiles WHERE profile_id = 'environment' "
                     "OR connection_reference = 'environment'"
                 ).fetchall()
+                profiles = tuple(_profile(row) for row in rows)
                 matching = next(
                     (
-                        _profile(row)
-                        for row in rows
+                        profile
+                        for profile in profiles
                         if (
-                            _profile(row).provider == provider
-                            and _profile(row).identity == identity
-                            and _profile(row).connection_reference == connection_reference
-                            and _profile(row).connection_revision == connection_revision
+                            profile.provider == provider
+                            and profile.dimension is not None
+                            and profile.identity == identity
+                            and profile.connection_reference == connection_reference
+                            and profile.connection_revision == connection_revision
                         )
                     ),
                     None,

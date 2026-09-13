@@ -11,9 +11,9 @@ RepoNPC 是一個開源、自託管的互動式 GitHub 作品集。你挑選想�
 > RepoNPC 0.2.1 已完成 GitHub OAuth／公開讀取 PAT 退場與匿名 REST resolver；clean-host Docker、真實 provider、完整瀏覽器與無障礙驗證仍待執行，因此目前適合開發與評估，尚非正式 v1 發布版。
 > Phase 5 remains the release-hardening boundary.
 
-最後檢閱：2026-09-10
+最後檢閱：2026-09-13
 
-模型連線、回答模型與資料查找模型（技術上為 embedding model）的服務管理、測試與模型優先設定引導已整合至目前 working tree。**規格 0.2.3 / ADR-030** 已核准改為「先設定兩種模型，再選專案並分析」，同時保留立即手動建立作品集的路線。管理員專案分析可在正式索引發布前執行；訪客問答仍需通過正式 bundle 驗證與啟用。修正交接請讀 [模型優先引導實作交接](docs/ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md)，前一版連線／秘密設計見 [模型設定實作交接](docs/MODEL_SETUP_IMPLEMENTATION_HANDOFF.md)。Figma 暫不處理；GGUF／Hugging Face 本地 runtime 仍是後續研究。
+模型連線、回答模型與資料查找模型（技術上為 embedding model）的服務管理、測試與模型優先設定引導已整合至目前 working tree。**規格 0.2.5 / ADR-032** 讓服務網址／協定／金鑰更新同時重綁可安全修改的候選模型，清除舊測試結果並要求明確重測，不再要求使用者另外編輯儲存每個模型；公開使用中、上一個可用版本、重建中與已執行的分析仍保留原 revision。規格 0.2.4 / ADR-031 允許直接覆寫或刪除環境預設連線（例如改用非 11434 的 Ollama port），並讓選擇在重啟後保留；環境網址與 API key 仍不會被讀回。規格 0.2.3 / ADR-030 的「先設定兩種模型，再選專案並分析」與立即手動建立作品集路線維持不變。修正交接請讀 [模型優先引導實作交接](docs/ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md)，前一版連線／秘密設計見 [模型設定實作交接](docs/MODEL_SETUP_IMPLEMENTATION_HANDOFF.md)。Figma 暫不處理；GGUF／Hugging Face 本地 runtime 仍是後續研究。
 
 ## 30 秒了解 RepoNPC
 
@@ -97,9 +97,9 @@ RepoNPC 的 Compose 檔只啟動應用程式，不會順便啟動 Ollama 或 vLL
    .\start-reponpc.cmd
    ```
 
-啟動器會在需要時安裝鎖定的 Python／Web 依賴、建立前端、只監聽 `localhost:8090`，並以兩分鐘、僅能使用一次的本機授權開啟 `/admin`。瀏覽器會把它交換成受保護的管理 session 並立即清除網址片段，因此本機評估不需要註冊、帳號、密碼或 GitHub OAuth。若直接開啟 `/admin` 而沒有有效 session，重新執行啟動器即可。
+啟動器會在需要時安裝鎖定的 Python／Web 依賴、建立前端、只監聽 `localhost:8090`，並以兩分鐘、僅能使用一次的本機授權開啟 `/admin`。瀏覽器會把它交換成受保護的管理 session 並立即清除網址片段；之後重新整理會恢復仍有效的 session，不需要再次執行啟動器。本機評估不需要註冊、帳號、密碼或 GitHub OAuth。若直接開啟 `/admin` 而沒有有效 session，重新執行啟動器即可。
 
-如果你已建立 `.env`，本機 provider URL 必須能從 Windows 主機連線，例如 Ollama 通常是 `http://127.0.0.1:11434`。完整訪客問答仍需要一個已發布並啟用、且 embedding 身分相符的索引包。
+如果你已建立 `.env`，本機 provider URL 必須能從 Windows 主機連線，例如 Ollama 通常是 `http://127.0.0.1:11434`。若服務使用其他 port，可在管理介面直接編輯環境預設連線並輸入完整新網址；可安全修改的關聯模型會一起更新為新 revision，之後只需明確按一次「測試模型」，不必再編輯儲存模型。轉為使用者管理後，重啟也不會再用 `.env` 的模型名稱覆寫已編輯的模型設定。也可在沒有模型引用後刪除該預設，兩種選擇都會跨重啟保留。完整訪客問答仍需要一個已發布並啟用、且 embedding 身分相符的索引包。
 
 ## 建立自己的 RepoNPC
 
@@ -126,7 +126,7 @@ cp reponpc.example.yml reponpc.yml
 
 RepoNPC 將聊天模型與 embedding 模型視為兩個獨立能力。兩者可以來自同一台 Ollama，也可以分別使用 vLLM 或 OpenAI-compatible API。
 
-選擇 Ollama 後，可參考 `qwen3-embedding:0.6b` 等模型；它不是規格 0.2.2/0.2.3 的預設服務或預選模型。正式環境仍使用外部 embedding profile；內建 sentence-transformers adapter 只供隔離測試與 benchmark。管理頁已有連線／模型面板，但一般引導與乾淨啟動後的首次分析仍在修正，因此目前可使用明確環境設定或進階管理面板評估，不能把引導畫面視為完成的首次使用流程。
+選擇 Ollama 後，可參考 `qwen3-embedding:0.6b` 等模型；它不是規格 0.2.2–0.2.4 的預設服務或預選模型。正式環境仍使用外部 embedding profile；內建 sentence-transformers adapter 只供隔離測試與 benchmark。管理頁已有連線／模型面板，但一般引導與乾淨啟動後的首次分析仍在修正，因此目前可使用明確環境設定或進階管理面板評估，不能把引導畫面視為完成的首次使用流程。
 
 先建立部署環境檔與 secret 目錄：
 
@@ -291,5 +291,7 @@ pnpm run web:check
 只改服務名稱時保留原網址與金鑰；更換網址是獨立選項。新輸入的金鑰會在送出或收合表單後清除。舊的泛用錯誤沒有保留原 HTTP 狀態，須再按一次測試才有新診斷。
 
 此次資料庫升級包含 runtime migration 19 與後續 migration 20，首次載入新版後端時交易式升級。保留舊資料與模型選擇，失敗會回復；正式 bundle 格式不變。完整修復清單與證據見 [UI／UX 修復紀錄](docs/UI_UX_REVIEW_2026-09-12.md)。
+
+Runtime migration 22 會修復舊版在服務更新後仍停留於舊 revision 的安全候選模型，並保存歷史 revision 的 provider 資訊。升級本身不會呼叫模型；重新啟動新版後端後，受影響的模型會顯示需要重新測試，按一次「測試模型」即可驗證新服務。
 
 模型測試失敗會顯示實際 HTTP 狀態碼與服務商錯誤原文，不翻譯或推測原因。原文會遮蔽已知金鑰及私人網址，並限制長度；無可顯示文字時會明確提示。舊版本未保存的原文需按「測試模型」重新取得。詳見 [錯誤原文修正紀錄](docs/PROVIDER_ERROR_MESSAGES_2026-09-12.md)。

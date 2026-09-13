@@ -2,12 +2,16 @@
 
 **Owner-approved URL editing exception (2026-09-12, ADR-029; FR-038/040, AC-055/057):** The owner explicitly requested that replacing a managed service URL prefill its saved value. Only `POST /api/admin/model-connections/{connection_id}/edit-endpoint`, guarded by the existing owner session, same-origin check and CSRF, may return `{connection_id, revision, base_url}` with `Cache-Control: no-store`. It accepts no arbitrary URL, reads the exact current encrypted revision, rejects host-managed/unknown connections with 404 and unavailable secret storage with 503, and makes no provider request or mutation. List/detail metadata remains URL-free; API keys, secret references and environment values are never returned. The UI fetches only on the explicit Replace URL action, keeps the result in the active form only, clears it on cancel/toggle-off/teardown, and ignores responses after a form or revision change. Loading disables URL editing/submission; failure permits retry or manual entry. No readback URL may enter browser storage, public drafts, exports, logs or snapshots. This narrow exception supersedes earlier blanket stored-URL readback prohibitions; stored-key prohibitions and destination-change credential rules remain unchanged.
 
+**Owner-approved environment-connection control amendment (2026-09-12, ADR-031; FR-039/040, AC-055/056/057):** Host-managed cards expose edit/delete. Replacement requires a complete new URL without reading the environment URL, promotes the connection to owner-managed, and survives environment changes/restarts. A prior key cannot cross destinations; an existing no-key state may remain no-key. Deletion is reference-safe and writes a secret-free durable suppression marker so restart does not recreate the default.
+
+**Owner-approved session-resume amendment (2026-09-13, ADR-033; FR-017/029/031, AC-049/050):** Reloading an authenticated admin page first resumes the still-valid HttpOnly-cookie session through strict same-origin `POST /api/admin/session/resume`. It returns only memory-held session-bound CSRF and expiry metadata with `Cache-Control: no-store`, consumes no launcher grant, and preserves generic failure, expiry, revocation, host/origin, and deployment-profile recovery behavior.
+
 2026-09-12 UI/event follow-up evidence (partial AC-019/023/025/038/040/057/058): shared checkbox semantics and responsive alignment, select font inheritance, status-card and long-text reflow, credential-intent event ordering, account discovery pagination reset with collected projects preserved, revision-bound installed-model lists with stale-response rejection, raw-draft preview invalidation, and suggestion-input focus. See [dated UI/system event audit](UI_SYSTEM_EVENT_AUDIT_2026-09-12.md) and `tests/browser/`. The 40 layout cases use root-font enlargement, not native browser zoom; synthetic browser tests and 121 frontend tests do not constitute full AC, live-provider, screen-reader, or novice-walkthrough acceptance.
 
 2026-09-12 owner-approved novice setup regression scope (FR-038/039/040, AC-054/055/057/058; bilingual AC-023): optional embedding dimensions remain unknown until an explicit successful two-sample test; unknown/failed/stale profiles cannot be activated or selected as ready. Existing dimensions, selections, switch intents and foreign keys survive runtime migration 19, including rollback on migration failure. Name-only service edits retain protected endpoint/key and revision; destination changes require explicit credential intent. Newly entered keys clear after submission and form closure. Scoped Ollama listing is explicit and distinguishes failure from empty. Successful operation results survive a failed/stale list refresh. These focused checks do not constitute full v1 or release acceptance.
 
-**Document status:** Approved through 0.2.3
-**Applies to:** RepoNPC v1 Technical Specification 0.2.3
+**Document status:** Approved through 0.2.6
+**Applies to:** RepoNPC v1 Technical Specification 0.2.6
 **Rule:** Every criterion is required unless its mapped requirement is changed through an approved specification update.
 
 ## 1. How acceptance works
@@ -389,7 +393,7 @@ The following criteria are normative release requirements under the owner-approv
 
 - **Given** explicit `loopback_evaluation` and `production` profiles, loopback/non-loopback binds and public URLs, trusted-proxy settings, production boundary/common passwords, unusual ports, SSH tunnels, VPN/LAN allowlists, and reverse-proxy route rules,
 - **When** startup validation, local launch, production setup/login/password change/recovery, and admin-route requests run,
-- **Then** loopback evaluation refuses every non-loopback or proxy-trusting combination and uses only one-use launcher grants with no credential form; production/non-loopback requires 15–128 code points and blocks compromised/common values without composition rules; existing Argon2id/session/CSRF/backoff controls remain where applicable; a passwordless local owner cannot make production ready until `set-password` succeeds; a non-standard port alone never grants access; SSH/VPN/private routes reach the password-protected Web Admin; public proxies deny `/admin` and `/api/admin/*`; and visitor routes remain independently usable.
+- **Then** loopback evaluation refuses every non-loopback or proxy-trusting combination and uses only one-use launcher grants with no credential form; reloading a page with a still-valid session resumes it without another grant while an absent/expired/revoked or boundary-invalid session shows the existing recovery surface; production/non-loopback requires 15–128 code points and blocks compromised/common values without composition rules; CSRF stays in browser memory and all existing Argon2id/session/CSRF/backoff/expiry/revocation controls remain where applicable; a passwordless local owner cannot make production ready until `set-password` succeeds; a non-standard port alone never grants access; SSH/VPN/private routes reach the password-protected Web Admin; public proxies deny `/admin` and `/api/admin/*`; and visitor routes remain independently usable.
 
 ### AC-050 — Local recovery and bounded operations CLI
 
@@ -397,7 +401,7 @@ The following criteria are normative release requirements under the owner-approv
 
 - **Given** a fresh loopback owner, a production owner, optional GitHub connection, OAuth outage/revocation, a forgotten or absent production password, copied runtime database, corrupt backup, active/previous/pinned bundles, and unknown CLI paths/IDs,
 - **When** the owner runs the host recovery or runtime/bundle commands,
-- **Then** `admin launch-token` works only for a validated loopback profile and emits one fragment-only two-minute URL; production setup/password exists independently of GitHub; `reponpc admin set-password --data-dir <dir>` creates or changes only the production-capable local hash without reopening setup or changing GitHub credentials; `runtime check/backup` are consistent and secret-safe; `bundle verify/pin/unpin` preserve last-known-good state; help/errors are stable; and no second public management protocol is required.
+- **Then** `admin launch-token` works only for a validated loopback profile and emits one fragment-only two-minute URL; the grant is needed to create a local session but not to reload that still-valid session; production setup/password exists independently of GitHub; `reponpc admin set-password --data-dir <dir>` creates or changes only the production-capable local hash without reopening setup or changing GitHub credentials; `runtime check/backup` are consistent and secret-safe; `bundle verify/pin/unpin` preserve last-known-good state; help/errors are stable; and no second public management protocol is required.
 
 ## 10. Traceability matrix
 
@@ -597,17 +601,18 @@ Diagnostic regression (owner correction, 2026-09-12; AC-054/055/057 and bilingua
 
 **Maps to:** FR-039, NFR-001, NFR-002, NFR-012
 
-- **Given** recognizable synthetic key/private-URL canaries, forged/expired sessions, absent CSRF, cross-origin calls, hostile URL/redirect/DNS fixtures, changed destinations, empty/replace/remove credential intents, and unavailable/corrupt secret storage,
+- **Given** recognizable synthetic key/private-URL canaries, host-managed defaults, forged/expired sessions, absent CSRF, cross-origin calls, hostile URL/redirect/DNS fixtures, changed destinations, empty/replace/remove credential intents, and unavailable/corrupt secret storage,
 - **When** connections are created, tested, read, edited, deleted, backed up, restored, and rejected,
-- **Then** only authenticated same-origin ingress accepts typed values; the browser never directly contacts providers; stored values never appear in read/error responses, public YAML, bundles, logs, history, browser storage, exports, or recorded screenshots; key inputs clear after submission/exit; storage is protected and fails closed; changing a destination never forwards an old key; reference cleanup preserves live revisions; and GitHub/authentication secrets cannot be borrowed. URL policy covers normalized IPv4/IPv6, forbidden ranges, redirects, and DNS changes at connection time.
+- **Then** only authenticated same-origin ingress accepts typed values; the browser never directly contacts providers; stored values never appear in read/error responses, public YAML, bundles, logs, history, browser storage, exports, or recorded screenshots; host-managed editing requires a complete replacement without environment URL readback; key inputs clear after submission/exit; storage is protected and fails closed; changing a destination never forwards an old key; reference cleanup preserves live revisions; and GitHub/authentication secrets cannot be borrowed. URL policy covers normalized IPv4/IPv6, forbidden ranges, redirects, and DNS changes at connection time.
 
 ### AC-056 - Model changes preserve active service and recover after restart
 
 **Maps to:** FR-006, FR-035, FR-038, FR-039, NFR-003, NFR-011
 
-- **Given** active chat/search revisions, a compatible bundle, candidate edits, concurrent activations, shared connections, failed/cancelled probes/reindexes, key rotation, migration failure, restart, and an index builder unable to reach a private endpoint,
+- **Given** active chat/search revisions, a compatible bundle, host-managed replacement/deletion, candidate edits, concurrent activations, shared connections, failed/cancelled probes/reindexes, key rotation, migration failure, restart, and an index builder unable to reach a private endpoint,
 - **When** the owner saves and explicitly uses candidates,
-- **Then** saving alone cannot alter active service; chat switches only after its test while old requests complete on their revision; embedding activation requires probe/reindex/validation/smoke and an atomic switch; failed work preserves the last-known-good profile/bundle; compatible cache reuse and incompatible result invalidation follow the selected identities; restarts preserve explicit selections; unreachable builders show a publication-specific recovery path with no secret export or unapproved topology change; backups restore connection/profile/key availability using the documented protected procedure.
+- **Then** saving alone cannot alter active service; chat switches only after its test while old requests complete on their revision; embedding activation requires probe/reindex/validation/smoke and an atomic switch; failed work preserves the last-known-good profile/bundle; compatible cache reuse and incompatible result invalidation follow the selected identities; restarts preserve explicit selections and do not overwrite/recreate an owner-replaced/deleted environment default or remirror environment model fields into its owner-edited profile; unreachable builders show a publication-specific recovery path with no secret export or unapproved topology change; backups restore connection/profile/key/override availability using the documented protected procedure.
+- **And** an effective connection update atomically rebinds only directly referencing inactive candidates that are neither previous last-known-good nor reindexing, clears their prior probe evidence, refreshes their cards, and requires an explicit retest without a second profile save; analysis selection generation becomes stale. Public-active, previous last-known-good, reindexing, and frozen batch work remain on their historical revision/provider and can be resolved after restart. Migration 22 repairs earlier stranded safe candidates without provider calls or changing unrelated profiles.
 
 ### AC-057 - Novice model setup is readable, reversible, and accessible
 
@@ -615,7 +620,7 @@ Diagnostic regression (owner correction, 2026-09-12; AC-054/055/057 and bilingua
 
 - **Given** both locales, first-time and returning owners, keyboard/screen-reader use, 375/768/1024/1440-pixel widths, 200% zoom, reduced motion, and long model IDs/errors,
 - **When** they select a service, enter address/key/model, test, edit, cancel, activate/reindex, skip setup, and return to their portfolio draft,
-- **Then** the primary flow asks only service/address/key/model information, distinguishes chat from search and connection success from publication, never requires dimension/reference jargon, provides contextual recovery and manual continuation, preserves unrelated work, keeps Ollama catalog/actions conditional, and has no overlap, clipped controls, untranslated status keys, lost focus, or color-only status. Automated browser/accessibility evidence plus a dated novice walkthrough are required; Figma is not required.
+- **Then** the primary flow asks only service/address/key/model information, lets the owner edit or delete environment defaults (including a non-default Ollama port), updates safe dependent model settings as part of the same connection save rather than requiring another profile edit-save, distinguishes chat from search and connection success from publication, never requires dimension/reference jargon, provides contextual recovery and manual continuation, preserves unrelated work, keeps Ollama catalog/actions conditional, and has no overlap, clipped controls, untranslated status keys, lost focus, or color-only status. Automated browser/accessibility evidence plus a dated novice walkthrough are required; Figma is not required.
 
 ### AC-058 - Model-first AI flow and immediate manual flow
 
@@ -645,6 +650,8 @@ Diagnostic regression (owner correction, 2026-09-12; AC-054/055/057 and bilingua
 - **Verification:** migration/reducer/orchestration, batch identity/race/restart/security and real-browser recovery tests; a single-item failure cannot erase other validated results.
 
 Version 0.2.3 additionally extends AC-040/AC-053/AC-056/AC-057 with section 11.6's model-first journey and analysis/public-activation distinction. “Active profile” in public-readiness criteria continues to mean public serving state; an analysis-only selection does not satisfy it. AC-058 through AC-060 start **not-run** until the correction is implemented and observed. Prior 0.2.2 tests do not establish these outcomes.
+
+Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding correction. A connection update is one owner action for editable dependent candidates, but test/use/publication remain explicit actions and protected historical work remains pinned. Runtime migration 22 is upgrade compatibility evidence, not live-provider or full release acceptance by itself.
 
 ## 11. Approval result format
 

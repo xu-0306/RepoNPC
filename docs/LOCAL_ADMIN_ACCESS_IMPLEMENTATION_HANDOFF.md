@@ -1,7 +1,9 @@
 # RepoNPC 0.2.0 本機管理員存取實作交接
 
-**更新時間：** 2026-09-08（Asia/Taipei）  
-**狀態：** 0.2.1 OAuth／公開讀取憑證退場已整合至根工作樹；clean-host／live release evidence 待完成  
+> **0.2.6 implementation update (2026-09-13, ADR-033):** The owner found that a browser reload lost the memory-only CSRF value and incorrectly showed relaunch while the HttpOnly session remained valid. Strict same-origin `POST /api/admin/session/resume` now reissues session-bound CSRF/expiry metadata without browser storage or launch-grant replay, and the fragment-free frontend bootstrap tries it before the existing relaunch/password recovery surface. New sessions use a domain-separated HMAC-bound CSRF value; pre-0.2.6 stored random CSRF values remain valid for their original session lifetime. Expiry, revocation, Host/Origin and forwarded-header protections remain unchanged. Focused backend auth/API/spec tests passed 63; the complete frontend suite passed 134, along with Ruff, mypy, Prettier, ESLint (five pre-existing Fast Refresh warnings only), TypeScript typecheck and production build. An accidentally unfiltered full Python run reported 889 passed and 2 skipped, then failed only at the unrelated Compose smoke because `docker compose` returned exit 1; that smoke is not claimed as passed and was not rerun for this Windows/local auth correction.
+
+**更新時間：** 2026-09-13（Asia/Taipei）
+**狀態：** 0.2.6 authenticated reload resume 已整合並通過本機自動化驗證；clean-host／live release evidence 待完成
 **分支：** `codex/local-admin-access-0.2.0`  
 **基底提交：** `f6a7829`  
 **隔離工作樹：** `D:\RepoNPC\.agent-foreman\worktrees\local-admin-0-2`

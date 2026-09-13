@@ -12,7 +12,7 @@
 
 管理頁使用固定版本的 `@lobehub/icons-static-svg` 提供 Ollama、OpenAI、Qwen 與 vLLM 品牌識別；SVG 由 Vite 隨程式打包，不從 CDN 載入。授權與商標用途記錄於 repository 根目錄的 `THIRD_PARTY_NOTICES.md`。
 
-目標是讓管理者看得懂「目前做到哪裡、還缺什麼、接下來按哪裡」，並沿用參考圖的白底、紫色重點、卡片、六步導覽與像素 NPC。行為以 Approved Technical Specification 0.2.3 為準；本文件不新增 API、provider、發布拓撲或公開資料 schema。
+目標是讓管理者看得懂「目前做到哪裡、還缺什麼、接下來按哪裡」，並沿用參考圖的白底、紫色重點、卡片、六步導覽與像素 NPC。行為以 Approved Technical Specification 0.2.5 為準；本文件不新增 provider、發布拓撲或公開資料 schema。依 ADR-032，服務有效設定更新後，可安全修改的關聯模型會自動換到新 revision、清除舊測試證據並刷新卡片；使用者只需重新測試，不需再編輯儲存模型。
 
 審核基線及必修缺陷見 [模型與引導實作審核](MODEL_ONBOARDING_IMPLEMENTATION_REVIEW_2026-09-10.md)。參考圖為擁有者提供的 `ChatGPT Image 2026年9月10日 下午11_40_18.png`，屬於期望視覺，不是目前功能已實現的證據。
 
@@ -112,7 +112,7 @@ RepoNPC 管理工作區       [NPC 短提示]        [語言] [說明] [管理�
 - 已保存 URL/key 不回填、不提供「顯示已存 key」、不讀出 masked suffix；眼睛圖示只可切換本次新輸入值。
 - 編輯時提供明確「保留／替換／移除憑證」。空白不能被當成刪除。目的地變更依後端規則要求新的授權憑證，不偷偷沿用舊 key。
 - 成功、取消、登出、session expiry、unmount 清除秘密輸入。失敗保留安全名稱、角色及模型選擇；不可把 URL/key 送入 draft/storage/log/trace/測試快照。
-- host-managed 卡片提供來源說明及「建立另一個連線」；不承諾可修改或讀回部署環境的秘密。
+- host-managed 卡片提供來源說明與編輯／刪除操作。編輯要求完整新網址且不讀回部署環境值，成功後轉為 owner-managed；刪除須先解除模型引用並跨重啟保留停用狀態。
 - 新增表單在 owner 動作後展開，使用同一份 editor；不在兩個角色各複製一套會不同步的 connection store。
 
 ### 3.3 模型庫

@@ -74,9 +74,14 @@ def test_chat_profiles_require_probe_and_freeze_the_connection_revision(tmp_path
         connection.connection_id,
         _connection_input(api_key="rotated-chat-key-canary"),
     )
+    rebound = profiles.get(replacement.profile_id)
+    assert rebound.connection_revision == 2
+    assert rebound.status == "probe"
+    assert rebound.observed_model_id is None
+
     with pytest.raises(ChatProfileError) as stale:
         profiles.activate(replacement.profile_id)
-    assert stale.value.code == "CHAT_PROFILE_STALE"
+    assert stale.value.code == "CHAT_PROBE_REQUIRED"
     assert profiles.active().profile_id == profile.profile_id  # type: ignore[union-attr]
 
 

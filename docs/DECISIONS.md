@@ -1,6 +1,6 @@
 # RepoNPC Architecture Decision Log
 
-**Document status:** ADR-001 through ADR-030 accepted; ADR-030 approved 2026-09-10. Historical supersession is stated in each record.
+**Document status:** ADR-001 through ADR-033 accepted; ADR-033 approved 2026-09-13. Historical supersession is stated in each record.
 **Approval rule:** These records were accepted together when the project owner approved `TECHNICAL_SPEC.md` 0.1.0. A later incompatible change requires a new ADR; do not silently rewrite an accepted decision.
 
 ## ADR-001: Use a modular monolith
@@ -247,6 +247,32 @@
 - **Scope limits:** No chat-only/lexical analysis redesign, new public schema, locale-threshold reduction, hosted service, publication-topology change, durable server portfolio drafts, Figma, or GGUF/Hugging Face runtime. Separate model references do not create another inference service or another public active model per role.
 - **Consequences:** Adds FR-041/FR-042 and AC-058 through AC-060. Requires an actual clean-bootstrap-to-analysis integration/browser test, existing-public-service preservation, revision/cache consistency, old-state migration, manual-route and bilingual/accessibility coverage. Existing green tests are baseline evidence only.
 - **Handoff:** `ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md` is the next implementation entry point; the 0.2.2 handoff remains architectural history and a source of retained security obligations.
+
+## ADR-031: Let owners replace or delete environment-default model connections
+
+- **Status:** Accepted and implemented on 2026-09-12; full AC-055/056/057 release evidence remains pending.
+- **Authorization:** The owner explicitly rejected immutable default connection cards and identified non-default Ollama ports as a concrete unusable case.
+- **Context:** The UI hid edit/delete for `host-managed` connections. Although the backend CRUD path did not uniformly reject them, startup mirroring overwrote edits and recreated deleted rows, so adding buttons alone would produce misleading, non-durable behavior.
+- **Decision:** Show edit/delete on host-managed cards. The first edit requires a complete newly entered URL and never reads back the environment URL/key. A successful replacement creates a new protected revision, changes the connection to owner-managed, and records durable precedence over startup mirroring. Startup then preserves the associated owner-edited model profile rather than rewriting its model identity from environment defaults. A prior key cannot cross a changed destination without explicit replacement/removal; an existing no-key state may remain no-key. Deletion remains blocked by Chat/Embedding profile references; otherwise it atomically stores a secret-free `disabled` marker and deletes the connection, and startup honors that marker instead of recreating the default.
+- **Storage and recovery:** Runtime migration 21 adds `host_managed_connection_overrides(connection_id, state, updated_at)`, with state limited to `managed|disabled`. It stores no URL, secret reference, or credential. Runtime SQLite backup/restore therefore carries the owner's override/deletion choice; encrypted connection revisions still require the separately protected model-secret key.
+- **Consequences:** Technical Specification advances to 0.2.4. FR-039/040 and AC-055/056/057 cover API, security, restart, bilingual UI, migration, and reference-safety behavior. Existing no-fallback, no-key-readback, managed-URL edit-endpoint, profile revision, and last-known-good rules remain unchanged.
+
+## ADR-032: Rebind editable model candidates when their connection changes
+
+- **Status:** Accepted and implemented on 2026-09-13; full live-provider/browser AC-055/056/057/060 evidence remains pending.
+- **Authorization:** After observing that a working local Ollama service still produced `EMBEDDING_CONNECTION_REQUIRED`, the owner rejected the extra manual profile-save ceremony and explicitly requested the existing model settings be updated directly when their connection is updated.
+- **Evidence:** The real Ollama `/api/version`, `/api/tags`, and `/api/embed` calls succeeded, including `qwen3-embedding:8b` with a 4096-dimensional vector. The stored connection was revision 2 while the environment embedding profile remained revision 1, so provider resolution returned no provider before any Ollama request. The connection update transaction changed only the connection row/secret revision and left dependent candidate rows stale.
+- **Decision:** An effective provider/URL/key connection update atomically rebinds directly referencing editable Chat and Embedding candidates to the new connection revision; Embedding also follows the selected connection provider. Their prior probe observations/errors/timestamps are cleared and an explicit retest is required. If the current analysis selection references that connection, its generation advances and existing plans become stale while the explanatory selection IDs/revisions remain. A display-name-only edit changes none of these values. Unrelated profiles are untouched, and saving never auto-probes, activates, reindexes, analyzes, or publishes.
+- **Protected revisions:** Public-active, previous last-known-good, and reindexing profiles are not rebound. Already frozen batch snapshots keep their old pair. Historical connection-secret revisions record the provider as safe metadata, allowing those pinned profiles/jobs to resolve the correct protocol plus encrypted endpoint/key after restart. No private URL/key is added to metadata reads.
+- **Migration and consequences:** Runtime migration 22 backfills provider metadata for existing protected revisions and repairs safe candidates stranded by earlier connection updates, clearing invalid probe evidence and invalidating stale selection generations in one transaction. Technical Specification advances to 0.2.5. FR-039/040/042 and AC-055/056/057/060 govern this behavior. The explicit retest, no-fallback, key-cross-destination, last-known-good, and immutable in-flight rules remain.
+
+## ADR-033: Resume a valid admin session after page reload
+
+- **Status:** Accepted for implementation on 2026-09-13; full clean-browser release evidence remains pending.
+- **Authorization:** The owner observed that refreshing a page opened by `start-reponpc.cmd` showed the relaunch screen even though both processes and the server session were still active, then approved the proposed strict same-origin session-resume correction.
+- **Evidence:** The live `/healthz` endpoint remained alive and runtime SQLite retained one current unrevoked session. The frontend defined authentication solely as an in-memory CSRF value; reload erased it, the one-use fragment had correctly been removed, and bootstrap called only public auth-method discovery before selecting the relaunch screen. The existing refresh endpoint required the now-lost CSRF token, and tests covered grant exchange but not post-exchange page reload.
+- **Decision:** Add empty-body `POST /api/admin/session/resume`. It requires the existing valid HttpOnly session cookie and the same host/origin/private-admin boundary, returns only session-bound CSRF and expiry metadata with `Cache-Control: no-store`, and consumes no local-launch/setup proof. CSRF is deterministically derived from the high-entropy session token through a domain-separated server HMAC, remains browser-memory-only, and is accepted alongside the pre-0.2.6 stored random CSRF for existing sessions until they expire. The frontend attempts resume whenever no launch fragment exists, then uses the prior relaunch/password recovery path on generic failure.
+- **Consequences:** Technical Specification advances to 0.2.6. FR-017/029/031 and AC-049/050 require valid-session reload, expiry/revocation/cross-origin/forwarded-host failure, multi-tab compatibility, no storage/grant replay, and production-password regressions. No database migration, new credential, public management protocol, or launcher behavior is added.
 
 ### ADR-029/030 implementation clarification — 2026-09-12
 

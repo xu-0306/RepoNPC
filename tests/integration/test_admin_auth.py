@@ -163,6 +163,100 @@ def test_local_launch_grant_is_hashed_reissued_and_consumed_once(tmp_path: Path)
     assert second not in persisted
 
 
+def test_valid_session_can_resume_without_reusing_a_launch_grant(tmp_path: Path) -> None:
+    clock = Clock()
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    service = AdminSessionService(
+        database=database,
+        identity_hmac_key=b"k" * 32,
+        deployment_profile="loopback_evaluation",
+        now=clock,
+    )
+    grant = issue_admin_local_launch_grant(
+        database,
+        deployment_profile="loopback_evaluation",
+        now=clock(),
+    )
+    session = service.consume_local_launch(grant=grant)
+
+    clock.advance(minutes=5)
+    resumed = service.resume(session_token=session.session_token)
+
+    assert resumed.session_token == session.session_token
+    assert resumed.csrf_token == session.csrf_token
+    assert resumed.expires_at > session.expires_at
+    service.authorize(
+        session_token=resumed.session_token,
+        csrf_token=resumed.csrf_token,
+    )
+    with database.connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM admin_sessions").fetchone()[0] == 1
+        stored = connection.execute("SELECT session_hash, csrf_hash FROM admin_sessions").fetchone()
+    assert stored is not None
+    assert all(
+        secret not in repr(tuple(stored))
+        for secret in (grant, resumed.session_token, resumed.csrf_token)
+    )
+
+
+def test_resume_preserves_pre_amendment_csrf_until_the_session_expires(tmp_path: Path) -> None:
+    clock = Clock()
+    service, database = _service(tmp_path, clock)
+    session = service.login(
+        username="admin",
+        password="correct horse battery staple",
+        remote_identity="visitor",
+    )
+    legacy_csrf = "legacy-random-csrf-token"
+    with database.connection() as connection:
+        connection.execute(
+            "UPDATE admin_sessions SET csrf_hash = ? WHERE session_hash = ?",
+            (
+                hashlib.sha256(legacy_csrf.encode()).hexdigest(),
+                hashlib.sha256(session.session_token.encode()).hexdigest(),
+            ),
+        )
+
+    service.authorize(session_token=session.session_token, csrf_token=legacy_csrf)
+    resumed = service.resume(session_token=session.session_token)
+
+    assert resumed.csrf_token != legacy_csrf
+    service.authorize(
+        session_token=resumed.session_token,
+        csrf_token=resumed.csrf_token,
+    )
+
+
+def test_session_resume_rejects_expired_and_revoked_authority(tmp_path: Path) -> None:
+    clock = Clock()
+    service, _database = _service(tmp_path, clock)
+    expired = service.login(
+        username="admin",
+        password="correct horse battery staple",
+        remote_identity="visitor-expired",
+    )
+    clock.advance(minutes=31)
+
+    with pytest.raises(AdminAuthError) as expired_error:
+        service.resume(session_token=expired.session_token)
+    assert expired_error.value.code == "AUTHENTICATION_REQUIRED"
+
+    revoked = service.login(
+        username="admin",
+        password="correct horse battery staple",
+        remote_identity="visitor-revoked",
+    )
+    service.logout(
+        session_token=revoked.session_token,
+        csrf_token=revoked.csrf_token,
+    )
+
+    with pytest.raises(AdminAuthError) as revoked_error:
+        service.resume(session_token=revoked.session_token)
+    assert revoked_error.value.code == "AUTHENTICATION_REQUIRED"
+
+
 def test_local_launch_grant_expiry_profile_gate_and_atomic_concurrency(
     tmp_path: Path,
 ) -> None:
