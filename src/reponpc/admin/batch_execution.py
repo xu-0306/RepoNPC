@@ -218,9 +218,10 @@ def _onboarding_error(error: GuidedOnboardingError) -> BatchExecutionError:
     if error.code in {"CANCELLED", "RATE_LIMITED", "PROVIDER_TIMEOUT"}:
         return BatchExecutionError(
             "CANCELLED" if error.code == "CANCELLED" else error.code,
+            reason=error.reason,
             retry_after_seconds=error.retry_after_seconds,
         )
-    return BatchExecutionError(error.code)
+    return BatchExecutionError(error.code, reason=error.reason)
 
 
 def _cache_key(*parts: str) -> str:

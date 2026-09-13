@@ -200,6 +200,70 @@ describe("BatchAnalysisPanel", () => {
     expect(markup).not.toContain("GITHUB_RATE_LIMITED");
   });
 
+  it("shows a durable safe repository error code and validation reason", () => {
+    const markup = renderToStaticMarkup(
+      <BatchAnalysisPanel
+        {...props({
+          job: {
+            id: "batch-failed",
+            status: "failed",
+            items: [
+              {
+                slug: "octocat/demo",
+                stage: "validating",
+                state: "failed",
+                retryable: true,
+                error: {
+                  scope: "repository",
+                  code: "PROVIDER_ERROR",
+                  reason: "PROVIDER_OUTPUT_SCHEMA_INVALID",
+                  requestId: "request-id-is-not-rendered",
+                },
+              },
+            ],
+          },
+        })}
+      />,
+    );
+
+    expect(markup).toContain("Error code");
+    expect(markup).toContain("PROVIDER_ERROR");
+    expect(markup).toContain("Failure reason");
+    expect(markup).toContain("PROVIDER_OUTPUT_SCHEMA_INVALID");
+    expect(markup).toContain("did not match the analysis JSON schema");
+    expect(markup).not.toContain("request-id-is-not-rendered");
+  });
+
+  it("does not render an unrecognized repository error or reason", () => {
+    const markup = renderToStaticMarkup(
+      <BatchAnalysisPanel
+        {...props({
+          job: {
+            id: "batch-unsafe-error",
+            status: "failed",
+            items: [
+              {
+                slug: "octocat/demo",
+                stage: "validating",
+                state: "failed",
+                retryable: false,
+                error: {
+                  scope: "repository",
+                  code: "UNSAFE_SERVER_DETAIL",
+                  reason: "PRIVATE_PROVIDER_BODY",
+                },
+              },
+            ],
+          },
+        })}
+      />,
+    );
+
+    expect(markup).toContain("ANALYSIS_FAILED");
+    expect(markup).not.toContain("UNSAFE_SERVER_DETAIL");
+    expect(markup).not.toContain("PRIVATE_PROVIDER_BODY");
+  });
+
   it("keeps Traditional Chinese controls and status text materially equivalent", () => {
     const markup = renderToStaticMarkup(
       <BatchAnalysisPanel {...props({ locale: "zh-TW" })} />,

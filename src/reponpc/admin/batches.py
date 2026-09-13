@@ -38,12 +38,28 @@ from reponpc.admin.batch_runtime import (
     ClaimedBatchItem,
 )
 
+SAFE_BATCH_ERROR_REASONS = frozenset(
+    {
+        "NO_ELIGIBLE_CONTENT",
+        "PROVIDER_OUTPUT_SCHEMA_INVALID",
+        "PROVIDER_EVIDENCE_ID_INVALID",
+        "PROVIDER_PERSONAL_INFERENCE_REJECTED",
+    }
+)
+
 
 class BatchExecutionError(RuntimeError):
     """Safe worker failure with no upstream body/path/token detail."""
 
-    def __init__(self, code: str, *, retry_after_seconds: int | None = None) -> None:
+    def __init__(
+        self,
+        code: str,
+        *,
+        reason: str | None = None,
+        retry_after_seconds: int | None = None,
+    ) -> None:
         self.code = code
+        self.reason = reason if reason in SAFE_BATCH_ERROR_REASONS else None
         self.retry_after_seconds = retry_after_seconds
         super().__init__("analysis batch item execution failed")
 
@@ -386,9 +402,14 @@ class AnalysisBatchService:
                     retry_at=self._utc_now().replace(microsecond=0) + timedelta(seconds=retry),
                 )
             elif exc.code == "GENERATION_DISPATCHED_INTERRUPTED":
-                self._store.fail_item(item, code=exc.code, retry_confirmation=True)
+                self._store.fail_item(
+                    item,
+                    code=exc.code,
+                    reason=exc.reason,
+                    retry_confirmation=True,
+                )
             else:
-                self._store.fail_item(item, code=exc.code)
+                self._store.fail_item(item, code=exc.code, reason=exc.reason)
         except Exception:
             self._store.fail_item(item, code="ANALYSIS_FAILED")
 

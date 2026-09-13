@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import hashlib
 
+import pytest
+
 from reponpc.admin.analysis_selection import AnalysisModelPair
 from reponpc.admin.batch_execution import PinnedBatchItemRunner
 from reponpc.admin.batch_resolver import BatchCapacity
 from reponpc.admin.batch_runtime import BatchCreateRequest, BatchItemInput, BatchRuntimeStore
-from reponpc.admin.batches import BatchStageGates
+from reponpc.admin.batches import BatchExecutionError, BatchStageGates
+from reponpc.admin.onboarding import GuidedOnboardingError
 from reponpc.indexing.sources import EmbeddingIdentity
 from reponpc.runtime.database import RuntimeDatabase
 
@@ -21,13 +24,16 @@ class Source:
 
 
 class Onboarding:
-    def __init__(self) -> None:
+    def __init__(self, failure: GuidedOnboardingError | None = None) -> None:
         self.calls = 0
         self.providers: list[object] = []
+        self.failure = failure
 
     def analyze_resolved_repository(self, **values: object) -> dict[str, object]:
         self.calls += 1
         self.providers.append(values["providers"])
+        if self.failure is not None:
+            raise self.failure
         stage_changed = values["stage_changed"]
         assert callable(stage_changed)
         stage_changed("filtering")
@@ -157,3 +163,30 @@ def test_runner_uses_the_pair_persisted_with_the_claimed_batch(tmp_path) -> None
 
     assert result["repository"]["slug"] == "octocat/demo"
     assert onboarding.providers == ["runtime:chat-a"]
+
+
+def test_runner_preserves_allowlisted_onboarding_failure_reason(tmp_path) -> None:
+    database = RuntimeDatabase(tmp_path / "runtime")
+    database.initialize()
+    store = BatchRuntimeStore(database)
+    request = _request("safe-reason")
+    batch, _ = store.create_batch(request)
+    claimed = store.claim_next_item(batch.batch_id)
+    assert claimed is not None
+    runner = PinnedBatchItemRunner(
+        store=store,
+        source=Source(),  # type: ignore[arg-type]
+        onboarding=Onboarding(
+            GuidedOnboardingError(
+                "CONFIG_INVALID",
+                reason="NO_ELIGIBLE_CONTENT",
+            )
+        ),  # type: ignore[arg-type]
+        gates=BatchStageGates(BatchCapacity(1, 1, 2, 1, 4)),
+    )
+
+    with pytest.raises(BatchExecutionError) as error:
+        runner(claimed, lambda: False)
+
+    assert error.value.code == "CONFIG_INVALID"
+    assert error.value.reason == "NO_ELIGIBLE_CONTENT"

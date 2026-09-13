@@ -141,6 +141,32 @@ def test_item_completion_transitions_to_durable_terminal_snapshot(tmp_path) -> N
     assert all("token" not in event.payload for event in events)
 
 
+def test_item_failure_reason_survives_snapshot_event_and_restart(tmp_path) -> None:
+    clock = Clock()
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    store = BatchRuntimeStore(database, now=clock)
+    batch, _ = store.create_batch(_request())
+    claimed = store.claim_next_item(batch.batch_id)
+    assert claimed is not None
+
+    store.fail_item(
+        claimed,
+        code="PROVIDER_ERROR",
+        reason="PROVIDER_OUTPUT_SCHEMA_INVALID",
+    )
+
+    restarted = BatchRuntimeStore(database, now=clock)
+    terminal = restarted.get_batch(batch.batch_id)
+    assert terminal.items[0].error_code == "PROVIDER_ERROR"
+    assert terminal.items[0].error_reason == "PROVIDER_OUTPUT_SCHEMA_INVALID"
+    assert restarted.events_after(batch.batch_id, after_event_id=0)[-2].payload == {
+        "state": "failed",
+        "error_code": "PROVIDER_ERROR",
+        "error_reason": "PROVIDER_OUTPUT_SCHEMA_INVALID",
+    }
+
+
 def test_pause_cancel_retry_and_restart_never_auto_retries_generation(tmp_path) -> None:
     clock = Clock()
     store = _store(tmp_path, clock)

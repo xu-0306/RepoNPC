@@ -23,7 +23,7 @@ def test_runtime_database_is_idempotent_and_separate_from_index_data(tmp_path: P
 
     assert database.database_path == tmp_path / "runtime-data" / "runtime.sqlite"
     assert database.database_path.exists()
-    assert database.schema_version() == 22
+    assert database.schema_version() == 23
     assert {
         "runtime_schema_migrations",
         "admin_sessions",
@@ -90,7 +90,7 @@ def test_provider_message_migration_is_atomic(tmp_path: Path) -> None:
                 row[1] for row in connection.execute(f"PRAGMA table_info({table})")
             }
     database.initialize()
-    assert database.schema_version() == 22
+    assert database.schema_version() == 23
 
 
 def test_host_connection_override_migration_is_atomic(tmp_path: Path) -> None:
@@ -110,7 +110,7 @@ def test_host_connection_override_migration_is_atomic(tmp_path: Path) -> None:
     assert database.schema_version() == 20
     assert "host_managed_connection_overrides" not in table_names(database)
     database.initialize()
-    assert database.schema_version() == 22
+    assert database.schema_version() == 23
 
 
 def test_connection_revision_rebinding_migration_repairs_safe_candidates(
@@ -206,7 +206,7 @@ def test_connection_revision_rebinding_migration_repairs_safe_candidates(
 
     database.initialize()
 
-    assert database.schema_version() == 22
+    assert database.schema_version() == 23
     with database.connection() as connection:
         revisions = connection.execute(
             "SELECT revision, provider FROM model_connection_secrets ORDER BY revision"
@@ -272,7 +272,29 @@ def test_connection_revision_rebinding_migration_is_atomic(tmp_path: Path) -> No
         }
     assert "provider" not in columns
     database.initialize()
+    assert database.schema_version() == 23
+
+
+def test_analysis_batch_error_reason_migration_is_atomic(tmp_path: Path) -> None:
+    database = RuntimeDatabase(tmp_path / "analysis-error-reason-rollback")
+    previous = tuple(m for m in MIGRATIONS if m.version < 23)
+    database.initialize(migrations=previous)
+    migration = next(m for m in MIGRATIONS if m.version == 23)
+    broken = Migration(
+        version=23,
+        name=migration.name,
+        statements=(*migration.statements, "INVALID SQL"),
+    )
+
+    with pytest.raises(RuntimeDatabaseError):
+        database.initialize(migrations=(*previous, broken))
+
     assert database.schema_version() == 22
+    with database.connection() as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(analysis_batch_items)")}
+    assert "error_reason" not in columns
+    database.initialize()
+    assert database.schema_version() == 23
 
 
 def test_concurrent_initialization_creates_one_versioned_schema(tmp_path: Path) -> None:
@@ -281,11 +303,11 @@ def test_concurrent_initialization_creates_one_versioned_schema(tmp_path: Path) 
     with ThreadPoolExecutor(max_workers=2) as executor:
         list(executor.map(lambda _unused: database.initialize(), range(2)))
 
-    assert database.schema_version() == 22
+    assert database.schema_version() == 23
     with database.connection() as connection:
         versions = connection.execute("SELECT version FROM runtime_schema_migrations").fetchall()
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()
-        assert [row[0] for row in versions] == list(range(1, 23))
+        assert [row[0] for row in versions] == list(range(1, 24))
     assert foreign_keys is not None and foreign_keys[0] == 1
 
 
@@ -336,13 +358,13 @@ def test_concurrent_initialization_across_database_owners_is_safe(tmp_path: Path
 
         database = RuntimeDatabase(data_dir)
         database.initialize()
-        assert database.schema_version() == 22
+        assert database.schema_version() == 23
         with database.connection() as connection:
             versions = connection.execute(
                 "SELECT version FROM runtime_schema_migrations"
             ).fetchall()
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()
-            assert [row[0] for row in versions] == list(range(1, 23))
+            assert [row[0] for row in versions] == list(range(1, 24))
         assert journal_mode is not None and journal_mode[0] == "wal"
 
 

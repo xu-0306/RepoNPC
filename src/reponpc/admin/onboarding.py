@@ -51,6 +51,33 @@ _DEFAULT_INCLUDE_PATTERNS = (
     "package.json",
     "go.mod",
     "Cargo.toml",
+    "*.c",
+    "*.cc",
+    "*.cpp",
+    "*.cs",
+    "*.css",
+    "*.go",
+    "*.h",
+    "*.hpp",
+    "*.html",
+    "*.java",
+    "*.js",
+    "*.jsx",
+    "*.kt",
+    "*.kts",
+    "*.php",
+    "*.py",
+    "*.rb",
+    "*.rs",
+    "*.sh",
+    "*.sql",
+    "*.swift",
+    "*.ts",
+    "*.tsx",
+    "*.vue",
+    "*.ps1",
+    "*.bat",
+    "*.cmd",
 )
 _PERSONAL_INFERENCE_RE = re.compile(
     r"\b(i|my|me|mine|owner|author|employee|senior|responsib|achievement|led)\b"
@@ -910,14 +937,18 @@ def _parse_analysis(content: str | dict[str, Any], selected: frozenset[str]) -> 
     try:
         envelope = AnalysisEnvelope.model_validate(_provider_payload(content))
     except (ValidationError, ValueError, json.JSONDecodeError) as exc:
-        raise GuidedOnboardingError("PROVIDER_ERROR") from exc
+        raise GuidedOnboardingError(
+            "PROVIDER_ERROR", reason="PROVIDER_OUTPUT_SCHEMA_INVALID"
+        ) from exc
     for inference in envelope.inferences:
         if not set(inference.supporting_evidence_ids).issubset(selected):
-            raise GuidedOnboardingError("PROVIDER_ERROR")
+            raise GuidedOnboardingError("PROVIDER_ERROR", reason="PROVIDER_EVIDENCE_ID_INVALID")
         if _PERSONAL_INFERENCE_RE.search(
             inference.statement.zh_tw
         ) or _PERSONAL_INFERENCE_RE.search(inference.statement.en):
-            raise GuidedOnboardingError("PROVIDER_ERROR")
+            raise GuidedOnboardingError(
+                "PROVIDER_ERROR", reason="PROVIDER_PERSONAL_INFERENCE_REJECTED"
+            )
     return envelope
 
 

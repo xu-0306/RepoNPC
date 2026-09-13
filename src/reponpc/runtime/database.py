@@ -881,6 +881,21 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             """,
         ),
     ),
+    Migration(
+        version=23,
+        name="analysis_batch_safe_error_reasons",
+        statements=(
+            """
+            ALTER TABLE analysis_batch_items ADD COLUMN error_reason TEXT
+                CHECK(error_reason IS NULL OR error_reason IN (
+                    'NO_ELIGIBLE_CONTENT',
+                    'PROVIDER_OUTPUT_SCHEMA_INVALID',
+                    'PROVIDER_EVIDENCE_ID_INVALID',
+                    'PROVIDER_PERSONAL_INFERENCE_REJECTED'
+                ))
+            """,
+        ),
+    ),
 )
 
 

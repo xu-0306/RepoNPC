@@ -16,6 +16,7 @@ from reponpc.admin.onboarding import (
     GuidedProfileDraft,
     GuidedRepositoryDraft,
     _analysis_config,
+    _parse_analysis,
 )
 from reponpc.chat.limits import ChatLimits
 from reponpc.indexing.exclusions import SourceEntryKind
@@ -81,6 +82,33 @@ class FakeResolver:
                     entry_kind=SourceEntryKind.SYMLINK,
                     size_bytes=4,
                 ),
+            ),
+        )
+
+
+class FlatRootResolver(FakeResolver):
+    def resolve(self, **values: object) -> ResolvedRepository:
+        self.source_calls += 1
+        assert values["slug"] == "octocat/demo"
+        return ResolvedRepository(
+            slug="octocat/demo",
+            commit_sha=SHA,
+            default_branch="main",
+            github_html_url="https://github.com/octocat/demo",
+            blobs=tuple(
+                RepositoryBlob(
+                    path=path,
+                    entry_kind=SourceEntryKind.REGULAR_FILE,
+                    size_bytes=len(content),
+                    content=content,
+                )
+                for path, content in (
+                    ("app.js", b"export const app = true;\n"),
+                    ("index.html", b"<main>Demo</main>\n"),
+                    ("server.py", b"def health(): return True\n"),
+                    ("styles.css", b"main { display: block; }\n"),
+                    ("start-demo.bat", b"@echo off\r\npython server.py\r\n"),
+                )
             ),
         )
 
@@ -177,6 +205,7 @@ def _service(
     *,
     chat: FakeChat | None = None,
     embedding: FakeEmbedding | None = None,
+    resolver: FakeResolver | None = None,
 ) -> tuple[GuidedOnboardingService, RuntimeDatabase, FakeResolver, FakeChat]:
     database = RuntimeDatabase(tmp_path / "runtime")
     database.initialize()
@@ -187,7 +216,7 @@ def _service(
         daily_budget=1,
         global_concurrency=1,
     )
-    resolver = FakeResolver()
+    resolver = resolver or FakeResolver()
     selected_chat = chat or FakeChat()
     selected_embedding = embedding or FakeEmbedding()
     providers = ProviderRuntime(chat=selected_chat, embedding=selected_embedding)  # type: ignore[arg-type]
@@ -307,6 +336,69 @@ def test_analysis_reuses_exclusions_returns_distinct_evidence_and_cleans_staging
     assert not any((tmp_path / "staging").iterdir())
     with database.connection() as connection:
         assert connection.execute("SELECT COUNT(*) FROM daily_usage").fetchone()[0] == 0
+
+
+def test_default_analysis_includes_common_root_level_source_files(tmp_path: Path) -> None:
+    service, _database, resolver, chat = _service(tmp_path, resolver=FlatRootResolver())
+
+    result = service.analyze_repository(
+        session_hash="session-a",
+        slug="octocat/demo",
+        ref=None,
+        include=(),
+        exclude=(),
+        cancel_requested=threading.Event(),
+    )
+
+    assert resolver.source_calls == 1
+    assert chat.calls == 1
+    assert {item["path"] for item in result["facts"]} & {
+        "app.js",
+        "index.html",
+        "server.py",
+        "styles.css",
+        "start-demo.bat",
+    }
+
+
+@pytest.mark.parametrize(
+    ("content", "selected", "reason"),
+    [
+        ({}, frozenset({"E_allowed"}), "PROVIDER_OUTPUT_SCHEMA_INVALID"),
+        (
+            {
+                "inferences": [
+                    {
+                        "statement": {"zh-TW": "架構摘要", "en": "Architecture summary"},
+                        "supporting_evidence_ids": ["E_unknown"],
+                    }
+                ]
+            },
+            frozenset({"E_allowed"}),
+            "PROVIDER_EVIDENCE_ID_INVALID",
+        ),
+        (
+            {
+                "inferences": [
+                    {
+                        "statement": {"zh-TW": "架構摘要", "en": "I led this project"},
+                        "supporting_evidence_ids": ["E_allowed"],
+                    }
+                ]
+            },
+            frozenset({"E_allowed"}),
+            "PROVIDER_PERSONAL_INFERENCE_REJECTED",
+        ),
+    ],
+)
+def test_analysis_validation_reports_safe_failure_reason(
+    content: dict[str, object], selected: frozenset[str], reason: str
+) -> None:
+    with pytest.raises(GuidedOnboardingError) as error:
+        _parse_analysis(content, selected)
+
+    assert error.value.code == "PROVIDER_ERROR"
+    assert error.value.reason == reason
 
 
 def test_analysis_calls_configured_provider_once_and_releases_session_on_failure(

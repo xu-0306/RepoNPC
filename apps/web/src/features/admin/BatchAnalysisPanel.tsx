@@ -21,6 +21,7 @@ export type BatchPreflightBlocker =
 export interface BatchOperationError {
   scope: "preflight" | "batch" | "repository" | "batch_action";
   code: string;
+  reason?: string;
   batchId?: string;
   slug?: string;
   retryAfterSeconds?: number;
@@ -221,6 +222,8 @@ type Copy = {
   actionPending: (action: BatchAction) => string;
   actionFailed: string;
   repositoryFailed: string;
+  repositoryErrorCode: string;
+  repositoryErrorReason: string;
   retryAfter: (seconds: number) => string;
   batchStatus: (status: BatchJobStatus) => string;
 };
@@ -308,8 +311,9 @@ const COPY: Record<Locale, Copy> = {
     actionPending: (action) =>
       `正在${{ pause: "暫停", resume: "繼續", cancel: "取消", retry: "重試" }[action]}批次。`,
     actionFailed: "批次操作未完成。請確認目前狀態後再試。",
-    repositoryFailed:
-      "此 repository 需要處理；詳細內容不會顯示在這個狀態面板。",
+    repositoryFailed: "此 repository 需要處理。",
+    repositoryErrorCode: "錯誤代碼",
+    repositoryErrorReason: "失敗原因",
     retryAfter: (seconds) =>
       `請在約 ${formatDuration(seconds, "zh-TW")} 後再試。`,
     batchStatus: (status) => batchStatusLabel(status, "zh-TW"),
@@ -414,8 +418,9 @@ const COPY: Record<Locale, Copy> = {
       `Batch ${{ pause: "pause", resume: "resume", cancel: "cancellation", retry: "retry" }[action]} is in progress.`,
     actionFailed:
       "The batch action did not complete. Check the current status and try again.",
-    repositoryFailed:
-      "This repository needs attention. Details are not shown in this status panel.",
+    repositoryFailed: "This repository needs attention.",
+    repositoryErrorCode: "Error code",
+    repositoryErrorReason: "Failure reason",
     retryAfter: (seconds) =>
       `Try again in about ${formatDuration(seconds, "en")}.`,
     batchStatus: (status) => batchStatusLabel(status, "en"),
@@ -865,12 +870,25 @@ function RepositoryList({
                 <dd>{repositoryStageLabel(item.stage, locale)}</dd>
               </dl>
               {item.error && (
-                <p className="guided-onboarding__disabled-reason">
-                  {copy.repositoryFailed}
-                  {item.error.retryAfterSeconds
-                    ? ` ${copy.retryAfter(item.error.retryAfterSeconds)}`
-                    : ""}
-                </p>
+                <div className="guided-onboarding__disabled-reason">
+                  <p>
+                    {copy.repositoryFailed}{" "}
+                    {repositoryErrorMessage(item.error, locale)}
+                    {item.error.retryAfterSeconds
+                      ? ` ${copy.retryAfter(item.error.retryAfterSeconds)}`
+                      : ""}
+                  </p>
+                  <dl className="guided-onboarding__repository-meta">
+                    <dt>{copy.repositoryErrorCode}</dt>
+                    <dd>{safeRepositoryErrorCode(item.error.code)}</dd>
+                    {safeRepositoryErrorReason(item.error.reason) && (
+                      <>
+                        <dt>{copy.repositoryErrorReason}</dt>
+                        <dd>{safeRepositoryErrorReason(item.error.reason)}</dd>
+                      </>
+                    )}
+                  </dl>
+                </div>
               )}
             </li>
           );
@@ -878,6 +896,111 @@ function RepositoryList({
       </ul>
     </section>
   );
+}
+
+const REPOSITORY_ERROR_CODES = new Set([
+  "ANALYSIS_FAILED",
+  "CANCELLED",
+  "CONCURRENCY_LIMIT",
+  "CONFIG_INVALID",
+  "GENERATION_DISPATCHED_INTERRUPTED",
+  "GITHUB_ERROR",
+  "GITHUB_RATE_LIMITED",
+  "MODEL_UNAVAILABLE",
+  "NOT_FOUND",
+  "PROVIDER_ERROR",
+  "PROVIDER_TIMEOUT",
+  "RATE_LIMITED",
+  "SERVICE_NOT_READY",
+  "VALIDATION_ERROR",
+]);
+
+const REPOSITORY_ERROR_REASONS = new Set([
+  "NO_ELIGIBLE_CONTENT",
+  "PROVIDER_OUTPUT_SCHEMA_INVALID",
+  "PROVIDER_EVIDENCE_ID_INVALID",
+  "PROVIDER_PERSONAL_INFERENCE_REJECTED",
+]);
+
+function safeRepositoryErrorCode(code: string): string {
+  return REPOSITORY_ERROR_CODES.has(code) ? code : "ANALYSIS_FAILED";
+}
+
+function safeRepositoryErrorReason(reason: string | undefined): string | null {
+  return reason && REPOSITORY_ERROR_REASONS.has(reason) ? reason : null;
+}
+
+function repositoryErrorMessage(
+  error: BatchOperationError,
+  locale: Locale,
+): string {
+  const reason = safeRepositoryErrorReason(error.reason);
+  const reasonMessages: Record<Locale, Record<string, string>> = {
+    "zh-TW": {
+      NO_ELIGIBLE_CONTENT:
+        "找不到符合收錄規則的可分析來源檔案；請調整 include/exclude 後重新分析。",
+      PROVIDER_OUTPUT_SCHEMA_INVALID:
+        "聊天模型已回覆，但內容不符合分析 JSON 格式；請確認模型支援結構化輸出後重試。",
+      PROVIDER_EVIDENCE_ID_INVALID:
+        "聊天模型引用了本次未提供的證據 ID；結果已被安全驗證拒絕。",
+      PROVIDER_PERSONAL_INFERENCE_REJECTED:
+        "聊天模型輸出包含未經確認的個人歸因；結果已被安全規則拒絕。",
+    },
+    en: {
+      NO_ELIGIBLE_CONTENT:
+        "No analyzable source matched the include/exclude rules. Adjust the rules and run analysis again.",
+      PROVIDER_OUTPUT_SCHEMA_INVALID:
+        "The chat model replied, but its content did not match the analysis JSON schema. Verify structured-output support and try again.",
+      PROVIDER_EVIDENCE_ID_INVALID:
+        "The chat model cited an evidence ID that was not supplied for this analysis, so validation rejected the result.",
+      PROVIDER_PERSONAL_INFERENCE_REJECTED:
+        "The chat model returned an unconfirmed personal attribution, so the safety policy rejected the result.",
+    },
+  };
+  if (reason) return reasonMessages[locale][reason];
+
+  const code = safeRepositoryErrorCode(error.code);
+  const codeMessages: Record<Locale, Record<string, string>> = {
+    "zh-TW": {
+      CONFIG_INVALID: "來源選擇或索引設定無法產生分析內容。",
+      PROVIDER_ERROR: "聊天模型呼叫或回傳內容驗證失敗。",
+      PROVIDER_TIMEOUT: "聊天模型未在時限內完成。",
+      MODEL_UNAVAILABLE: "分析所需的模型目前無法使用。",
+      GITHUB_ERROR: "無法從 GitHub 取得此 repository。",
+      GITHUB_RATE_LIMITED: "GitHub 目前限制新的請求。",
+      RATE_LIMITED: "模型服務目前限制新的請求。",
+      CONCURRENCY_LIMIT: "分析並行容量目前已滿。",
+      SERVICE_NOT_READY: "分析服務尚未就緒。",
+      NOT_FOUND: "此 repository 不存在或目前無法存取。",
+      VALIDATION_ERROR: "分析輸入未通過驗證。",
+      GENERATION_DISPATCHED_INTERRUPTED:
+        "聊天模型請求送出後中斷，需要明確確認才能重試。",
+      CANCELLED: "此項分析已取消。",
+      ANALYSIS_FAILED: "分析未完成；請依錯誤代碼檢查設定後重試。",
+    },
+    en: {
+      CONFIG_INVALID:
+        "The source selection or index configuration produced no analysis content.",
+      PROVIDER_ERROR:
+        "The chat-model request or returned content failed validation.",
+      PROVIDER_TIMEOUT: "The chat model did not finish within the time limit.",
+      MODEL_UNAVAILABLE:
+        "A model required for analysis is currently unavailable.",
+      GITHUB_ERROR: "RepoNPC could not retrieve this repository from GitHub.",
+      GITHUB_RATE_LIMITED: "GitHub is currently limiting new requests.",
+      RATE_LIMITED: "The model service is currently limiting new requests.",
+      CONCURRENCY_LIMIT: "Analysis concurrency is currently full.",
+      SERVICE_NOT_READY: "The analysis service is not ready.",
+      NOT_FOUND: "This repository does not exist or is currently inaccessible.",
+      VALIDATION_ERROR: "The analysis input did not pass validation.",
+      GENERATION_DISPATCHED_INTERRUPTED:
+        "The chat-model request was interrupted after dispatch and requires explicit confirmation before retrying.",
+      CANCELLED: "This analysis item was cancelled.",
+      ANALYSIS_FAILED:
+        "Analysis did not complete. Check the error code and settings, then try again.",
+    },
+  };
+  return codeMessages[locale][code] ?? codeMessages[locale].ANALYSIS_FAILED;
 }
 
 function operationErrorMessage(error: BatchOperationError, copy: Copy): string {

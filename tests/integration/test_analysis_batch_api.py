@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -17,7 +18,7 @@ from reponpc.admin.batch_resolver import (
     GitHubRESTMetadataResolver,
 )
 from reponpc.admin.batch_runtime import BatchRuntimeStore
-from reponpc.admin.batches import AnalysisBatchService
+from reponpc.admin.batches import AnalysisBatchService, BatchExecutionError
 from reponpc.admin.operations import AdminOperations
 from reponpc.main import create_app
 from reponpc.runtime.database import RuntimeDatabase
@@ -42,7 +43,7 @@ class RESTTransport:
         )
 
 
-def _application(tmp_path: Path) -> tuple[FastAPI, RuntimeDatabase]:
+def _application(tmp_path: Path, *, runner=None) -> tuple[FastAPI, RuntimeDatabase]:
     database = RuntimeDatabase(tmp_path / "runtime")
     database.initialize()
     auth = AdminSessionService(
@@ -65,7 +66,7 @@ def _application(tmp_path: Path) -> tuple[FastAPI, RuntimeDatabase]:
         planner=planner,
         provider_ready_supplier=lambda: True,
         capacity=BatchCapacity(1, 1, 2, 1, 4),
-        runner=lambda item, _cancelled: {"repository": {"slug": item.input.slug}},
+        runner=runner or (lambda item, _cancelled: {"repository": {"slug": item.input.slug}}),
     )
     operations = AdminOperations(
         github=None,
@@ -188,3 +189,50 @@ def test_legacy_analysis_is_projected_from_the_durable_batch_event_store(
     assert event_stream.status_code == 200
     assert "event: batch_created" in event_body
     assert "event: item_terminal" in event_body
+
+
+def test_batch_snapshot_and_events_expose_only_allowlisted_failure_reason(tmp_path: Path) -> None:
+    def fail_analysis(_item, _cancelled):
+        raise BatchExecutionError(
+            "PROVIDER_ERROR",
+            reason="PROVIDER_OUTPUT_SCHEMA_INVALID",
+        )
+
+    app, _database = _application(tmp_path, runner=fail_analysis)
+    with TestClient(app, base_url=ORIGIN) as client:
+        csrf = _login(client)
+        preflight = client.post(
+            "/api/admin/onboarding/analysis-batches/preflight",
+            headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
+            json={"selections": [_selection()]},
+        )
+        created = client.post(
+            "/api/admin/onboarding/analysis-batches",
+            headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
+            json={
+                "plan_id": preflight.json()["plan_id"],
+                "idempotency_key": "analysis-batch-safe-error",
+                "selections": [_selection()],
+            },
+        )
+        batch_id = created.json()["batch"]["batch_id"]
+        for _attempt in range(100):
+            snapshot = client.get(
+                f"/api/admin/onboarding/analysis-batches/{batch_id}",
+                headers={"Origin": ORIGIN},
+            )
+            if snapshot.json()["state"] == "failed":
+                break
+            time.sleep(0.01)
+        with client.stream(
+            "GET",
+            f"/api/admin/onboarding/analysis-batches/{batch_id}/events",
+            headers={"Origin": ORIGIN},
+        ) as events:
+            event_body = events.read().decode()
+
+    assert snapshot.status_code == 200
+    assert snapshot.json()["items"][0]["error_code"] == "PROVIDER_ERROR"
+    assert snapshot.json()["items"][0]["error_reason"] == "PROVIDER_OUTPUT_SCHEMA_INVALID"
+    assert "PROVIDER_OUTPUT_SCHEMA_INVALID" in event_body
+    assert "provider response body" not in snapshot.text

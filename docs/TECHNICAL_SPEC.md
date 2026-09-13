@@ -730,6 +730,8 @@ The following same-origin authenticated admin endpoints set `Cache-Control: no-s
 
 Batch state is `queued -> running <-> paused -> cancelling -> cancelled|completed|completed_with_errors|failed`. An item reports the safe stage `queued`, `resolving_commit`, `fetching_source`, `filtering`, `indexing`, `embedding`, `generating`, `validating`, `cleaning_up`, or `complete`, or an explicit terminal/waiting reason. The old one-repository analysis endpoint remains a compatibility adapter: it creates a one-item batch, waits only for its terminal snapshot within its existing request deadline, and returns the prior safe result shape rather than bypassing batch policy.
 
+Each failed item snapshot retains its stable `error_code` plus an optional closed-set `error_reason`. Allowed reasons are `NO_ELIGIBLE_CONTENT`, `PROVIDER_OUTPUT_SCHEMA_INVALID`, `PROVIDER_EVIDENCE_ID_INVALID`, and `PROVIDER_PERSONAL_INFERENCE_REJECTED`. They describe only application-owned validation outcomes; provider bodies, prompts, arbitrary exception text, request IDs, URLs, paths, and credentials remain prohibited. Runtime migration 23 adds the nullable reason transactionally so a reload can display the same safe diagnostic. Unknown reasons are discarded, and the frontend renders only allowlisted codes/reasons with bilingual recovery text.
+
 ## 10. Common error contract
 
 JSON failures use:
@@ -887,7 +889,8 @@ All routes below are authenticated same-origin admin routes with `Cache-Control:
 - Missing/private/inaccessible accounts or repositories return `404 NOT_FOUND` without visibility disclosure.
 - GitHub upstream/rate-limit failures return `502 GITHUB_ERROR` or `429 RATE_LIMITED` with bounded retry metadata when available.
 - No eligible source content returns `422 CONFIG_INVALID` with safe reason `NO_ELIGIBLE_CONTENT`.
-- Provider unavailable, invalid, timed out, or failed returns the existing `MODEL_UNAVAILABLE`, `PROVIDER_ERROR`, or `PROVIDER_TIMEOUT` code; selection and browser draft remain available and no fallback occurs.
+- An empty include selection uses the documented directory/manifest defaults plus common root-level source extensions (`c`, `cc`, `cpp`, `cs`, `css`, `go`, `h`, `hpp`, `html`, `java`, `js`, `jsx`, `kt`, `kts`, `php`, `py`, `rb`, `rs`, `sh`, `sql`, `swift`, `ts`, `tsx`, `vue`, `ps1`, `bat`, and `cmd`). Mandatory binary/generated/secret/path exclusions still run after matching; explicit owner include/exclude values remain authoritative.
+- Provider unavailable, invalid, timed out, or failed returns the existing `MODEL_UNAVAILABLE`, `PROVIDER_ERROR`, or `PROVIDER_TIMEOUT` code; selection and browser draft remain available and no fallback occurs. Analysis-output schema failure, evidence-ID mismatch, and rejected personal attribution retain the respective safe reason `PROVIDER_OUTPUT_SCHEMA_INVALID`, `PROVIDER_EVIDENCE_ID_INVALID`, or `PROVIDER_PERSONAL_INFERENCE_REJECTED` without retaining provider output.
 - Cancellation/disconnect sends no replacement success body; server cleanup remains mandatory. Failure of one repository does not erase other confirmed selections.
 
 ### 11.5 Provider-neutral model setup (0.2.2)

@@ -166,6 +166,7 @@ interface BatchItemBody {
   state: string;
   retryable: boolean;
   error_code?: string | null;
+  error_reason?: string | null;
   retry_at?: string | null;
   result?: Record<string, unknown> | null;
 }
@@ -339,6 +340,7 @@ function batchItem(item: BatchItemBody): BatchRepositoryItem {
       ? {
           scope: "repository",
           code: item.error_code,
+          reason: item.error_reason ?? undefined,
           retryAfterSeconds: retryAfterSeconds(item.retry_at),
         }
       : null,

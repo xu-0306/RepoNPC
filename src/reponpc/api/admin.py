@@ -2018,6 +2018,7 @@ def _batch_snapshot_payload(snapshot: BatchSnapshot) -> dict[str, object]:
                 "state": item.state,
                 "retryable": item.retryable,
                 "error_code": item.error_code,
+                "error_reason": item.error_reason,
                 "retry_at": item.retry_at,
                 "result": item.result,
             }

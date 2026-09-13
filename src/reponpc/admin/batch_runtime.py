@@ -264,6 +264,7 @@ class BatchItemSnapshot:
     state: str
     retryable: bool
     error_code: str | None
+    error_reason: str | None
     retry_at: str | None
     result: dict[str, object] | None
 
@@ -627,7 +628,8 @@ class BatchRuntimeStore:
                 changed = connection.execute(
                     """
                     UPDATE analysis_batch_items
-                    SET state = 'queued', error_code = NULL, retry_at = NULL,
+                    SET state = 'queued', error_code = NULL, error_reason = NULL,
+                        retry_at = NULL,
                         lease_id = NULL, execution_started_at = NULL, updated_at = ?
                     WHERE batch_id = ?
                       AND state IN ('needs_retry_confirmation', 'failed', 'waiting_reconnection')
@@ -754,6 +756,7 @@ class BatchRuntimeStore:
         *,
         state: str,
         error_code: str | None = None,
+        error_reason: str | None = None,
         retry_at: datetime | None = None,
     ) -> None:
         if state not in ITEM_ACTIVE_STAGES | {"waiting_rate_limit", "waiting_reconnection"}:
@@ -762,6 +765,7 @@ class BatchRuntimeStore:
             claimed,
             state=state,
             error_code=error_code,
+            error_reason=error_reason,
             retry_at=retry_at,
             result=None,
             terminal=False,
@@ -772,6 +776,7 @@ class BatchRuntimeStore:
             claimed,
             state="complete",
             error_code=None,
+            error_reason=None,
             retry_at=None,
             result=result,
             terminal=True,
@@ -782,12 +787,14 @@ class BatchRuntimeStore:
         claimed: ClaimedBatchItem,
         *,
         code: str,
+        reason: str | None = None,
         retry_confirmation: bool = False,
     ) -> None:
         self._update_item(
             claimed,
             state="needs_retry_confirmation" if retry_confirmation else "failed",
             error_code=code,
+            error_reason=reason,
             retry_at=None,
             result=None,
             terminal=True,
@@ -798,6 +805,7 @@ class BatchRuntimeStore:
             claimed,
             state="cancelled",
             error_code=None,
+            error_reason=None,
             retry_at=None,
             result=None,
             terminal=True,
@@ -1029,6 +1037,7 @@ class BatchRuntimeStore:
         *,
         state: str,
         error_code: str | None,
+        error_reason: str | None,
         retry_at: datetime | None,
         result: dict[str, object] | None,
         terminal: bool,
@@ -1065,7 +1074,7 @@ class BatchRuntimeStore:
                 changed = connection.execute(
                     """
                     UPDATE analysis_batch_items
-                    SET state = ?, error_code = ?, retry_at = ?, result_json = ?,
+                    SET state = ?, error_code = ?, error_reason = ?, retry_at = ?, result_json = ?,
                       generation_attempt_count = generation_attempt_count + ?,
                       execution_elapsed_seconds = execution_elapsed_seconds + ?,
                       lease_id = CASE WHEN ? THEN NULL ELSE lease_id END,
@@ -1076,6 +1085,7 @@ class BatchRuntimeStore:
                     (
                         effective_state,
                         error_code,
+                        error_reason,
                         _timestamp(retry_at) if retry_at else None,
                         result_json,
                         generation_increment,
@@ -1093,12 +1103,18 @@ class BatchRuntimeStore:
                 if changed != 1:
                     connection.execute("ROLLBACK")
                     raise BatchRuntimeError("ANALYSIS_LEASE_LOST")
+                event_payload: dict[str, object] = {
+                    "state": effective_state,
+                    "error_code": error_code,
+                }
+                if error_reason is not None:
+                    event_payload["error_reason"] = error_reason
                 self._event_locked(
                     connection,
                     batch_id=claimed.batch_id,
                     item_id=claimed.item_id,
                     event_type="item_terminal" if terminal else "item_stage",
-                    payload={"state": effective_state, "error_code": error_code},
+                    payload=event_payload,
                     occurred_at=now,
                 )
                 self._finish_batch_locked(connection, claimed.batch_id, now)
@@ -1195,6 +1211,7 @@ def _snapshot(batch: sqlite3.Row, rows: Sequence[sqlite3.Row]) -> BatchSnapshot:
                 retryable=str(row["state"])
                 in {"needs_retry_confirmation", "failed", "waiting_reconnection"},
                 error_code=_optional_text(row["error_code"]),
+                error_reason=_optional_text(row["error_reason"]),
                 retry_at=_optional_text(row["retry_at"]),
                 result=_json_object_optional(row["result_json"]),
             )
