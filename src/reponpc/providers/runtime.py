@@ -55,8 +55,8 @@ class ProviderRuntime:
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
-        if isinstance(max_attempts, bool) or not 1 <= max_attempts <= 2:
-            raise ValueError("runtime provider attempts must be one or two")
+        if isinstance(max_attempts, bool) or not 1 <= max_attempts <= 3:
+            raise ValueError("runtime provider attempts must be between one and three")
         if retry_base_seconds < 0:
             raise ValueError("retry delay must be non-negative")
         self.chat = chat
@@ -149,6 +149,8 @@ class ProviderRuntime:
         response_schema: ResponseSchema,
         max_output_tokens: int,
         timeout: float,
+        *,
+        on_attempt: Callable[[int], None] | None = None,
     ) -> ProviderResult:
         """Generate within one deadline and retry only the same selected adapter."""
 
@@ -157,6 +159,7 @@ class ProviderRuntime:
             lambda remaining: self.chat.generate(
                 messages, response_schema, max_output_tokens, remaining
             ),
+            on_attempt=on_attempt,
         )
 
     def generate_once(
@@ -177,6 +180,12 @@ class ProviderRuntime:
 
         embedding = self.embedding
         return self._within_deadline(timeout, lambda _remaining: embedding.embed_query(texts))
+
+    def embed_passages(self, texts: list[str], *, timeout: float) -> NDArray[np.float32]:
+        """Embed passage batches with bounded same-adapter transient retries."""
+
+        embedding = self.embedding
+        return self._within_deadline(timeout, lambda _remaining: embedding.embed_passages(texts))
 
     def embed_query_for(
         self,
@@ -201,7 +210,13 @@ class ProviderRuntime:
         embedding = self.embedding
         return embedding.embed_query(texts)
 
-    def _within_deadline(self, timeout: float, operation: Callable[[float], T]) -> T:
+    def _within_deadline(
+        self,
+        timeout: float,
+        operation: Callable[[float], T],
+        *,
+        on_attempt: Callable[[int], None] | None = None,
+    ) -> T:
         if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
             raise ProviderError(ProviderFailureCode.TIMEOUT)
         deadline = self._monotonic() + float(timeout)
@@ -210,6 +225,8 @@ class ProviderRuntime:
             if remaining <= 0:
                 raise ProviderError(ProviderFailureCode.TIMEOUT)
             try:
+                if on_attempt is not None:
+                    on_attempt(attempt + 1)
                 return operation(remaining)
             except ProviderError as exc:
                 if exc.code not in _TRANSIENT_FAILURES or attempt + 1 >= self._max_attempts:

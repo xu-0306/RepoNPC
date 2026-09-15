@@ -55,7 +55,10 @@ from reponpc.admin.model_connections import (
     ProtectedModelSecretStore,
 )
 from reponpc.admin.model_operations import OllamaModelOperationCoordinator
-from reponpc.admin.onboarding import GuidedOnboardingService
+from reponpc.admin.onboarding import (
+    GuidedOnboardingService,
+    analysis_generation_policy_identity,
+)
 from reponpc.admin.operations import AdminOperations
 from reponpc.api.admin import create_admin_router
 from reponpc.api.public import SetupState, create_public_router, error_response
@@ -473,6 +476,13 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         limits_supplier=lambda: app.state.chat_limits,
         staging_root=settings.data_dir / "onboarding-staging",
         provider_timeout_seconds=settings.chat_timeout_seconds,
+        analysis_max_output_tokens=settings.analysis_max_output_tokens,
+        analysis_timeout_seconds=settings.analysis_repository_timeout_seconds,
+        analysis_provider_timeout_seconds=settings.analysis_provider_timeout_seconds,
+        analysis_generation_attempts=settings.analysis_generation_attempts,
+        analysis_max_file_bytes=settings.analysis_max_file_bytes,
+        analysis_max_repository_text_bytes=settings.analysis_max_repository_text_bytes,
+        analysis_max_corpus_text_bytes=settings.analysis_max_corpus_text_bytes,
     )
     capacity = BatchCapacity(
         github_requests=1,
@@ -484,14 +494,16 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
     stage_gates = BatchStageGates(capacity)
 
     archive_source = GitHubArchiveSource(
-        transport=UrllibGitHubArchiveTransport(timeout_seconds=20.0),
+        transport=UrllibGitHubArchiveTransport(
+            timeout_seconds=float(settings.analysis_github_timeout_seconds)
+        ),
         limiter=rate_limiter,
         staging_root=settings.data_dir / "analysis-archive-staging",
         limits=ArchiveSafetyLimits(
-            max_compressed_bytes=50 * 1024 * 1024,
-            max_uncompressed_bytes=200 * 1024 * 1024,
-            max_entries=10_000,
-            max_single_file_bytes=2 * 1024 * 1024,
+            max_compressed_bytes=settings.analysis_archive_max_compressed_bytes,
+            max_uncompressed_bytes=settings.analysis_archive_max_uncompressed_bytes,
+            max_entries=settings.analysis_archive_max_entries,
+            max_single_file_bytes=settings.analysis_archive_max_single_file_bytes,
         ),
     )
     store = BatchRuntimeStore(runtime_database)
@@ -500,17 +512,31 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         source=archive_source,
         onboarding=onboarding,
         gates=stage_gates,
+        analysis_max_output_tokens=settings.analysis_max_output_tokens,
         runtime_resolver=lambda pair: app.state.analysis_frozen_runtime_resolver(pair),
     )
+
+    def analysis_policy_identity(pair: AnalysisModelPair | None) -> str:
+        if pair is None:
+            supplier = getattr(app.state, "analysis_runtime_supplier", None)
+            runtime = supplier() if callable(supplier) else None
+        else:
+            resolver = getattr(app.state, "analysis_frozen_runtime_resolver", None)
+            runtime = resolver(pair) if callable(resolver) else None
+        return analysis_generation_policy_identity(settings.analysis_max_output_tokens, runtime)
+
     analysis_batches = AnalysisBatchService(
         store=store,
         planner=BatchPreflightPlanner(
             resolver=GitHubRESTMetadataResolver(
-                transport=UrllibGitHubRESTTransport(timeout_seconds=20.0),
+                transport=UrllibGitHubRESTTransport(
+                    timeout_seconds=float(settings.analysis_github_timeout_seconds)
+                ),
                 limiter=rate_limiter,
                 cache=resolution_cache,
             ),
             limiter=rate_limiter,
+            maximum_generation_attempts=settings.analysis_generation_attempts,
         ),
         provider_ready_supplier=lambda: (
             app.state.analysis_runtime_supplier() is not None and app.state.chat_limits is not None
@@ -521,6 +547,10 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         analysis_pair_supplier=lambda: analysis_selection.frozen_pair(),
         embedding_identity=settings.embedding_model,
         chat_model=settings.chat_model,
+        analysis_max_output_tokens=settings.analysis_max_output_tokens,
+        analysis_timeout_seconds=settings.analysis_repository_timeout_seconds,
+        analysis_generation_attempts=settings.analysis_generation_attempts,
+        analysis_policy_supplier=analysis_policy_identity,
     )
     app.state.analysis_batch_service = analysis_batches
     embedding_identity = _configured_embedding_identity(settings)
@@ -547,6 +577,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
                 model=profile.model_id,
                 query_prefix=profile.query_prefix,
                 passage_prefix=profile.passage_prefix,
+                request_timeout_seconds=settings.analysis_provider_timeout_seconds,
             )
         except ModelConnectionError:
             return None
@@ -624,6 +655,24 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         except ModelConnectionError:
             return None
 
+    def resolve_analysis_chat_profile(profile: ChatProfile) -> ChatProvider | None:
+        """Resolve a selected profile with the management-analysis output policy."""
+
+        try:
+            revision = model_connections.revision_for(
+                profile.connection_id, profile.connection_revision
+            )
+            return _chat_provider_from_connection(
+                settings,
+                revision.provider,
+                profile.model_id,
+                revision.secret.base_url,
+                revision.secret.api_key,
+                capabilities=_analysis_chat_capabilities(settings),
+            )
+        except ModelConnectionError:
+            return None
+
     chat_profiles = ChatProfileRegistry(
         runtime_database,
         model_connections,
@@ -643,7 +692,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         try:
             chat_profile = chat_profiles.get(view.selection.chat_profile_id or "")
             embedding_profile = embedding_profiles.get(view.selection.embedding_profile_id or "")
-            chat_provider = chat_profiles.resolve_provider(chat_profile)
+            chat_provider = resolve_analysis_chat_profile(chat_profile)
             embedding_provider = embedding_profiles.resolve_provider(embedding_profile)
             if (
                 chat_provider is None
@@ -651,7 +700,12 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
                 or not isinstance(embedding_provider, RuntimeEmbeddingProvider)
             ):
                 return None
-            return ProviderRuntime(chat=chat_provider, embedding=embedding_provider)
+            return ProviderRuntime(
+                chat=chat_provider,
+                embedding=embedding_provider,
+                max_attempts=settings.analysis_generation_attempts,
+                retry_base_seconds=5.0,
+            )
         except Exception:
             return None
 
@@ -677,13 +731,17 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
                     pair.chat_model_id,
                     chat_revision.secret.base_url,
                     chat_revision.secret.api_key,
+                    capabilities=_analysis_chat_capabilities(settings),
                 ),
                 embedding=_embedding_provider_from_connection(
                     pair.embedding_provider,
                     embedding_revision.secret.base_url,
                     embedding_revision.secret.api_key,
                     pair.embedding_identity,
+                    request_timeout_seconds=settings.analysis_provider_timeout_seconds,
                 ),
+                max_attempts=settings.analysis_generation_attempts,
+                retry_base_seconds=5.0,
             )
         except (ModelConnectionError, ValueError):
             return None
@@ -952,7 +1010,11 @@ def _environment_embedding_provider(
         or profile.provider != settings.embedding_provider
     ):
         return None
-    return _embedding_provider_from_settings(settings, profile.identity)
+    return _embedding_provider_from_settings(
+        settings,
+        profile.identity,
+        request_timeout_seconds=settings.analysis_provider_timeout_seconds,
+    )
 
 
 def _configured_embedding_identity(settings: EnvironmentSettings) -> EmbeddingIdentity:
@@ -982,6 +1044,23 @@ def _chat_provider_from_settings(
         settings.chat_base_url,
         key.reveal() if key is not None else None,
         capabilities=capabilities,
+    )
+
+
+def _analysis_chat_capabilities(settings: EnvironmentSettings) -> ProviderCapabilities:
+    """Expose the management analysis policy without widening public chat."""
+
+    return ProviderCapabilities(
+        streaming=False,
+        system_role=True,
+        structured_output=True,
+        usage_reporting=True,
+        health_check=True,
+        max_context_tokens=settings.chat_max_context_tokens,
+        max_output_tokens=min(
+            settings.analysis_max_output_tokens,
+            settings.chat_max_context_tokens,
+        ),
     )
 
 
@@ -1025,6 +1104,7 @@ def _embedding_provider_from_connection(
     model: str | None = None,
     query_prefix: str = "",
     passage_prefix: str = "",
+    request_timeout_seconds: float = 30.0,
 ) -> RuntimeEmbeddingProvider:
     model_id = identity.model_id if identity else model
     if not model_id:
@@ -1037,6 +1117,7 @@ def _embedding_provider_from_connection(
             allow_dimension_discovery=identity is None,
             query_prefix=query_prefix,
             passage_prefix=passage_prefix,
+            request_timeout_seconds=request_timeout_seconds,
         )
     if provider in {"openai_compatible", "vllm"}:
         return OpenAICompatibleEmbeddingProvider(
@@ -1048,6 +1129,7 @@ def _embedding_provider_from_connection(
             allow_dimension_discovery=identity is None,
             query_prefix=query_prefix,
             passage_prefix=passage_prefix,
+            request_timeout_seconds=request_timeout_seconds,
         )
     raise ValueError("unsupported embedding provider")
 
@@ -1055,6 +1137,8 @@ def _embedding_provider_from_connection(
 def _embedding_provider_from_settings(
     settings: EnvironmentSettings,
     identity: EmbeddingIdentity,
+    *,
+    request_timeout_seconds: float = 30.0,
 ) -> RuntimeEmbeddingProvider | None:
     if identity.adapter != _provider_contract_adapter(settings.embedding_provider):
         return None
@@ -1064,6 +1148,7 @@ def _embedding_provider_from_settings(
             settings.embedding_base_url,
             identity.model_id,
             identity,
+            request_timeout_seconds=request_timeout_seconds,
         )
     if settings.embedding_provider in {"openai_compatible", "vllm"}:
         return OpenAICompatibleEmbeddingProvider(
@@ -1072,6 +1157,7 @@ def _embedding_provider_from_settings(
             identity,
             api_key=embedding_key.reveal() if embedding_key is not None else None,
             allow_private_http=settings.embedding_provider == "vllm",
+            request_timeout_seconds=request_timeout_seconds,
         )
     return None
 

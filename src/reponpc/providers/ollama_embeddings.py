@@ -60,6 +60,7 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
         allow_dimension_discovery: bool = False,
         query_prefix: str = "",
         passage_prefix: str = "",
+        request_timeout_seconds: float = _REQUEST_TIMEOUT_SECONDS,
     ) -> None:
         if not isinstance(base_url, str) or not base_url:
             raise ValueError("embedding base URL must be non-empty")
@@ -75,6 +76,8 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
             raise ValueError("embedding identity model does not match configured model")
         if identity is not None and identity.normalized is not True:
             raise ValueError("normalized embeddings are required")
+        if isinstance(request_timeout_seconds, bool) or request_timeout_seconds <= 0:
+            raise ValueError("embedding request timeout must be positive")
 
         self._model = model
         self._identity = identity
@@ -82,6 +85,7 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
         self._passage_prefix = identity.passage_prefix if identity else passage_prefix
         self._transport = transport or UrllibProviderHttpTransport()
         self._origin = ProviderOrigin(base_url, allow_private_http=True)
+        self._request_timeout_seconds = float(request_timeout_seconds)
 
     def __repr__(self) -> str:
         # Do not include base_url: Ollama's URL is often a private network
@@ -276,7 +280,7 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
                     "User-Agent": "RepoNPC-provider",
                 },
                 body=_json_bytes(request),
-                timeout=_REQUEST_TIMEOUT_SECONDS,
+                timeout=self._request_timeout_seconds,
             )
         except ProviderError:
             raise

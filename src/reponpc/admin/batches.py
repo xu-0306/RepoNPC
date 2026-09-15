@@ -37,11 +37,23 @@ from reponpc.admin.batch_runtime import (
     BatchSnapshot,
     ClaimedBatchItem,
 )
+from reponpc.admin.onboarding import (
+    ANALYSIS_MAX_OUTPUT_TOKENS,
+    ANALYSIS_OUTPUT_POLICY_VERSION,
+    ANALYSIS_OUTPUT_SCHEMA_VERSION,
+    ANALYSIS_PROMPT_VERSION,
+    ANALYSIS_TERMINATION_VALIDATION_VERSION,
+    ANALYSIS_TIMEOUT_SECONDS,
+    ANALYSIS_TOKEN_ESTIMATOR_VERSION,
+    analysis_generation_policy_identity,
+    validate_analysis_output_budget,
+)
 
 SAFE_BATCH_ERROR_REASONS = frozenset(
     {
         "NO_ELIGIBLE_CONTENT",
         "PROVIDER_OUTPUT_SCHEMA_INVALID",
+        "PROVIDER_OUTPUT_LIMIT_REACHED",
         "PROVIDER_EVIDENCE_ID_INVALID",
         "PROVIDER_PERSONAL_INFERENCE_REJECTED",
     }
@@ -110,6 +122,7 @@ class _StoredPlan:
     plan: BatchPreflightPlan
     selections: tuple[RepositorySelection, ...]
     analysis_pair: AnalysisModelPair | None
+    analysis_policy_identity: str
 
 
 class AnalysisBatchService:
@@ -126,11 +139,17 @@ class AnalysisBatchService:
         parser_identity: str = "parser-v1",
         embedding_identity: str = "embedding-runtime",
         chat_model: str = "chat-runtime",
-        prompt_version: str = "onboarding-prompt-v1",
-        output_schema_version: str = "analysis-schema-v1",
+        prompt_version: str = ANALYSIS_PROMPT_VERSION,
+        output_schema_version: str = ANALYSIS_OUTPUT_SCHEMA_VERSION,
         validation_version: str = "validation-v1",
+        analysis_max_output_tokens: int = ANALYSIS_MAX_OUTPUT_TOKENS,
+        analysis_timeout_seconds: int = int(ANALYSIS_TIMEOUT_SECONDS),
+        analysis_generation_attempts: int = 3,
+        token_estimator_version: str = ANALYSIS_TOKEN_ESTIMATOR_VERSION,
+        termination_validation_version: str = ANALYSIS_TERMINATION_VALIDATION_VERSION,
         stage_gates: BatchStageGates | None = None,
         analysis_pair_supplier: Callable[[], AnalysisModelPair | None] | None = None,
+        analysis_policy_supplier: Callable[[AnalysisModelPair | None], str] | None = None,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._store = store
@@ -144,8 +163,22 @@ class AnalysisBatchService:
         self._prompt_version = prompt_version
         self._output_schema_version = output_schema_version
         self._validation_version = validation_version
+        validate_analysis_output_budget(analysis_max_output_tokens)
+        if not 1 <= analysis_timeout_seconds <= 7200:
+            raise ValueError("analysis timeout must be between one second and two hours")
+        if not 1 <= analysis_generation_attempts <= 10:
+            raise ValueError("analysis generation attempts must be between one and ten")
+        runner_budget = getattr(runner, "analysis_max_output_tokens", None)
+        if runner_budget is not None and runner_budget != analysis_max_output_tokens:
+            raise ValueError("analysis output budget must match batch runner")
+        self._analysis_max_output_tokens = analysis_max_output_tokens
+        self._analysis_timeout_seconds = analysis_timeout_seconds
+        self._analysis_generation_attempts = analysis_generation_attempts
+        self._token_estimator_version = token_estimator_version
+        self._termination_validation_version = termination_validation_version
         self._stage_gates = stage_gates or BatchStageGates(capacity)
         self._analysis_pair_supplier = analysis_pair_supplier
+        self._analysis_policy_supplier = analysis_policy_supplier
         self._now = now
         self._plans: dict[str, _StoredPlan] = {}
         self._plans_lock = threading.RLock()
@@ -158,11 +191,15 @@ class AnalysisBatchService:
         try:
             policies = {selection.slug: selection for selection in request.selections}
             analysis_pair = self._analysis_pair()
+            analysis_policy = self._analysis_policy(analysis_pair)
             with self._stage_gates.github_request():
                 plan = self._planner.create(
                     selections=request.selections,
                     cache_prediction=lambda repository: self._cache_prediction(
-                        repository, policies[repository.slug], analysis_pair
+                        repository,
+                        policies[repository.slug],
+                        analysis_pair,
+                        analysis_policy,
                     ),
                     provider=_provider_readiness(
                         self._provider_ready_supplier()
@@ -173,7 +210,12 @@ class AnalysisBatchService:
         except BatchResolverError:
             raise
         with self._plans_lock:
-            self._plans[plan.plan_id] = _StoredPlan(plan, request.selections, analysis_pair)
+            self._plans[plan.plan_id] = _StoredPlan(
+                plan,
+                request.selections,
+                analysis_pair,
+                analysis_policy,
+            )
             self._prune_expired_plans_locked()
         return plan
 
@@ -193,7 +235,11 @@ class AnalysisBatchService:
             raise BatchRuntimeError("ANALYSIS_PLAN_STALE")
         if tuple(selections) != stored.selections:
             raise BatchRuntimeError("ANALYSIS_PLAN_STALE")
-        if self._analysis_pair() != stored.analysis_pair:
+        analysis_pair = self._analysis_pair()
+        if (
+            analysis_pair != stored.analysis_pair
+            or self._analysis_policy(analysis_pair) != stored.analysis_policy_identity
+        ):
             raise BatchRuntimeError("ANALYSIS_PLAN_STALE")
         plan = stored.plan
         if plan.blockers:
@@ -227,6 +273,7 @@ class AnalysisBatchService:
                 idempotency_key=idempotency_key,
                 items=tuple(items),
                 maximum_generation_attempts=plan.maximum_generation_attempts,
+                execution_budget_seconds=self._analysis_timeout_seconds,
                 analysis_model_pair=(
                     stored.analysis_pair.safe_dict() if stored.analysis_pair is not None else None
                 ),
@@ -247,7 +294,11 @@ class AnalysisBatchService:
 
     def action(self, batch_id: str, *, action: str) -> BatchSnapshot:
         if action == "retry":
-            snapshot = self._store.retry_items(batch_id)
+            snapshot = self._store.retry_items(
+                batch_id,
+                execution_budget_seconds=self._analysis_timeout_seconds,
+                maximum_generation_attempts=self._analysis_generation_attempts,
+            )
         else:
             snapshot = self._store.transition_batch(batch_id, action=action)
         if snapshot.state == "running":
@@ -259,11 +310,14 @@ class AnalysisBatchService:
         *,
         selection: RepositorySelection,
         cancelled: Callable[[], bool],
-        timeout_seconds: float = 120.0,
+        timeout_seconds: float | None = None,
     ) -> dict[str, object]:
         """Adapt the legacy one-repository request to the durable batch path."""
 
-        if timeout_seconds <= 0:
+        effective_timeout = (
+            float(self._analysis_timeout_seconds) if timeout_seconds is None else timeout_seconds
+        )
+        if effective_timeout <= 0:
             raise BatchRuntimeError("VALIDATION_ERROR")
         plan = self.preflight(BatchPreflightInput((selection,)))
         snapshot, _created = self.create(
@@ -271,7 +325,7 @@ class AnalysisBatchService:
             selections=(selection,),
             idempotency_key=secrets.token_urlsafe(24),
         )
-        deadline = time.monotonic() + timeout_seconds
+        deadline = time.monotonic() + effective_timeout
         while time.monotonic() < deadline:
             if cancelled():
                 self.action(snapshot.batch_id, action="cancel")
@@ -328,6 +382,19 @@ class AnalysisBatchService:
             return self._analysis_pair_supplier()
         except Exception:
             return None
+
+    def _analysis_policy(self, pair: AnalysisModelPair | None) -> str:
+        if self._analysis_policy_supplier is not None:
+            try:
+                identity = self._analysis_policy_supplier(pair)
+            except Exception:
+                identity = ""
+            if isinstance(identity, str) and identity:
+                return identity
+        return analysis_generation_policy_identity(
+            self._analysis_max_output_tokens,
+            None,
+        )
 
     def _run_batch(self, batch_id: str) -> None:
         # Work-item concurrency is bounded independently from the runner's
@@ -414,7 +481,11 @@ class AnalysisBatchService:
             self._store.fail_item(item, code="ANALYSIS_FAILED")
 
     def _cache_prediction(
-        self, repository, selection: RepositorySelection, pair: AnalysisModelPair | None
+        self,
+        repository,
+        selection: RepositorySelection,
+        pair: AnalysisModelPair | None,
+        policy_identity: str | None = None,
     ) -> CachePrediction:
         # A deliberately strict key includes every identity component known at
         # preflight. The runner writes a validated-result cache only after its
@@ -432,6 +503,11 @@ class AnalysisBatchService:
             self._prompt_version,
             self._output_schema_version,
             self._validation_version,
+            ANALYSIS_OUTPUT_POLICY_VERSION,
+            str(self._analysis_max_output_tokens),
+            self._token_estimator_version,
+            self._termination_validation_version,
+            policy_identity or self._analysis_policy(pair),
         )
         return CachePrediction(
             derived_index_hit=self._store.get_cache(derived_key) is not None,

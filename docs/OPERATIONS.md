@@ -8,7 +8,7 @@
 
 **Session-resume amendment (2026-09-13, ADR-033):** Reloading `/admin` now resumes a still-valid HttpOnly-cookie session through strict same-origin `POST /api/admin/session/resume`; it does not require another launcher grant. CSRF remains in browser memory and is reissued only for the valid session. Expired, revoked, or boundary-invalid sessions continue to show the launcher/password recovery surface.
 
-**Status:** Draft operational contract through approved Technical Specification 0.2.6; connection/profile implementation is present, model-first guided integration and release evidence remain pending
+**Status:** Draft operational contract through approved Technical Specification 0.3.0; connection/profile implementation is present, model-first guided integration and release evidence remain pending
 **Audience:** a single owner self-hosting RepoNPC
 
 Technical Specification 0.2.1 and ADR-015 through ADR-028 freeze the index CLI, external embedding profiles, deployment-aware private administration, profile-specific owner access, guided owner-onboarding, vLLM provider preset, anonymous public GitHub resolution, and bounded GitHub batch-analysis contracts. The 0.2.0 local-launch implementation and 0.2.1 OAuth/public-read PAT removal are integrated. Phase 5 still owns the final clean-host, live-provider, real GitHub Profile/browser, Compose, CLI, backup/restore, and release-document checks.
@@ -67,7 +67,7 @@ An authenticated new owner normally uses the guided flow instead of authoring YA
 
 Existing saved configuration is loaded into the guided editor for return editing. Unsaved guided state is limited to the current authenticated browser session and clears on logout or successful save. Saving or downloading does not make private data safe: the resulting configuration is intended to become public. Raw repository bodies, provider prompts/outputs, credentials, tokens, and private provider URLs are never saved in browser storage; guided draft generation preserves configuration fields outside the guided surface.
 
-Version 0.1.7 supersedes the earlier synchronous one-repository execution lifecycle with one owner-scoped durable batch and bounded item stages. Each repository retains an active-execution deadline of 120 seconds and the configured provider deadline (45 seconds by default); queue, owner pause, and GitHub rate waiting do not spend active execution time. Under 0.2.1, analysis uses only the selected provider/model plus anonymous REST capacity, has no credential/provider fallback, shares generation capacity fairly, and does not consume the anonymous public daily-chat counter. These constraints do not make analysis mandatory: manual authoring, validation, preview, copy, and download remain available.
+Version 0.3.0 supersedes the earlier fixed analysis envelope with configurable active-work and inactivity budgets. Each repository defaults to 1,800 active seconds and each provider operation to a 300-second socket/inactivity ceiling; archive, index, shared-provider capacity, owner pause and GitHub rate waiting do not spend active time. Analysis uses only the selected frozen provider/model plus anonymous REST capacity, has no credential/provider fallback, shares generation capacity fairly, and does not consume the anonymous public daily-chat counter. These constraints do not make analysis mandatory: manual authoring, validation, preview, copy, and download remain available.
 
 Treat connections as independent capabilities rather than one global ready flag:
 
@@ -356,7 +356,13 @@ If the application fails before a migration commits, restore the old image. Runt
 
 ## 14. Capacity and cost controls
 
-Start with `.env.example` defaults: 10 requests/minute/IP, two concurrent generations, 200 accepted chats/UTC day, 2,000-character questions, six history messages, and 1,000 output tokens. Lower them for expensive providers or small hardware.
+Start with `.env.example` public-chat defaults: 10 requests/minute/IP, two concurrent generations, 200 accepted chats/UTC day, 2,000-character questions, six history messages, and 4,096 output tokens (maximum 8,192). Lower them for expensive providers or small hardware.
+
+Admin repository analysis separately uses `REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS=8192`; accepted values are positive integers up to `16384` (16k). `REPONPC_ANALYSIS_REPOSITORY_TIMEOUT_SECONDS=1800`, `REPONPC_ANALYSIS_PROVIDER_TIMEOUT_SECONDS=300`, `REPONPC_ANALYSIS_GENERATION_ATTEMPTS=3` and `REPONPC_ANALYSIS_GITHUB_TIMEOUT_SECONDS=60` control execution without inheriting the public 45-second request deadline. Archive/source byte and entry settings are listed in `.env.example`; invalid relationships fail startup. The Windows launcher loads these `REPONPC_*` values from `.env`, and Compose passes them to the app. Full prompt/evidence/schema plus output must fit `REPONPC_CHAT_MAX_CONTEXT_TOKENS` and the selected provider's capability. A smaller provider cap wins; insufficient input room rejects analysis rather than overfilling context. The cap is a ceiling, not a requirement to generate/bill all tokens. Context estimates are not actual usage. Complete buffered provider adapters use socket inactivity as an approximation and cannot emit first-token/token-idle progress.
+
+After changing the deployment value, load the new backend through the normal restart procedure; it is not a hot setting or a public YAML field. Existing provider and 120-second active-item deadlines remain, so slower models may still time out. `PROVIDER_OUTPUT_LIMIT_REACHED` identifies an observed output-limit stop and is distinct from malformed/schema-invalid output. Incomplete content is discarded and no automatic repair/retry/model fallback occurs. Review the setting/model and explicitly retry or continue manually. Changed analysis budget/policy misses incompatible result caches without deleting confirmed contribution text.
+
+ADR-034 includes runtime migration 24 to extend the closed reason constraint while preserving existing batch data/events/indexes. Follow the stopped-service backup procedure, deploy matching frontend/backend, then start once to migrate. On migration failure the transaction rolls back; use the prior matching application and protected runtime backup if a downgrade is needed. Older stored schema-error rows do not acquire a guessed truncation reason.
 
 Monitor safe aggregate accepted/rejected counts, retrieval/model latency, provider status, nullable token usage, and configured cost estimates. RepoNPC does not guarantee the provider's invoice; provider-side quotas/billing alerts remain recommended defense in depth.
 
@@ -373,6 +379,7 @@ Monitor safe aggregate accepted/rejected counts, retrieval/model latency, provid
 | Citation opens old code | inspect commit in URL | expected: citations are immutable; publish new index for new code |
 | Ollama unreachable | private network/DNS/model availability | restore private route; do not expose it publicly |
 | vLLM unavailable/model absent | private route, `/v1/models`, served model, chat template or embedding model | restore the selected instance/model; do not switch providers silently |
+| Model service URL save fails | read the focused Web Admin alert and safe diagnostic ID; compare provider, scheme, host and effective port | same-origin path edits such as `/v1` may retain the key; for a changed provider/origin, re-enter the new key or explicitly remove it; existing settings remain until save succeeds |
 
 ## 16. Release completion items
 
@@ -418,4 +425,4 @@ Compatibility: embedding create/update may omit dimension; old clients supplying
 
 Independent novice-setup fault evaluation additionally repaired model-key rotation error recovery: rollback runs while the database connection is live; failed BEGIN/UPDATE/COMMIT restores the old master key and preserves decryptable historical revisions. Tests use only synthetic keys in temporary stores. Process-kill atomicity across the key file and database remains outside this fault-path verification.
 
-Chat probe parser follow-up (2026-09-12): load the matching rebuilt frontend/backend and explicitly retest old failures to obtain parser evidence. This change needs no new runtime migration. Tests now use the configured chat output cap (existing default 1,000, configuration maximum 2,000) rather than 32; actual billed generation depends on the provider. The existing 10-second probe deadline and one-call behavior remain. This implementation did not call the owner's provider, restart its process, or alter its settings.
+Chat probe parser follow-up (2026-09-12, amended 2026-09-14): load the matching rebuilt frontend/backend and explicitly retest old failures to obtain parser evidence. Tests use the configured chat output cap (current default 4,096, configuration maximum 8,192) rather than 32; actual billed generation depends on the provider. A probe keeps the 10-second baseline and automatically adds one 10-second grace window to the same bounded request. The provider receives one 20-second deadline; no second request, activation or fallback occurs. Runtime migration 25 belongs to the separate ADR-037 analysis-budget amendment, not probe behavior.

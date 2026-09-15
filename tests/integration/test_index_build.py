@@ -17,6 +17,7 @@ from reponpc.indexing.index_database import (
     INDEX_SCHEMA_VERSION,
     IndexBuildError,
     IndexDatabaseBuilder,
+    _embedding_batch_size,
 )
 from reponpc.indexing.sources import (
     EmbeddingIdentity,
@@ -44,11 +45,13 @@ class DeterministicEmbeddingProvider:
             passage_prefix=prefix,
         )
         self.raw_passages: list[str] = []
+        self.passage_batches: list[int] = []
 
     def identity(self) -> EmbeddingIdentity:
         return self._identity
 
     def embed_passages(self, texts: list[str]) -> np.ndarray:
+        self.passage_batches.append(len(texts))
         self.raw_passages.extend(texts)
         result = np.zeros((len(texts), self._identity.dimension), dtype=np.float32)
         for row, text in enumerate(texts):
@@ -169,6 +172,41 @@ def test_root_manifest_is_line_addressable_repository_metadata_and_provider_adds
     assert provider.raw_passages
     passage_prefix = provider.identity().passage_prefix
     assert all(not text.startswith(passage_prefix) for text in provider.raw_passages)
+
+
+def test_index_builder_splits_embeddings_below_transport_response_limit(
+    tmp_path: Path,
+) -> None:
+    provider = DeterministicEmbeddingProvider()
+    extra_blobs: list[RepositoryBlob] = []
+    for index in range(20):
+        content = (
+            f"def batch_fixture_{index}():\n"
+            f'    """Return deterministic fixture number {index}."""\n'
+            f"    return {index}\n"
+        ).encode()
+        extra_blobs.append(
+            RepositoryBlob(
+                path=f"src/batch_fixture_{index}.py",
+                entry_kind=SourceEntryKind.REGULAR_FILE,
+                content=content,
+                size_bytes=len(content),
+            )
+        )
+    result = IndexDatabaseBuilder(provider).build(
+        config=load_public_config(FIXTURE_CONFIG),
+        configuration_source=_configuration_source(),
+        repositories=(_fixture_snapshot(extra_blobs=tuple(extra_blobs)),),
+        output_path=tmp_path / "index.sqlite",
+    )
+
+    assert len(provider.passage_batches) > 1
+    assert max(provider.passage_batches) <= 16
+    assert sum(provider.passage_batches) == result.evidence_count
+
+
+def test_embedding_batch_size_accounts_for_high_dimension_json() -> None:
+    assert _embedding_batch_size(4096) == 15
 
 
 def test_high_confidence_secret_blob_is_skipped_without_persisting_its_body(tmp_path: Path) -> None:

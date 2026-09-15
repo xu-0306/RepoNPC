@@ -11,6 +11,7 @@ from reponpc.admin.batch_runtime import BatchCreateRequest, BatchItemInput, Batc
 from reponpc.admin.batches import BatchExecutionError, BatchStageGates
 from reponpc.admin.onboarding import GuidedOnboardingError
 from reponpc.indexing.sources import EmbeddingIdentity
+from reponpc.providers.contracts import ProviderCapabilities
 from reponpc.runtime.database import RuntimeDatabase
 
 
@@ -47,6 +48,12 @@ class Onboarding:
             "inferences": [{"statement": {"zh-TW": "摘要", "en": "Summary"}}],
             "skipped_summary": {"count": 0, "reasons": []},
         }
+
+
+class BudgetedOnboarding(Onboarding):
+    def __init__(self, budget: int) -> None:
+        super().__init__()
+        self.analysis_max_output_tokens = budget
 
 
 def _request(key: str) -> BatchCreateRequest:
@@ -131,6 +138,104 @@ def test_validated_result_cache_is_commit_complete_and_excludes_source_excerpt(t
     assert "cache-test-token" not in serialized
 
 
+def test_analysis_cache_key_tracks_output_budget_and_validation_policy(tmp_path) -> None:
+    database = RuntimeDatabase(tmp_path / "runtime")
+    database.initialize()
+    store = BatchRuntimeStore(database)
+    request = _request("cache-policy")
+    batch, _created = store.create_batch(request)
+    claimed = store.claim_next_item(batch.batch_id)
+    assert claimed is not None
+
+    baseline = PinnedBatchItemRunner(
+        store=store,
+        source=Source(),  # type: ignore[arg-type]
+        onboarding=Onboarding(),  # type: ignore[arg-type]
+        gates=BatchStageGates(BatchCapacity(1, 1, 2, 1, 4)),
+        analysis_max_output_tokens=8192,
+        token_estimator_version="utf8-bytes-v1",
+        termination_validation_version="finish-reason-length-reject-v1",
+    )
+    changed_budget = PinnedBatchItemRunner(
+        store=store,
+        source=Source(),  # type: ignore[arg-type]
+        onboarding=Onboarding(),  # type: ignore[arg-type]
+        gates=BatchStageGates(BatchCapacity(1, 1, 2, 1, 4)),
+        analysis_max_output_tokens=16384,
+        token_estimator_version="utf8-bytes-v1",
+        termination_validation_version="finish-reason-length-reject-v1",
+    )
+    changed_termination_policy = PinnedBatchItemRunner(
+        store=store,
+        source=Source(),  # type: ignore[arg-type]
+        onboarding=Onboarding(),  # type: ignore[arg-type]
+        gates=BatchStageGates(BatchCapacity(1, 1, 2, 1, 4)),
+        analysis_max_output_tokens=8192,
+        token_estimator_version="utf8-bytes-v1",
+        termination_validation_version="finish-reason-length-reject-v2",
+    )
+
+    baseline_derived, baseline_result = baseline._cache_keys(claimed, None)
+    budget_derived, budget_result = changed_budget._cache_keys(claimed, None)
+    termination_derived, termination_result = changed_termination_policy._cache_keys(claimed, None)
+
+    assert baseline_derived == budget_derived
+    assert baseline_result != budget_result
+    assert baseline_derived == termination_derived
+    assert baseline_result != termination_result
+
+
+class _ChatRuntime:
+    def __init__(self, capabilities: ProviderCapabilities) -> None:
+        self._capabilities = capabilities
+
+    def capabilities(self) -> ProviderCapabilities:
+        return self._capabilities
+
+
+class _AnalysisRuntime:
+    def __init__(self, capabilities: ProviderCapabilities) -> None:
+        self.chat = _ChatRuntime(capabilities)
+
+
+def test_analysis_cache_key_tracks_effective_provider_context_and_output_caps(tmp_path) -> None:
+    database = RuntimeDatabase(tmp_path / "runtime")
+    database.initialize()
+    store = BatchRuntimeStore(database)
+    batch, _created = store.create_batch(_request("cache-capability"))
+    claimed = store.claim_next_item(batch.batch_id)
+    assert claimed is not None
+    runner = PinnedBatchItemRunner(
+        store=store,
+        source=Source(),  # type: ignore[arg-type]
+        onboarding=Onboarding(),  # type: ignore[arg-type]
+        gates=BatchStageGates(BatchCapacity(1, 1, 2, 1, 4)),
+        analysis_max_output_tokens=8192,
+    )
+    wide = _AnalysisRuntime(ProviderCapabilities(False, True, True, True, True, 32768, 16384))
+    narrow = _AnalysisRuntime(ProviderCapabilities(False, True, True, True, True, 8000, 8000))
+
+    wide_derived, wide_result = runner._cache_keys(claimed, None, wide)  # type: ignore[arg-type]
+    narrow_derived, narrow_result = runner._cache_keys(claimed, None, narrow)  # type: ignore[arg-type]
+
+    assert wide_derived == narrow_derived
+    assert wide_result != narrow_result
+
+
+def test_runner_rejects_budget_different_from_onboarding(tmp_path) -> None:
+    database = RuntimeDatabase(tmp_path / "runtime")
+    database.initialize()
+
+    with pytest.raises(ValueError, match="match onboarding"):
+        PinnedBatchItemRunner(
+            store=BatchRuntimeStore(database),
+            source=Source(),  # type: ignore[arg-type]
+            onboarding=BudgetedOnboarding(8192),  # type: ignore[arg-type]
+            gates=BatchStageGates(BatchCapacity(1, 1, 2, 1, 4)),
+            analysis_max_output_tokens=16384,
+        )
+
+
 def test_runner_uses_the_pair_persisted_with_the_claimed_batch(tmp_path) -> None:
     database = RuntimeDatabase(tmp_path / "runtime")
     database.initialize()
@@ -165,7 +270,8 @@ def test_runner_uses_the_pair_persisted_with_the_claimed_batch(tmp_path) -> None
     assert onboarding.providers == ["runtime:chat-a"]
 
 
-def test_runner_preserves_allowlisted_onboarding_failure_reason(tmp_path) -> None:
+@pytest.mark.parametrize("reason", ["NO_ELIGIBLE_CONTENT", "PROVIDER_OUTPUT_LIMIT_REACHED"])
+def test_runner_preserves_allowlisted_onboarding_failure_reason(tmp_path, reason: str) -> None:
     database = RuntimeDatabase(tmp_path / "runtime")
     database.initialize()
     store = BatchRuntimeStore(database)
@@ -179,7 +285,7 @@ def test_runner_preserves_allowlisted_onboarding_failure_reason(tmp_path) -> Non
         onboarding=Onboarding(
             GuidedOnboardingError(
                 "CONFIG_INVALID",
-                reason="NO_ELIGIBLE_CONTENT",
+                reason=reason,
             )
         ),  # type: ignore[arg-type]
         gates=BatchStageGates(BatchCapacity(1, 1, 2, 1, 4)),
@@ -189,4 +295,4 @@ def test_runner_preserves_allowlisted_onboarding_failure_reason(tmp_path) -> Non
         runner(claimed, lambda: False)
 
     assert error.value.code == "CONFIG_INVALID"
-    assert error.value.reason == "NO_ELIGIBLE_CONTENT"
+    assert error.value.reason == reason

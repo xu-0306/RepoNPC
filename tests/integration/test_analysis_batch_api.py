@@ -5,6 +5,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from argon2 import PasswordHasher, Type
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -191,11 +192,16 @@ def test_legacy_analysis_is_projected_from_the_durable_batch_event_store(
     assert "event: item_terminal" in event_body
 
 
-def test_batch_snapshot_and_events_expose_only_allowlisted_failure_reason(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "reason", ["PROVIDER_OUTPUT_SCHEMA_INVALID", "PROVIDER_OUTPUT_LIMIT_REACHED"]
+)
+def test_batch_snapshot_and_events_expose_only_allowlisted_failure_reason(
+    tmp_path: Path, reason: str
+) -> None:
     def fail_analysis(_item, _cancelled):
         raise BatchExecutionError(
             "PROVIDER_ERROR",
-            reason="PROVIDER_OUTPUT_SCHEMA_INVALID",
+            reason=reason,
         )
 
     app, _database = _application(tmp_path, runner=fail_analysis)
@@ -233,6 +239,6 @@ def test_batch_snapshot_and_events_expose_only_allowlisted_failure_reason(tmp_pa
 
     assert snapshot.status_code == 200
     assert snapshot.json()["items"][0]["error_code"] == "PROVIDER_ERROR"
-    assert snapshot.json()["items"][0]["error_reason"] == "PROVIDER_OUTPUT_SCHEMA_INVALID"
-    assert "PROVIDER_OUTPUT_SCHEMA_INVALID" in event_body
+    assert snapshot.json()["items"][0]["error_reason"] == reason
+    assert reason in event_body
     assert "provider response body" not in snapshot.text

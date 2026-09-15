@@ -11,7 +11,7 @@ RepoNPC 是一個開源、自託管的互動式 GitHub 作品集。你挑選想�
 > RepoNPC 0.2.1 已完成 GitHub OAuth／公開讀取 PAT 退場與匿名 REST resolver；clean-host Docker、真實 provider、完整瀏覽器與無障礙驗證仍待執行，因此目前適合開發與評估，尚非正式 v1 發布版。
 > Phase 5 remains the release-hardening boundary.
 
-最後檢閱：2026-09-13
+最後檢閱：2026-09-14
 
 模型連線、回答模型與資料查找模型（技術上為 embedding model）的服務管理、測試與模型優先設定引導已整合至目前 working tree。**規格 0.2.5 / ADR-032** 讓服務網址／協定／金鑰更新同時重綁可安全修改的候選模型，清除舊測試結果並要求明確重測，不再要求使用者另外編輯儲存每個模型；公開使用中、上一個可用版本、重建中與已執行的分析仍保留原 revision。規格 0.2.4 / ADR-031 允許直接覆寫或刪除環境預設連線（例如改用非 11434 的 Ollama port），並讓選擇在重啟後保留；環境網址與 API key 仍不會被讀回。規格 0.2.3 / ADR-030 的「先設定兩種模型，再選專案並分析」與立即手動建立作品集路線維持不變。修正交接請讀 [模型優先引導實作交接](docs/ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md)，前一版連線／秘密設計見 [模型設定實作交接](docs/MODEL_SETUP_IMPLEMENTATION_HANDOFF.md)。Figma 暫不處理；GGUF／Hugging Face 本地 runtime 仍是後續研究。
 
@@ -290,7 +290,9 @@ pnpm run web:check
 
 Repository AI 分析會同時使用兩個已選角色：Embedding 模型負責將來源與問題轉成向量並找出證據，Chat 模型再根據證據產生雙語分析。空白 include 會套用目錄、manifest 與常見程式碼副檔名的預設規則，因此只有根目錄檔案的平坦 repository 也能進入分析；秘密、二進位、產物與大小限制仍會先行排除。
 
-只改服務名稱時保留原網址與金鑰；更換網址是獨立選項。新輸入的金鑰會在送出或收合表單後清除。舊的泛用錯誤沒有保留原 HTTP 狀態，須再按一次測試才有新診斷。
+規格 0.3.0 / ADR-037 將大型 repository 分析改為彈性 active-work 配置：每 repository 預設 1,800 秒、provider 無活動預設 300 秒、GitHub I/O 預設 60 秒，暫時性錯誤最多使用同一凍結 provider/model 三次；archive、index 與 provider 容量等待不消耗有效執行時間。管理分析輸出維持 `REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS=8192`、最高 `16384`，訪客聊天改為 4,096／最高 8,192。Archive/source 限制可由 `.env` 調整；超過單檔 materialization 門檻會安全跳過並回報，只有不安全結構或總量天花板才終止。Migration 25 保留舊批次並擴大 durable budget。完整設定與安全界線見 `.env.example`、`docs/OPERATIONS.md` 與 ADR-037。
+
+只改服務名稱時保留原網址與金鑰；更換網址是獨立選項。同一連線方式且協定、主機與有效連接埠不變時，只修正路徑（例如補上 `/v1`）可沿用已儲存的金鑰；更換 origin 或連線方式仍須替換或移除金鑰。所有服務新增、更新、刪除與清單更新失敗都會在實際操作的面板顯示單一錯誤摘要，說明安全原因、原設定是否保留及下一步，並在可用時提供診斷代碼。新輸入的金鑰會在送出或收合表單後清除，失敗重試時會明確提醒重新填入。
 
 此次資料庫升級包含 runtime migration 19 與後續 migration 20，首次載入新版後端時交易式升級。保留舊資料與模型選擇，失敗會回復；正式 bundle 格式不變。完整修復清單與證據見 [UI／UX 修復紀錄](docs/UI_UX_REVIEW_2026-09-12.md)。
 

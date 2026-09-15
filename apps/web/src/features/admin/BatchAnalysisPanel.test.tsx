@@ -234,6 +234,44 @@ describe("BatchAnalysisPanel", () => {
     expect(markup).not.toContain("request-id-is-not-rendered");
   });
 
+  it.each([
+    ["zh-TW", "模型因輸出 token 上限停止", "繼續手動編輯"],
+    ["en", "The model stopped at its output token limit", "editing manually"],
+  ] as const)(
+    "explains output-limit failure in %s without calling retry",
+    (locale, explanation, recovery) => {
+      const view = props({
+        locale,
+        job: {
+          id: "batch-output-limit",
+          status: "failed",
+          items: [
+            {
+              slug: "octocat/demo",
+              stage: "validating",
+              state: "failed",
+              retryable: true,
+              error: {
+                scope: "repository",
+                code: "PROVIDER_ERROR",
+                reason: "PROVIDER_OUTPUT_LIMIT_REACHED",
+                requestId: "private-request-canary",
+              },
+            },
+          ],
+        },
+      });
+      const markup = renderToStaticMarkup(<BatchAnalysisPanel {...view} />);
+
+      expect(markup).toContain("PROVIDER_OUTPUT_LIMIT_REACHED");
+      expect(markup).toContain(explanation);
+      expect(markup).toContain(recovery);
+      expect(markup).not.toContain("PROVIDER_OUTPUT_SCHEMA_INVALID");
+      expect(markup).not.toContain("private-request-canary");
+      expect(view.onRetry).not.toHaveBeenCalled();
+    },
+  );
+
   it("does not render an unrecognized repository error or reason", () => {
     const markup = renderToStaticMarkup(
       <BatchAnalysisPanel

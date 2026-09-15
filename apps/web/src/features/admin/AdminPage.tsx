@@ -64,6 +64,7 @@ import { TransientNotice } from "./TransientNotice";
 import { ModelSetupWorkspace } from "./ModelSetupWorkspace";
 import { GuidedOnboardingView } from "./GuidedOnboardingView";
 import { LocalLaunchAccessPanel } from "./LocalLaunchAccessPanel";
+import { modelConnectionFailureMessage } from "./modelConnectionFeedback";
 import {
   restoreExistingAdminSession,
   type AdminAuthMethodsBody,
@@ -168,6 +169,9 @@ interface BatchItemBody {
   error_code?: string | null;
   error_reason?: string | null;
   retry_at?: string | null;
+  execution_elapsed_seconds?: number;
+  execution_budget_seconds?: number;
+  generation_attempt_count?: number;
   result?: Record<string, unknown> | null;
 }
 
@@ -202,12 +206,29 @@ interface BatchEventBody {
 
 class AdminRequestError extends Error {
   readonly retryAfterSeconds: number | undefined;
+  readonly requestId: string | undefined;
+  readonly status: number;
 
-  constructor(code: string, retryAfterSeconds?: number) {
+  constructor(
+    code: string,
+    status: number,
+    retryAfterSeconds?: number,
+    requestId?: string,
+  ) {
     super(code);
     this.name = "AdminRequestError";
+    this.status = status;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.requestId = requestId;
   }
+}
+
+type ModelConnectionScope = "advanced" | "chat" | "embedding";
+
+interface ModelConnectionFeedback {
+  scope: ModelConnectionScope;
+  message: string;
+  code?: string;
 }
 
 type AdminAccessState =
@@ -318,7 +339,10 @@ function batchRepositoryStage(state: string): BatchRepositoryStage {
   if (activeStages.includes(state as BatchRepositoryStage)) {
     return state as BatchRepositoryStage;
   }
-  return state === "complete" ? "complete" : "queued";
+  if (state === "complete") return "complete";
+  if (state === "failed" || state === "needs_retry_confirmation")
+    return "failed";
+  return "queued";
 }
 
 function retryAfterSeconds(
@@ -336,6 +360,9 @@ function batchItem(item: BatchItemBody): BatchRepositoryItem {
     stage: batchRepositoryStage(item.state),
     state: batchRepositoryState(item.state),
     retryable: item.retryable,
+    executionElapsedSeconds: item.execution_elapsed_seconds,
+    executionBudgetSeconds: item.execution_budget_seconds,
+    generationAttemptCount: item.generation_attempt_count,
     error: item.error_code
       ? {
           scope: "repository",
@@ -526,44 +553,10 @@ function embeddingProfileErrorMessage(locale: Locale, error: unknown): string {
 
 function modelConnectionErrorMessage(locale: Locale, error: unknown): string {
   const code = error instanceof Error ? error.message : "REQUEST_FAILED";
-  const messages: Record<string, [string, string]> = {
-    CREDENTIAL_REPLACE_REQUIRED: [
-      "更換網址或連線方式時，請重新填入此服務的 API key，或選擇移除金鑰後再儲存。",
-      "When changing a service URL or connection type, enter a new API key for that service or choose to remove the key before saving.",
-    ],
-    HOST_CONNECTION_REPLACEMENT_REQUIRED: [
-      "環境預設連線的原始網址不會顯示；請輸入完整的新服務網址後再儲存。",
-      "The original environment URL is not displayed. Enter the complete replacement service URL before saving.",
-    ],
-    MODEL_CONNECTION_IN_USE: [
-      "有模型仍使用此服務。請先編輯那些模型改用其他服務，或刪除不需要的模型設定。",
-      "Models still use this service. Edit those models to use another service, or delete model settings you no longer need.",
-    ],
-    MODEL_SECRET_STORAGE_UNAVAILABLE: [
-      "無法讀取受保護的服務設定。請檢查本機金鑰檔與存取權限，原設定不會被覆寫。",
-      "Protected service settings could not be read. Check the local key file and access permissions; existing settings will not be overwritten.",
-    ],
-    INVALID_PROVIDER_URL: [
-      "服務網址格式不正確，請從服務商複製完整 API 位址。",
-      "The service URL is invalid. Copy the complete API address from your provider.",
-    ],
-    INSECURE_PROVIDER_URL: [
-      "網路服務需要 https 網址，請確認服務商提供的 API 位址。",
-      "Internet services require an https URL. Check the API address supplied by your provider.",
-    ],
-    VALIDATION_ERROR: [
-      "請檢查服務名稱、連線方式與網址；如果剛送出過，請重新填入金鑰再試。",
-      "Check the service name, connection type, and URL. If you already submitted the form, re-enter the key before retrying.",
-    ],
-  };
-  const message = Object.hasOwn(messages, code) ? messages[code] : null;
-  return message
-    ? copyFor(locale, message[0], message[1])
-    : copyFor(
-        locale,
-        "服務設定操作未完成。請確認網路與登入狀態，再重新操作；需要金鑰時請重新填入。",
-        "The service setting could not be changed. Check your network and sign-in, then retry; re-enter the key if needed.",
-      );
+  return modelConnectionFailureMessage(locale, {
+    code,
+    requestId: error instanceof AdminRequestError ? error.requestId : undefined,
+  });
 }
 
 function chatProfileErrorMessage(locale: Locale, error: unknown): string {
@@ -966,7 +959,8 @@ export function AdminPage({
   const [modelConnectionsLoading, setModelConnectionsLoading] = useState(false);
   const [chatProfilesNotice, setChatProfilesNotice] = useState("");
   const [embeddingProfilesNotice, setEmbeddingProfilesNotice] = useState("");
-  const [modelConnectionsNotice, setModelConnectionsNotice] = useState("");
+  const [modelConnectionsNotice, setModelConnectionsNotice] =
+    useState<ModelConnectionFeedback | null>(null);
   const [serviceSaveNotice, setServiceSaveNotice] = useState<{
     id: number;
     message: string;
@@ -978,7 +972,8 @@ export function AdminPage({
     useState(false);
   const [embeddingProfilesError, setEmbeddingProfilesError] = useState("");
   const [modelConnectionsPending, setModelConnectionsPending] = useState(false);
-  const [modelConnectionsError, setModelConnectionsError] = useState("");
+  const [modelConnectionsError, setModelConnectionsError] =
+    useState<ModelConnectionFeedback | null>(null);
   const [chatProfiles, setChatProfiles] = useState<ChatProfileView[]>([]);
   const [chatProfilesPending, setChatProfilesPending] = useState(false);
   const [chatProfilesError, setChatProfilesError] = useState("");
@@ -1058,6 +1053,7 @@ export function AdminPage({
               code?: string;
               details?: { reason?: string };
               retry_after_seconds?: number;
+              request_id?: string;
             };
           }
         | null;
@@ -1073,9 +1069,17 @@ export function AdminPage({
           body !== null && typeof body === "object" && "error" in body
             ? body.error?.retry_after_seconds
             : undefined;
+        const responseRequestId =
+          body !== null && typeof body === "object" && "error" in body
+            ? body.error?.request_id
+            : undefined;
         throw new AdminRequestError(
           code ?? "REQUEST_FAILED",
+          response.status,
           retryAfterSeconds,
+          responseRequestId ??
+            response.headers.get("X-Request-ID") ??
+            undefined,
         );
       }
       return body as T;
@@ -1221,29 +1225,33 @@ export function AdminPage({
     }
   }, [locale, request]);
 
-  const refreshModelConnections = useCallback(async () => {
-    setModelConnectionsLoading(true);
-    setModelConnectionsNotice("");
-    try {
-      await modelRequests.current.connection.read(
-        () =>
-          request<{ connections: ModelConnectionView[] }>(
-            "/api/admin/model-connections",
+  const refreshModelConnections = useCallback(
+    async (scope: ModelConnectionScope = "chat") => {
+      setModelConnectionsLoading(true);
+      setModelConnectionsNotice(null);
+      try {
+        await modelRequests.current.connection.read(
+          () =>
+            request<{ connections: ModelConnectionView[] }>(
+              "/api/admin/model-connections",
+            ),
+          (value) => setModelConnections(value.connections),
+        );
+      } catch {
+        setModelConnectionsNotice({
+          scope,
+          message: copyFor(
+            locale,
+            "服務清單更新失敗，已完成的操作仍然保留。請按「重新整理」再讀取。",
+            "The service list could not refresh. Completed changes are kept. Use Refresh to load it again.",
           ),
-        (value) => setModelConnections(value.connections),
-      );
-    } catch {
-      setModelConnectionsNotice(
-        copyFor(
-          locale,
-          "服務清單更新失敗，已完成的操作仍然保留。請按「重新整理」再讀取。",
-          "The service list could not refresh. Completed changes are kept. Use Refresh to load it again.",
-        ),
-      );
-    } finally {
-      setModelConnectionsLoading(false);
-    }
-  }, [locale, request]);
+        });
+      } finally {
+        setModelConnectionsLoading(false);
+      }
+    },
+    [locale, request],
+  );
 
   const refreshChatProfiles = useCallback(async () => {
     setChatProfilesLoading(true);
@@ -1842,9 +1850,10 @@ export function AdminPage({
   async function saveModelConnection(
     draft: ModelConnectionDraft,
     connectionId?: string,
+    scope: ModelConnectionScope = "advanced",
   ) {
     setModelConnectionsPending(true);
-    setModelConnectionsError("");
+    setModelConnectionsError(null);
     setServiceSaveNotice(null);
     try {
       await modelRequests.current.connection.mutate(
@@ -1866,31 +1875,42 @@ export function AdminPage({
           : copyFor(locale, "服務已儲存", "Service saved"),
       });
       await refreshAfterModelConnectionSave(Boolean(connectionId), {
-        connections: refreshModelConnections,
+        connections: () => refreshModelConnections(scope),
         chatProfiles: refreshChatProfiles,
         embeddingProfiles: refreshEmbeddingProfiles,
         analysisSelection: refreshAnalysisSelection,
       });
     } catch (error) {
-      setModelConnectionsError(modelConnectionErrorMessage(locale, error));
+      setModelConnectionsError({
+        scope,
+        message: modelConnectionErrorMessage(locale, error),
+        code: error instanceof Error ? error.message : "REQUEST_FAILED",
+      });
     } finally {
       setModelConnectionsPending(false);
     }
   }
-  async function createModelConnection(draft: ModelConnectionDraft) {
-    await saveModelConnection(draft);
+  async function createModelConnection(
+    draft: ModelConnectionDraft,
+    scope: ModelConnectionScope,
+  ) {
+    await saveModelConnection(draft, undefined, scope);
   }
   async function updateModelConnection(
     id: string,
     draft: ModelConnectionDraft,
+    scope: ModelConnectionScope,
   ) {
-    await saveModelConnection(draft, id);
+    await saveModelConnection(draft, id, scope);
   }
 
-  async function deleteModelConnection(connectionId: string) {
+  async function deleteModelConnection(
+    connectionId: string,
+    scope: ModelConnectionScope,
+  ) {
     setServiceSaveNotice(null);
     setModelConnectionsPending(true);
-    setModelConnectionsError("");
+    setModelConnectionsError(null);
     try {
       await modelRequests.current.connection.mutate(
         () =>
@@ -1903,10 +1923,14 @@ export function AdminPage({
             current.filter((c) => c.connection_id !== connectionId),
           ),
       );
-      await refreshModelConnections();
+      await refreshModelConnections(scope);
       await refreshAnalysisSelection();
     } catch (error) {
-      setModelConnectionsError(modelConnectionErrorMessage(locale, error));
+      setModelConnectionsError({
+        scope,
+        message: modelConnectionErrorMessage(locale, error),
+        code: error instanceof Error ? error.message : "REQUEST_FAILED",
+      });
     } finally {
       setModelConnectionsPending(false);
     }
@@ -2590,29 +2614,46 @@ export function AdminPage({
   const connectionPanel = (
     managementActions: boolean,
     purpose?: "chat" | "embedding",
-  ) => (
-    <ModelConnectionPanel
-      onReadEndpoint={(connectionId) =>
-        request<{ connection_id: string; revision: number; base_url: string }>(
-          `/api/admin/model-connections/${encodeURIComponent(connectionId)}/edit-endpoint`,
-          { method: "POST" },
-        )
-      }
-      connections={modelConnections}
-      error={modelConnectionsError}
-      locale={locale}
-      managementActions={managementActions}
-      onCreate={(value) => void createModelConnection(value)}
-      onDelete={(value) => void deleteModelConnection(value)}
-      onRefresh={() => void refreshModelConnections()}
-      onUpdate={(connectionId, value) =>
-        void updateModelConnection(connectionId, value)
-      }
-      pending={modelConnectionsPending || modelConnectionsLoading}
-      notice={modelConnectionsNotice}
-      purpose={purpose}
-    />
-  );
+  ) => {
+    const scope: ModelConnectionScope = purpose ?? "advanced";
+    const scopedError =
+      modelConnectionsError?.scope === scope ? modelConnectionsError : null;
+    const scopedNotice =
+      modelConnectionsNotice?.scope === scope ? modelConnectionsNotice : null;
+    return (
+      <ModelConnectionPanel
+        onReadEndpoint={(connectionId) =>
+          request<{
+            connection_id: string;
+            revision: number;
+            base_url: string;
+          }>(
+            `/api/admin/model-connections/${encodeURIComponent(connectionId)}/edit-endpoint`,
+            { method: "POST" },
+          )
+        }
+        connections={modelConnections}
+        error={scopedError?.message ?? ""}
+        errorCode={scopedError?.code}
+        locale={locale}
+        managementActions={managementActions}
+        onClearError={() =>
+          setModelConnectionsError((current) =>
+            current?.scope === scope ? null : current,
+          )
+        }
+        onCreate={(value) => void createModelConnection(value, scope)}
+        onDelete={(value) => void deleteModelConnection(value, scope)}
+        onRefresh={() => void refreshModelConnections(scope)}
+        onUpdate={(connectionId, value) =>
+          void updateModelConnection(connectionId, value, scope)
+        }
+        pending={modelConnectionsPending || modelConnectionsLoading}
+        notice={scopedNotice?.message}
+        purpose={purpose}
+      />
+    );
+  };
   const chatPanel = (managementActions: boolean) => (
     <ChatProfilePanel
       connections={connectionsForPurpose("chat")}

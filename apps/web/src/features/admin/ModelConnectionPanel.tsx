@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, RefObject } from "react";
 
 import type { Locale } from "../../i18n/messages";
 import { ProviderBrandIcon } from "./ModelBrandIcon";
@@ -32,11 +32,13 @@ interface Props {
   connections: ModelConnectionView[];
   pending: boolean;
   error: string;
+  errorCode?: string;
   notice?: string;
   onRefresh: () => void;
   onCreate: (draft: ModelConnectionDraft) => void;
   onUpdate: (connectionId: string, draft: ModelConnectionDraft) => void;
   onDelete: (connectionId: string) => void;
+  onClearError?: () => void;
   onReadEndpoint?: (
     connectionId: string,
   ) => Promise<{ connection_id: string; revision: number; base_url: string }>;
@@ -78,6 +80,11 @@ const COPY = {
     remove: "刪除",
     select: "選擇服務商支援的連線方式",
     pending: "正在處理模型連線…",
+    saveFailed: "服務設定未完成",
+    secretCleared:
+      "為保護金鑰，剛輸入的 API key 已清除。若修正後仍需替換金鑰，請重新輸入。",
+    urlFieldError: "請修正服務網址後再儲存。",
+    keyFieldError: "請重新輸入新服務的金鑰，或明確選擇移除已儲存的金鑰。",
     revision: "設定版本",
   },
   en: {
@@ -113,6 +120,12 @@ const COPY = {
     remove: "Delete",
     select: "Select the connection type your provider supports",
     pending: "Working on model connections…",
+    saveFailed: "Service change not completed",
+    secretCleared:
+      "For security, the API key you just entered was cleared. Re-enter it if the corrected update still replaces the key.",
+    urlFieldError: "Correct the service URL before saving again.",
+    keyFieldError:
+      "Enter the new service key again, or explicitly choose to remove the saved key.",
     revision: "Revision",
   },
 } as const;
@@ -122,16 +135,19 @@ export function ModelConnectionPanel({
   connections,
   pending,
   error,
+  errorCode,
   notice,
   onRefresh,
   onCreate,
   onUpdate,
   onDelete,
+  onClearError,
   onReadEndpoint,
   purpose,
 }: Props) {
   const copy = COPY[locale];
   const editorRef = useRef<HTMLDetailsElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
   const [displayName, setDisplayName] = useState("");
   const [provider, setProvider] = useState<
     "" | ModelConnectionView["provider"]
@@ -144,6 +160,7 @@ export function ModelConnectionPanel({
   const [removeKey, setRemoveKey] = useState(false);
   const [endpointLoading, setEndpointLoading] = useState(false);
   const [endpointError, setEndpointError] = useState(false);
+  const [submittedSecretCleared, setSubmittedSecretCleared] = useState(false);
   const endpointRequest = useRef(0);
   useEffect(
     () => () => {
@@ -160,6 +177,7 @@ export function ModelConnectionPanel({
   }, []);
 
   const cancelEdit = useCallback(() => {
+    onClearError?.();
     setEditorOpen(false);
     clearEndpointRead();
     setEditingId(null);
@@ -169,7 +187,14 @@ export function ModelConnectionPanel({
     setApiKey("");
     setReplaceAddress(true);
     setRemoveKey(false);
-  }, [clearEndpointRead]);
+    setSubmittedSecretCleared(false);
+  }, [clearEndpointRead, onClearError]);
+
+  useEffect(() => {
+    if (!error || !errorRef.current) return;
+    errorRef.current.focus();
+    errorRef.current.scrollIntoView({ block: "nearest" });
+  }, [error]);
 
   async function readEndpoint() {
     if (!editingId || !onReadEndpoint) return;
@@ -212,6 +237,9 @@ export function ModelConnectionPanel({
     : connections;
   const idSuffix = purpose ? `-${purpose}` : "";
   const headingId = `model-connection-heading${idSuffix}`;
+  const errorId = `model-connection-error${idSuffix}`;
+  const urlErrorId = `model-connection-url-error${idSuffix}`;
+  const keyErrorId = `model-connection-key-error${idSuffix}`;
   const editingConnection = connections.find(
     (item) => item.connection_id === editingId,
   );
@@ -225,6 +253,21 @@ export function ModelConnectionPanel({
     editingConnection && editingConnection.provider !== provider,
   );
   const editingHostConnection = editingConnection?.source === "host-managed";
+  const urlError = Boolean(
+    error &&
+      errorCode &&
+      [
+        "INVALID_PROVIDER_URL",
+        "INSECURE_PROVIDER_URL",
+        "PROVIDER_NETWORK_BLOCKED",
+        "PROVIDER_NETWORK_UNAVAILABLE",
+        "HOST_CONNECTION_REPLACEMENT_REQUIRED",
+        "VALIDATION_ERROR",
+      ].includes(errorCode),
+  );
+  const keyError = Boolean(
+    error && errorCode === "CREDENTIAL_REPLACE_REQUIRED",
+  );
   const Heading = purpose ? "h4" : "h2";
   const heading = purpose
     ? purpose === "chat"
@@ -251,12 +294,14 @@ export function ModelConnectionPanel({
       api_key: removeKey || !apiKey ? undefined : apiKey,
       credential_action: removeKey ? "remove" : apiKey ? "replace" : "retain",
     } satisfies ModelConnectionDraft;
+    setSubmittedSecretCleared(Boolean(apiKey));
     setApiKey("");
     if (editingId) onUpdate(editingId, draft);
     else onCreate(draft);
   }
 
   function edit(connection: ModelConnectionView) {
+    onClearError?.();
     clearEndpointRead();
     if (editorRef.current) {
       editorRef.current.open = true;
@@ -269,6 +314,7 @@ export function ModelConnectionPanel({
     setApiKey("");
     setReplaceAddress(connection.source === "host-managed");
     setRemoveKey(false);
+    setSubmittedSecretCleared(false);
   }
 
   return (
@@ -282,8 +328,16 @@ export function ModelConnectionPanel({
         {copy.refresh}
       </button>
       {pending && <p role="status">{copy.pending}</p>}
-      {error && !editorOpen && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
+      {error && !editorOpen && (
+        <OperationError
+          copy={copy}
+          error={error}
+          errorId={errorId}
+          errorRef={errorRef}
+          secretCleared={false}
+        />
+      )}
+      {notice && <p role="alert">{notice}</p>}
       {visibleConnections.length === 0 ? (
         <p>{copy.empty}</p>
       ) : (
@@ -415,6 +469,8 @@ export function ModelConnectionPanel({
             <label htmlFor={`model-connection-address${idSuffix}`}>
               {copy.address}
               <input
+                aria-describedby={urlError ? urlErrorId : undefined}
+                aria-invalid={urlError || undefined}
                 disabled={pending || endpointLoading}
                 id={`model-connection-address${idSuffix}`}
                 autoComplete="off"
@@ -425,6 +481,7 @@ export function ModelConnectionPanel({
                 type="url"
                 value={baseUrl}
               />
+              {urlError && <span id={urlErrorId}>{copy.urlFieldError}</span>}
             </label>
           )}
           {endpointLoading && (
@@ -457,13 +514,15 @@ export function ModelConnectionPanel({
                   ? "這筆環境連線目前沒有已設定的金鑰；若新網址也不需要金鑰，可保持空白。之後需要更新模型設定並重新測試。"
                   : "This environment connection has no configured key. Leave the key blank if the new URL also needs no key. Then update and retest its model settings."
                 : locale === "zh-TW"
-                  ? "更換網址或連線方式時，請填入此服務的新金鑰，或明確選擇移除金鑰。之後需要更新模型設定並重新測試。"
-                  : "When changing the URL or connection type, enter a new key for that service or explicitly remove the key. Then update and retest its model settings."}
+                  ? "連線方式、協定、主機與連接埠不變時，只修改路徑（例如加上 /v1）可安全沿用已儲存的金鑰。若 origin 或連線方式改變，請填入新金鑰或明確移除；網址變更後仍需重新測試模型。"
+                  : "When the connection type, protocol, host, and port stay the same, a path-only edit such as adding /v1 can safely retain the saved key. If the origin or connection type changes, enter a new key or explicitly remove it. Retest models after any URL change."}
             </p>
           )}
           <label htmlFor={`model-connection-key${idSuffix}`}>
             {copy.key}
             <input
+              aria-describedby={keyError ? keyErrorId : undefined}
+              aria-invalid={keyError || undefined}
               autoComplete="new-password"
               disabled={pending}
               id={`model-connection-key${idSuffix}`}
@@ -475,6 +534,7 @@ export function ModelConnectionPanel({
               type="password"
               value={apiKey}
             />
+            {keyError && <span id={keyErrorId}>{copy.keyFieldError}</span>}
           </label>
           {editingId &&
             (replaceAddress ||
@@ -500,7 +560,7 @@ export function ModelConnectionPanel({
             )}
           <div className="model-connection-form__actions">
             <button disabled={pending || endpointLoading} type="submit">
-              {editingId ? copy.update : copy.create}
+              {pending ? copy.pending : editingId ? copy.update : copy.create}
             </button>
             {editingId && (
               <DeleteSettingButton
@@ -515,10 +575,47 @@ export function ModelConnectionPanel({
               />
             )}
           </div>
-          {error && editorOpen && <p role="alert">{error}</p>}
+          {error && editorOpen && (
+            <OperationError
+              copy={copy}
+              error={error}
+              errorId={errorId}
+              errorRef={errorRef}
+              secretCleared={submittedSecretCleared}
+            />
+          )}
         </form>
       </ModelEditor>
     </section>
+  );
+}
+
+function OperationError({
+  copy,
+  error,
+  errorId,
+  errorRef,
+  secretCleared,
+}: {
+  copy: (typeof COPY)[Locale];
+  error: string;
+  errorId: string;
+  errorRef: RefObject<HTMLDivElement | null>;
+  secretCleared: boolean;
+}) {
+  return (
+    <div
+      aria-atomic="true"
+      className="model-connection-form__error"
+      id={errorId}
+      ref={errorRef}
+      role="alert"
+      tabIndex={-1}
+    >
+      <strong>{copy.saveFailed}</strong>
+      <p>{error}</p>
+      {secretCleared && <p>{copy.secretCleared}</p>}
+    </div>
   );
 }
 

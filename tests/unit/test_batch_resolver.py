@@ -94,6 +94,41 @@ def test_archive_source_rebuilds_only_safe_regular_files_and_cleans_staging(tmp_
     assert list((tmp_path / "archives").iterdir()) == []
 
 
+def test_archive_source_skips_oversized_member_without_failing_repository(tmp_path: Path) -> None:
+    archive = io.BytesIO()
+    with tarfile.open(fileobj=archive, mode="w:gz") as handle:
+        payload = b"x" * 32
+        entry = tarfile.TarInfo("demo-sha/generated.bin")
+        entry.size = len(payload)
+        handle.addfile(entry, io.BytesIO(payload))
+
+    class StaticArchiveTransport:
+        def stream(self, **_values: object):
+            yield archive.getvalue()
+
+    source = GitHubArchiveSource(
+        transport=StaticArchiveTransport(),  # type: ignore[arg-type]
+        limiter=GitHubRateLimiter(now=lambda: NOW),
+        staging_root=tmp_path / "oversized",
+        limits=ArchiveSafetyLimits(1024 * 1024, 1024 * 1024, 10, 8),
+    )
+
+    resolved = source.fetch(
+        repository=ResolvedRepository(
+            slug="octocat/demo",
+            node_id="R_demo",
+            default_branch="main",
+            commit_sha=SHA_A,
+            is_archived=False,
+            archive_url=f"https://api.github.com/repos/octocat/demo/tarball/{SHA_A}",
+        ),
+    )
+
+    assert len(resolved.blobs) == 1
+    assert resolved.blobs[0].entry_kind.value == "oversized_file"
+    assert resolved.blobs[0].content is None
+
+
 def test_rate_limiter_applies_secondary_pause_to_core_requests() -> None:
     limiter = GitHubRateLimiter(safety_reserve=10, now=lambda: NOW)
     limiter.observe(
@@ -275,7 +310,7 @@ def test_preflight_binds_selection_hash_and_reports_cache_capacity_duration() ->
 
     assert plan.plan_id == "safe-plan-id"
     assert plan.selection_hash == selection_hash_for((selection,))
-    assert plan.maximum_generation_attempts == 1
+    assert plan.maximum_generation_attempts == 3
     assert plan.duration and plan.duration.confidence == "low"
     assert plan.warnings == ("ANONYMOUS_ARCHIVE_REQUESTS:0",)
     assert all(

@@ -87,6 +87,54 @@ def test_create_update_and_remove_are_revisioned_and_write_only(tmp_path: Path) 
     assert all(CANARY_KEY.encode() not in bytes(row[0]) for row in ciphertext)
 
 
+def test_same_provider_origin_path_change_retains_protected_key(tmp_path: Path) -> None:
+    registry, _database = _registry(tmp_path)
+    created = registry.create(_values(url="https://gateway.example.test"))
+
+    updated = registry.update(
+        created.connection_id,
+        _values(
+            url="https://GATEWAY.example.test:443/v1",
+            key=None,
+            action="retain",
+        ),
+    )
+
+    assert updated.revision == 2
+    secret = registry.secret_for(updated.connection_id)
+    assert secret.base_url == "https://GATEWAY.example.test:443/v1"
+    assert secret.api_key == CANARY_KEY
+
+
+@pytest.mark.parametrize(
+    "provider,url",
+    (
+        ("vllm", "https://gateway.example.test/v1"),
+        ("openai_compatible", "https://gateway.example.test:8443/v1"),
+        ("openai_compatible", "https://other.example.test/v1"),
+    ),
+)
+def test_provider_or_origin_change_cannot_retain_protected_key(
+    tmp_path: Path, provider: str, url: str
+) -> None:
+    registry, _database = _registry(tmp_path)
+    created = registry.create(_values(url="https://gateway.example.test"))
+
+    with pytest.raises(ModelConnectionError) as raised:
+        registry.update(
+            created.connection_id,
+            ModelConnectionInput(
+                display_name="Primary gateway",
+                provider=provider,
+                base_url=url,
+                credential_action="retain",
+            ),
+        )
+
+    assert raised.value.code == "CREDENTIAL_REPLACE_REQUIRED"
+    assert registry.get(created.connection_id) == created
+
+
 def test_effective_update_rebinds_only_safe_candidates_and_invalidates_selection(
     tmp_path: Path,
 ) -> None:

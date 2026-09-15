@@ -115,13 +115,25 @@ def test_model_connection_api_is_authenticated_write_only_and_revisioned(tmp_pat
         assert changed_without_key.json()["error"]["code"] == "CREDENTIAL_REPLACE_REQUIRED"
         assert CANARY_KEY not in changed_without_key.text
 
+        changed_path = client.put(
+            f"/api/admin/model-connections/{connection_id}",
+            headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
+            json={
+                **_body(url="https://private-gateway.example.test/v2", key=None),
+                "credential_action": "retain",
+            },
+        )
+        assert changed_path.status_code == 200
+        assert changed_path.json()["revision"] == 2
+        assert CANARY_KEY not in changed_path.text
+
         replaced = client.put(
             f"/api/admin/model-connections/{connection_id}",
             headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
             json=_body(url="https://other-gateway.example.test/v1", key="ROTATED_KEY_CANARY"),
         )
         assert replaced.status_code == 200
-        assert replaced.json()["revision"] == 2
+        assert replaced.json()["revision"] == 3
         assert "ROTATED_KEY_CANARY" not in replaced.text
 
         deleted = client.delete(

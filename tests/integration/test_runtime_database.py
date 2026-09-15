@@ -15,6 +15,46 @@ def table_names(database: RuntimeDatabase) -> set[str]:
     return {str(row[0]) for row in rows}
 
 
+def _seed_analysis_batch(database: RuntimeDatabase) -> None:
+    selection_hash = "a" * 64
+    idempotency_hash = "b" * 64
+    commit_sha = "c" * 40
+    with database.connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO analysis_batches(
+              batch_id, plan_id, selection_hash, idempotency_key_hash, state,
+              maximum_generation_attempts, created_at, updated_at
+            ) VALUES ('batch-migration', 'plan-migration', ?, ?, 'completed', 2, 'now', 'now')
+            """,
+            (selection_hash, idempotency_hash),
+        )
+        connection.execute(
+            """
+            INSERT INTO analysis_batch_items(
+              item_id, batch_id, position, repository_slug, requested_ref,
+              selection_hash, resolved_commit_sha, selection_json, state,
+              result_json, error_reason, created_at, updated_at
+            ) VALUES (
+              'item-migration', 'batch-migration', 0, 'octocat/demo', 'main', ?, ?,
+              '{"include":["src/**"],"exclude":[]}', 'complete',
+              '{"repository":{"slug":"octocat/demo"},"inferences":[],"skipped_summary":{"count":0,"reasons":[]}}',
+              'PROVIDER_OUTPUT_SCHEMA_INVALID', 'now', 'now'
+            )
+            """,
+            (selection_hash, commit_sha),
+        )
+        connection.execute(
+            """
+            INSERT INTO analysis_batch_events(
+              event_id, batch_id, item_id, event_type, payload_json, occurred_at
+            ) VALUES (
+              17, 'batch-migration', 'item-migration', 'item_completed', '{"ok":true}', 'now'
+            )
+            """
+        )
+
+
 def test_runtime_database_is_idempotent_and_separate_from_index_data(tmp_path: Path) -> None:
     database = RuntimeDatabase(tmp_path / "runtime-data")
 
@@ -23,7 +63,7 @@ def test_runtime_database_is_idempotent_and_separate_from_index_data(tmp_path: P
 
     assert database.database_path == tmp_path / "runtime-data" / "runtime.sqlite"
     assert database.database_path.exists()
-    assert database.schema_version() == 23
+    assert database.schema_version() == 25
     assert {
         "runtime_schema_migrations",
         "admin_sessions",
@@ -90,7 +130,7 @@ def test_provider_message_migration_is_atomic(tmp_path: Path) -> None:
                 row[1] for row in connection.execute(f"PRAGMA table_info({table})")
             }
     database.initialize()
-    assert database.schema_version() == 23
+    assert database.schema_version() == 25
 
 
 def test_host_connection_override_migration_is_atomic(tmp_path: Path) -> None:
@@ -110,7 +150,7 @@ def test_host_connection_override_migration_is_atomic(tmp_path: Path) -> None:
     assert database.schema_version() == 20
     assert "host_managed_connection_overrides" not in table_names(database)
     database.initialize()
-    assert database.schema_version() == 23
+    assert database.schema_version() == 25
 
 
 def test_connection_revision_rebinding_migration_repairs_safe_candidates(
@@ -206,7 +246,7 @@ def test_connection_revision_rebinding_migration_repairs_safe_candidates(
 
     database.initialize()
 
-    assert database.schema_version() == 23
+    assert database.schema_version() == 25
     with database.connection() as connection:
         revisions = connection.execute(
             "SELECT revision, provider FROM model_connection_secrets ORDER BY revision"
@@ -272,7 +312,7 @@ def test_connection_revision_rebinding_migration_is_atomic(tmp_path: Path) -> No
         }
     assert "provider" not in columns
     database.initialize()
-    assert database.schema_version() == 23
+    assert database.schema_version() == 25
 
 
 def test_analysis_batch_error_reason_migration_is_atomic(tmp_path: Path) -> None:
@@ -294,7 +334,166 @@ def test_analysis_batch_error_reason_migration_is_atomic(tmp_path: Path) -> None
         columns = {row[1] for row in connection.execute("PRAGMA table_info(analysis_batch_items)")}
     assert "error_reason" not in columns
     database.initialize()
+    assert database.schema_version() == 25
+
+
+def test_analysis_output_limit_reason_migration_preserves_results_events_and_foreign_keys(
+    tmp_path: Path,
+) -> None:
+    database = RuntimeDatabase(tmp_path / "analysis-output-limit")
+    database.initialize(migrations=tuple(m for m in MIGRATIONS if m.version < 24))
+    _seed_analysis_batch(database)
+    with database.connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO analysis_batch_events(
+              event_id, batch_id, item_id, event_type, payload_json, occurred_at
+            ) VALUES (9000, 'batch-migration', 'item-migration', 'pruned', '{}', 'now')
+            """
+        )
+        connection.execute("DELETE FROM analysis_batch_events WHERE event_id = 9000")
+
+    database.initialize()
+
+    assert database.schema_version() == 25
+    with database.connection() as connection:
+        item = connection.execute(
+            "SELECT * FROM analysis_batch_items WHERE item_id = 'item-migration'"
+        ).fetchone()
+        event = connection.execute(
+            "SELECT * FROM analysis_batch_events WHERE event_id = 17"
+        ).fetchone()
+        foreign_keys = connection.execute(
+            "PRAGMA foreign_key_list(analysis_batch_events)"
+        ).fetchall()
+        sequence = connection.execute(
+            "SELECT COUNT(*), MAX(seq) FROM sqlite_sequence WHERE name = 'analysis_batch_events'"
+        ).fetchone()
+        connection.execute(
+            "UPDATE analysis_batch_items SET error_reason = 'PROVIDER_OUTPUT_LIMIT_REACHED' "
+            "WHERE item_id = 'item-migration'"
+        )
+        updated_reason = connection.execute(
+            "SELECT error_reason FROM analysis_batch_items WHERE item_id = 'item-migration'"
+        ).fetchone()[0]
+        inserted = connection.execute(
+            """
+            INSERT INTO analysis_batch_events(
+              batch_id, item_id, event_type, payload_json, occurred_at
+            ) VALUES ('batch-migration', 'item-migration', 'post-migration', '{}', 'now')
+            """
+        )
+
+    assert item is not None
+    assert item["result_json"] == (
+        '{"repository":{"slug":"octocat/demo"},"inferences":[],'
+        '"skipped_summary":{"count":0,"reasons":[]}}'
+    )
+    assert item["selection_json"] == '{"include":["src/**"],"exclude":[]}'
+    assert event is not None and event["event_id"] == 17
+    assert {row[2] for row in foreign_keys} == {"analysis_batches", "analysis_batch_items"}
+    assert tuple(sequence) == (1, 9000)
+    assert updated_reason == "PROVIDER_OUTPUT_LIMIT_REACHED"
+    assert inserted.lastrowid == 9001
+
+
+def test_analysis_output_limit_reason_migration_preserves_event_watermark_when_all_events_pruned(
+    tmp_path: Path,
+) -> None:
+    database = RuntimeDatabase(tmp_path / "analysis-output-limit-all-pruned")
+    previous = tuple(m for m in MIGRATIONS if m.version < 24)
+    database.initialize(migrations=previous)
+    _seed_analysis_batch(database)
+    with database.connection() as connection:
+        connection.execute("DELETE FROM analysis_batch_events")
+
+    database.initialize()
+
+    with database.connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM analysis_batch_events").fetchone()[0] == 0
+        sequence = connection.execute(
+            "SELECT COUNT(*), MAX(seq) FROM sqlite_sequence WHERE name = 'analysis_batch_events'"
+        ).fetchone()
+        inserted = connection.execute(
+            """
+            INSERT INTO analysis_batch_events(
+              batch_id, item_id, event_type, payload_json, occurred_at
+            ) VALUES ('batch-migration', 'item-migration', 'post-migration', '{}', 'now')
+            """
+        )
+
+    assert tuple(sequence) == (1, 17)
+    assert inserted.lastrowid == 18
+
+
+def test_analysis_output_limit_reason_migration_rolls_back_without_losing_old_schema(
+    tmp_path: Path,
+) -> None:
+    database = RuntimeDatabase(tmp_path / "analysis-output-limit-rollback")
+    previous = tuple(m for m in MIGRATIONS if m.version < 24)
+    database.initialize(migrations=previous)
+    _seed_analysis_batch(database)
+    migration = next(m for m in MIGRATIONS if m.version == 24)
+    broken = Migration(
+        version=24,
+        name=migration.name,
+        statements=(*migration.statements, "INVALID SQL"),
+    )
+
+    with pytest.raises(RuntimeDatabaseError):
+        database.initialize(migrations=(*previous, broken))
+
     assert database.schema_version() == 23
+    with database.connection() as connection:
+        assert (
+            connection.execute(
+                "SELECT result_json FROM analysis_batch_items WHERE item_id = 'item-migration'"
+            )
+            .fetchone()[0]
+            .startswith('{"repository"')
+        )
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM analysis_batch_events WHERE event_id = 17"
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name LIKE '%_v24'"
+            ).fetchone()[0]
+            == 0
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "UPDATE analysis_batch_items SET error_reason = 'PROVIDER_OUTPUT_LIMIT_REACHED' "
+                "WHERE item_id = 'item-migration'"
+            )
+
+    database.initialize()
+    assert database.schema_version() == 25
+
+
+def test_flexible_analysis_budget_migration_preserves_existing_value(tmp_path: Path) -> None:
+    database = RuntimeDatabase(tmp_path / "analysis-budget-v25")
+    previous = tuple(m for m in MIGRATIONS if m.version < 25)
+    database.initialize(migrations=previous)
+    _seed_analysis_batch(database)
+    with database.connection() as connection:
+        connection.execute(
+            "UPDATE analysis_batch_items SET execution_budget_seconds = 600 "
+            "WHERE item_id = 'item-migration'"
+        )
+
+    database.initialize()
+
+    assert database.schema_version() == 25
+    with database.connection() as connection:
+        row = connection.execute(
+            "SELECT legacy_execution_budget_seconds, execution_budget_seconds "
+            "FROM analysis_batch_items WHERE item_id = 'item-migration'"
+        ).fetchone()
+    assert tuple(row) == (600, 600)
 
 
 def test_concurrent_initialization_creates_one_versioned_schema(tmp_path: Path) -> None:
@@ -303,11 +502,11 @@ def test_concurrent_initialization_creates_one_versioned_schema(tmp_path: Path) 
     with ThreadPoolExecutor(max_workers=2) as executor:
         list(executor.map(lambda _unused: database.initialize(), range(2)))
 
-    assert database.schema_version() == 23
+    assert database.schema_version() == 25
     with database.connection() as connection:
         versions = connection.execute("SELECT version FROM runtime_schema_migrations").fetchall()
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()
-        assert [row[0] for row in versions] == list(range(1, 24))
+        assert [row[0] for row in versions] == list(range(1, 26))
     assert foreign_keys is not None and foreign_keys[0] == 1
 
 
@@ -358,13 +557,13 @@ def test_concurrent_initialization_across_database_owners_is_safe(tmp_path: Path
 
         database = RuntimeDatabase(data_dir)
         database.initialize()
-        assert database.schema_version() == 23
+        assert database.schema_version() == 25
         with database.connection() as connection:
             versions = connection.execute(
                 "SELECT version FROM runtime_schema_migrations"
             ).fetchall()
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()
-            assert [row[0] for row in versions] == list(range(1, 24))
+            assert [row[0] for row in versions] == list(range(1, 26))
         assert journal_mode is not None and journal_mode[0] == "wal"
 
 

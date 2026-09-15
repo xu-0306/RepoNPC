@@ -311,33 +311,33 @@ def test_release_audit_covers_acceptance_and_release_input_gates(tmp_path: Path)
         assert records[check_id]["status"] == "not-run"
 
 
-def test_release_audit_requires_every_accepted_criterion_through_ac_060(tmp_path: Path) -> None:
+def test_release_audit_requires_every_accepted_criterion_through_ac_061(tmp_path: Path) -> None:
     _write_snapshot(tmp_path)
     acceptance = tmp_path / "docs" / "ACCEPTANCE_CRITERIA.md"
     acceptance.write_text(
         "# Acceptance Criteria\n\n"
-        + "\n".join(f"### AC-{index:03d} — Fixture" for index in range(1, 61)),
+        + "\n".join(f"### AC-{index:03d} — Fixture" for index in range(1, 62)),
         encoding="utf-8",
     )
 
     records = {record["id"]: record for record in audit_repository(tmp_path)}
     assert records["acceptance-coverage"]["status"] == "pass"
-    assert records["acceptance-coverage"]["evidence"]["required"] == ("AC-001 through AC-060")
+    assert records["acceptance-coverage"]["evidence"]["required"] == ("AC-001 through AC-061")
 
     acceptance.write_text(
         "# Acceptance Criteria\n\n"
-        + "\n".join(f"### AC-{index:03d} — Fixture" for index in range(1, 60)),
+        + "\n".join(f"### AC-{index:03d} — Fixture" for index in range(1, 61)),
         encoding="utf-8",
     )
     records = {record["id"]: record for record in audit_repository(tmp_path)}
     assert records["acceptance-coverage"]["status"] == "blocked"
-    assert records["acceptance-coverage"]["evidence"]["missing"] == ["AC-060"]
+    assert records["acceptance-coverage"]["evidence"]["missing"] == ["AC-061"]
 
 
 def test_acceptance_ledger_validator_requires_unique_complete_safe_entries() -> None:
     entries = [
         {"id": f"AC-{index:03d}", "status": "not-run", "reason": "external evidence unavailable"}
-        for index in range(1, 61)
+        for index in range(1, 62)
     ]
     payload = {
         "schema_name": "reponpc/acceptance-ledger",
@@ -350,7 +350,7 @@ def test_acceptance_ledger_validator_requires_unique_complete_safe_entries() -> 
     payload["entries"] = [*entries[:-1], entries[-2]]
     errors = validate_acceptance_ledger(payload)
     assert any("duplicate" in error for error in errors)
-    assert any("missing ledger entry: AC-060" in error for error in errors)
+    assert any("missing ledger entry: AC-061" in error for error in errors)
 
 
 def test_acceptance_ledger_validator_rejects_secret_metadata() -> None:

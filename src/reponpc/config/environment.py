@@ -67,6 +67,18 @@ _ENVIRONMENT_NAMES: Final = frozenset(
         "REPONPC_CHAT_API_KEY_FILE",
         "REPONPC_CHAT_MAX_CONTEXT_TOKENS",
         "REPONPC_CHAT_MAX_OUTPUT_TOKENS",
+        "REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS",
+        "REPONPC_ANALYSIS_REPOSITORY_TIMEOUT_SECONDS",
+        "REPONPC_ANALYSIS_PROVIDER_TIMEOUT_SECONDS",
+        "REPONPC_ANALYSIS_GENERATION_ATTEMPTS",
+        "REPONPC_ANALYSIS_GITHUB_TIMEOUT_SECONDS",
+        "REPONPC_ANALYSIS_ARCHIVE_MAX_COMPRESSED_BYTES",
+        "REPONPC_ANALYSIS_ARCHIVE_MAX_UNCOMPRESSED_BYTES",
+        "REPONPC_ANALYSIS_ARCHIVE_MAX_ENTRIES",
+        "REPONPC_ANALYSIS_ARCHIVE_MAX_SINGLE_FILE_BYTES",
+        "REPONPC_ANALYSIS_MAX_FILE_BYTES",
+        "REPONPC_ANALYSIS_MAX_REPOSITORY_TEXT_BYTES",
+        "REPONPC_ANALYSIS_MAX_CORPUS_TEXT_BYTES",
         "REPONPC_CHAT_TIMEOUT_SECONDS",
         "REPONPC_EMBEDDING_PROVIDER",
         "REPONPC_EMBEDDING_MODEL",
@@ -186,6 +198,18 @@ class EnvironmentSettings:
     chat_base_url: str = field(repr=False)
     chat_max_context_tokens: int
     chat_max_output_tokens: int
+    analysis_max_output_tokens: int
+    analysis_repository_timeout_seconds: int
+    analysis_provider_timeout_seconds: int
+    analysis_generation_attempts: int
+    analysis_github_timeout_seconds: int
+    analysis_archive_max_compressed_bytes: int
+    analysis_archive_max_uncompressed_bytes: int
+    analysis_archive_max_entries: int
+    analysis_archive_max_single_file_bytes: int
+    analysis_max_file_bytes: int
+    analysis_max_repository_text_bytes: int
+    analysis_max_corpus_text_bytes: int
     chat_timeout_seconds: int
     embedding_provider: str
     embedding_model: str
@@ -643,7 +667,83 @@ def load_environment(
         chat_base_url=_text(source, "REPONPC_CHAT_BASE_URL", "", issues, allow_empty=True),
         chat_max_context_tokens=_integer(source, "REPONPC_CHAT_MAX_CONTEXT_TOKENS", 32768, issues),
         chat_max_output_tokens=_integer(
-            source, "REPONPC_CHAT_MAX_OUTPUT_TOKENS", 1000, issues, maximum=2000
+            source, "REPONPC_CHAT_MAX_OUTPUT_TOKENS", 4096, issues, maximum=8192
+        ),
+        analysis_max_output_tokens=_integer(
+            source,
+            "REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS",
+            8192,
+            issues,
+            maximum=16384,
+        ),
+        analysis_repository_timeout_seconds=_integer(
+            source,
+            "REPONPC_ANALYSIS_REPOSITORY_TIMEOUT_SECONDS",
+            1800,
+            issues,
+            maximum=7200,
+        ),
+        analysis_provider_timeout_seconds=_integer(
+            source,
+            "REPONPC_ANALYSIS_PROVIDER_TIMEOUT_SECONDS",
+            300,
+            issues,
+            maximum=3600,
+        ),
+        analysis_generation_attempts=_integer(
+            source, "REPONPC_ANALYSIS_GENERATION_ATTEMPTS", 3, issues, maximum=3
+        ),
+        analysis_github_timeout_seconds=_integer(
+            source, "REPONPC_ANALYSIS_GITHUB_TIMEOUT_SECONDS", 60, issues, maximum=300
+        ),
+        analysis_archive_max_compressed_bytes=_integer(
+            source,
+            "REPONPC_ANALYSIS_ARCHIVE_MAX_COMPRESSED_BYTES",
+            256 * 1024 * 1024,
+            issues,
+            maximum=1024 * 1024 * 1024,
+        ),
+        analysis_archive_max_uncompressed_bytes=_integer(
+            source,
+            "REPONPC_ANALYSIS_ARCHIVE_MAX_UNCOMPRESSED_BYTES",
+            1024 * 1024 * 1024,
+            issues,
+            maximum=4 * 1024 * 1024 * 1024,
+        ),
+        analysis_archive_max_entries=_integer(
+            source,
+            "REPONPC_ANALYSIS_ARCHIVE_MAX_ENTRIES",
+            100_000,
+            issues,
+            maximum=500_000,
+        ),
+        analysis_archive_max_single_file_bytes=_integer(
+            source,
+            "REPONPC_ANALYSIS_ARCHIVE_MAX_SINGLE_FILE_BYTES",
+            2 * 1024 * 1024,
+            issues,
+            maximum=16 * 1024 * 1024,
+        ),
+        analysis_max_file_bytes=_integer(
+            source,
+            "REPONPC_ANALYSIS_MAX_FILE_BYTES",
+            2 * 1024 * 1024,
+            issues,
+            maximum=16 * 1024 * 1024,
+        ),
+        analysis_max_repository_text_bytes=_integer(
+            source,
+            "REPONPC_ANALYSIS_MAX_REPOSITORY_TEXT_BYTES",
+            100 * 1024 * 1024,
+            issues,
+            maximum=500 * 1024 * 1024,
+        ),
+        analysis_max_corpus_text_bytes=_integer(
+            source,
+            "REPONPC_ANALYSIS_MAX_CORPUS_TEXT_BYTES",
+            250 * 1024 * 1024,
+            issues,
+            maximum=1024 * 1024 * 1024,
         ),
         chat_timeout_seconds=_integer(
             source, "REPONPC_CHAT_TIMEOUT_SECONDS", 45, issues, maximum=300
@@ -708,6 +808,30 @@ def load_environment(
         persist_conversations=persist_conversations,
         secrets=MappingProxyType(nonempty_secrets),
     )
+    if (
+        settings.analysis_archive_max_compressed_bytes
+        > settings.analysis_archive_max_uncompressed_bytes
+    ):
+        _issue(
+            issues,
+            "REPONPC_ANALYSIS_ARCHIVE_MAX_UNCOMPRESSED_BYTES",
+            "invalid_limit_relationship",
+            "uncompressed archive limit must cover the compressed limit",
+        )
+    if settings.analysis_max_repository_text_bytes > settings.analysis_max_corpus_text_bytes:
+        _issue(
+            issues,
+            "REPONPC_ANALYSIS_MAX_CORPUS_TEXT_BYTES",
+            "invalid_limit_relationship",
+            "analysis corpus limit must cover one repository",
+        )
+    if settings.analysis_max_file_bytes > settings.analysis_archive_max_single_file_bytes:
+        _issue(
+            issues,
+            "REPONPC_ANALYSIS_ARCHIVE_MAX_SINGLE_FILE_BYTES",
+            "invalid_limit_relationship",
+            "archive materialization limit must cover the analysis file limit",
+        )
     if "*" in settings.allowed_origins:
         _issue(
             issues,

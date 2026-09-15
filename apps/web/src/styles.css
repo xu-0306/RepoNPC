@@ -1014,6 +1014,32 @@ input {
   max-width: 100%;
   min-width: min(7rem, 100%);
 }
+.model-connection-form__error {
+  background: var(--admin-danger-soft);
+  border: 1px solid var(--admin-danger);
+  border-radius: 0.65rem;
+  color: var(--admin-danger);
+  margin-top: 0.85rem;
+  padding: 0.8rem;
+}
+.model-connection-form__error:focus-visible {
+  outline: 3px solid var(--admin-primary);
+  outline-offset: 3px;
+}
+.model-connection-form__error p {
+  margin: 0.35rem 0 0;
+}
+.model-connection-form [aria-invalid="true"] {
+  border-color: var(--admin-danger);
+}
+.model-connection-form label > span[id$="-error-chat"],
+.model-connection-form label > span[id$="-error-embedding"],
+.model-connection-form label > span[id$="-error"] {
+  color: var(--admin-danger);
+  display: block;
+  font-size: 0.9rem;
+  margin-top: 0.35rem;
+}
 .admin-workspace .model-connection-form__cancel {
   background: var(--admin-surface);
   color: var(--admin-ink);

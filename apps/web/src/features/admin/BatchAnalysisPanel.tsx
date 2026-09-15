@@ -77,6 +77,7 @@ export type BatchRepositoryStage =
   | "generating"
   | "validating"
   | "cleaning_up"
+  | "failed"
   | "complete";
 
 export type BatchRepositoryState =
@@ -93,6 +94,9 @@ export interface BatchRepositoryItem {
   stage: BatchRepositoryStage;
   state: BatchRepositoryState;
   retryable: boolean;
+  executionElapsedSeconds?: number;
+  executionBudgetSeconds?: number;
+  generationAttemptCount?: number;
   error: BatchOperationError | null;
 }
 
@@ -209,6 +213,9 @@ type Copy = {
   active: string;
   repositoryHeading: string;
   stage: string;
+  activeTime: string;
+  executionBudget: string;
+  generationAttempts: string;
   actionHeading: string;
   pause: string;
   resume: string;
@@ -298,6 +305,9 @@ const COPY: Record<Locale, Copy> = {
     active: "進行中",
     repositoryHeading: "各 repository 的進度",
     stage: "階段",
+    activeTime: "有效執行時間",
+    executionBudget: "安全上限",
+    generationAttempts: "模型嘗試次數",
     actionHeading: "批次操作",
     pause: "暫停批次",
     resume: "繼續批次",
@@ -402,6 +412,9 @@ const COPY: Record<Locale, Copy> = {
     active: "Active",
     repositoryHeading: "Repository progress",
     stage: "Stage",
+    activeTime: "Active execution",
+    executionBudget: "Safety ceiling",
+    generationAttempts: "Model attempts",
     actionHeading: "Batch controls",
     pause: "Pause batch",
     resume: "Resume batch",
@@ -868,6 +881,28 @@ function RepositoryList({
               <dl className="guided-onboarding__repository-meta">
                 <dt>{copy.stage}</dt>
                 <dd>{repositoryStageLabel(item.stage, locale)}</dd>
+                {typeof item.executionElapsedSeconds === "number" && (
+                  <>
+                    <dt>{copy.activeTime}</dt>
+                    <dd>
+                      {formatDuration(item.executionElapsedSeconds, locale)}
+                    </dd>
+                  </>
+                )}
+                {typeof item.executionBudgetSeconds === "number" && (
+                  <>
+                    <dt>{copy.executionBudget}</dt>
+                    <dd>
+                      {formatDuration(item.executionBudgetSeconds, locale)}
+                    </dd>
+                  </>
+                )}
+                {typeof item.generationAttemptCount === "number" && (
+                  <>
+                    <dt>{copy.generationAttempts}</dt>
+                    <dd>{item.generationAttemptCount}</dd>
+                  </>
+                )}
               </dl>
               {item.error && (
                 <div className="guided-onboarding__disabled-reason">
@@ -900,11 +935,16 @@ function RepositoryList({
 
 const REPOSITORY_ERROR_CODES = new Set([
   "ANALYSIS_FAILED",
+  "ANALYSIS_TIMEOUT",
+  "ARCHIVE_TOO_LARGE",
+  "ARCHIVE_INVALID",
+  "ARCHIVE_UNSAFE",
   "CANCELLED",
   "CONCURRENCY_LIMIT",
   "CONFIG_INVALID",
   "GENERATION_DISPATCHED_INTERRUPTED",
   "GITHUB_ERROR",
+  "GITHUB_TIMEOUT",
   "GITHUB_RATE_LIMITED",
   "MODEL_UNAVAILABLE",
   "NOT_FOUND",
@@ -918,6 +958,7 @@ const REPOSITORY_ERROR_CODES = new Set([
 const REPOSITORY_ERROR_REASONS = new Set([
   "NO_ELIGIBLE_CONTENT",
   "PROVIDER_OUTPUT_SCHEMA_INVALID",
+  "PROVIDER_OUTPUT_LIMIT_REACHED",
   "PROVIDER_EVIDENCE_ID_INVALID",
   "PROVIDER_PERSONAL_INFERENCE_REJECTED",
 ]);
@@ -941,6 +982,8 @@ function repositoryErrorMessage(
         "找不到符合收錄規則的可分析來源檔案；請調整 include/exclude 後重新分析。",
       PROVIDER_OUTPUT_SCHEMA_INVALID:
         "聊天模型已回覆，但內容不符合分析 JSON 格式；請確認模型支援結構化輸出後重試。",
+      PROVIDER_OUTPUT_LIMIT_REACHED:
+        "模型因輸出 token 上限停止，分析尚未完成；請檢查分析上限與模型容量後重試，或繼續手動編輯。",
       PROVIDER_EVIDENCE_ID_INVALID:
         "聊天模型引用了本次未提供的證據 ID；結果已被安全驗證拒絕。",
       PROVIDER_PERSONAL_INFERENCE_REJECTED:
@@ -951,6 +994,8 @@ function repositoryErrorMessage(
         "No analyzable source matched the include/exclude rules. Adjust the rules and run analysis again.",
       PROVIDER_OUTPUT_SCHEMA_INVALID:
         "The chat model replied, but its content did not match the analysis JSON schema. Verify structured-output support and try again.",
+      PROVIDER_OUTPUT_LIMIT_REACHED:
+        "The model stopped at its output token limit before analysis completed. Check the analysis limit and model capacity, then retry or continue editing manually.",
       PROVIDER_EVIDENCE_ID_INVALID:
         "The chat model cited an evidence ID that was not supplied for this analysis, so validation rejected the result.",
       PROVIDER_PERSONAL_INFERENCE_REJECTED:
@@ -962,11 +1007,17 @@ function repositoryErrorMessage(
   const code = safeRepositoryErrorCode(error.code);
   const codeMessages: Record<Locale, Record<string, string>> = {
     "zh-TW": {
-      CONFIG_INVALID: "來源選擇或索引設定無法產生分析內容。",
+      CONFIG_INVALID: "來源、索引或模型 context 設定無法支援此次分析。",
       PROVIDER_ERROR: "聊天模型呼叫或回傳內容驗證失敗。",
-      PROVIDER_TIMEOUT: "聊天模型未在時限內完成。",
+      PROVIDER_TIMEOUT: "模型服務在此階段的無活動期限內沒有回應。",
+      ANALYSIS_TIMEOUT: "此 repository 已達整體分析安全上限。",
+      ARCHIVE_TOO_LARGE:
+        "Repository 封存檔超過目前設定的總大小或項目數安全上限。",
+      ARCHIVE_INVALID: "GitHub 回傳的 repository 封存檔無法解析。",
+      ARCHIVE_UNSAFE: "Repository 封存檔包含不安全的路徑或項目類型。",
       MODEL_UNAVAILABLE: "分析所需的模型目前無法使用。",
       GITHUB_ERROR: "無法從 GitHub 取得此 repository。",
+      GITHUB_TIMEOUT: "GitHub 在設定的無活動期限內沒有傳回資料。",
       GITHUB_RATE_LIMITED: "GitHub 目前限制新的請求。",
       RATE_LIMITED: "模型服務目前限制新的請求。",
       CONCURRENCY_LIMIT: "分析並行容量目前已滿。",
@@ -980,13 +1031,24 @@ function repositoryErrorMessage(
     },
     en: {
       CONFIG_INVALID:
-        "The source selection or index configuration produced no analysis content.",
+        "The source, index, or model context configuration cannot support this analysis.",
       PROVIDER_ERROR:
         "The chat-model request or returned content failed validation.",
-      PROVIDER_TIMEOUT: "The chat model did not finish within the time limit.",
+      PROVIDER_TIMEOUT:
+        "The model service did not respond within this stage's inactivity timeout.",
+      ANALYSIS_TIMEOUT:
+        "This repository reached the overall analysis safety ceiling.",
+      ARCHIVE_TOO_LARGE:
+        "The repository archive exceeded the configured total-size or entry-count safety ceiling.",
+      ARCHIVE_INVALID:
+        "The repository archive returned by GitHub could not be parsed.",
+      ARCHIVE_UNSAFE:
+        "The repository archive contains an unsafe path or entry type.",
       MODEL_UNAVAILABLE:
         "A model required for analysis is currently unavailable.",
       GITHUB_ERROR: "RepoNPC could not retrieve this repository from GitHub.",
+      GITHUB_TIMEOUT:
+        "GitHub returned no data within the configured inactivity timeout.",
       GITHUB_RATE_LIMITED: "GitHub is currently limiting new requests.",
       RATE_LIMITED: "The model service is currently limiting new requests.",
       CONCURRENCY_LIMIT: "Analysis concurrency is currently full.",
@@ -1060,6 +1122,7 @@ function repositoryStageLabel(
       generating: "產生分析",
       validating: "驗證結果",
       cleaning_up: "清除暫存資料",
+      failed: "分析未完成",
       complete: "已完成",
     },
     en: {
@@ -1072,6 +1135,7 @@ function repositoryStageLabel(
       generating: "Generating analysis",
       validating: "Validating result",
       cleaning_up: "Cleaning up staging",
+      failed: "Analysis failed",
       complete: "Complete",
     },
   };

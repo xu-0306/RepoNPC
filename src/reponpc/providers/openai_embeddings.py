@@ -59,6 +59,7 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
         allow_dimension_discovery: bool = False,
         query_prefix: str = "",
         passage_prefix: str = "",
+        request_timeout_seconds: float = _REQUEST_TIMEOUT_SECONDS,
     ) -> None:
         if not isinstance(base_url, str) or not base_url:
             raise ValueError("embedding base URL must be non-empty")
@@ -78,6 +79,8 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
             raise ValueError("embedding API key must be text")
         if not isinstance(allow_private_http, bool):
             raise ValueError("private HTTP policy must be boolean")
+        if isinstance(request_timeout_seconds, bool) or request_timeout_seconds <= 0:
+            raise ValueError("embedding request timeout must be positive")
 
         self._model = model
         self._identity = identity
@@ -86,6 +89,7 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
         self._transport = transport or UrllibProviderHttpTransport()
         self._api_key = api_key
         self._origin = ProviderOrigin(base_url, allow_private_http)
+        self._request_timeout_seconds = float(request_timeout_seconds)
 
     def __repr__(self) -> str:
         # Keep the credential out of diagnostics while retaining useful model
@@ -167,7 +171,7 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
                 self._origin.endpoint("embeddings"),
                 headers=self._headers({"Content-Type": "application/json"}),
                 body=_json_bytes(request),
-                timeout=_REQUEST_TIMEOUT_SECONDS,
+                timeout=self._request_timeout_seconds,
             )
         except ProviderError:
             raise

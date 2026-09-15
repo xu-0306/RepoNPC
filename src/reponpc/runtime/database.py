@@ -311,8 +311,8 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
                 execution_started_at TEXT,
                 execution_elapsed_seconds INTEGER NOT NULL DEFAULT 0
                     CHECK(execution_elapsed_seconds >= 0),
-                execution_budget_seconds INTEGER NOT NULL DEFAULT 120
-                    CHECK(execution_budget_seconds BETWEEN 1 AND 600),
+                execution_budget_seconds INTEGER NOT NULL DEFAULT 1800
+                    CHECK(execution_budget_seconds BETWEEN 1 AND 7200),
                 attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0),
                 generation_attempt_count INTEGER NOT NULL DEFAULT 0
                     CHECK(generation_attempt_count >= 0),
@@ -893,6 +893,163 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
                     'PROVIDER_EVIDENCE_ID_INVALID',
                     'PROVIDER_PERSONAL_INFERENCE_REJECTED'
                 ))
+            """,
+        ),
+    ),
+    Migration(
+        version=24,
+        name="analysis_batch_output_limit_reason",
+        statements=(
+            # SQLite cannot alter a CHECK expression in place. Rebuild the
+            # parent and its event child in one migration transaction while
+            # preserving every row and keeping foreign-key enforcement on.
+            """
+            CREATE TEMP TABLE analysis_batch_events_sequence_v24 AS
+            SELECT seq FROM sqlite_sequence WHERE name = 'analysis_batch_events'
+            """,
+            "ALTER TABLE analysis_batch_events RENAME TO analysis_batch_events_v24",
+            "ALTER TABLE analysis_batch_items RENAME TO analysis_batch_items_v23",
+            """
+            CREATE TABLE analysis_batch_items_new (
+                item_id TEXT PRIMARY KEY
+                    CHECK(length(item_id) BETWEEN 1 AND 64),
+                batch_id TEXT NOT NULL REFERENCES analysis_batches(batch_id)
+                    ON DELETE CASCADE,
+                position INTEGER NOT NULL CHECK(position >= 0),
+                repository_slug TEXT NOT NULL CHECK(length(repository_slug) BETWEEN 3 AND 200),
+                requested_ref TEXT CHECK(requested_ref IS NULL OR length(requested_ref) <= 256),
+                selection_hash TEXT NOT NULL
+                    CHECK(length(selection_hash) = 64
+                          AND selection_hash NOT GLOB '*[^0-9a-f]*'),
+                resolved_commit_sha TEXT
+                    CHECK(resolved_commit_sha IS NULL OR (
+                        length(resolved_commit_sha) = 40
+                        AND resolved_commit_sha NOT GLOB '*[^0-9a-f]*'
+                    )),
+                state TEXT NOT NULL CHECK(state IN (
+                    'queued', 'resolving_commit', 'fetching_source', 'filtering',
+                    'indexing', 'embedding', 'generating', 'validating', 'cleaning_up',
+                    'complete', 'waiting_rate_limit', 'waiting_reconnection',
+                    'needs_retry_confirmation', 'failed', 'cancelled'
+                )),
+                resume_state TEXT CHECK(resume_state IS NULL OR resume_state IN (
+                    'resolving_commit', 'fetching_source', 'filtering', 'indexing',
+                    'embedding', 'generating', 'validating', 'cleaning_up'
+                )),
+                lease_id TEXT,
+                execution_started_at TEXT,
+                execution_elapsed_seconds INTEGER NOT NULL DEFAULT 0
+                    CHECK(execution_elapsed_seconds >= 0),
+                execution_budget_seconds INTEGER NOT NULL DEFAULT 1800
+                    CHECK(execution_budget_seconds BETWEEN 1 AND 7200),
+                attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0),
+                generation_attempt_count INTEGER NOT NULL DEFAULT 0
+                    CHECK(generation_attempt_count >= 0),
+                result_json TEXT,
+                error_code TEXT,
+                retry_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                selection_json TEXT NOT NULL DEFAULT '{}',
+                error_reason TEXT CHECK(error_reason IS NULL OR error_reason IN (
+                    'NO_ELIGIBLE_CONTENT',
+                    'PROVIDER_OUTPUT_SCHEMA_INVALID',
+                    'PROVIDER_OUTPUT_LIMIT_REACHED',
+                    'PROVIDER_EVIDENCE_ID_INVALID',
+                    'PROVIDER_PERSONAL_INFERENCE_REJECTED'
+                )),
+                UNIQUE(batch_id, position),
+                UNIQUE(batch_id, repository_slug)
+            )
+            """,
+            """
+            INSERT INTO analysis_batch_items_new(
+              item_id, batch_id, position, repository_slug, requested_ref,
+              selection_hash, resolved_commit_sha, state, resume_state, lease_id,
+              execution_started_at, execution_elapsed_seconds, execution_budget_seconds,
+              attempt_count, generation_attempt_count, result_json, error_code, retry_at,
+              created_at, updated_at, selection_json, error_reason
+            )
+            SELECT
+              item_id, batch_id, position, repository_slug, requested_ref,
+              selection_hash, resolved_commit_sha, state, resume_state, lease_id,
+              execution_started_at, execution_elapsed_seconds, execution_budget_seconds,
+              attempt_count, generation_attempt_count, result_json, error_code, retry_at,
+              created_at, updated_at, selection_json, error_reason
+            FROM analysis_batch_items_v23
+            """,
+            "ALTER TABLE analysis_batch_items_new RENAME TO analysis_batch_items",
+            """
+            CREATE TABLE analysis_batch_events_new (
+                event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                batch_id TEXT NOT NULL REFERENCES analysis_batches(batch_id)
+                    ON DELETE CASCADE,
+                item_id TEXT REFERENCES analysis_batch_items(item_id)
+                    ON DELETE CASCADE,
+                event_type TEXT NOT NULL CHECK(length(event_type) BETWEEN 1 AND 64),
+                payload_json TEXT NOT NULL,
+                occurred_at TEXT NOT NULL
+            )
+            """,
+            """
+            INSERT INTO analysis_batch_events_new(
+              event_id, batch_id, item_id, event_type, payload_json, occurred_at
+            )
+            SELECT event_id, batch_id, item_id, event_type, payload_json, occurred_at
+            FROM analysis_batch_events_v24
+            """,
+            "DROP TABLE analysis_batch_events_v24",
+            "DROP TABLE analysis_batch_items_v23",
+            "ALTER TABLE analysis_batch_events_new RENAME TO analysis_batch_events",
+            """
+            CREATE INDEX analysis_batch_items_schedule_idx
+            ON analysis_batch_items(batch_id, state, retry_at, position)
+            """,
+            """
+            CREATE INDEX analysis_batch_events_replay_idx
+            ON analysis_batch_events(batch_id, event_id)
+            """,
+            """
+            UPDATE sqlite_sequence
+            SET seq = max(
+                seq,
+                COALESCE(
+                    (SELECT max(saved.seq) FROM analysis_batch_events_sequence_v24 AS saved),
+                    seq
+                )
+            )
+            WHERE name = 'analysis_batch_events'
+            """,
+            """
+            INSERT INTO sqlite_sequence(name, seq)
+            SELECT 'analysis_batch_events', seq
+            FROM analysis_batch_events_sequence_v24
+            WHERE NOT EXISTS (
+                SELECT 1 FROM sqlite_sequence WHERE name = 'analysis_batch_events'
+            )
+            """,
+            "DROP TABLE analysis_batch_events_sequence_v24",
+        ),
+    ),
+    Migration(
+        version=25,
+        name="flexible_analysis_execution_budget",
+        statements=(
+            # SQLite cannot alter an existing CHECK constraint. Preserve the
+            # previous value under an inert legacy name and add the widened
+            # active column without rebuilding the event foreign-key graph.
+            """
+            ALTER TABLE analysis_batch_items
+            RENAME COLUMN execution_budget_seconds TO legacy_execution_budget_seconds
+            """,
+            """
+            ALTER TABLE analysis_batch_items
+            ADD COLUMN execution_budget_seconds INTEGER NOT NULL DEFAULT 1800
+                CHECK(execution_budget_seconds BETWEEN 1 AND 7200)
+            """,
+            """
+            UPDATE analysis_batch_items
+            SET execution_budget_seconds = legacy_execution_budget_seconds
             """,
         ),
     ),

@@ -109,4 +109,47 @@ describe("ModelConnectionPanel", () => {
     expect(markup).not.toContain("Environment embedding");
     expect(markup).not.toContain("環境預設連線（資料查找）");
   });
+
+  it("renders one actionable alert and associates URL failures with the field", () => {
+    const markup = renderToStaticMarkup(
+      <ModelConnectionPanel
+        connections={[]}
+        error="The service was not saved. Correct the URL and retry."
+        errorCode="INVALID_PROVIDER_URL"
+        locale="en"
+        notice=""
+        onClearError={vi.fn()}
+        onCreate={vi.fn()}
+        onDelete={vi.fn()}
+        onRefresh={vi.fn()}
+        onUpdate={vi.fn()}
+        pending={false}
+      />,
+    );
+
+    expect(markup.match(/role="alert"/g)).toHaveLength(1);
+    expect(markup).toContain("Service change not completed");
+    expect(markup).toContain("Correct the URL and retry");
+    expect(markup).toContain('aria-describedby="model-connection-url-error"');
+    expect(markup).toContain('aria-invalid="true"');
+  });
+
+  it("announces refresh failures as errors instead of success status", () => {
+    const markup = renderToStaticMarkup(
+      <ModelConnectionPanel
+        connections={[]}
+        error=""
+        locale="zh-TW"
+        notice="服務清單更新失敗"
+        onCreate={vi.fn()}
+        onDelete={vi.fn()}
+        onRefresh={vi.fn()}
+        onUpdate={vi.fn()}
+        pending={false}
+      />,
+    );
+
+    expect(markup).toContain('<p role="alert">服務清單更新失敗</p>');
+    expect(markup).not.toContain('<p role="status">服務清單更新失敗</p>');
+  });
 });

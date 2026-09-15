@@ -6,12 +6,16 @@
 
 **Owner-approved session-resume amendment (2026-09-13, ADR-033; FR-017/029/031, AC-049/050):** Reloading an authenticated admin page first resumes the still-valid HttpOnly-cookie session through strict same-origin `POST /api/admin/session/resume`. It returns only memory-held session-bound CSRF and expiry metadata with `Cache-Control: no-store`, consumes no launcher grant, and preserves generic failure, expiry, revocation, host/origin, and deployment-profile recovery behavior.
 
+**Owner-approved same-service URL and actionable-error amendment (2026-09-14, ADR-035; FR-039/040, NFR-003, AC-055/057):** Same-provider URL edits retain a key only when normalized scheme, hostname, and effective port are unchanged; a path-only `/v1` correction is allowed, while provider/origin changes require replace/remove intent. Every connection create/update/delete/refresh failure yields one operation-scoped accessible alert with safe cause, preservation state, recovery action, affected-field association, focus, and a safe request ID when available. Submitted keys still clear and the alert explains re-entry.
+
+**Owner-approved chat-probe grace amendment (2026-09-14, ADR-036; FR-038/040, AC-054/057):** Chat probe acceptance uses one provider request with a 10-second baseline plus one automatic 10-second grace window. A response completing during the grace window passes normal response validation. Timeout is reported only after the 20-second total deadline, with no second request, activation, or provider/model fallback.
+
 2026-09-12 UI/event follow-up evidence (partial AC-019/023/025/038/040/057/058): shared checkbox semantics and responsive alignment, select font inheritance, status-card and long-text reflow, credential-intent event ordering, account discovery pagination reset with collected projects preserved, revision-bound installed-model lists with stale-response rejection, raw-draft preview invalidation, and suggestion-input focus. See [dated UI/system event audit](UI_SYSTEM_EVENT_AUDIT_2026-09-12.md) and `tests/browser/`. The 40 layout cases use root-font enlargement, not native browser zoom; synthetic browser tests and 121 frontend tests do not constitute full AC, live-provider, screen-reader, or novice-walkthrough acceptance.
 
 2026-09-12 owner-approved novice setup regression scope (FR-038/039/040, AC-054/055/057/058; bilingual AC-023): optional embedding dimensions remain unknown until an explicit successful two-sample test; unknown/failed/stale profiles cannot be activated or selected as ready. Existing dimensions, selections, switch intents and foreign keys survive runtime migration 19, including rollback on migration failure. Name-only service edits retain protected endpoint/key and revision; destination changes require explicit credential intent. Newly entered keys clear after submission and form closure. Scoped Ollama listing is explicit and distinguishes failure from empty. Successful operation results survive a failed/stale list refresh. These focused checks do not constitute full v1 or release acceptance.
 
-**Document status:** Approved through 0.2.6
-**Applies to:** RepoNPC v1 Technical Specification 0.2.6
+**Document status:** Approved through 0.3.0
+**Applies to:** RepoNPC v1 Technical Specification 0.3.0
 **Rule:** Every criterion is required unless its mapped requirement is changed through an approved specification update.
 
 ## 1. How acceptance works
@@ -355,11 +359,13 @@ The following criteria are normative release requirements under the owner-approv
 
 ### AC-039 — Analysis is selected-only, batch-backed, and evidence-safe
 
+**0.2.7 / ADR-034 regression, amended by 0.3.0 / ADR-037:** With `REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS` absent, actual analysis generation requests 8,192 tokens when provider/context capacity permits. An explicit 16,384 is accepted; non-positive, non-integer and larger values are rejected safely. Visitor/probe output remains independent and now uses the ADR-037 4,096-default / 8,192-maximum policy; contribution suggestions remain 700. Both analysis paths reserve full prompt, evidence/IDs, schema/framing and output before generation; insufficient context triggers no chat call. A returned `length` termination or adapter empty-output/length diagnostic fails with `PROVIDER_ERROR` / `PROVIDER_OUTPUT_LIMIT_REACHED` before parsing, even for valid JSON, without retry, raw-output retention or successful cache insertion. Normal complete bilingual output still passes canonical/evidence/person validation. Exercise OpenAI-compatible and Ollama transports, a smaller actual provider capability and clean application wiring; synthetic results do not establish live-model quality.
+
 **Maps to:** FR-027, FR-028, FR-008 through FR-012, NFR-001, NFR-002, NFR-014
 
 - **Given** confirmed/unconfirmed repositories, conventional directory layouts, flat repositories with common root-level source files, excluded/secret/symlink/binary/generated/oversized content, repository prompt injection, model outage/timeout/invalid output, cancellation/disconnect, legacy one-item requests, and two concurrent attempts by the sole owner,
 - **When** the owner explicitly analyzes repositories,
-- **Then** only confirmed public repositories enter analysis, every item pins one full commit and reuses production exclusions/chunking/evidence/provider validation, an empty include selection covers documented directories/manifests and common root-level source extensions without bypassing mandatory exclusions, only one owner-scoped durable batch is active, and the legacy one-item route creates a one-item batch instead of bypassing batch policy. The 120-second active-item and configured provider deadlines apply; every terminal/recovery path removes unique staging; no archive, repository body, prompt, provider body, incomplete output, or path becomes durable; only bounded safe progress, closed-set failure reasons, and validated normalized results may persist; no fallback occurs; and returned results keep `REPOSITORY_FACT` separate from supported `MODEL_INFERENCE`.
+- **Then** only confirmed public repositories enter analysis, every item pins one full commit and reuses production exclusions/chunking/evidence/provider validation, an empty include selection covers documented directories/manifests and common root-level source extensions without bypassing mandatory exclusions, only one owner-scoped durable batch is active, and the legacy one-item route creates a one-item batch instead of bypassing batch policy. The configurable bounded active-item and provider deadlines in AC-061 apply; every terminal/recovery path removes unique staging; no archive, repository body, prompt, provider body, incomplete output, or path becomes durable; only bounded safe progress, closed-set failure reasons, and validated normalized results may persist; no fallback occurs; and returned results keep `REPOSITORY_FACT` separate from supported `MODEL_INFERENCE`.
 
 ### AC-040 — Personal claims require confirmation and the guided flow remains usable
 
@@ -549,6 +555,8 @@ The 2026-08-30 usability clarification strengthens existing FR-025, FR-027, FR-0
 
 ### AC-045 — Durable analysis batches preserve safe bounded progress
 
+**0.2.7 / ADR-034 regression:** Migration 24 preserves preexisting batch items, results, events, foreign keys and indexes while permitting the new fixed output-limit reason; injected migration failure rolls back. Snapshots after reload preserve the reason, both locales distinguish it from schema mismatch, and unknown/raw provider values remain excluded. A truncated result never reports success or causes automatic regeneration.
+
 **Maps to:** FR-033, FR-027, NFR-001, NFR-002, NFR-012, NFR-014
 
 - **Given** duplicate idempotency requests, reload/SSE reconnect, pause/resume/cancel, partial failures, expired plans, restart during every stage, rate waiting, provider contention, and interrupted generation fixtures,
@@ -559,7 +567,7 @@ The 2026-08-30 usability clarification strengthens existing FR-025, FR-027, FR-0
 
 **Maps to:** FR-033, FR-002, FR-006, FR-012, NFR-001, NFR-002, NFR-011
 
-- **Given** otherwise equal batches whose commit, include/exclude policy, parser version, embedding identity, chat model, prompt version, output-schema version, or validation version differs,
+- **Given** otherwise equal batches whose commit, include/exclude policy, parser version, embedding identity, chat model, prompt version, output-schema version, validation/generation policy version, analysis output budget, or effective provider output/context capacity differs,
 - **When** cache prediction/reuse and expiry cleanup run,
 - **Then** only checksummed/integrity-checked compatible derived indexes and validated normalized results are reused; every identity change misses the corresponding cache; raw source/archive/prompt/provider body never persists; and TTL/LRU cleanup removes expired entries without changing active work or prior validated results.
 
@@ -603,7 +611,7 @@ Diagnostic regression (owner correction, 2026-09-12; AC-054/055/057 and bilingua
 
 - **Given** recognizable synthetic key/private-URL canaries, host-managed defaults, forged/expired sessions, absent CSRF, cross-origin calls, hostile URL/redirect/DNS fixtures, changed destinations, empty/replace/remove credential intents, and unavailable/corrupt secret storage,
 - **When** connections are created, tested, read, edited, deleted, backed up, restored, and rejected,
-- **Then** only authenticated same-origin ingress accepts typed values; the browser never directly contacts providers; stored values never appear in read/error responses, public YAML, bundles, logs, history, browser storage, exports, or recorded screenshots; host-managed editing requires a complete replacement without environment URL readback; key inputs clear after submission/exit; storage is protected and fails closed; changing a destination never forwards an old key; reference cleanup preserves live revisions; and GitHub/authentication secrets cannot be borrowed. URL policy covers normalized IPv4/IPv6, forbidden ranges, redirects, and DNS changes at connection time.
+- **Then** only authenticated same-origin ingress accepts typed values; the browser never directly contacts providers; stored values never appear in read/error responses, public YAML, bundles, logs, history, browser storage, exports, or recorded screenshots; host-managed editing requires a complete replacement without environment URL readback; key inputs clear after submission/exit; storage is protected and fails closed; a same-provider path-only edit with unchanged normalized scheme/hostname/effective-port may retain the old key, but provider or origin changes never forward it without explicit replacement/removal; reference cleanup preserves live revisions; and GitHub/authentication secrets cannot be borrowed. URL policy covers normalized IPv4/IPv6, forbidden ranges, redirects, and DNS changes at connection time.
 
 ### AC-056 - Model changes preserve active service and recover after restart
 
@@ -620,7 +628,7 @@ Diagnostic regression (owner correction, 2026-09-12; AC-054/055/057 and bilingua
 
 - **Given** both locales, first-time and returning owners, keyboard/screen-reader use, 375/768/1024/1440-pixel widths, 200% zoom, reduced motion, and long model IDs/errors,
 - **When** they select a service, enter address/key/model, test, edit, cancel, activate/reindex, skip setup, and return to their portfolio draft,
-- **Then** the primary flow asks only service/address/key/model information, lets the owner edit or delete environment defaults (including a non-default Ollama port), updates safe dependent model settings as part of the same connection save rather than requiring another profile edit-save, distinguishes chat from search and connection success from publication, never requires dimension/reference jargon, provides contextual recovery and manual continuation, preserves unrelated work, keeps Ollama catalog/actions conditional, and has no overlap, clipped controls, untranslated status keys, lost focus, or color-only status. Automated browser/accessibility evidence plus a dated novice walkthrough are required; Figma is not required.
+- **Then** the primary flow asks only service/address/key/model information, lets the owner edit or delete environment defaults (including a non-default Ollama port), allows a same-origin path correction such as `/v1` without unnecessary key re-entry, updates safe dependent model settings as part of the same connection save rather than requiring another profile edit-save, distinguishes chat from search and connection success from publication, never requires dimension/reference jargon, provides contextual recovery and manual continuation, preserves unrelated work, keeps Ollama catalog/actions conditional, and has no overlap, clipped controls, untranslated status keys, lost focus, duplicated/silent connection failure, or color-only status. Each failed connection operation identifies what failed, a safe cause, preserved state, recovery action, and cleared-key re-entry requirement; field errors are associated and the summary receives focus. Automated browser/accessibility evidence plus a dated novice walkthrough are required; Figma is not required.
 
 ### AC-058 - Model-first AI flow and immediate manual flow
 
@@ -653,6 +661,15 @@ Version 0.2.3 additionally extends AC-040/AC-053/AC-056/AC-057 with section 11.6
 
 Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding correction. A connection update is one owner action for editable dependent candidates, but test/use/publication remain explicit actions and protected historical work remains pinned. Runtime migration 22 is upgrade compatibility evidence, not live-provider or full release acceptance by itself.
 
+### AC-061 - Flexible analysis budgets support large repositories without removing safety ceilings
+
+**Maps to:** FR-027, FR-033, FR-041, NFR-003, NFR-011, NFR-014
+
+- **Given** one or more repositories contending for archive, index and provider capacity; a slow but responsive configured model; transient timeout/rate/unavailable failures; an archive with an oversized individual file; and deployments using default, valid override and invalid relationship values,
+- **When** the owner starts analysis, observes progress, waits, retries or continues manually,
+- **Then** scheduler semaphore waiting does not spend active repository time; the default active/provider/GitHub budgets are 1,800/300/60 seconds and remain bounded by 7,200/3,600/300-second ceilings; only the same frozen provider/model is retried for transient failures up to three attempts; public chat requests 4,096 tokens by default and never more than 8,192/provider/context capacity; analysis remains independently capped at 8,192/16,384; individual archive members over the materialization threshold are body-free `FILE_TOO_LARGE` skips while unsafe paths/types and total archive ceilings fail closed; snapshots and both locales show the specific terminal code, active elapsed time, budget and generation-attempt count; invalid cross-limit configuration prevents startup without exposing secrets.
+- **Verification:** environment/Compose contract tests, migration-25 preservation/rollback, deterministic semaphore-clock tests, archive skip and zip-bomb regressions, same-provider retry/no-fallback tests, frontend unit/accessibility checks, production build and a controlled slow-provider browser run. Buffered-provider evidence must be labeled as socket-inactivity behavior rather than token-level streaming evidence.
+
 ## 11. Approval result format
 
 Release acceptance MUST report:
@@ -672,4 +689,4 @@ The current machine-readable evidence ledger is `release-evidence/acceptance-led
 
 **0.2.3 evidence boundary (2026-09-10):** Release coverage must extend through AC-060, excluding legacy AC-041 through AC-043. The auditor still enumerates only AC-052 at this review. Extend both document coverage and ledger validation, with missing/duplicate-new-ID tests, during the implementation package. Source presence is not full acceptance for AC-053 through AC-057 either.
 
-Chat parser regression (2026-09-12, AC-054/055/057 and AC-023): test OpenAI-compatible and Ollama HTTP-200 responses with malformed JSON, invalid message/content/termination/usage, and empty or partial output stopped by `length`. The retained diagnostic identifies the application check and excludes arbitrary body canaries. A configured output budget above 32 can complete the synthetic reasoning-budget case; a configured smaller budget remains bounded and fails honestly. One explicit test means one call, no activation and no hidden retry. Successful retest clears diagnostics. Both languages show the same source-labelled check, while actual HTTP error prose stays unmodified. A synthetic regression does not establish the cause of an unreplayed live gateway failure.
+Chat parser regression (2026-09-12, amended 2026-09-14; AC-054/055/057 and AC-023): test OpenAI-compatible and Ollama HTTP-200 responses with malformed JSON, invalid message/content/termination/usage, and empty or partial output stopped by `length`. The retained diagnostic identifies the application check and excludes arbitrary body canaries. A configured output budget above 32 can complete the synthetic reasoning-budget case; a configured smaller budget remains bounded and fails honestly. One explicit test means one provider call with a 10-second baseline plus one 10-second grace window, no activation and no hidden retry. Successful retest clears diagnostics. Both languages show the same source-labelled check, while actual HTTP error prose stays unmodified. A synthetic regression does not establish the cause of an unreplayed live gateway failure.

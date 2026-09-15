@@ -23,4 +23,5 @@ class ProviderResponseError(ProviderError):
         if not isinstance(issue, ResponseIssue):
             raise TypeError("issue must be a ResponseIssue")
         super().__init__(ProviderFailureCode.INVALID_RESPONSE)
+        self.issue = issue
         self.diagnostic_message = f"RepoNPC response check: {issue.value}"

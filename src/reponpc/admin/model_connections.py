@@ -442,9 +442,9 @@ class ModelConnectionRegistry:
         if base_url is None:
             raise ModelConnectionError("VALIDATION_ERROR")
         if values.credential_action == "retain":
-            destination_changed = (
-                values.provider != current.provider or base_url != current_secret.base_url
-            )
+            destination_changed = values.provider != current.provider or _provider_origin(
+                base_url
+            ) != _provider_origin(current_secret.base_url)
             if destination_changed and (
                 current_secret.api_key is not None or current.source != "host-managed"
             ):
@@ -659,6 +659,16 @@ def validate_provider_base_url(base_url: str | None, *, provider: str) -> None:
         raise ModelConnectionError("INVALID_PROVIDER_URL")
     if parsed.scheme == "http" and not _private_provider_name(hostname):
         raise ModelConnectionError("INSECURE_PROVIDER_URL")
+
+
+def _provider_origin(base_url: str) -> tuple[str, str, int]:
+    """Return the normalized security origin of an already validated provider URL."""
+
+    parsed = urlsplit(base_url)
+    scheme = parsed.scheme.casefold()
+    hostname = (parsed.hostname or "").rstrip(".").casefold()
+    port = parsed.port if parsed.port is not None else (443 if scheme == "https" else 80)
+    return scheme, hostname, port
 
 
 def validate_resolved_provider_addresses(

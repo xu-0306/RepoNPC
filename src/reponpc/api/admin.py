@@ -1768,6 +1768,8 @@ def _onboarding_error(request: Request, error: GuidedOnboardingError) -> JSONRes
         "MODEL_UNAVAILABLE": 503,
         "SERVICE_NOT_READY": 503,
         "PROVIDER_TIMEOUT": 504,
+        "ANALYSIS_TIMEOUT": 504,
+        "GITHUB_TIMEOUT": 504,
         "CANCELLED": 499,
     }
     details = {"reason": error.reason} if error.reason else {}
@@ -2020,6 +2022,9 @@ def _batch_snapshot_payload(snapshot: BatchSnapshot) -> dict[str, object]:
                 "error_code": item.error_code,
                 "error_reason": item.error_reason,
                 "retry_at": item.retry_at,
+                "execution_elapsed_seconds": item.execution_elapsed_seconds,
+                "execution_budget_seconds": item.execution_budget_seconds,
+                "generation_attempt_count": item.generation_attempt_count,
                 "result": item.result,
             }
             for item in snapshot.items

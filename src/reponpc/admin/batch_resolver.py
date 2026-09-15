@@ -957,14 +957,18 @@ class BatchPreflightPlanner:
         resolver: GitHubRESTMetadataResolver,
         limiter: GitHubRateLimiter,
         plan_ttl: timedelta = DEFAULT_PREFLIGHT_PLAN_TTL,
+        maximum_generation_attempts: int = 3,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
         plan_id_factory: Callable[[], str] = lambda: secrets.token_urlsafe(24),
     ) -> None:
         if plan_ttl <= timedelta(0):
             raise ValueError("preflight plan TTL must be positive")
+        if not 1 <= maximum_generation_attempts <= 3:
+            raise ValueError("generation attempts must be between one and three")
         self._resolver = resolver
         self._limiter = limiter
         self._plan_ttl = plan_ttl
+        self._maximum_generation_attempts = maximum_generation_attempts
         self._now = now
         self._plan_id_factory = plan_id_factory
 
@@ -1036,7 +1040,7 @@ class BatchPreflightPlanner:
             secondary_retry_at=secondary_retry_at,
             provider_ready=provider.ready,
             server_capacity=capacity,
-            maximum_generation_attempts=1,
+            maximum_generation_attempts=self._maximum_generation_attempts,
             duration=duration,
             blockers=tuple(blockers),
             warnings=tuple(warnings),
@@ -1281,8 +1285,6 @@ def _append_archive_entry(
 ) -> tuple[list[tuple[str, int]], int]:
     if isinstance(size, bool) or size < 0:
         raise BatchResolverError("ARCHIVE_INVALID")
-    if size > limits.max_single_file_bytes:
-        raise BatchResolverError("ARCHIVE_TOO_LARGE")
     normalized = _validate_archive_path(name)
     if any(existing == normalized for existing, _ in entries):
         raise BatchResolverError("ARCHIVE_UNSAFE")
@@ -1368,7 +1370,14 @@ def _tar_archive_blobs(
                 raise BatchResolverError("ARCHIVE_UNSAFE")
             path = _archive_content_path(member.name, root)
             if member.size > limits.max_single_file_bytes:
-                raise BatchResolverError("ARCHIVE_TOO_LARGE")
+                blobs.append(
+                    RepositoryBlob(
+                        path=path,
+                        entry_kind=SourceEntryKind.OVERSIZED_FILE,
+                        size_bytes=member.size,
+                    )
+                )
+                continue
             handle = archive.extractfile(member)
             if handle is None:
                 raise BatchResolverError("ARCHIVE_INVALID")
@@ -1413,7 +1422,14 @@ def _zip_archive_blobs(
                 raise BatchResolverError("ARCHIVE_UNSAFE")
             path = _archive_content_path(info.filename, root)
             if info.file_size > limits.max_single_file_bytes:
-                raise BatchResolverError("ARCHIVE_TOO_LARGE")
+                blobs.append(
+                    RepositoryBlob(
+                        path=path,
+                        entry_kind=SourceEntryKind.OVERSIZED_FILE,
+                        size_bytes=info.file_size,
+                    )
+                )
+                continue
             with archive.open(info, mode="r") as handle:
                 content = _read_member_bytes(
                     handle,

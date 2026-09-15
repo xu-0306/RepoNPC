@@ -280,20 +280,20 @@ def _acceptance_coverage_record(root: Path) -> dict[str, Any]:
             "acceptance criteria document is missing or unreadable.",
         )
     found = {int(value) for value in re.findall(r"^###\s+AC-(\d{3})\b", text, re.MULTILINE)}
-    required = set(range(1, 61))
+    required = set(range(1, 62))
     missing = sorted(required - found)
     if missing:
         return _record(
             "acceptance-coverage",
             "blocked",
             {"path": relative, "missing": [f"AC-{value:03d}" for value in missing]},
-            "acceptance criteria coverage does not include AC-001 through AC-060.",
+            "acceptance criteria coverage does not include AC-001 through AC-061.",
         )
     return _record(
         "acceptance-coverage",
         "pass",
-        {"path": relative, "required": "AC-001 through AC-060"},
-        "acceptance criteria document enumerates AC-001 through AC-060.",
+        {"path": relative, "required": "AC-001 through AC-061"},
+        "acceptance criteria document enumerates AC-001 through AC-061.",
     )
 
 
@@ -339,7 +339,7 @@ def validate_acceptance_ledger(payload: object) -> list[str]:
     """Validate a machine-readable AC ledger without performing external checks.
 
     The validator is intentionally pure and returns bounded diagnostics suitable
-    for CI. Every AC-001..AC-060 entry must be present exactly once with an
+    for CI. Every AC-001..AC-061 entry must be present exactly once with an
     explicit status; source identity and environment metadata are mandatory.
     """
 
@@ -373,7 +373,7 @@ def validate_acceptance_ledger(payload: object) -> list[str]:
             errors.append(f"ledger status is invalid: {entry_id}")
         if not isinstance(entry.get("reason"), str) or not entry["reason"].strip():
             errors.append(f"ledger reason is missing: {entry_id}")
-    required = {f"AC-{index:03d}" for index in range(1, 61)}
+    required = {f"AC-{index:03d}" for index in range(1, 62)}
     for missing in sorted(required - seen):
         errors.append(f"missing ledger entry: {missing}")
     return errors

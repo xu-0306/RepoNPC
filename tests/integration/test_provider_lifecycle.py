@@ -14,6 +14,8 @@ from reponpc.api.public import SetupState
 from reponpc.config.environment import load_environment
 from reponpc.indexing.sources import EmbeddingIdentity
 from reponpc.main import (
+    _analysis_chat_capabilities,
+    _chat_provider_from_connection,
     _configure_provider_lifecycle,
     _environment_embedding_provider,
     create_app,
@@ -177,6 +179,45 @@ def test_production_assembly_wires_only_selected_ollama_adapters_and_configured_
     assert application.state.max_message_characters == 8
     assert application.state.max_history_messages == 2
     assert application.state.max_history_characters == 12
+
+
+def test_analysis_capability_is_separate_from_public_chat_output_capability(
+    tmp_path: Path,
+) -> None:
+    settings = load_environment(
+        {
+            "REPONPC_DATA_DIR": str(tmp_path),
+            "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
+            "REPONPC_CONFIG_REPOSITORY": "example/portfolio",
+            "REPONPC_INDEX_MANIFEST_URL": "https://raw.githubusercontent.com/example/portfolio/main/stable-manifest.json",
+            "REPONPC_CHAT_PROVIDER": "ollama",
+            "REPONPC_CHAT_MODEL": "fixture-chat",
+            "REPONPC_CHAT_BASE_URL": "http://127.0.0.1:11434",
+            "REPONPC_EMBEDDING_PROVIDER": "ollama",
+            "REPONPC_EMBEDDING_MODEL": "fixture-embed",
+            "REPONPC_EMBEDDING_BASE_URL": "http://127.0.0.1:11434",
+            "REPONPC_EMBEDDING_DIMENSION": "2",
+        },
+        secret_roots=(tmp_path,),
+    )
+    public = _chat_provider_from_connection(
+        settings,
+        settings.chat_provider,
+        settings.chat_model,
+        settings.chat_base_url,
+        None,
+    )
+    analysis = _chat_provider_from_connection(
+        settings,
+        settings.chat_provider,
+        settings.chat_model,
+        settings.chat_base_url,
+        None,
+        capabilities=_analysis_chat_capabilities(settings),
+    )
+
+    assert public.capabilities().max_output_tokens == 4096
+    assert analysis.capabilities().max_output_tokens == 8192
 
 
 def test_production_assembly_maps_vllm_to_private_openai_compatible_transport(

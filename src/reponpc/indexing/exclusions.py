@@ -18,6 +18,7 @@ class SourceEntryKind(StrEnum):
     """The limited source-entry types accepted by the index intake boundary."""
 
     REGULAR_FILE = "regular_file"
+    OVERSIZED_FILE = "oversized_file"
     SYMLINK = "symlink"
     SUBMODULE = "submodule"
     OTHER = "other"
@@ -308,6 +309,8 @@ def _valid_metadata(metadata: SourceMetadata) -> bool:
 
 
 def _entry_kind_reason(entry_kind: SourceEntryKind) -> ExclusionReason | None:
+    if entry_kind is SourceEntryKind.OVERSIZED_FILE:
+        return ExclusionReason.FILE_TOO_LARGE
     if entry_kind is SourceEntryKind.SYMLINK:
         return ExclusionReason.SYMLINK
     if entry_kind is SourceEntryKind.SUBMODULE:

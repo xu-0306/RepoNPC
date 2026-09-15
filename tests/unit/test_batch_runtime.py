@@ -47,12 +47,14 @@ def _request(
     key: str = "idempotency",
     selection: str = "selection",
     maximum_generation_attempts: int = 1,
+    execution_budget_seconds: int = 1800,
 ) -> BatchCreateRequest:
     return BatchCreateRequest(
         plan_id="plan-safe-id",
         selection_hash=_hash(selection),
         idempotency_key=key,
         maximum_generation_attempts=maximum_generation_attempts,
+        execution_budget_seconds=execution_budget_seconds,
         items=(
             BatchItemInput(
                 slug=slug,
@@ -141,7 +143,10 @@ def test_item_completion_transitions_to_durable_terminal_snapshot(tmp_path) -> N
     assert all("token" not in event.payload for event in events)
 
 
-def test_item_failure_reason_survives_snapshot_event_and_restart(tmp_path) -> None:
+@pytest.mark.parametrize(
+    "reason", ["PROVIDER_OUTPUT_SCHEMA_INVALID", "PROVIDER_OUTPUT_LIMIT_REACHED"]
+)
+def test_item_failure_reason_survives_snapshot_event_and_restart(tmp_path, reason: str) -> None:
     clock = Clock()
     database = RuntimeDatabase(tmp_path)
     database.initialize()
@@ -153,17 +158,17 @@ def test_item_failure_reason_survives_snapshot_event_and_restart(tmp_path) -> No
     store.fail_item(
         claimed,
         code="PROVIDER_ERROR",
-        reason="PROVIDER_OUTPUT_SCHEMA_INVALID",
+        reason=reason,
     )
 
     restarted = BatchRuntimeStore(database, now=clock)
     terminal = restarted.get_batch(batch.batch_id)
     assert terminal.items[0].error_code == "PROVIDER_ERROR"
-    assert terminal.items[0].error_reason == "PROVIDER_OUTPUT_SCHEMA_INVALID"
+    assert terminal.items[0].error_reason == reason
     assert restarted.events_after(batch.batch_id, after_event_id=0)[-2].payload == {
         "state": "failed",
         "error_code": "PROVIDER_ERROR",
-        "error_reason": "PROVIDER_OUTPUT_SCHEMA_INVALID",
+        "error_reason": reason,
     }
 
 
@@ -222,6 +227,30 @@ def test_retry_items_does_not_exceed_the_generation_attempt_limit(tmp_path) -> N
     assert store.claim_next_item(batch.batch_id) is None
 
 
+def test_explicit_retry_can_adopt_the_current_larger_execution_policy(tmp_path) -> None:
+    clock = Clock()
+    store = _store(tmp_path, clock)
+    batch, _ = store.create_batch(
+        _request(maximum_generation_attempts=1, execution_budget_seconds=120)
+    )
+    claimed = store.claim_next_item(batch.batch_id)
+    assert claimed is not None
+    store.advance_item(claimed, state="generating")
+    store.fail_item(claimed, code="PROVIDER_TIMEOUT")
+
+    retried = store.retry_items(
+        batch.batch_id,
+        execution_budget_seconds=1800,
+        maximum_generation_attempts=3,
+    )
+    reclaimed = store.claim_next_item(batch.batch_id)
+
+    assert retried.maximum_generation_attempts == 3
+    assert retried.items[0].execution_budget_seconds == 1800
+    assert reclaimed is not None
+    assert reclaimed.execution_budget_seconds == 1800
+
+
 def test_execution_elapsed_and_remaining_budget_survive_restart(tmp_path) -> None:
     clock = Clock()
     database = RuntimeDatabase(tmp_path)
@@ -238,7 +267,23 @@ def test_execution_elapsed_and_remaining_budget_survive_restart(tmp_path) -> Non
 
     assert resumed is not None
     assert resumed.execution_elapsed_seconds == 37
-    assert resumed.execution_budget_seconds == 83
+    assert resumed.execution_budget_seconds == 1763
+
+
+def test_scheduler_wait_is_excluded_from_active_execution_budget(tmp_path) -> None:
+    clock = Clock()
+    store = _store(tmp_path, clock)
+    batch, _ = store.create_batch(_request())
+    claimed = store.claim_next_item(batch.batch_id)
+    assert claimed is not None
+
+    clock.advance(seconds=30)
+    store.exclude_item_wait(claimed, seconds=20)
+    store.advance_item(claimed, state="fetching_source")
+
+    snapshot = store.get_batch(batch.batch_id)
+    assert snapshot.items[0].execution_elapsed_seconds == 10
+    assert snapshot.items[0].execution_budget_seconds == 1800
 
 
 def test_idempotency_key_reuse_rejects_a_different_batch_payload(tmp_path) -> None:

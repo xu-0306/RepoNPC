@@ -4,7 +4,7 @@
 
 ## 修正
 
-- `src/reponpc/admin/chat_profiles.py`：測試使用既有 provider capability 的輸出上限；保留一次呼叫、10 秒期限、JSON 驗證及明確啟用流程。若收到 `length` 終止，指出輸出上限，避免把部分 JSON 視為成功。
+- `src/reponpc/admin/chat_profiles.py`：測試使用既有 provider capability 的輸出上限；保留一次呼叫與 JSON 驗證，期限於 2026-09-14 經 owner 核准改為基準 10 秒加一次 10 秒寬限，單一請求總上限 20 秒。若收到 `length` 終止，指出輸出上限，避免把部分 JSON 視為成功。
 - `src/reponpc/providers/openai_compatible.py`、`ollama.py`、`response_diagnostics.py`：按解析階段提供固定診斷，包括空白回答伴隨 `length`；不根據服務商名稱、模型名稱或自然語言猜原因。一般生成流程仍可回傳非空的部分內容及其 finish reason，由上層處理。
 - `apps/web/src/features/admin/modelProbeError.ts`：顯示既有欄位中的應用程式診斷。`RepoNPC response check:` 明確標示來源；真正的 HTTP 錯誤仍顯示服務商原文。沒有詳細原因的舊資料不補造 HTTP 狀態或原因。
 - 更新規格、驗收、安全、決策及操作說明；API 錯誤碼、資料庫 schema、供應商切換規則均未增加。
@@ -23,6 +23,6 @@
 
 ## 實際限制
 
-未讀取真實 key/URL、未呼叫真實模型、未重啟既有服務、未提交或部署。需載入更新並明確重測，才會取得這次服務商的具體失敗位置。若仍達到設定上限或逾時，仍會失敗，不自動加額度、重試或換模型。用量欄位的既有型別驗證仍保留，僅改成指出該檢查失敗。
+原 2026-09-12 修正未讀取真實 key/URL、未呼叫真實模型、未重啟既有服務、未提交或部署。2026-09-14 實測確認 coderelay 的模型清單約 0.9 秒回覆、Chat 約 11.6 秒回覆，超過原 10 秒期限但落在新增寬限內。若仍達到 20 秒總上限或其他檢查失敗，仍會誠實失敗；不自動加額度、重送請求或換模型。用量欄位的既有型別驗證仍保留。
 
 推理 tokens 可能先消耗輸出額度，是有協定依據的可能性，不是本次 live failure 的證明：[OpenAI token 說明](https://help.openai.com/en/articles/4936856)。

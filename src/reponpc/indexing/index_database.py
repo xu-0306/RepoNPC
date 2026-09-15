@@ -37,6 +37,9 @@ from reponpc.retrieval.vector import validate_vector_matrix
 
 INDEX_SCHEMA_VERSION: Final = 1
 APPLICATION_COMPATIBILITY: Final = {"minimum": "1.0.0", "maximum_exclusive": "2.0.0"}
+_MAX_EMBEDDING_BATCH_ITEMS: Final = 16
+_EMBEDDING_RESPONSE_BUDGET_BYTES: Final = 1_500_000
+_MAX_JSON_FLOAT_BYTES: Final = 24
 _SECRET_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
@@ -47,6 +50,14 @@ _DOCUMENT_SUFFIXES: Final[frozenset[str]] = frozenset({".md", ".markdown", ".rst
 _ROOT_REPOSITORY_METADATA: Final[frozenset[str]] = frozenset(
     {"pyproject.toml", "package.json", "Cargo.toml", "go.mod", "requirements.txt"}
 )
+
+
+def _embedding_batch_size(dimension: int) -> int:
+    """Bound JSON vector responses below the shared provider transport limit."""
+
+    estimated_item_bytes = max(1, dimension) * _MAX_JSON_FLOAT_BYTES
+    response_bounded_items = max(1, _EMBEDDING_RESPONSE_BUDGET_BYTES // estimated_item_bytes)
+    return min(_MAX_EMBEDDING_BATCH_ITEMS, response_bounded_items)
 
 
 class IndexBuildError(RuntimeError):
@@ -528,29 +539,35 @@ class IndexDatabaseBuilder:
         if not evidence_rows:
             raise IndexBuildError("index_has_no_evidence")
         ordered = tuple(sorted(evidence_rows, key=lambda item: item.evidence_id or ""))
-        texts = [evidence.content for evidence in ordered]
-        vectors = self._embedding_provider.embed_passages(texts)
-        try:
-            matrix = validate_vector_matrix(
-                [str(evidence.evidence_id) for evidence in ordered],
-                vectors,
-                dimension=self._identity.dimension,
+        batch_size = _embedding_batch_size(self._identity.dimension)
+        for start in range(0, len(ordered), batch_size):
+            batch = ordered[start : start + batch_size]
+            vectors = self._embedding_provider.embed_passages(
+                [evidence.content for evidence in batch]
             )
-        except (TypeError, ValueError) as exc:
-            raise IndexBuildError("embedding_output_invalid") from exc
-        for evidence_id, vector in zip(matrix.evidence_ids, matrix.values, strict=True):
-            connection.execute(
-                """
-                INSERT INTO embeddings(evidence_id, model_id, dimension, normalized, vector_f32_le)
-                VALUES (?, ?, ?, 1, ?)
-                """,
-                (
-                    evidence_id,
-                    self._identity.model_id,
-                    self._identity.dimension,
-                    vector.astype("<f4").tobytes(),
-                ),
-            )
+            try:
+                matrix = validate_vector_matrix(
+                    [str(evidence.evidence_id) for evidence in batch],
+                    vectors,
+                    dimension=self._identity.dimension,
+                )
+            except (TypeError, ValueError) as exc:
+                raise IndexBuildError("embedding_output_invalid") from exc
+            for evidence_id, vector in zip(matrix.evidence_ids, matrix.values, strict=True):
+                connection.execute(
+                    """
+                    INSERT INTO embeddings(
+                        evidence_id, model_id, dimension, normalized, vector_f32_le
+                    )
+                    VALUES (?, ?, ?, 1, ?)
+                    """,
+                    (
+                        evidence_id,
+                        self._identity.model_id,
+                        self._identity.dimension,
+                        vector.astype("<f4").tobytes(),
+                    ),
+                )
 
     def _validate_embedding_contract(self, config: PublicConfig) -> None:
         configured = config.retrieval.embedding

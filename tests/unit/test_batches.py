@@ -17,7 +17,9 @@ from reponpc.admin.batch_resolver import (
 )
 from reponpc.admin.batch_runtime import BatchRuntimeError, BatchRuntimeStore
 from reponpc.admin.batches import AnalysisBatchService, BatchExecutionError, BatchPreflightInput
+from reponpc.admin.onboarding import analysis_generation_policy_identity
 from reponpc.indexing.sources import EmbeddingIdentity
+from reponpc.providers.contracts import ProviderCapabilities
 from reponpc.runtime.database import RuntimeDatabase
 
 SHA = "a" * 40
@@ -41,7 +43,22 @@ class RESTTransport:
         )
 
 
-def _service(tmp_path, *, status: int = 200, runner=None, analysis_pair_supplier=None):
+class _BudgetedRunner:
+    def __init__(self, budget: int) -> None:
+        self.analysis_max_output_tokens = budget
+
+    def __call__(self, item, _cancelled):
+        return {"repository": {"slug": item.input.slug}}
+
+
+def _service(
+    tmp_path,
+    *,
+    status: int = 200,
+    runner=None,
+    analysis_pair_supplier=None,
+    analysis_policy_supplier=None,
+):
     database = RuntimeDatabase(tmp_path / "runtime")
     database.initialize()
     limiter = GitHubRateLimiter()
@@ -59,6 +76,7 @@ def _service(tmp_path, *, status: int = 200, runner=None, analysis_pair_supplier
         capacity=BatchCapacity(1, 1, 2, 1, 4),
         runner=runner or (lambda item, cancelled: {"repository": {"slug": item.input.slug}}),
         analysis_pair_supplier=analysis_pair_supplier,
+        analysis_policy_supplier=analysis_policy_supplier,
     )
     return service
 
@@ -151,6 +169,32 @@ def test_changed_model_pair_stales_the_preflight_plan(tmp_path) -> None:
         )
 
     assert error.value.code == "ANALYSIS_PLAN_STALE"
+
+
+def test_changed_provider_generation_caps_stale_the_preflight_plan(tmp_path) -> None:
+    capabilities = ProviderCapabilities(False, True, True, True, True, 32768, 16384)
+    service = _service(
+        tmp_path,
+        analysis_policy_supplier=lambda _pair: analysis_generation_policy_identity(
+            8192, capabilities
+        ),
+    )
+    plan = service.preflight(BatchPreflightInput((_selection(),)))
+    capabilities = ProviderCapabilities(False, True, True, True, True, 8000, 8000)
+
+    with pytest.raises(BatchRuntimeError) as error:
+        service.create(
+            plan_id=plan.plan_id,
+            selections=(_selection(),),
+            idempotency_key="capability-change",
+        )
+
+    assert error.value.code == "ANALYSIS_PLAN_STALE"
+
+
+def test_batch_service_rejects_budget_different_from_runner(tmp_path) -> None:
+    with pytest.raises(ValueError, match="match batch runner"):
+        _service(tmp_path, runner=_BudgetedRunner(16384))
 
 
 def test_runner_rate_waits_without_busy_loop_then_resumes(tmp_path) -> None:

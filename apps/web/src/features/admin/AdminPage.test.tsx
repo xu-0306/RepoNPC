@@ -7,6 +7,7 @@ import {
   takeLocalLaunchGrant,
   safeDraftForSessionStorage,
 } from "./AdminPage";
+import { modelConnectionFailureMessage } from "./modelConnectionFeedback";
 import { adminErrorStateReducer, initialAdminErrorState } from "./adminErrors";
 import { preflightState } from "./batchPreflight";
 
@@ -52,6 +53,40 @@ describe("batch preflight mapping", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("model connection failure guidance", () => {
+  it("explains the safety boundary, preserved state, recovery, and diagnostic ID", () => {
+    const message = modelConnectionFailureMessage("zh-TW", {
+      code: "CREDENTIAL_REPLACE_REQUIRED",
+      requestId: "request-safe-123",
+    });
+
+    expect(message).toContain("不能把舊金鑰送到新的 origin");
+    expect(message).toContain("原設定仍保留");
+    expect(message).toContain("重新填入");
+    expect(message).toContain("診斷代碼: request-safe-123");
+  });
+
+  it("does not display an unsafe diagnostic identifier", () => {
+    const message = modelConnectionFailureMessage("en", {
+      code: "MODEL_CONNECTION_SAVE_FAILED",
+      requestId: "<script>alert(1)</script>",
+    });
+
+    expect(message).toContain("existing setting is preserved");
+    expect(message).not.toContain("script");
+  });
+
+  it("does not claim failure or success when the browser received no result", () => {
+    const message = modelConnectionFailureMessage("zh-TW", {
+      code: "REQUEST_FAILED",
+    });
+
+    expect(message).toContain("無法判定更新是否完成");
+    expect(message).toContain("先按「重新整理」核對服務清單");
+    expect(message).toContain("金鑰不會保留");
   });
 });
 

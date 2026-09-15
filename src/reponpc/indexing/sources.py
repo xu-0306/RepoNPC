@@ -86,6 +86,9 @@ class RepositoryBlob:
         if self.entry_kind is SourceEntryKind.REGULAR_FILE:
             if self.content is None or len(self.content) != self.size_bytes:
                 raise ValueError("regular file content must match its reported size")
+        elif self.entry_kind is SourceEntryKind.OVERSIZED_FILE:
+            if self.content is not None:
+                raise ValueError("oversized source entries must not supply content")
         elif self.content is not None:
             raise ValueError("non-regular source entries must not supply content")
 

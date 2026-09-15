@@ -62,6 +62,86 @@ def test_load_environment_uses_typed_defaults_and_redacts_direct_secrets(tmp_pat
     assert canary not in str(settings.secrets["github_token"])
 
 
+def test_analysis_output_budget_is_independent_and_defaults_to_8192(tmp_path: Path) -> None:
+    settings = load_environment(
+        deployment_environment(REPONPC_CHAT_MAX_OUTPUT_TOKENS="2000"),
+        secret_roots=(tmp_path,),
+    )
+
+    assert settings.analysis_max_output_tokens == 8192
+    assert settings.chat_max_output_tokens == 2000
+
+
+def test_flexible_analysis_limits_have_large_project_defaults(tmp_path: Path) -> None:
+    settings = load_environment(deployment_environment(), secret_roots=(tmp_path,))
+
+    assert settings.chat_max_output_tokens == 4096
+    assert settings.analysis_repository_timeout_seconds == 1800
+    assert settings.analysis_provider_timeout_seconds == 300
+    assert settings.analysis_generation_attempts == 3
+    assert settings.analysis_archive_max_compressed_bytes == 256 * 1024 * 1024
+    assert settings.analysis_archive_max_uncompressed_bytes == 1024 * 1024 * 1024
+    assert settings.analysis_archive_max_entries == 100_000
+    assert settings.analysis_max_file_bytes == 2 * 1024 * 1024
+
+
+@pytest.mark.parametrize("value", ["8192"])
+def test_public_chat_output_budget_accepts_hard_boundary(tmp_path: Path, value: str) -> None:
+    settings = load_environment(
+        deployment_environment(REPONPC_CHAT_MAX_OUTPUT_TOKENS=value),
+        secret_roots=(tmp_path,),
+    )
+
+    assert settings.chat_max_output_tokens == 8192
+
+
+@pytest.mark.parametrize("value", ["8193", "0", "not-an-integer"])
+def test_public_chat_output_budget_rejects_values_outside_contract(
+    tmp_path: Path, value: str
+) -> None:
+    with pytest.raises(EnvironmentValidationError) as raised:
+        load_environment(
+            deployment_environment(REPONPC_CHAT_MAX_OUTPUT_TOKENS=value),
+            secret_roots=(tmp_path,),
+        )
+
+    assert issue_codes(raised.value) & {"out_of_range", "invalid_integer"}
+
+
+def test_analysis_limit_relationships_fail_closed(tmp_path: Path) -> None:
+    with pytest.raises(EnvironmentValidationError) as raised:
+        load_environment(
+            deployment_environment(
+                REPONPC_ANALYSIS_MAX_REPOSITORY_TEXT_BYTES=str(200 * 1024 * 1024),
+                REPONPC_ANALYSIS_MAX_CORPUS_TEXT_BYTES=str(100 * 1024 * 1024),
+            ),
+            secret_roots=(tmp_path,),
+        )
+
+    assert "invalid_limit_relationship" in issue_codes(raised.value)
+
+
+@pytest.mark.parametrize("value", ["16384"])
+def test_analysis_output_budget_accepts_hard_boundary(tmp_path: Path, value: str) -> None:
+    settings = load_environment(
+        deployment_environment(REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS=value),
+        secret_roots=(tmp_path,),
+    )
+
+    assert settings.analysis_max_output_tokens == 16384
+
+
+@pytest.mark.parametrize("value", ["16385", "0", "not-an-integer"])
+def test_analysis_output_budget_rejects_values_outside_contract(tmp_path: Path, value: str) -> None:
+    with pytest.raises(EnvironmentValidationError) as raised:
+        load_environment(
+            deployment_environment(REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS=value),
+            secret_roots=(tmp_path,),
+        )
+
+    assert issue_codes(raised.value) & {"out_of_range", "invalid_integer"}
+
+
 @pytest.mark.parametrize(
     ("host", "public_base_url"),
     [

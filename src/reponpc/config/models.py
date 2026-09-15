@@ -282,9 +282,9 @@ class ChunkingConfig(StrictModel):
 
 
 class RetrievalLimitsConfig(StrictModel):
-    max_file_bytes: Annotated[int, Field(gt=0, le=2 * 1024 * 1024)]
-    max_repository_text_bytes: Annotated[int, Field(gt=0, le=100 * 1024 * 1024)]
-    max_corpus_text_bytes: Annotated[int, Field(gt=0, le=250 * 1024 * 1024)]
+    max_file_bytes: Annotated[int, Field(gt=0, le=16 * 1024 * 1024)]
+    max_repository_text_bytes: Annotated[int, Field(gt=0, le=500 * 1024 * 1024)]
+    max_corpus_text_bytes: Annotated[int, Field(gt=0, le=1024 * 1024 * 1024)]
     max_evidence_records: Annotated[int, Field(gt=0, le=100000)]
 
 

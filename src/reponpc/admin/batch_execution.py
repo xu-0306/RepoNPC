@@ -11,6 +11,7 @@ import hashlib
 import json
 import time
 from collections.abc import Callable
+from contextlib import AbstractContextManager, contextmanager
 
 from reponpc.admin.analysis_selection import AnalysisModelPair, AnalysisSelectionError
 from reponpc.admin.batch_resolver import (
@@ -21,7 +22,18 @@ from reponpc.admin.batch_resolver import (
 )
 from reponpc.admin.batch_runtime import BatchRuntimeError, BatchRuntimeStore, ClaimedBatchItem
 from reponpc.admin.batches import BatchExecutionError, BatchStageGates
-from reponpc.admin.onboarding import GuidedOnboardingError, GuidedOnboardingService
+from reponpc.admin.onboarding import (
+    ANALYSIS_MAX_OUTPUT_TOKENS,
+    ANALYSIS_OUTPUT_POLICY_VERSION,
+    ANALYSIS_OUTPUT_SCHEMA_VERSION,
+    ANALYSIS_PROMPT_VERSION,
+    ANALYSIS_TERMINATION_VALIDATION_VERSION,
+    ANALYSIS_TOKEN_ESTIMATOR_VERSION,
+    GuidedOnboardingError,
+    GuidedOnboardingService,
+    analysis_generation_policy_identity,
+    validate_analysis_output_budget,
+)
 from reponpc.providers.runtime import ProviderRuntime
 
 
@@ -38,9 +50,12 @@ class PinnedBatchItemRunner:
         parser_identity: str = "parser-v1",
         embedding_identity: str = "embedding-runtime",
         chat_model: str = "chat-runtime",
-        prompt_version: str = "onboarding-prompt-v1",
-        output_schema_version: str = "analysis-schema-v1",
+        prompt_version: str = ANALYSIS_PROMPT_VERSION,
+        output_schema_version: str = ANALYSIS_OUTPUT_SCHEMA_VERSION,
         validation_version: str = "validation-v1",
+        analysis_max_output_tokens: int = ANALYSIS_MAX_OUTPUT_TOKENS,
+        token_estimator_version: str = ANALYSIS_TOKEN_ESTIMATOR_VERSION,
+        termination_validation_version: str = ANALYSIS_TERMINATION_VALIDATION_VERSION,
         runtime_resolver: Callable[[AnalysisModelPair], ProviderRuntime | None] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -54,19 +69,35 @@ class PinnedBatchItemRunner:
         self._prompt_version = prompt_version
         self._output_schema_version = output_schema_version
         self._validation_version = validation_version
+        validate_analysis_output_budget(analysis_max_output_tokens)
+        onboarding_budget = getattr(onboarding, "analysis_max_output_tokens", None)
+        if onboarding_budget is not None and onboarding_budget != analysis_max_output_tokens:
+            raise ValueError("analysis output budget must match onboarding")
+        self._analysis_max_output_tokens = analysis_max_output_tokens
+        self._token_estimator_version = token_estimator_version
+        self._termination_validation_version = termination_validation_version
         self._runtime_resolver = runtime_resolver
         self._monotonic = monotonic
 
+    @property
+    def analysis_max_output_tokens(self) -> int:
+        """Expose the budget shared with the onboarding generation service."""
+
+        return self._analysis_max_output_tokens
+
     def __call__(self, item: ClaimedBatchItem, cancelled: Callable[[], bool]) -> dict[str, object]:
         if item.execution_budget_seconds <= 0:
-            raise BatchExecutionError("PROVIDER_TIMEOUT")
-        deadline = self._monotonic() + item.execution_budget_seconds
+            raise BatchExecutionError("ANALYSIS_TIMEOUT")
+        deadline = _ExtendableDeadline(
+            seconds=item.execution_budget_seconds,
+            monotonic=self._monotonic,
+        )
         try:
             if cancelled():
                 raise BatchExecutionError("CANCELLED")
             pair = self._frozen_pair(item)
             runtime = self._frozen_runtime(pair)
-            derived_key, result_key = self._cache_keys(item, pair)
+            derived_key, result_key = self._cache_keys(item, pair, runtime)
             cached = self._store.get_cache(result_key)
             if (
                 cached is not None
@@ -76,11 +107,11 @@ class PinnedBatchItemRunner:
                 return _cached_result(cached.payload)
             repository = _immutable_repository(item)
             self._store.advance_item(item, state="fetching_source")
-            with self._gates.archive_staging():
+            with self._excluded_wait(item, deadline, self._gates.archive_staging):
                 snapshot = self._source.fetch(
                     repository=repository,
                     cancel_requested=cancelled,
-                    deadline=deadline,
+                    deadline=deadline.value(),
                     monotonic=self._monotonic,
                 )
             result = self._onboarding.analyze_resolved_repository(
@@ -89,8 +120,9 @@ class PinnedBatchItemRunner:
                 exclude=item.input.exclude,
                 cancel_requested=cancelled,
                 stage_changed=lambda stage: self._store.advance_item(item, state=stage),
-                index_permit=self._gates.index_work,
-                execution_deadline=deadline,
+                index_permit=lambda: self._excluded_wait(item, deadline, self._gates.index_work),
+                execution_deadline=deadline.value,
+                wait_excluded=lambda seconds: self._exclude_wait_seconds(item, deadline, seconds),
                 providers=runtime,
             )
             self._store.advance_item(item, state="cleaning_up")
@@ -123,6 +155,14 @@ class PinnedBatchItemRunner:
                     "prompt_version": self._prompt_version,
                     "output_schema_version": self._output_schema_version,
                     "validation_version": self._validation_version,
+                    "analysis_output_policy_version": ANALYSIS_OUTPUT_POLICY_VERSION,
+                    "analysis_max_output_tokens": self._analysis_max_output_tokens,
+                    "token_estimator_version": self._token_estimator_version,
+                    "termination_validation_version": self._termination_validation_version,
+                    "analysis_generation_policy": analysis_generation_policy_identity(
+                        self._analysis_max_output_tokens,
+                        runtime,
+                    ),
                 },
                 payload=_cacheable_result(result),
             )
@@ -137,6 +177,28 @@ class PinnedBatchItemRunner:
             # A lost lease means another terminal action already owns the
             # outcome.  Never attempt another upstream/provider call.
             raise BatchExecutionError("CANCELLED") from None
+
+    @contextmanager
+    def _excluded_wait(
+        self,
+        item: ClaimedBatchItem,
+        deadline: _ExtendableDeadline,
+        permit: Callable[[], AbstractContextManager[object]],
+    ):
+        started = self._monotonic()
+        with permit():
+            waited = max(0.0, self._monotonic() - started)
+            self._exclude_wait_seconds(item, deadline, waited)
+            yield
+
+    def _exclude_wait_seconds(
+        self,
+        item: ClaimedBatchItem,
+        deadline: _ExtendableDeadline,
+        seconds: float,
+    ) -> None:
+        deadline.extend(seconds)
+        self._store.exclude_item_wait(item, seconds=seconds)
 
     def _frozen_pair(self, item: ClaimedBatchItem) -> AnalysisModelPair | None:
         if item.analysis_model_pair is None:
@@ -157,7 +219,10 @@ class PinnedBatchItemRunner:
         return runtime
 
     def _cache_keys(
-        self, item: ClaimedBatchItem, pair: AnalysisModelPair | None
+        self,
+        item: ClaimedBatchItem,
+        pair: AnalysisModelPair | None,
+        runtime: ProviderRuntime | None = None,
     ) -> tuple[str, str]:
         policy = json.dumps(
             {"include": item.input.include, "exclude": item.input.exclude},
@@ -177,6 +242,11 @@ class PinnedBatchItemRunner:
             self._prompt_version,
             self._output_schema_version,
             self._validation_version,
+            ANALYSIS_OUTPUT_POLICY_VERSION,
+            str(self._analysis_max_output_tokens),
+            self._token_estimator_version,
+            self._termination_validation_version,
+            analysis_generation_policy_identity(self._analysis_max_output_tokens, runtime),
         )
 
 
@@ -226,6 +296,20 @@ def _onboarding_error(error: GuidedOnboardingError) -> BatchExecutionError:
 
 def _cache_key(*parts: str) -> str:
     return hashlib.sha256("\x1f".join(parts).encode()).hexdigest()
+
+
+class _ExtendableDeadline:
+    """An active-work deadline that can exclude scheduler semaphore waits."""
+
+    def __init__(self, *, seconds: float, monotonic: Callable[[], float]) -> None:
+        self._monotonic = monotonic
+        self._deadline = monotonic() + seconds
+
+    def value(self) -> float:
+        return self._deadline
+
+    def extend(self, seconds: float) -> None:
+        self._deadline += max(0.0, seconds)
 
 
 def _cacheable_result(result: dict[str, object]) -> dict[str, object]:
