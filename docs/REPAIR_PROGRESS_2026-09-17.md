@@ -31,7 +31,7 @@
 
 ## 實際測試
 
-環境：Linux；Node.js `22.16.0`；TypeScript `5.8.3`（與 Web lockfile 宣告的版本一致）。未使用付費模型、正式資料或外部發布服務。
+環境：Linux；Node.js `22.16.0`；TypeScript `5.8.3`（與 apps/web/package.json 宣告的版本一致）。未使用付費模型、正式資料或外部發布服務。
 
 | 檢查 | 結果與限制 |
 | --- | --- |
