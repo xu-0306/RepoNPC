@@ -14,12 +14,21 @@ import {
   type CharacterState,
 } from "../features/character/CharacterRenderer";
 import { messages, type Locale } from "../i18n/messages";
+import {
+  buildChatHistory,
+  collectValidatedReply,
+  retainSuccessfulExchanges,
+  type SuccessfulExchange,
+} from "./visitorChat";
+
 import { AdminAccessLayout } from "../features/admin/AdminAccessLayout";
 import {
   VisitorConversation,
   type Citation,
   type VisitorTurn,
 } from "./VisitorConversation";
+
+export { consumeSse, type SseEvent } from "./sse";
 
 const AdminPage = lazy(() =>
   import("../features/admin/AdminPage").then((module) => ({
@@ -63,6 +72,8 @@ export function App() {
   const [locale, setLocale] = useState<Locale>("zh-TW");
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<VisitorTurn[]>([]);
+  // Displayed turns include errors and long replies; model history never does.
+  const [exchanges, setExchanges] = useState<SuccessfulExchange[]>([]);
   const [chatAvailable, setChatAvailable] = useState(false);
   const [pending, setPending] = useState(false);
   const [profile, setProfile] = useState<PublicProfile | null>(null);
@@ -73,11 +84,33 @@ export function App() {
   const profileErrorAlert = useRef<HTMLParagraphElement>(null);
   const chatStatus = useRef<HTMLParagraphElement>(null);
   const statusController = useRef<AbortController | null>(null);
+  const requestController = useRef<AbortController | null>(null);
+  const characterTimer = useRef<number | null>(null);
   const copy = messages[locale];
   const reducedMotion = useMemo(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     [],
   );
+
+  const transitionCharacter = useCallback((state: CharacterState) => {
+    if (characterTimer.current !== null) {
+      window.clearTimeout(characterTimer.current);
+      characterTimer.current = null;
+    }
+    setCharacterState(state);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      requestController.current?.abort();
+      requestController.current = null;
+      statusController.current?.abort();
+      if (characterTimer.current !== null) {
+        window.clearTimeout(characterTimer.current);
+        characterTimer.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     syncDocumentLanguage(locale);
@@ -85,10 +118,18 @@ export function App() {
 
   useEffect(() => {
     if (reducedMotion) return;
-    setCharacterState("walk");
-    const timeout = window.setTimeout(() => setCharacterState("idle"), 900);
-    return () => window.clearTimeout(timeout);
-  }, [reducedMotion]);
+    transitionCharacter("walk");
+    characterTimer.current = window.setTimeout(() => {
+      characterTimer.current = null;
+      if (!requestController.current) setCharacterState("idle");
+    }, 900);
+    return () => {
+      if (characterTimer.current !== null) {
+        window.clearTimeout(characterTimer.current);
+        characterTimer.current = null;
+      }
+    };
+  }, [reducedMotion, transitionCharacter]);
 
   const refreshStatus = useCallback(() => {
     statusController.current?.abort();
@@ -102,18 +143,20 @@ export function App() {
       .then((status) => {
         if (statusController.current !== controller) return;
         setChatAvailable(status.chat_available);
-        setCharacterState(status.chat_available ? "idle" : "offline");
+        if (!requestController.current) {
+          transitionCharacter(status.chat_available ? "idle" : "offline");
+        }
       })
       .catch((error: unknown) => {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
           if (statusController.current !== controller) return;
           setChatAvailable(false);
-          setCharacterState("offline");
+          if (!requestController.current) transitionCharacter("offline");
           window.setTimeout(() => chatStatus.current?.focus(), 0);
         }
       });
     return controller;
-  }, []);
+  }, [transitionCharacter]);
 
   useEffect(() => {
     const controller = refreshStatus();
@@ -164,10 +207,13 @@ export function App() {
 
   async function submit(questionText: string) {
     const trimmed = questionText.trim();
-    if (!trimmed || pending || !chatAvailable) return;
-    const history = turns
-      .filter((turn) => !turn.failed && turn.content.length > 0)
-      .map(({ role, content }) => ({ role, content }));
+    if (!trimmed || pending || requestController.current || !chatAvailable) {
+      return;
+    }
+    // Set synchronously: two clicks before React renders must not submit twice.
+    const controller = new AbortController();
+    requestController.current = controller;
+    const history = buildChatHistory(exchanges);
     const requestId =
       window.crypto?.randomUUID?.() ??
       `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -185,19 +231,20 @@ export function App() {
     ]);
     setQuestion("");
     setPending(true);
-    setCharacterState("think");
+    transitionCharacter("think");
     try {
       const response = await fetch("/api/public/chat/stream", {
         method: "POST",
+        signal: controller.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: trimmed, locale, history }),
       });
       if (!response.ok || !response.body) throw new Error("chat unavailable");
-      setCharacterState("talk");
-      let completed = false;
-      await consumeSse(response.body, (event) => {
+      const answer = await collectValidatedReply(response.body, (event) => {
+        if (requestController.current !== controller) return;
         if (event.name === "token") {
           const delta = String(event.data.delta ?? "");
+          if (delta) transitionCharacter("talk");
           setTurns((current) =>
             current.map((turn) =>
               turn.id === assistantId
@@ -214,13 +261,24 @@ export function App() {
               turn.id === assistantId ? { ...turn, citations } : turn,
             ),
           );
-        } else if (event.name === "complete") {
-          completed = true;
         }
       });
-      if (!completed) throw new Error("chat stream incomplete");
-      setCharacterState("success");
+      if (controller.signal.aborted || requestController.current !== controller) {
+        return;
+      }
+      // Failed, cancelled or incomplete deliveries never enter model context.
+      setExchanges((current) =>
+        retainSuccessfulExchanges([...current, { question: trimmed, answer }]),
+      );
+      transitionCharacter("success");
+      characterTimer.current = window.setTimeout(() => {
+        characterTimer.current = null;
+        if (!requestController.current) setCharacterState("idle");
+      }, 1200);
     } catch {
+      if (controller.signal.aborted || requestController.current !== controller) {
+        return;
+      }
       setTurns((current) =>
         current.map((turn) =>
           turn.id === assistantId
@@ -232,10 +290,15 @@ export function App() {
             : turn,
         ),
       );
-      setCharacterState("offline");
+      // A rejected request is not proof that the model service is offline.
+      transitionCharacter("idle");
+      refreshStatus();
       window.setTimeout(() => questionInput.current?.focus(), 0);
     } finally {
-      setPending(false);
+      if (requestController.current === controller) {
+        requestController.current = null;
+        setPending(false);
+      }
     }
   }
 
@@ -421,7 +484,9 @@ export function App() {
             maxLength={4000}
             onChange={(event) => {
               setQuestion(event.target.value);
-              if (chatAvailable && !pending) setCharacterState("listen");
+              if (chatAvailable && !pending) {
+                transitionCharacter(event.target.value ? "listen" : "idle");
+              }
             }}
             placeholder={copy.inputPlaceholder}
             rows={3}
@@ -445,41 +510,4 @@ function capitalize(value: string) {
 
 export function syncDocumentLanguage(locale: Locale) {
   document.documentElement.lang = locale;
-}
-
-export interface SseEvent {
-  name: string;
-  data: Record<string, unknown>;
-}
-
-export async function consumeSse(
-  stream: ReadableStream<Uint8Array>,
-  onEvent: (event: SseEvent) => void,
-): Promise<void> {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done });
-    buffer = buffer.replace(/\r\n/g, "\n");
-    if (done && buffer.trim()) buffer += "\n\n";
-    const blocks = buffer.split("\n\n");
-    buffer = blocks.pop() ?? "";
-    for (const block of blocks) {
-      const name = block.match(/^event: (.+)$/m)?.[1];
-      const data = block.match(/^data: (.+)$/m)?.[1];
-      if (name && data) {
-        const parsed = JSON.parse(data) as unknown;
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          throw new Error("invalid SSE event");
-        }
-        onEvent({
-          name,
-          data: parsed as Record<string, unknown>,
-        });
-      }
-    }
-    if (done) break;
-  }
 }
