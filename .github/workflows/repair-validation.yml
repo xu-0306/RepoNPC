@@ -1,0 +1,62 @@
+name: Repair validation
+
+on:
+  push:
+    branches: [fix/reponpc-repair-2026-09-16]
+    paths:
+      - '.github/workflows/repair-validation.yml'
+      - 'src/**'
+      - 'apps/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'pnpm-lock.yaml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repair-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Archive tracked source only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import subprocess
+          import zipfile
+
+          root = pathlib.Path.cwd()
+          output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'repair-source.zip'
+          paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
+              for name in paths:
+                  if not name:
+                      continue
+                  path = root / name
+                  if path.is_symlink() or not path.is_file():
+                      continue
+                  if path.suffix.lower() in {'.otf', '.ttf', '.woff', '.woff2', '.pem', '.key', '.sqlite', '.db'}:
+                      continue
+                  if path.name == '.env' or any(part in {'.venv', 'node_modules', '.git'} for part in path.parts):
+                      continue
+                  archive.write(path, name)
+              archive.writestr('REPAIR_SOURCE_COMMIT.txt', subprocess.check_output(['git', 'rev-parse', 'HEAD']))
+          print('Created tracked-source snapshot without credentials, runtime files or fonts.')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: repair-source-${{ github.sha }}
+          path: ${{ runner.temp }}/repair-source.zip
+          if-no-files-found: error
+          retention-days: 1
