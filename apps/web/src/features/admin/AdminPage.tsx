@@ -1,4 +1,8 @@
 import {
+  LocalPublishingWorkspace,
+  type LocalDraftBody,
+} from "./LocalPublishingWorkspace";
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -12,7 +16,15 @@ import {
   type AdminPreview,
   type AdminStatus,
   type AdminValidation,
+  type AdminWorkspaceMode,
 } from "./AdminWorkspace";
+import {
+  CharacterAssetConverter,
+  type CharacterAssetBody,
+  type CharacterConversionStrategy,
+  type CharacterMaterialSource,
+  type CharacterPreparationResult,
+} from "./CharacterAssetConverter";
 import { AdminAccessLayout } from "./AdminAccessLayout";
 import {
   BatchAnalysisPanel,
@@ -28,6 +40,14 @@ import {
   type BatchRepositoryState,
   type BatchSseState,
 } from "./BatchAnalysisPanel";
+import {
+  analysisModelConfirmationMessage,
+  type AnalysisModelPairBody,
+} from "./analysisModelConfirmation";
+import {
+  batchMutationResultUnknown,
+  reconcileUnknownBatchMutation,
+} from "./batchMutationRecovery";
 import {
   ChatProfilePanel,
   type ChatProfileDraft,
@@ -80,7 +100,9 @@ import {
   type ContributionProposal,
   type GuidedOnboardingAction,
   type GuidedProviderStatus,
+  type ModelInference,
   type RepositoryAnalysis,
+  type RepositoryFact,
   type RepositoryMetadata,
 } from "./guidedOnboarding";
 import type { Locale } from "../../i18n/messages";
@@ -110,11 +132,6 @@ interface AdminAccessPanelProps {
   onLogin: React.FormEventHandler<HTMLFormElement>;
   onSetupOwner: React.FormEventHandler<HTMLFormElement>;
   onRefreshSetupStatus: () => void;
-}
-
-interface ConfigBody {
-  content: string;
-  blob_sha: string;
 }
 
 interface SnippetBody {
@@ -166,11 +183,19 @@ interface BatchItemBody {
   commit_sha?: string | null;
   state: string;
   retryable: boolean;
+  reanalyzable?: boolean;
+  retry_blocker?:
+    | "ATTEMPTS_EXHAUSTED"
+    | "EXECUTION_BUDGET_EXHAUSTED"
+    | "SUCCESSOR_EXISTS"
+    | null;
+  failure_stage?: string | null;
   error_code?: string | null;
   error_reason?: string | null;
   retry_at?: string | null;
   execution_elapsed_seconds?: number;
   execution_budget_seconds?: number;
+  recovery_execution_budget_seconds?: number;
   generation_attempt_count?: number;
   result?: Record<string, unknown> | null;
 }
@@ -181,6 +206,10 @@ interface BatchSnapshotBody {
   plan_id: string;
   selection_hash: string;
   maximum_generation_attempts: number;
+  recovery_maximum_generation_attempts?: number;
+  source_batch_id?: string | null;
+  analysis_round?: number;
+  analysis_model_pair?: AnalysisModelPairBody | null;
   created_at: string;
   started_at?: string | null;
   completed_at?: string | null;
@@ -252,6 +281,81 @@ export function safeDraftForSessionStorage(content: string): string | null {
   return content;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, keys: string[]): boolean {
+  const expected = new Set(keys);
+  return (
+    Object.keys(value).length === expected.size &&
+    Object.keys(value).every((key) => expected.has(key))
+  );
+}
+
+function isLocalizedContribution(value: unknown): boolean {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["zh-TW", "en"])) return false;
+  return [value["zh-TW"], value.en].every(
+    (text) =>
+      typeof text === "string" &&
+      text.trim().length > 0 &&
+      Array.from(text).length <= 2000,
+  );
+}
+
+export function shouldApplyContributionResponse(
+  requestGeneration: number,
+  currentGeneration: number,
+): boolean {
+  return requestGeneration === currentGeneration;
+}
+
+export function contributionSuggestionBody(
+  value: unknown,
+  expectedSlug: string,
+  expectedStatement: string,
+): ContributionSuggestionBody | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, [
+      "slug",
+      "original_statement",
+      "proposal",
+      "confirmed",
+    ]) ||
+    value.slug !== expectedSlug ||
+    value.original_statement !== expectedStatement ||
+    value.confirmed !== false ||
+    !isRecord(value.proposal) ||
+    !hasOnlyKeys(value.proposal, ["role", "summary", "claims"]) ||
+    !isLocalizedContribution(value.proposal.role) ||
+    !isLocalizedContribution(value.proposal.summary) ||
+    !Array.isArray(value.proposal.claims) ||
+    value.proposal.claims.length > 8
+  ) {
+    return null;
+  }
+  const identifiers = new Set<string>();
+  for (const claim of value.proposal.claims) {
+    if (
+      !isRecord(claim) ||
+      !hasOnlyKeys(claim, ["id", "kind", "statement"]) ||
+      typeof claim.id !== "string" ||
+      !/^[a-z][a-z0-9_-]{2,63}$/.test(claim.id) ||
+      identifiers.has(claim.id) ||
+      typeof claim.kind !== "string" ||
+      !["role", "responsibility", "achievement", "context"].includes(
+        claim.kind,
+      ) ||
+      !isLocalizedContribution(claim.statement)
+    ) {
+      return null;
+    }
+    identifiers.add(claim.id);
+  }
+  return value as unknown as ContributionSuggestionBody;
+}
+
 function copyFor(locale: Locale, chinese: string, english: string): string {
   return locale === "zh-TW" ? chinese : english;
 }
@@ -278,6 +382,7 @@ function batchOperationError(
     code: error instanceof Error ? error.message : "REQUEST_FAILED",
     retryAfterSeconds:
       error instanceof AdminRequestError ? error.retryAfterSeconds : undefined,
+    requestId: error instanceof AdminRequestError ? error.requestId : undefined,
   };
 }
 
@@ -356,10 +461,17 @@ function retryAfterSeconds(
 
 function batchItem(item: BatchItemBody): BatchRepositoryItem {
   return {
+    id: item.item_id,
     slug: item.slug,
     stage: batchRepositoryStage(item.state),
     state: batchRepositoryState(item.state),
     retryable: item.retryable,
+    reanalyzable: item.reanalyzable === true,
+    retryBlocker: item.retry_blocker ?? undefined,
+    failureStage:
+      item.failure_stage && item.failure_stage !== "complete"
+        ? batchRepositoryStage(item.failure_stage)
+        : undefined,
     executionElapsedSeconds: item.execution_elapsed_seconds,
     executionBudgetSeconds: item.execution_budget_seconds,
     generationAttemptCount: item.generation_attempt_count,
@@ -385,7 +497,12 @@ function batchJob(snapshot: BatchSnapshotBody): BatchJobSnapshot {
 function elapsedSeconds(snapshot: BatchSnapshotBody): number {
   const start = Date.parse(snapshot.started_at ?? snapshot.created_at);
   if (Number.isNaN(start)) return 0;
-  return Math.max(0, Math.round((Date.now() - start) / 1000));
+  const terminal = isTerminalBatch(batchJobStatus(snapshot.state));
+  const end = terminal
+    ? Date.parse(snapshot.completed_at ?? snapshot.created_at)
+    : Date.now();
+  if (Number.isNaN(end)) return 0;
+  return Math.max(0, Math.round((end - start) / 1000));
 }
 
 function terminalCount(snapshot: BatchSnapshotBody): number {
@@ -406,21 +523,33 @@ function batchProgress(
 ): BatchProgressState {
   const elapsed = elapsedSeconds(snapshot);
   const duration = batchDuration(plan?.duration ?? null);
-  const estimatedRemaining = duration
-    ? {
-        ...duration,
-        minimumSeconds: Math.max(0, duration.minimumSeconds - elapsed),
-        maximumSeconds: Math.max(0, duration.maximumSeconds - elapsed),
-      }
-    : null;
-  const failedItems =
-    snapshot.progress.failed + snapshot.progress.needs_retry_confirmation;
-
+  const status = batchJobStatus(snapshot.state);
+  const estimateReliable =
+    duration !== null &&
+    ["queued", "running"].includes(status) &&
+    !snapshot.items.some((item) =>
+      [
+        "waiting_rate_limit",
+        "waiting_reconnection",
+        "needs_retry_confirmation",
+      ].includes(item.state),
+    ) &&
+    elapsed < duration.maximumSeconds;
+  const estimatedRemaining =
+    duration && estimateReliable
+      ? {
+          ...duration,
+          minimumSeconds: Math.max(0, duration.minimumSeconds - elapsed),
+          maximumSeconds: Math.max(0, duration.maximumSeconds - elapsed),
+        }
+      : null;
   return {
     totalItems: snapshot.progress.total,
-    completedItems: terminalCount(snapshot),
+    processedItems: terminalCount(snapshot),
+    successfulItems: snapshot.progress.complete,
     activeItems: snapshot.progress.active,
-    failedItems,
+    failedItems: snapshot.progress.failed,
+    attentionItems: snapshot.progress.needs_retry_confirmation,
     cancelledItems: snapshot.progress.cancelled,
     elapsedSeconds: elapsed,
     estimatedRemaining,
@@ -438,7 +567,59 @@ function isTerminalBatch(state: BatchJobStatus): boolean {
   );
 }
 
-function batchAnalysisResult(
+export function shouldApplyBatchSnapshot(
+  activeBatchId: string | null,
+  incomingBatchId: string,
+  requestGeneration: number,
+  currentGeneration: number,
+): boolean {
+  return (
+    requestGeneration === currentGeneration &&
+    (activeBatchId === null || activeBatchId === incomingBatchId)
+  );
+}
+
+function isNullableNumber(value: unknown): value is number | null {
+  return value === null || typeof value === "number";
+}
+
+function repositoryFact(value: unknown): RepositoryFact | null {
+  if (!value || typeof value !== "object") return null;
+  const fact = value as Record<string, unknown>;
+  if (
+    fact.evidence_class !== "REPOSITORY_FACT" ||
+    typeof fact.evidence_id !== "string" ||
+    typeof fact.path !== "string" ||
+    !isNullableNumber(fact.start_line) ||
+    !isNullableNumber(fact.end_line) ||
+    typeof fact.excerpt !== "string"
+  ) {
+    return null;
+  }
+  return fact as unknown as RepositoryFact;
+}
+
+function modelInference(value: unknown): ModelInference | null {
+  if (!value || typeof value !== "object") return null;
+  const inference = value as Record<string, unknown>;
+  const statement = inference.statement;
+  if (
+    inference.evidence_class !== "MODEL_INFERENCE" ||
+    !statement ||
+    typeof statement !== "object" ||
+    typeof (statement as Record<string, unknown>)["zh-TW"] !== "string" ||
+    typeof (statement as Record<string, unknown>).en !== "string" ||
+    !Array.isArray(inference.supporting_evidence_ids) ||
+    !inference.supporting_evidence_ids.every(
+      (evidenceId) => typeof evidenceId === "string",
+    )
+  ) {
+    return null;
+  }
+  return inference as unknown as ModelInference;
+}
+
+export function batchAnalysisResult(
   result: Record<string, unknown> | null | undefined,
 ): RepositoryAnalysis | null {
   if (!result || typeof result !== "object") return null;
@@ -451,11 +632,38 @@ function batchAnalysisResult(
     typeof values.default_branch !== "string" ||
     typeof values.html_url !== "string" ||
     !Array.isArray(result.facts) ||
-    !Array.isArray(result.inferences)
+    !Array.isArray(result.inferences) ||
+    !result.skipped_summary ||
+    typeof result.skipped_summary !== "object"
   ) {
     return null;
   }
-  return result as unknown as RepositoryAnalysis;
+  const facts = result.facts.map(repositoryFact);
+  const inferences = result.inferences.map(modelInference);
+  const skippedSummary = result.skipped_summary as Record<string, unknown>;
+  if (
+    facts.some((fact) => fact === null) ||
+    inferences.some((inference) => inference === null) ||
+    typeof skippedSummary.count !== "number" ||
+    !Array.isArray(skippedSummary.reasons) ||
+    !skippedSummary.reasons.every((reason) => typeof reason === "string")
+  ) {
+    return null;
+  }
+  return {
+    repository: {
+      slug: values.slug,
+      commit_sha: values.commit_sha,
+      default_branch: values.default_branch,
+      html_url: values.html_url,
+    },
+    facts: facts as RepositoryFact[],
+    inferences: inferences as ModelInference[],
+    skipped_summary: {
+      count: skippedSummary.count,
+      reasons: skippedSummary.reasons as string[],
+    },
+  };
 }
 
 function parseBatchEvent(data: string): BatchEventBody | null {
@@ -897,6 +1105,9 @@ export function AdminPage({
   const [csrfToken, setCsrfToken] = useState("");
   const [draft, setDraft] = useState("");
   const [blobSha, setBlobSha] = useState("");
+  const [localRevision, setLocalRevision] = useState<string | null>(null);
+  const [characterSprite, setCharacterSprite] = useState<string | null>(null);
+  const [publicationOpen, setPublicationOpen] = useState(false);
   const [validation, setValidation] = useState<AdminValidation | null>(null);
   const [preview, setPreview] = useState<AdminPreview | null>(null);
   const [status, setStatus] = useState<AdminStatus | null>(null);
@@ -996,6 +1207,7 @@ export function AdminPage({
   const [guidedState, setGuidedState] = useState(() =>
     initialGuidedOnboardingState(),
   );
+  const [characterWorkspaceOpen, setCharacterWorkspaceOpen] = useState(false);
   const [guidedResumeReady, setGuidedResumeReady] = useState(false);
   const guidedResumeFound = useRef(false);
   const draftHydrated = useRef(false);
@@ -1021,6 +1233,7 @@ export function AdminPage({
   const [batchCreatePending, setBatchCreatePending] = useState(false);
   const [activeBatchLoaded, setActiveBatchLoaded] = useState(false);
   const batchEventSource = useRef<EventSource | null>(null);
+  const activeBatchId = useRef<string | null>(null);
   const batchLastEventId = useRef<string | null>(null);
   const batchAnnouncement = useRef<{
     batchId: string;
@@ -1028,8 +1241,38 @@ export function AdminPage({
     announcedAt: number;
   } | null>(null);
   const batchIdempotency = useRef<{ planId: string; key: string } | null>(null);
+  const reanalysisIdempotency = useRef<{
+    batchId: string;
+    itemId: string;
+    modelSelection: "frozen" | "current";
+    confirmModelChange: boolean;
+    expectedSelectionGeneration: number | null;
+    key: string;
+  } | null>(null);
+  const batchSnapshotBody = useRef<BatchSnapshotBody | null>(null);
+  const batchMutationPending = useRef(false);
+  const batchSnapshotGeneration = useRef(0);
+  const contributionRequestGeneration = useRef(0);
+  const contributionRequestPending = useRef<number | null>(null);
+  const contributionRequestAbort = useRef<AbortController | null>(null);
   const accessBootstrapStarted = useRef(false);
   const authenticated = Boolean(csrfToken);
+
+  const invalidateContributionRequest = useCallback((releaseBusy: boolean) => {
+    const ownedBusyState = contributionRequestPending.current !== null;
+    contributionRequestGeneration.current += 1;
+    contributionRequestAbort.current?.abort();
+    contributionRequestAbort.current = null;
+    contributionRequestPending.current = null;
+    if (releaseBusy && ownedBusyState) setBusy(false);
+  }, []);
+
+  useEffect(
+    () => () => {
+      invalidateContributionRequest(false);
+    },
+    [invalidateContributionRequest],
+  );
 
   const request = useCallback(
     async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -1087,6 +1330,20 @@ export function AdminPage({
     [csrfToken],
   );
 
+  const requestIdempotentMutation = useCallback(
+    async <T,>(path: string, init: RequestInit): Promise<T> => {
+      try {
+        return await request<T>(path, init);
+      } catch (error) {
+        if (error instanceof AdminRequestError) throw error;
+        // A transport failure after a write has an unknown result. Reconcile
+        // by repeating the exact same persisted idempotency key once.
+        return request<T>(path, init);
+      }
+    },
+    [request],
+  );
+
   const batchSelections = useMemo(
     () =>
       selectedRepositories(guidedState).map(
@@ -1114,7 +1371,7 @@ export function AdminPage({
         now - (previousAnnouncement?.announcedAt ?? 0) >= 5_000) ||
       isTerminalBatch(job.status);
     const announcement = shouldAnnounce
-      ? { completedItems: terminalItems, totalItems: snapshot.progress.total }
+      ? { processedItems: terminalItems, totalItems: snapshot.progress.total }
       : null;
     if (shouldAnnounce) {
       batchAnnouncement.current = {
@@ -1124,6 +1381,16 @@ export function AdminPage({
       };
     }
 
+    if (
+      activeBatchId.current !== null &&
+      activeBatchId.current !== snapshot.batch_id &&
+      snapshot.source_batch_id
+    ) {
+      batchPlanRef.current = null;
+      setBatchPlan(null);
+    }
+    activeBatchId.current = snapshot.batch_id;
+    batchSnapshotBody.current = snapshot;
     setBatchSnapshot(job);
     setBatchProgressState(
       batchProgress(snapshot, batchPlanRef.current, announcement),
@@ -1133,7 +1400,7 @@ export function AdminPage({
       batchEventSource.current = null;
       setBatchStream((current) => ({
         ...current,
-        connection: "disconnected",
+        connection: "complete",
       }));
     }
     setGuidedState((current) => {
@@ -1169,11 +1436,22 @@ export function AdminPage({
   }, []);
 
   const refreshBatchSnapshot = useCallback(
-    async (batchId: string) => {
+    async (batchId: string, generation = batchSnapshotGeneration.current) => {
       const snapshot = await request<BatchSnapshotBody>(
         `/api/admin/onboarding/analysis-batches/${encodeURIComponent(batchId)}`,
       );
-      applyBatchSnapshot(snapshot);
+      if (
+        shouldApplyBatchSnapshot(
+          activeBatchId.current,
+          batchId,
+          generation,
+          batchSnapshotGeneration.current,
+        )
+      ) {
+        applyBatchSnapshot(snapshot);
+        return true;
+      }
+      return false;
     },
     [applyBatchSnapshot, request],
   );
@@ -1503,11 +1781,16 @@ export function AdminPage({
 
   useEffect(() => {
     if (!authenticated) {
+      batchSnapshotGeneration.current += 1;
       batchEventSource.current?.close();
       batchEventSource.current = null;
       batchLastEventId.current = null;
       batchAnnouncement.current = null;
       batchIdempotency.current = null;
+      reanalysisIdempotency.current = null;
+      activeBatchId.current = null;
+      batchSnapshotBody.current = null;
+      batchMutationPending.current = false;
       setBatchSnapshot(null);
       setBatchProgressState(null);
       setBatchPlan(null);
@@ -1523,15 +1806,26 @@ export function AdminPage({
     }
 
     let cancelled = false;
+    const generation = batchSnapshotGeneration.current;
     setActiveBatchLoaded(false);
     void request<BatchSnapshotBody>(
       "/api/admin/onboarding/analysis-batches/active",
     )
       .then((snapshot) => {
-        if (!cancelled) applyBatchSnapshot(snapshot);
+        if (
+          !cancelled &&
+          shouldApplyBatchSnapshot(
+            activeBatchId.current,
+            snapshot.batch_id,
+            generation,
+            batchSnapshotGeneration.current,
+          )
+        ) {
+          applyBatchSnapshot(snapshot);
+        }
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && activeBatchId.current === null) {
           setBatchSnapshot(null);
           setBatchProgressState(null);
         }
@@ -1552,7 +1846,7 @@ export function AdminPage({
       if (batchStreamBatchId && batchStreamTerminal) {
         setBatchStream((current) => ({
           ...current,
-          connection: "disconnected",
+          connection: "complete",
         }));
       }
       return;
@@ -1570,6 +1864,7 @@ export function AdminPage({
       connection: current.reconnectAttempts > 0 ? "reconnecting" : "connecting",
     }));
     let snapshotRefreshPending = false;
+    let snapshotRefreshAgain = false;
 
     const refreshFromEvent = (event: Event) => {
       const message = event as MessageEvent<string>;
@@ -1583,15 +1878,30 @@ export function AdminPage({
           lastEventId: String(eventId),
         }));
       }
-      if (snapshotRefreshPending) return;
+      if (snapshotRefreshPending) {
+        snapshotRefreshAgain = true;
+        return;
+      }
       snapshotRefreshPending = true;
-      void refreshBatchSnapshot(batchId)
-        .catch(() => {
-          setBatchStream((current) => ({ ...current, connection: "error" }));
-        })
-        .finally(() => {
+      void (async () => {
+        let refreshGeneration = batchSnapshotGeneration.current;
+        try {
+          do {
+            snapshotRefreshAgain = false;
+            refreshGeneration = batchSnapshotGeneration.current;
+            await refreshBatchSnapshot(batchId, refreshGeneration);
+          } while (snapshotRefreshAgain);
+        } catch {
+          if (
+            activeBatchId.current === batchId &&
+            batchSnapshotGeneration.current === refreshGeneration
+          ) {
+            setBatchStream((current) => ({ ...current, connection: "error" }));
+          }
+        } finally {
           snapshotRefreshPending = false;
-        });
+        }
+      })();
     };
 
     const eventTypes = [
@@ -1666,71 +1976,46 @@ export function AdminPage({
     void (async () => {
       setBusy(true);
       dispatchAdminError({ type: "CLEAR_GLOBAL_ERROR" });
-      const [configResult, statusResult, snippetResult] =
-        await Promise.allSettled([
-          request<ConfigBody>("/api/admin/config"),
-          request<AdminStatus>("/api/admin/index/status"),
-          request<SnippetBody>(
-            `/api/admin/readme-snippet?locale=${encodeURIComponent(locale)}&theme=light&extension=svg&revision=1`,
-          ),
-        ]);
+      const [configResult, statusResult] = await Promise.allSettled([
+        request<LocalDraftBody>("/api/admin/portfolio"),
+        request<AdminStatus>("/api/admin/index/status"),
+      ]);
       if (configResult.status === "fulfilled") {
+        const local = configResult.value;
         const resumedDraft = safeDraftForSessionStorage(
           window.sessionStorage.getItem(GUIDED_DRAFT_STORAGE_KEY) ?? "",
         );
         draftHydrated.current = true;
-        setDraft(resumedDraft ?? configResult.value.content);
-        setBlobSha(configResult.value.blob_sha);
-        setGitHubOperationsReady(true);
-        try {
-          const parsed = await request<AdminValidation>(
-            "/api/admin/config/validate",
-            {
-              method: "POST",
-              body: JSON.stringify({ content: configResult.value.content }),
-            },
-          );
-          setBaseConfig(parsed.parsed ?? null);
-          if (!guidedResumeFound.current) {
-            setGuidedState(
-              guidedOnboardingFromConfig(parsed.parsed) ??
-                initialGuidedOnboardingState(true),
+        setDraft(resumedDraft ?? local.content);
+        setLocalRevision(local.revision);
+        setCharacterSprite(local.sprite_base64);
+        setGitHubOperationsReady(false);
+        if (local.content) {
+          try {
+            const parsed = await request<AdminValidation>(
+              "/api/admin/config/validate",
+              {
+                method: "POST",
+                body: JSON.stringify({ content: local.content }),
+              },
             );
+            setBaseConfig(parsed.parsed ?? null);
+            if (!guidedResumeFound.current)
+              setGuidedState(
+                guidedOnboardingFromConfig(parsed.parsed) ??
+                  initialGuidedOnboardingState(true),
+              );
+          } catch {
+            setBaseConfig(null);
           }
-        } catch {
-          setBaseConfig(null);
         }
       } else {
-        setGitHubOperationsReady(
-          !(
-            configResult.reason instanceof Error &&
-            configResult.reason.message === "SERVICE_NOT_READY"
-          ),
-        );
         dispatchAdminError({
           type: "SET_GLOBAL_ERROR",
           message: adminDataErrorMessage(locale, configResult.reason),
         });
       }
       if (statusResult.status === "fulfilled") setStatus(statusResult.value);
-      if (snippetResult.status === "fulfilled") setSnippet(snippetResult.value);
-      if (
-        configResult.status === "fulfilled" &&
-        (statusResult.status === "rejected" ||
-          snippetResult.status === "rejected")
-      ) {
-        dispatchAdminError({
-          type: "SET_GLOBAL_ERROR",
-          message: adminDataErrorMessage(
-            locale,
-            statusResult.status === "rejected"
-              ? statusResult.reason
-              : snippetResult.status === "rejected"
-                ? snippetResult.reason
-                : new Error("REQUEST_FAILED"),
-          ),
-        });
-      }
       setBusy(false);
     })();
   }, [authenticated, locale, request]);
@@ -2074,12 +2359,20 @@ export function AdminPage({
         return;
       }
       const nextState = guidedOnboardingReducer(guidedState, action);
+      // Only an accepted transition invalidates the active request. This also
+      // releases its busy ownership so a newer request is not blocked by an
+      // older promise's delayed finally callback.
+      invalidateContributionRequest(true);
       if (invalidatesBatch) {
+        batchSnapshotGeneration.current += 1;
         batchEventSource.current?.close();
         batchEventSource.current = null;
         batchLastEventId.current = null;
         batchAnnouncement.current = null;
         batchIdempotency.current = null;
+        reanalysisIdempotency.current = null;
+        activeBatchId.current = null;
+        batchSnapshotBody.current = null;
         batchPlanRef.current = null;
         setBatchSnapshot(null);
         setBatchProgressState(null);
@@ -2093,6 +2386,7 @@ export function AdminPage({
         setBatchActions({ pending: null, error: null });
       }
       setGuidedState(nextState);
+      if (action.type === "SET_MODE") setCharacterWorkspaceOpen(false);
       dispatchAdminError({ type: "CLEAR_GUIDED_ERROR" });
     } catch (transitionError) {
       const code =
@@ -2160,12 +2454,21 @@ export function AdminPage({
   }
 
   async function createAnalysisBatch() {
-    let plan = batchPlan;
-    if (plan === null) {
-      if (!authenticated || !activeBatchLoaded || batchSnapshot !== null)
-        return;
-      setBatchPreflight({ status: "loading" });
-      try {
+    if (
+      !authenticated ||
+      !activeBatchLoaded ||
+      batchSnapshot !== null ||
+      batchMutationPending.current
+    )
+      return;
+    batchMutationPending.current = true;
+    const generation = ++batchSnapshotGeneration.current;
+    setBatchCreatePending(true);
+    setBatchActions({ pending: null, error: null });
+    try {
+      let plan = batchPlan;
+      if (plan === null) {
+        setBatchPreflight({ status: "loading" });
         plan = await request<BatchPreflightBody>(
           "/api/admin/onboarding/analysis-batches/preflight",
           {
@@ -2173,22 +2476,13 @@ export function AdminPage({
             body: JSON.stringify({ selections: batchSelections }),
           },
         );
+        if (generation !== batchSnapshotGeneration.current) return;
+        if (activeBatchId.current !== null) return;
         setBatchPlan(plan);
         batchPlanRef.current = plan;
         setBatchPreflight(preflightState(plan));
-      } catch (error) {
-        setBatchPreflight({
-          status: "failed",
-          error: batchOperationError(error, "preflight"),
-        });
-        return;
       }
-    }
-    if (!plan) return;
-    if (preflightState(plan).status !== "ready") return;
-    setBatchCreatePending(true);
-    setBatchActions({ pending: null, error: null });
-    try {
+      if (preflightState(plan).status !== "ready") return;
       const existingKey = batchIdempotency.current;
       const idempotencyKey =
         existingKey?.planId === plan.plan_id
@@ -2199,7 +2493,7 @@ export function AdminPage({
         planId: plan.plan_id,
         key: idempotencyKey,
       };
-      const result = await request<BatchCreateBody>(
+      const result = await requestIdempotentMutation<BatchCreateBody>(
         "/api/admin/onboarding/analysis-batches",
         {
           method: "POST",
@@ -2210,20 +2504,41 @@ export function AdminPage({
           }),
         },
       );
+      if (generation !== batchSnapshotGeneration.current) return;
+      batchSnapshotGeneration.current += 1;
       markBatchAnalysisStarted();
       applyBatchSnapshot(result.batch);
     } catch (error) {
-      setBatchActions({
-        pending: null,
-        error: batchOperationError(error, "batch"),
-      });
+      if (generation === batchSnapshotGeneration.current) {
+        if (batchPlanRef.current === null) {
+          setBatchPreflight({
+            status: "failed",
+            error: batchOperationError(error, "preflight"),
+          });
+        } else {
+          setBatchActions({
+            pending: null,
+            error: batchOperationError(error, "batch"),
+          });
+        }
+      }
     } finally {
+      batchMutationPending.current = false;
       setBatchCreatePending(false);
     }
   }
 
   async function retryAnalysisPreflight() {
-    if (!authenticated || !activeBatchLoaded || batchCreatePending) return;
+    if (
+      !authenticated ||
+      !activeBatchLoaded ||
+      batchCreatePending ||
+      batchMutationPending.current
+    )
+      return;
+    batchMutationPending.current = true;
+    const generation = ++batchSnapshotGeneration.current;
+    setBatchCreatePending(true);
     setBatchPlan(null);
     batchPlanRef.current = null;
     setBatchActions({ pending: null, error: null });
@@ -2233,6 +2548,7 @@ export function AdminPage({
         const active = await request<BatchSnapshotBody>(
           "/api/admin/onboarding/analysis-batches/active",
         );
+        if (generation !== batchSnapshotGeneration.current) return;
         applyBatchSnapshot(active);
         setBatchPreflight({ status: "idle" });
         return;
@@ -2249,6 +2565,9 @@ export function AdminPage({
       batchLastEventId.current = null;
       batchAnnouncement.current = null;
       batchIdempotency.current = null;
+      reanalysisIdempotency.current = null;
+      activeBatchId.current = null;
+      batchSnapshotBody.current = null;
       setBatchSnapshot(null);
       setBatchProgressState(null);
       setBatchStream({
@@ -2263,14 +2582,20 @@ export function AdminPage({
           body: JSON.stringify({ selections: batchSelections }),
         },
       );
+      if (generation !== batchSnapshotGeneration.current) return;
       setBatchPlan(plan);
       batchPlanRef.current = plan;
       setBatchPreflight(preflightState(plan));
     } catch (error) {
-      setBatchPreflight({
-        status: "failed",
-        error: batchOperationError(error, "preflight"),
-      });
+      if (generation === batchSnapshotGeneration.current) {
+        setBatchPreflight({
+          status: "failed",
+          error: batchOperationError(error, "preflight"),
+        });
+      }
+    } finally {
+      batchMutationPending.current = false;
+      setBatchCreatePending(false);
     }
   }
 
@@ -2278,21 +2603,186 @@ export function AdminPage({
     batchId: string,
     action: "pause" | "resume" | "cancel" | "retry",
   ) {
+    if (
+      batchMutationPending.current ||
+      batchMutationResultUnknown(batchActions)
+    )
+      return;
+    batchMutationPending.current = true;
+    const generation = ++batchSnapshotGeneration.current;
     setBatchActions({ pending: action, error: null });
     try {
       const snapshot = await request<BatchSnapshotBody>(
         `/api/admin/onboarding/analysis-batches/${encodeURIComponent(batchId)}/${action}`,
         { method: "POST" },
       );
-      applyBatchSnapshot(snapshot);
+      if (generation === batchSnapshotGeneration.current) {
+        batchSnapshotGeneration.current += 1;
+        applyBatchSnapshot(snapshot);
+      }
     } catch (error) {
-      setBatchActions({
-        pending: null,
-        error: batchOperationError(error, "batch_action"),
-      });
+      if (generation === batchSnapshotGeneration.current) {
+        if (!(error instanceof AdminRequestError)) {
+          const reconciliation = await reconcileUnknownBatchMutation({
+            batchId,
+            generation,
+            currentGeneration: () => batchSnapshotGeneration.current,
+            refresh: refreshBatchSnapshot,
+          });
+          if (reconciliation === "reconciled") {
+            setBatchActions({ pending: null, error: null });
+          } else if (reconciliation === "unknown") {
+            setBatchActions({
+              pending: null,
+              error: {
+                scope: "batch_action",
+                code: "ANALYSIS_RESULT_UNKNOWN",
+                batchId,
+              },
+            });
+          }
+        } else {
+          setBatchActions({
+            pending: null,
+            error: batchOperationError(error, "batch_action"),
+          });
+        }
+      }
     } finally {
+      batchMutationPending.current = false;
       setBatchActions((current) =>
         current.pending === action ? { ...current, pending: null } : current,
+      );
+    }
+  }
+
+  async function reconcileAnalysisBatch(batchId: string) {
+    if (batchMutationPending.current) return;
+    batchMutationPending.current = true;
+    const generation = ++batchSnapshotGeneration.current;
+    setBatchActions((current) => ({ ...current, pending: "reconcile" }));
+    try {
+      await refreshBatchSnapshot(batchId, generation);
+      if (generation === batchSnapshotGeneration.current) {
+        setBatchActions({ pending: null, error: null });
+      }
+    } catch {
+      if (generation === batchSnapshotGeneration.current) {
+        setBatchActions({
+          pending: null,
+          error: {
+            scope: "batch_action",
+            code: "ANALYSIS_RESULT_UNKNOWN",
+            batchId,
+          },
+        });
+      }
+    } finally {
+      batchMutationPending.current = false;
+      setBatchActions((current) =>
+        current.pending === "reconcile"
+          ? { ...current, pending: null }
+          : current,
+      );
+    }
+  }
+
+  async function reanalyzeBatchItem(
+    batchId: string,
+    itemId: string,
+    modelSelection: "frozen" | "current" = "frozen",
+  ) {
+    if (
+      batchMutationPending.current ||
+      batchMutationResultUnknown(batchActions)
+    )
+      return;
+    batchMutationPending.current = true;
+    const currentGeneration = analysisSelection?.selection.generation;
+    if (modelSelection === "current") {
+      const source = batchSnapshotBody.current;
+      const item = source?.items.find(
+        (candidate) => candidate.item_id === itemId,
+      );
+      if (!currentGeneration || !source || !item) {
+        batchMutationPending.current = false;
+        return;
+      }
+      const frozen = source.analysis_model_pair;
+      const confirmed = window.confirm(
+        analysisModelConfirmationMessage(
+          locale,
+          item.commit_sha,
+          frozen,
+          analysisSelection.selection,
+        ),
+      );
+      if (!confirmed) {
+        batchMutationPending.current = false;
+        return;
+      }
+    }
+    const generation = ++batchSnapshotGeneration.current;
+    const confirmModelChange = modelSelection === "current";
+    const expectedSelectionGeneration = confirmModelChange
+      ? (currentGeneration ?? null)
+      : null;
+    setBatchActions({ pending: "reanalyze", error: null });
+    try {
+      const existingKey = reanalysisIdempotency.current;
+      const idempotencyKey =
+        existingKey?.batchId === batchId &&
+        existingKey.itemId === itemId &&
+        existingKey.modelSelection === modelSelection &&
+        existingKey.confirmModelChange === confirmModelChange &&
+        existingKey.expectedSelectionGeneration === expectedSelectionGeneration
+          ? existingKey.key
+          : (window.crypto?.randomUUID?.() ??
+            `reanalyze-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+      reanalysisIdempotency.current = {
+        batchId,
+        itemId,
+        modelSelection,
+        confirmModelChange,
+        expectedSelectionGeneration,
+        key: idempotencyKey,
+      };
+      const result = await requestIdempotentMutation<BatchCreateBody>(
+        `/api/admin/onboarding/analysis-batches/${encodeURIComponent(batchId)}/reanalyze`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            item_ids: [itemId],
+            idempotency_key: idempotencyKey,
+            model_selection: modelSelection,
+            confirm_model_change: confirmModelChange,
+            expected_selection_generation: expectedSelectionGeneration,
+          }),
+        },
+      );
+      if (generation === batchSnapshotGeneration.current) {
+        batchSnapshotGeneration.current += 1;
+        applyBatchSnapshot(result.batch);
+      }
+    } catch (error) {
+      if (generation === batchSnapshotGeneration.current) {
+        if (
+          error instanceof AdminRequestError &&
+          error.message === "ANALYSIS_MODEL_SELECTION_STALE"
+        ) {
+          await refreshAnalysisSelection();
+        }
+        setBatchActions({
+          pending: null,
+          error: batchOperationError(error, "batch_action"),
+        });
+      }
+    } finally {
+      batchMutationPending.current = false;
+      setBatchActions((current) =>
+        current.pending === "reanalyze"
+          ? { ...current, pending: null }
+          : current,
       );
     }
   }
@@ -2306,7 +2796,7 @@ export function AdminPage({
     try {
       setBusy(true);
       dispatchAdminError({ type: "CLEAR_GUIDED_ERROR" });
-      const analysis = await request<RepositoryAnalysis>(
+      const result = await request<Record<string, unknown>>(
         "/api/admin/onboarding/repositories/analyze",
         {
           method: "POST",
@@ -2318,6 +2808,8 @@ export function AdminPage({
           }),
         },
       );
+      const analysis = batchAnalysisResult(result);
+      if (analysis === null) throw new Error("INVALID_ANALYSIS_RESPONSE");
       setGuidedState((current) =>
         guidedOnboardingReducer(current, {
           type: "ANALYSIS_COMPLETED",
@@ -2343,36 +2835,89 @@ export function AdminPage({
   }
 
   async function suggestContribution(slug: string) {
+    if (contributionRequestPending.current !== null) return;
     const repository = selectedRepositories(guidedState).find(
       (candidate) => candidate.metadata.slug === slug,
     );
     if (!repository?.ownerStatement.trim()) return;
-    await performGuided(async () => {
-      const result = await request<ContributionSuggestionBody>(
+    const originalStatement = repository.ownerStatement;
+    const generation = ++contributionRequestGeneration.current;
+    const abortController = new AbortController();
+    contributionRequestAbort.current = abortController;
+    contributionRequestPending.current = generation;
+    setBusy(true);
+    dispatchAdminError({ type: "CLEAR_GUIDED_ERROR" });
+    try {
+      const response = await request<unknown>(
         "/api/admin/onboarding/contributions/suggest",
         {
           method: "POST",
+          signal: abortController.signal,
           body: JSON.stringify({
             slug,
-            owner_statement: repository.ownerStatement,
+            owner_statement: originalStatement,
           }),
         },
       );
-      setGuidedState((current) =>
-        guidedOnboardingReducer(current, {
-          type: "SET_CONTRIBUTION_PROPOSAL",
-          slug,
-          originalStatement: result.original_statement,
-          proposal: result.proposal,
-        }),
+      if (
+        !shouldApplyContributionResponse(
+          generation,
+          contributionRequestGeneration.current,
+        )
+      )
+        return;
+      const result = contributionSuggestionBody(
+        response,
+        slug,
+        originalStatement,
       );
-    });
+      if (result === null) throw new Error("PROVIDER_OUTPUT_SCHEMA_INVALID");
+      setGuidedState((current) =>
+        shouldApplyContributionResponse(
+          generation,
+          contributionRequestGeneration.current,
+        )
+          ? guidedOnboardingReducer(current, {
+              type: "SET_CONTRIBUTION_PROPOSAL",
+              slug,
+              originalStatement: result.original_statement,
+              proposal: result.proposal,
+            })
+          : current,
+      );
+    } catch (error) {
+      if (
+        shouldApplyContributionResponse(
+          generation,
+          contributionRequestGeneration.current,
+        )
+      ) {
+        const rawCode =
+          error instanceof Error ? error.message : "REQUEST_FAILED";
+        dispatchAdminError({
+          type: "SET_GUIDED_ERROR",
+          code:
+            rawCode === "CONFIG_INVALID"
+              ? "CONTRIBUTION_CONTEXT_INVALID"
+              : rawCode,
+        });
+      }
+    } finally {
+      if (
+        contributionRequestPending.current === generation &&
+        contributionRequestGeneration.current === generation
+      ) {
+        contributionRequestAbort.current = null;
+        contributionRequestPending.current = null;
+        setBusy(false);
+      }
+    }
   }
 
   async function createGuidedDraft() {
     const repositories = selectedRepositories(guidedState);
     await performGuided(async () => {
-      const result = await request<OnboardingDraftBody>(
+      let result = await request<OnboardingDraftBody>(
         "/api/admin/onboarding/draft",
         {
           method: "POST",
@@ -2397,7 +2942,22 @@ export function AdminPage({
           }),
         },
       );
+      if (characterSprite) {
+        const applied = await request<LocalDraftBody>(
+          "/api/admin/portfolio/character",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              content: result.content,
+              sprite_base64: characterSprite,
+            }),
+          },
+        );
+        result = { ...result, content: applied.content };
+      }
       setDraft(result.content);
+      setPublicationOpen(true);
+      setCharacterWorkspaceOpen(false);
       setValidation(result.validation);
       setConflict(false);
       setGuidedState((current) =>
@@ -2459,6 +3019,60 @@ export function AdminPage({
           body: JSON.stringify({ content: draft }),
         }),
       );
+    });
+  }
+
+  async function convertCharacterAsset(
+    source: CharacterMaterialSource,
+    strategy: CharacterConversionStrategy,
+    candidateId?: string,
+  ): Promise<CharacterPreparationResult> {
+    const body = new FormData();
+    if (source.kind === "file") {
+      body.append("file", source.file);
+    } else {
+      for (const entry of source.entries) body.append("files", entry.file);
+      body.append(
+        "paths_json",
+        JSON.stringify(source.entries.map((entry) => entry.path)),
+      );
+    }
+    body.append("strategy", strategy);
+    if (candidateId) body.append("candidate_id", candidateId);
+    return request<CharacterPreparationResult>(
+      "/api/admin/assets/character/convert",
+      { method: "POST", body },
+    );
+  }
+
+  async function saveCharacterAsset(filename: string, pngBase64: string) {
+    const binary = window.atob(pngBase64);
+    const bytes = Uint8Array.from(binary, (character) =>
+      character.charCodeAt(0),
+    );
+    const body = new FormData();
+    body.append("file", new File([bytes], filename, { type: "image/png" }));
+    body.append("commit_message", "Add RepoNPC canonical character");
+    await request(
+      `/api/admin/assets/character/${encodeURIComponent(filename)}`,
+      {
+        method: "PUT",
+        body,
+      },
+    );
+  }
+
+  async function validateAlignedCharacterAsset(
+    png: Blob,
+  ): Promise<CharacterAssetBody> {
+    const body = new FormData();
+    body.append(
+      "file",
+      new File([png], "character.png", { type: "image/png" }),
+    );
+    return request<CharacterAssetBody>("/api/admin/assets/character/validate", {
+      method: "POST",
+      body,
     });
   }
 
@@ -2524,6 +3138,14 @@ export function AdminPage({
     setSetupPassword("");
     setSetupPasswordConfirmation("");
     setDraft("");
+    setLocalRevision(null);
+    setCharacterSprite(null);
+    setPublicationOpen(false);
+    try {
+      window.sessionStorage.removeItem("reponpc.share.public");
+    } catch {
+      /* optional */
+    }
     setBlobSha("");
     setValidation(null);
     setPreview(null);
@@ -2544,6 +3166,12 @@ export function AdminPage({
     batchLastEventId.current = null;
     batchAnnouncement.current = null;
     batchIdempotency.current = null;
+    reanalysisIdempotency.current = null;
+    activeBatchId.current = null;
+    batchSnapshotBody.current = null;
+    batchSnapshotGeneration.current += 1;
+    invalidateContributionRequest(true);
+    batchMutationPending.current = false;
     batchPlanRef.current = null;
     setBatchPreflight({ status: "idle" });
     setBatchPlan(null);
@@ -2807,12 +3435,73 @@ export function AdminPage({
     />
   );
 
+  const workspaceMode: AdminWorkspaceMode = characterWorkspaceOpen
+    ? "character"
+    : publicationOpen
+      ? "publish"
+      : guidedState.mode;
+
   return (
     <>
       <AdminWorkspace
-        advancedMode={guidedState.mode === "advanced"}
         authenticated
         busy={busy}
+        publicationView={
+          <LocalPublishingWorkspace
+            locale={locale}
+            content={draft}
+            spriteBase64={characterSprite}
+            revision={localRevision}
+            initialAccount={guidedState.githubAccount}
+            selection={analysisSelection}
+            request={request}
+            onCreateDraft={() => void createGuidedDraft()}
+            onStored={(body) => {
+              setLocalRevision(body.revision);
+              setDraft(body.content);
+              setCharacterSprite(body.sprite_base64);
+            }}
+          />
+        }
+        characterAssetView={
+          <CharacterAssetConverter
+            disabled={busy}
+            githubOperationsReady={githubOperationsReady}
+            locale={locale}
+            onConvert={convertCharacterAsset}
+            onValidate={validateAlignedCharacterAsset}
+            onSave={saveCharacterAsset}
+            onApply={async (asset) => {
+              if (draft) {
+                const applied = await request<LocalDraftBody>(
+                  "/api/admin/portfolio/character",
+                  {
+                    method: "POST",
+                    body: JSON.stringify({
+                      content: draft,
+                      sprite_base64: asset.png_base64,
+                    }),
+                  },
+                );
+                setCharacterSprite(applied.sprite_base64);
+                setDraft(applied.content);
+                setPreview(null);
+                const parsed = await request<AdminValidation>(
+                  "/api/admin/config/validate",
+                  {
+                    method: "POST",
+                    body: JSON.stringify({ content: applied.content }),
+                  },
+                );
+                setBaseConfig(parsed.parsed ?? null);
+                setPublicationOpen(true);
+                setCharacterWorkspaceOpen(false);
+              } else {
+                setCharacterSprite(asset.png_base64);
+              }
+            }}
+          />
+        }
         conflict={conflict}
         draft={draft}
         embeddingProfileView={modelPanels}
@@ -2836,6 +3525,18 @@ export function AdminPage({
                   onPause={(batchId) => void actOnBatch(batchId, "pause")}
                   onResume={(batchId) => void actOnBatch(batchId, "resume")}
                   onRetry={(batchId) => void actOnBatch(batchId, "retry")}
+                  onReanalyze={(batchId, itemId) =>
+                    void reanalyzeBatchItem(batchId, itemId)
+                  }
+                  onReanalyzeCurrent={
+                    analysisSelection?.eligible
+                      ? (batchId, itemId) =>
+                          void reanalyzeBatchItem(batchId, itemId, "current")
+                      : undefined
+                  }
+                  onReconcile={(batchId) =>
+                    void reconcileAnalysisBatch(batchId)
+                  }
                   onRetryPreflight={() => void retryAnalysisPreflight()}
                   preflight={batchPreflight}
                   progress={batchProgressState}
@@ -2875,7 +3576,13 @@ export function AdminPage({
         }
         locale={locale}
         notice={adminErrors.globalMessage}
-        onLocaleChange={onLocaleChange}
+        onLocaleChange={(nextLocale) => {
+          // Locale changes are part of the visible editing flow. Invalidate a
+          // pending contribution result so its success, error, and cleanup
+          // cannot act on a UI generation the owner has already left.
+          invalidateContributionRequest(true);
+          onLocaleChange?.(nextLocale);
+        }}
         onCopy={() =>
           void navigator.clipboard.writeText(snippet?.markdown ?? "")
         }
@@ -2893,12 +3600,16 @@ export function AdminPage({
           );
         }}
         onLogout={() => void logout()}
-        onAdvancedModeChange={(advanced) =>
-          applyGuidedAction({
-            type: "SET_MODE",
-            mode: advanced ? "advanced" : "guided",
-          })
-        }
+        onWorkspaceModeChange={(mode) => {
+          if (mode === "character") {
+            setCharacterWorkspaceOpen(true);
+            dispatchAdminError({ type: "CLEAR_GUIDED_ERROR" });
+            return;
+          }
+          setCharacterWorkspaceOpen(false);
+          setPublicationOpen(mode === "publish");
+          if (mode !== "publish") applyGuidedAction({ type: "SET_MODE", mode });
+        }}
         onPreview={() => void showPreview()}
         onSave={() => void save()}
         onValidate={() => void validate()}
@@ -2906,6 +3617,7 @@ export function AdminPage({
         snippet={snippet}
         status={status}
         validation={validation}
+        workspaceMode={workspaceMode}
       />
       {serviceSaveNotice && (
         <TransientNotice

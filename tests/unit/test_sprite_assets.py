@@ -6,14 +6,26 @@ import struct
 import pytest
 from PIL import Image, PngImagePlugin
 
-from reponpc.cards.assets import SpriteValidationError, validate_sprite, validate_sprite_filename
+from reponpc.cards.assets import (
+    FRAME_COLUMNS,
+    FRAME_ROWS,
+    FRAME_SIZE,
+    HEIGHT,
+    WIDTH,
+    SpriteValidationError,
+    validate_sprite,
+    validate_sprite_filename,
+)
 
 
 def _sheet(*, metadata: bool = False) -> bytes:
-    image = Image.new("RGBA", (128, 224), (0, 0, 0, 0))
-    for row in range(7):
-        for column in range(4):
-            image.putpixel((column * 32 + 4, row * 32 + 4), (20 + row, 40 + column, 60, 255))
+    image = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    for row in range(FRAME_ROWS):
+        for column in range(FRAME_COLUMNS):
+            image.putpixel(
+                (column * FRAME_SIZE + 4, row * FRAME_SIZE + 4),
+                (20 + row, 40 + column, 60, 255),
+            )
     info = None
     if metadata:
         info = PngImagePlugin.PngInfo()
@@ -32,7 +44,7 @@ def test_valid_sprite_is_metadata_free_and_deterministic() -> None:
     assert len(first.sha256) == 64
     with Image.open(io.BytesIO(first.content)) as image:
         assert image.mode == "RGBA"
-        assert image.size == (128, 224)
+        assert image.size == (WIDTH, HEIGHT)
 
 
 @pytest.mark.parametrize(
@@ -66,20 +78,26 @@ def test_rejects_ihdr_dimensions_before_pillow_decode(
 
 
 def test_missing_transparency_and_empty_state_are_rejected() -> None:
-    opaque = Image.new("RGBA", (128, 224), "red")
+    opaque = Image.new("RGBA", (WIDTH, HEIGHT), "red")
     output = io.BytesIO()
     opaque.save(output, "PNG")
     with pytest.raises(SpriteValidationError, match="character asset is invalid") as error:
         validate_sprite(output.getvalue())
     assert error.value.code == "MISSING_TRANSPARENCY"
 
-    empty = Image.new("RGBA", (128, 224), (0, 0, 0, 0))
-    empty.putpixel((1, 1), (1, 2, 3, 255))
+    empty = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    for row in range(FRAME_ROWS):
+        for column in range(FRAME_COLUMNS):
+            if (row, column) != (FRAME_ROWS - 1, FRAME_COLUMNS - 1):
+                empty.putpixel(
+                    (column * FRAME_SIZE + 1, row * FRAME_SIZE + 1),
+                    (1, 2, 3, 255),
+                )
     output = io.BytesIO()
     empty.save(output, "PNG")
     with pytest.raises(SpriteValidationError) as error:
         validate_sprite(output.getvalue())
-    assert error.value.code == "EMPTY_STATE"
+    assert error.value.code == "EMPTY_FRAME"
 
 
 @pytest.mark.parametrize("filename", ["../hero.png", "nested/hero.png", "Hero.png", "hero.jpg"])

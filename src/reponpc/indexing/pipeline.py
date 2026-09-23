@@ -37,6 +37,7 @@ from reponpc.indexing.github_publication import (
     UrllibGitHubReleaseTransport,
 )
 from reponpc.indexing.index_database import IndexDatabaseBuilder
+from reponpc.indexing.passage_cache import PassageVectorCache
 from reponpc.indexing.public_profile import build_public_profile_bytes
 from reponpc.indexing.publication import (
     PublicationCoordinator,
@@ -106,6 +107,7 @@ def build_index_bundle(
     built_at: datetime | None = None,
     public_directory: str | Path | None = None,
     embedding_identity_override: EmbeddingIdentity | None = None,
+    passage_cache: PassageVectorCache | None = None,
 ) -> BuiltBundle:
     """Resolve, index, bundle, and verify the complete production build path."""
 
@@ -155,7 +157,7 @@ def build_index_bundle(
         embedding=provider.identity(),
         parser_chunker_version=PARSER_CHUNKER_VERSION,
     )
-    index_result = IndexDatabaseBuilder(provider).build(
+    index_result = IndexDatabaseBuilder(provider, passage_cache=passage_cache).build(
         config=config,
         configuration_source=source,
         repositories=snapshots,

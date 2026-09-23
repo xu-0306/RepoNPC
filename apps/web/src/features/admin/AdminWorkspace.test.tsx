@@ -59,7 +59,11 @@ describe("AdminWorkspace", () => {
     expect(markup).toContain('aria-labelledby="admin-preview-heading"');
     expect(markup).toContain('aria-labelledby="admin-status-heading"');
     expect(markup).toContain('aria-labelledby="admin-snippet-heading"');
-    expect(markup).toContain('alt="Unsaved character preview"');
+    expect(markup).toContain('aria-label="Unsaved character preview"');
+    expect(markup).toContain(
+      'aria-label="Unsaved RepoNPC card preview: light-en"',
+    );
+    expect(markup).not.toContain("data:image/png;base64");
     expect(markup).toContain("Unsaved preview");
     expect(markup).toContain("bundle-1");
     expect(markup).toContain("Copy snippet");
@@ -183,30 +187,54 @@ describe("AdminWorkspace", () => {
     expect(markup).toContain("Administrator");
   });
 
-  it("defaults to guided content and keeps raw YAML behind advanced mode", () => {
+  it("gives ordinary character setup its own workspace and keeps raw YAML advanced", () => {
     const guided = renderToStaticMarkup(
       <AdminWorkspace
         {...props({
           guidedView: <section id="guided-fixture">Start guided setup</section>,
-          advancedMode: false,
-          onAdvancedModeChange: vi.fn(),
+          characterAssetView: (
+            <section id="character-fixture">Upload character art</section>
+          ),
+          workspaceMode: "guided",
+          onWorkspaceModeChange: vi.fn(),
         })}
       />,
     );
     expect(guided).toContain('id="guided-fixture"');
-    expect(guided).toContain('aria-pressed="true"');
+    expect(guided).toContain("Character &amp; animation");
+    expect(guided).not.toContain('id="character-fixture"');
     expect(guided).not.toContain('id="admin-config-draft"');
+
+    const character = renderToStaticMarkup(
+      <AdminWorkspace
+        {...props({
+          guidedView: <section id="guided-fixture">Start guided setup</section>,
+          characterAssetView: (
+            <section id="character-fixture">Upload character art</section>
+          ),
+          workspaceMode: "character",
+          onWorkspaceModeChange: vi.fn(),
+        })}
+      />,
+    );
+    expect(character).toContain('id="character-fixture"');
+    expect(character).not.toContain('id="guided-fixture"');
+    expect(character).not.toContain('id="admin-config-draft"');
 
     const advanced = renderToStaticMarkup(
       <AdminWorkspace
         {...props({
           guidedView: <section id="guided-fixture">Start guided setup</section>,
-          advancedMode: true,
-          onAdvancedModeChange: vi.fn(),
+          characterAssetView: (
+            <section id="character-fixture">Upload character art</section>
+          ),
+          workspaceMode: "advanced",
+          onWorkspaceModeChange: vi.fn(),
         })}
       />,
     );
     expect(advanced).not.toContain('id="guided-fixture"');
+    expect(advanced).not.toContain('id="character-fixture"');
     expect(advanced).toContain('id="admin-config-draft"');
     expect(advanced).toContain("Advanced: edit raw YAML");
   });
@@ -217,8 +245,8 @@ describe("AdminWorkspace", () => {
         {...props({
           notice: "Global workspace failure",
           guidedView: <p role="alert">Guided operation failure</p>,
-          advancedMode: false,
-          onAdvancedModeChange: vi.fn(),
+          workspaceMode: "guided",
+          onWorkspaceModeChange: vi.fn(),
         })}
       />,
     );
@@ -232,8 +260,8 @@ describe("AdminWorkspace", () => {
         {...props({
           notice: "Global workspace failure",
           guidedView: <p role="alert">Guided operation failure</p>,
-          advancedMode: true,
-          onAdvancedModeChange: vi.fn(),
+          workspaceMode: "advanced",
+          onWorkspaceModeChange: vi.fn(),
         })}
       />,
     );

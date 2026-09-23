@@ -1053,6 +1053,93 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             """,
         ),
     ),
+    Migration(
+        version=26,
+        name="analysis_recovery_lineage",
+        statements=(
+            """
+            ALTER TABLE analysis_batches
+            ADD COLUMN source_batch_id TEXT
+                CHECK(source_batch_id IS NULL OR length(source_batch_id) BETWEEN 1 AND 64)
+            """,
+            """
+            ALTER TABLE analysis_batches
+            ADD COLUMN analysis_round INTEGER NOT NULL DEFAULT 1
+                CHECK(analysis_round >= 1)
+            """,
+            """
+            ALTER TABLE analysis_batch_items
+            ADD COLUMN source_item_id TEXT
+                CHECK(source_item_id IS NULL OR length(source_item_id) BETWEEN 1 AND 64)
+            """,
+            """
+            ALTER TABLE analysis_batch_items
+            ADD COLUMN failure_stage TEXT CHECK(failure_stage IS NULL OR failure_stage IN (
+                'queued', 'resolving_commit', 'fetching_source', 'filtering',
+                'indexing', 'embedding', 'generating', 'validating', 'cleaning_up'
+            ))
+            """,
+            """
+            CREATE UNIQUE INDEX analysis_batches_source_idx
+            ON analysis_batches(source_batch_id, analysis_round, selection_hash)
+            WHERE source_batch_id IS NOT NULL
+            """,
+            """
+            CREATE UNIQUE INDEX analysis_batch_items_source_idx
+            ON analysis_batch_items(source_item_id)
+            WHERE source_item_id IS NOT NULL
+            """,
+            """
+            UPDATE analysis_batch_items
+            SET execution_started_at = NULL
+            WHERE state NOT IN (
+                'resolving_commit', 'fetching_source', 'filtering', 'indexing',
+                'embedding', 'generating', 'validating', 'cleaning_up'
+            )
+            """,
+        ),
+    ),
+    Migration(
+        version=27,
+        name="analysis_recovery_receipts",
+        statements=(
+            """
+            ALTER TABLE analysis_batch_items
+            ADD COLUMN successor_batch_id TEXT
+                CHECK(successor_batch_id IS NULL OR length(successor_batch_id) BETWEEN 1 AND 64)
+            """,
+            """
+            UPDATE analysis_batch_items AS source
+            SET successor_batch_id = (
+                SELECT successor.batch_id
+                FROM analysis_batch_items AS successor
+                WHERE successor.source_item_id = source.item_id
+                LIMIT 1
+            )
+            WHERE EXISTS (
+                SELECT 1 FROM analysis_batch_items AS successor
+                WHERE successor.source_item_id = source.item_id
+            )
+            """,
+            """
+            CREATE TABLE analysis_batch_idempotency_receipts (
+                idempotency_key_hash TEXT PRIMARY KEY
+                    CHECK(length(idempotency_key_hash) = 64
+                          AND idempotency_key_hash NOT GLOB '*[^0-9a-f]*'),
+                operation TEXT NOT NULL CHECK(operation = 'reanalyze'),
+                request_hash TEXT NOT NULL
+                    CHECK(length(request_hash) = 64
+                          AND request_hash NOT GLOB '*[^0-9a-f]*'),
+                batch_id TEXT NOT NULL CHECK(length(batch_id) BETWEEN 1 AND 64),
+                created_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE INDEX analysis_batch_idempotency_receipts_batch_idx
+            ON analysis_batch_idempotency_receipts(batch_id)
+            """,
+        ),
+    ),
 )
 
 

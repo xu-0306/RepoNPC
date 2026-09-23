@@ -53,14 +53,16 @@ character:
   mode: builtin
   revision: 0
   builtin:
-    body: standard
-    skin: medium
-    hair: short
-    hair_color: '#2b1d14'
-    outfit: engineer
-    primary_color: '#6d5dfc'
-    secondary_color: '#f2c14e'
-    accessory: glasses
+    pack_id: core/humanoid
+    pack_version: 1
+    options:
+      tone: medium
+      hairstyle: short
+      attire: engineer
+      hair_color: '#2b1d14'
+      primary_color: '#6d5dfc'
+      secondary_color: '#f2c14e'
+      accessory: glasses
   animation:
     frame_duration_ms: 160
     movement: subtle

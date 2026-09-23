@@ -18,6 +18,12 @@ export interface ChatHistoryMessage {
   content: string;
 }
 
+interface HistoryLimits {
+  messages: number;
+  messageCharacters: number;
+  totalCharacters: number;
+}
+
 function characterCount(text: string): number {
   // Python/Pydantic count Unicode code points, not JavaScript UTF-16 units.
   return Array.from(text).length;
@@ -31,21 +37,21 @@ function characterCount(text: string): number {
  */
 export function retainSuccessfulExchanges(
   exchanges: readonly SuccessfulExchange[],
+  limits: HistoryLimits = CHAT_HISTORY_LIMITS,
 ): SuccessfulExchange[] {
   const retained: SuccessfulExchange[] = [];
   let characters = 0;
   for (let index = exchanges.length - 1; index >= 0; index -= 1) {
-    if ((retained.length + 1) * 2 > CHAT_HISTORY_LIMITS.messages) break;
+    if ((retained.length + 1) * 2 > limits.messages) break;
     const exchange = exchanges[index];
     const questionLength = characterCount(exchange.question);
     const answerLength = characterCount(exchange.answer);
     if (
       !exchange.question.trim() ||
       !exchange.answer.trim() ||
-      questionLength > CHAT_HISTORY_LIMITS.messageCharacters ||
-      answerLength > CHAT_HISTORY_LIMITS.messageCharacters ||
-      characters + questionLength + answerLength >
-        CHAT_HISTORY_LIMITS.totalCharacters
+      questionLength > limits.messageCharacters ||
+      answerLength > limits.messageCharacters ||
+      characters + questionLength + answerLength > limits.totalCharacters
     ) {
       break;
     }
@@ -57,11 +63,65 @@ export function retainSuccessfulExchanges(
 
 export function buildChatHistory(
   exchanges: readonly SuccessfulExchange[],
+  limits: HistoryLimits = CHAT_HISTORY_LIMITS,
 ): ChatHistoryMessage[] {
-  return retainSuccessfulExchanges(exchanges).flatMap((exchange) => [
+  return retainSuccessfulExchanges(exchanges, limits).flatMap((exchange) => [
     { role: "user" as const, content: exchange.question },
     { role: "assistant" as const, content: exchange.answer },
   ]);
+}
+
+/** Retry once only when admission reports smaller history limits. No model
+ * request has run for this 413 response; the visible transcript stays intact. */
+export async function requestPortfolioChat(
+  message: string,
+  locale: string,
+  exchanges: readonly SuccessfulExchange[],
+  signal: AbortSignal,
+  send: typeof fetch = fetch,
+): Promise<Response> {
+  const history = buildChatHistory(exchanges);
+  const post = (selected: ChatHistoryMessage[]) =>
+    send("/api/public/chat/stream", {
+      method: "POST",
+      signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, locale, history: selected }),
+    });
+  const response = await post(history);
+  if (response.status !== 413 || history.length === 0 || signal.aborted)
+    return response;
+  let error;
+  try {
+    error = (await response.clone().json()).error;
+  } catch {
+    return response;
+  }
+  const details = error?.details;
+  if (
+    error?.code !== "PAYLOAD_TOO_LARGE" ||
+    !details ||
+    ![
+      details.max_message_characters,
+      details.max_history_messages,
+      details.max_history_characters,
+    ].every((value) => Number.isSafeInteger(value) && value >= 0) ||
+    characterCount(message) > details.max_message_characters
+  )
+    return response;
+  const bounded = buildChatHistory(exchanges, {
+    ...CHAT_HISTORY_LIMITS,
+    messages: Math.min(
+      details.max_history_messages,
+      CHAT_HISTORY_LIMITS.messages,
+    ),
+    totalCharacters: Math.min(
+      details.max_history_characters,
+      CHAT_HISTORY_LIMITS.totalCharacters,
+    ),
+  });
+  if (bounded.length >= history.length || signal.aborted) return response;
+  return post(bounded);
 }
 
 /**

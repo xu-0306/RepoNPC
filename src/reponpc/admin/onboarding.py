@@ -25,6 +25,7 @@ from reponpc.indexing.github import (
     normalize_github_repository,
 )
 from reponpc.indexing.index_database import IndexBuildError, IndexDatabaseBuilder
+from reponpc.indexing.passage_cache import PassageVectorCache
 from reponpc.indexing.sources import (
     EmbeddingIdentity,
     EmbeddingProviderError,
@@ -47,13 +48,14 @@ ANALYSIS_GENERATION_ATTEMPTS = 3
 MAX_OWNER_STATEMENT_CHARACTERS = 4000
 ANALYSIS_MAX_OUTPUT_TOKENS = 8192
 ANALYSIS_MAX_OUTPUT_TOKENS_HARD_LIMIT = 16384
-_SUGGESTION_MAX_OUTPUT_TOKENS = 700
+CONTRIBUTION_MAX_OUTPUT_TOKENS = 700
 ANALYSIS_PROMPT_VERSION = "onboarding-prompt-v2"
 ANALYSIS_OUTPUT_SCHEMA_VERSION = "analysis-schema-v2"
 ANALYSIS_OUTPUT_POLICY_VERSION = "analysis-output-policy-v1"
 ANALYSIS_TOKEN_ESTIMATOR_VERSION = "utf8-bytes-v1"
 ANALYSIS_TERMINATION_VALIDATION_VERSION = "finish-reason-length-reject-v1"
 _ANALYSIS_CONTEXT_SAFETY_MARGIN_TOKENS = 256
+_CONTRIBUTION_CONTEXT_SAFETY_MARGIN_TOKENS = 256
 _DEFAULT_INCLUDE_PATTERNS = (
     "README.md",
     "docs/**",
@@ -91,11 +93,105 @@ _DEFAULT_INCLUDE_PATTERNS = (
     "*.bat",
     "*.cmd",
 )
-_PERSONAL_INFERENCE_RE = re.compile(
-    r"\b(i|my|me|mine|owner|author|employee|senior|responsib|achievement|led)\b"
-    r"|我|本人|負責|主導|作者|職位|資深|成就|影響",
-    re.IGNORECASE,
+_ENGLISH_PERSON = (
+    r"(?:owner|author|maintainer|contributor|developer|engineer|employee|"
+    r"team[ -]member|person|individual)"
 )
+_ENGLISH_PERSON_PREDICATE = (
+    r"(?:lead|leads|led|leading|responsible|responsibility|responsibilities|"
+    r"author|authored|ownership|owns|owned|employed|employment|employee|"
+    r"senior|seniority|achievement|achievements|achieved|impact|impacts|"
+    r"impacted|built|created|implemented|designed|completed|delivered|drove|"
+    r"wrote|maintained|developed|contributed)"
+)
+_ENGLISH_PERSONAL_INFERENCE_RES = (
+    re.compile(
+        rf"\b(?:i|we|he|she|they)\b"
+        rf"(?:\s+(?:am|is|are|was|were|have|has|had|been|personally|primarily|"
+        rf"directly|independently|jointly|successfully))*"
+        rf"\s+\b{_ENGLISH_PERSON_PREDICATE}\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:the\s+)?{_ENGLISH_PERSON}s?\b"
+        rf"(?:\s+(?:is|are|was|were|has|have|had|been|personally|primarily|"
+        rf"directly|independently|jointly|successfully))*"
+        rf"\s+\b{_ENGLISH_PERSON_PREDICATE}\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:my|our|his|her|their|(?:the\s+)?{_ENGLISH_PERSON}s?['\u2019]s)\s+"
+        r"(?:role|responsibility|responsibilities|authorship|ownership|employment|"
+        r"seniority|achievement|achievements|impact|contribution|contributions)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b{_ENGLISH_PERSON_PREDICATE}\b[^.!?\n]{{0,24}}\bby\s+"
+        rf"(?:me|us|him|her|them|(?:the\s+)?{_ENGLISH_PERSON}s?)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:senior|lead|principal)\s+{_ENGLISH_PERSON}s?\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:i|we|he|she|they|(?:the\s+)?{_ENGLISH_PERSON}s?)\b\s+"
+        rf"(?:am|is|are|was|were)\s+(?:(?:an?|the)\s+)?{_ENGLISH_PERSON}s?\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:my|our|his|her|their|(?:the\s+)?{_ENGLISH_PERSON}s?['\u2019]s)\s+"
+        r"(?:role|position|job|title)\s+(?:is|was)\s+(?:(?:an?|the)\s+)?"
+        rf"(?:{_ENGLISH_PERSON}s?|development|engineering|maintenance|architecture)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:i|we|he|she|they|(?:the\s+)?{_ENGLISH_PERSON}s?)\b\s+"
+        r"(?:currently\s+)?(?:work|works|worked)\s+(?:at|for)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:i|we|he|she|they|(?:the\s+)?{_ENGLISH_PERSON}s?)\b\s+"
+        r"(?:have\s+|has\s+|had\s+)?joined\b[^.!?\n]{1,48}\bas\s+"
+        rf"(?:(?:an?|the)\s+)?{_ENGLISH_PERSON}s?\b",
+        re.IGNORECASE,
+    ),
+)
+_CHINESE_PERSONAL_INFERENCE_RES = (
+    re.compile(
+        r"(?:我|我們|本人|他|她|他們|她們)"
+        r"[^\uFF0C\u3002\uFF01\uFF1F!?\uFF1B;\n]{0,16}"
+        r"(?:負責|主導|領導|完成|開發|實作|實現|建立|設計|撰寫|維護|擁有|"
+        r"任職|職位|資深|成就|貢獻|影響)"
+    ),
+    re.compile(
+        r"(?:作者|擁有者|所有者|維護者|貢獻者|開發者|工程師|員工|團隊成員)"
+        r"(?:(?:曾|主要|直接|獨立|共同|親自|實際|也|並|則|是|為|的)|"
+        r"(?:在[^\uFF0C\u3002\uFF01\uFF1F!?\uFF1B;\n]{0,8})){0,3}"
+        r"(?:負責|主導|領導|完成|開發|實作|實現|建立|設計|撰寫|維護|擁有|"
+        r"任職|職位|資深|成就|貢獻|影響)"
+    ),
+    re.compile(
+        r"(?:我|我們|本人|他|她|他們|她們|作者|擁有者|所有者|維護者|貢獻者|"
+        r"開發者|工程師|員工|團隊成員)(?:的(?:角色|職位)|角色|職位)?(?:是|為)"
+        r"(?:主要|資深|首席)?(?:擁有者|所有者|維護者|貢獻者|開發者|工程師|員工|"
+        r"團隊成員|負責人)"
+    ),
+    re.compile(
+        r"(?:我|我們|本人|他|她|他們|她們|作者|擁有者|所有者|維護者|貢獻者|"
+        r"開發者|工程師|員工|團隊成員)(?:目前|曾經|現正|過去|曾|正|已)?"
+        r"(?:任職|受僱|就職)於?"
+    ),
+    re.compile(r"(?:資深|首席|主要)\s*(?:維護者|貢獻者|開發者|工程師|員工)"),
+)
+
+
+def _contains_personal_inference(text: str) -> bool:
+    """Detect explicit person claims without rejecting non-human technical subjects."""
+
+    return any(pattern.search(text) for pattern in _ENGLISH_PERSONAL_INFERENCE_RES) or any(
+        pattern.search(text) for pattern in _CHINESE_PERSONAL_INFERENCE_RES
+    )
 
 
 def analysis_effective_output_tokens(
@@ -255,6 +351,7 @@ class GuidedOnboardingService:
         source_resolver: GitHubSourceResolver,
         providers_supplier: Callable[[], ProviderRuntime | None],
         limits_supplier: Callable[[], ChatLimits | None],
+        contribution_providers_supplier: Callable[[], ProviderRuntime | None] | None = None,
         staging_root: Path,
         provider_timeout_seconds: float,
         analysis_max_output_tokens: int = ANALYSIS_MAX_OUTPUT_TOKENS,
@@ -286,8 +383,12 @@ class GuidedOnboardingService:
         validate_analysis_output_budget(analysis_max_output_tokens)
         self._source_resolver = source_resolver
         self._providers_supplier = providers_supplier
+        self._contribution_providers_supplier = (
+            contribution_providers_supplier or providers_supplier
+        )
         self._limits_supplier = limits_supplier
         self._staging_root = Path(staging_root)
+        self._passage_cache = PassageVectorCache(self._staging_root.parent / "passage-cache")
         self._provider_timeout_seconds = float(provider_timeout_seconds)
         self._analysis_max_output_tokens = analysis_max_output_tokens
         self._analysis_timeout_seconds = float(analysis_timeout_seconds)
@@ -373,7 +474,8 @@ class GuidedOnboardingService:
                         limits=limits,
                         lane=ProviderLane.ADMIN_SINGLE,
                         timeout_seconds=self._analysis_provider_timeout_seconds,
-                    )
+                    ),
+                    passage_cache=self._passage_cache,
                 )
                 result = builder.build(
                     config=config,
@@ -489,7 +591,7 @@ class GuidedOnboardingService:
             reason = "NO_ELIGIBLE_CONTENT" if exc.code == "index_evidence_limit_exceeded" else None
             raise GuidedOnboardingError("CONFIG_INVALID", reason=reason) from exc
         except ProviderError as exc:
-            raise _provider_error(exc, analysis=True) from exc
+            raise _provider_error(exc) from exc
         except EmbeddingProviderError as exc:
             raise GuidedOnboardingError("MODEL_UNAVAILABLE") from exc
 
@@ -547,7 +649,8 @@ class GuidedOnboardingService:
                             queue_timeout_seconds=self._analysis_timeout_seconds,
                             wait_excluded=wait_excluded,
                             monotonic=self._monotonic,
-                        )
+                        ),
+                        passage_cache=self._passage_cache,
                     ).build(
                         config=config,
                         configuration_source=ResolvedConfiguration(
@@ -664,7 +767,7 @@ class GuidedOnboardingService:
             reason = "NO_ELIGIBLE_CONTENT" if exc.code == "index_evidence_limit_exceeded" else None
             raise GuidedOnboardingError("CONFIG_INVALID", reason=reason) from exc
         except ProviderError as exc:
-            raise _provider_error(exc, analysis=True) from exc
+            raise _provider_error(exc) from exc
         except EmbeddingProviderError as exc:
             raise GuidedOnboardingError("MODEL_UNAVAILABLE") from exc
 
@@ -682,18 +785,30 @@ class GuidedOnboardingService:
         statement = owner_statement.strip()
         if not statement or len(statement) > MAX_OWNER_STATEMENT_CHARACTERS:
             raise GuidedOnboardingError("VALIDATION_ERROR")
-        providers, limits = self._provider_dependencies()
+        providers, limits = self._contribution_provider_dependencies()
         try:
             with self._session_operation(session_hash), limits.acquire_generation():
+                messages = _contribution_messages(normalized_slug, statement)
+                response_schema = _contribution_response_schema()
+                capabilities = providers.chat.capabilities()
+                output_tokens = min(
+                    CONTRIBUTION_MAX_OUTPUT_TOKENS,
+                    capabilities.max_output_tokens,
+                    capabilities.max_context_tokens,
+                )
+                _validate_contribution_request(
+                    messages,
+                    response_schema=response_schema,
+                    output_tokens=output_tokens,
+                    max_context_tokens=capabilities.max_context_tokens,
+                )
                 result = providers.generate_once(
-                    _contribution_messages(normalized_slug, statement),
-                    _contribution_response_schema(),
-                    min(
-                        _SUGGESTION_MAX_OUTPUT_TOKENS,
-                        providers.chat.capabilities().max_output_tokens,
-                    ),
+                    messages,
+                    response_schema,
+                    output_tokens,
                     self._provider_timeout_seconds,
                 )
+                _validate_contribution_termination(result)
                 proposal = _parse_contribution(result.content)
         except ChatLimitError as exc:
             raise GuidedOnboardingError(
@@ -805,6 +920,13 @@ class GuidedOnboardingService:
         self, *, providers: ProviderRuntime | None = None
     ) -> tuple[ProviderRuntime, ChatLimits]:
         providers = providers or self._providers_supplier()
+        limits = self._limits_supplier()
+        if providers is None or limits is None:
+            raise GuidedOnboardingError("MODEL_UNAVAILABLE")
+        return providers, limits
+
+    def _contribution_provider_dependencies(self) -> tuple[ProviderRuntime, ChatLimits]:
+        providers = self._contribution_providers_supplier()
         limits = self._limits_supplier()
         if providers is None or limits is None:
             raise GuidedOnboardingError("MODEL_UNAVAILABLE")
@@ -939,14 +1061,17 @@ def _analysis_config(
             "mode": "builtin",
             "revision": 1,
             "builtin": {
-                "body": "standard",
-                "skin": "medium",
-                "hair": "short",
-                "hair_color": "#2b1d14",
-                "outfit": "adventurer",
-                "primary_color": "#6d5dfc",
-                "secondary_color": "#f2c14e",
-                "accessory": "glasses",
+                "pack_id": "core/humanoid",
+                "pack_version": 1,
+                "options": {
+                    "tone": "medium",
+                    "hairstyle": "short",
+                    "attire": "adventurer",
+                    "hair_color": "#2b1d14",
+                    "primary_color": "#6d5dfc",
+                    "secondary_color": "#f2c14e",
+                    "accessory": "glasses",
+                },
             },
             "animation": {"frame_duration_ms": 160, "movement": "subtle"},
         },
@@ -1099,11 +1224,18 @@ def _contribution_messages(slug: str, statement: str) -> tuple[ProviderMessage, 
     return (
         ProviderMessage(
             "system",
-            "Structure only the owner's supplied public statement into bilingual editable "
-            "role, summary, and claims. Preserve uncertainty and collaboration boundaries. "
-            "Do not add or strengthen authorship, responsibility, achievement, seniority, "
-            "or impact. "
-            "The output remains an unconfirmed proposal.",
+            "Edit only the owner's supplied public statement into concise, natural bilingual "
+            "portfolio text. Return JSON only with exactly role, summary, and claims. Role is "
+            "the owner's short personal role. Summary describes the owner's contribution while "
+            "preserving collaboration boundaries. Responsibility claims describe only the "
+            "owner's stated work; place explicitly stated AI or collaborator work in context "
+            "claims. Create an achievement claim only when the owner states an outcome. Keep "
+            "qualifiers such as assisted, participated, or co-maintained. Do not invent or "
+            "strengthen authorship, leadership, architecture ownership, interface design, "
+            "testing, deployment, seniority, achievement, or impact. Do not repeat claims merely "
+            "to fill the array. Every localized value has exactly non-empty zh-TW and en strings; "
+            "claim kinds are role, responsibility, achievement, or context. The output remains "
+            "an unconfirmed proposal; do not write workflow labels into its content.",
         ),
         ProviderMessage(
             "user",
@@ -1184,7 +1316,10 @@ def _contribution_response_schema() -> dict[str, Any]:
         "type": "object",
         "additionalProperties": False,
         "required": ["zh-TW", "en"],
-        "properties": {"zh-TW": {"type": "string"}, "en": {"type": "string"}},
+        "properties": {
+            "zh-TW": {"type": "string", "minLength": 1, "maxLength": 2000},
+            "en": {"type": "string", "minLength": 1, "maxLength": 2000},
+        },
     }
     return {
         "type": "object",
@@ -1201,7 +1336,10 @@ def _contribution_response_schema() -> dict[str, Any]:
                     "additionalProperties": False,
                     "required": ["id", "kind", "statement"],
                     "properties": {
-                        "id": {"type": "string"},
+                        "id": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_-]{2,63}$",
+                        },
                         "kind": {"enum": ["role", "responsibility", "achievement", "context"]},
                         "statement": localized,
                     },
@@ -1221,9 +1359,9 @@ def _parse_analysis(content: str | dict[str, Any], selected: frozenset[str]) -> 
     for inference in envelope.inferences:
         if not set(inference.supporting_evidence_ids).issubset(selected):
             raise GuidedOnboardingError("PROVIDER_ERROR", reason="PROVIDER_EVIDENCE_ID_INVALID")
-        if _PERSONAL_INFERENCE_RE.search(
-            inference.statement.zh_tw
-        ) or _PERSONAL_INFERENCE_RE.search(inference.statement.en):
+        if _contains_personal_inference(inference.statement.zh_tw) or _contains_personal_inference(
+            inference.statement.en
+        ):
             raise GuidedOnboardingError(
                 "PROVIDER_ERROR", reason="PROVIDER_PERSONAL_INFERENCE_REJECTED"
             )
@@ -1234,7 +1372,36 @@ def _parse_contribution(content: str | dict[str, Any]) -> ContributionProposal:
     try:
         return ContributionProposal.model_validate(_provider_payload(content))
     except (ValidationError, ValueError, json.JSONDecodeError) as exc:
-        raise GuidedOnboardingError("PROVIDER_ERROR") from exc
+        raise GuidedOnboardingError(
+            "PROVIDER_ERROR", reason="PROVIDER_OUTPUT_SCHEMA_INVALID"
+        ) from exc
+
+
+def _validate_contribution_request(
+    messages: Sequence[ProviderMessage],
+    *,
+    response_schema: dict[str, Any],
+    output_tokens: int,
+    max_context_tokens: int,
+) -> None:
+    """Reserve the full contribution request and fixed output budget before generation."""
+
+    request_tokens = _analysis_request_tokens(messages)
+    request_tokens += _conservative_token_count(
+        json.dumps(response_schema, ensure_ascii=False, sort_keys=True)
+    )
+    if (
+        request_tokens + output_tokens + _CONTRIBUTION_CONTEXT_SAFETY_MARGIN_TOKENS
+        > max_context_tokens
+    ):
+        raise GuidedOnboardingError("CONFIG_INVALID")
+
+
+def _validate_contribution_termination(result: ProviderResult) -> None:
+    """Never accept a contribution proposal the provider marked as truncated."""
+
+    if result.finish_reason.casefold() == "length":
+        raise GuidedOnboardingError("PROVIDER_ERROR", reason="PROVIDER_OUTPUT_LIMIT_REACHED")
 
 
 def _provider_payload(content: str | dict[str, Any]) -> dict[str, Any]:
@@ -1244,14 +1411,12 @@ def _provider_payload(content: str | dict[str, Any]) -> dict[str, Any]:
     return value
 
 
-def _provider_error(error: ProviderError, *, analysis: bool = False) -> GuidedOnboardingError:
+def _provider_error(error: ProviderError) -> GuidedOnboardingError:
     if error.code is ProviderFailureCode.TIMEOUT:
         return GuidedOnboardingError("PROVIDER_TIMEOUT")
     if error.code is ProviderFailureCode.UNAVAILABLE:
         return GuidedOnboardingError("MODEL_UNAVAILABLE")
     if isinstance(error, ProviderResponseError) and error.issue is ResponseIssue.OUTPUT_LIMIT:
-        if not analysis:
-            return GuidedOnboardingError("PROVIDER_ERROR")
         return GuidedOnboardingError("PROVIDER_ERROR", reason="PROVIDER_OUTPUT_LIMIT_REACHED")
     return GuidedOnboardingError("PROVIDER_ERROR")
 

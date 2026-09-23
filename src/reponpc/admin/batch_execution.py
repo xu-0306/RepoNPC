@@ -34,6 +34,7 @@ from reponpc.admin.onboarding import (
     analysis_generation_policy_identity,
     validate_analysis_output_budget,
 )
+from reponpc.domain.evidence import EVIDENCE_ID_RE
 from reponpc.providers.runtime import ProviderRuntime
 
 
@@ -99,12 +100,17 @@ class PinnedBatchItemRunner:
             runtime = self._frozen_runtime(pair)
             derived_key, result_key = self._cache_keys(item, pair, runtime)
             cached = self._store.get_cache(result_key)
-            if (
-                cached is not None
-                and cached.cache_kind == "validated_analysis"
-                and _cache_matches_item(cached.payload, item)
-            ):
-                return _cached_result(cached.payload)
+            if cached is not None:
+                cached_result = None
+                if (
+                    cached.cache_kind == "validated_analysis"
+                    and cached.derived_index_key == derived_key
+                    and cached.metadata == self._result_cache_metadata(item, pair, runtime)
+                ):
+                    cached_result = _cached_result(cached.payload, item)
+                if cached_result is not None:
+                    return cached_result
+                self._store.delete_cache(result_key)
             repository = _immutable_repository(item)
             self._store.advance_item(item, state="fetching_source")
             with self._excluded_wait(item, deadline, self._gates.archive_staging):
@@ -146,25 +152,8 @@ class PinnedBatchItemRunner:
                 cache_key=result_key,
                 cache_kind="validated_analysis",
                 derived_index_key=derived_key,
-                metadata={
-                    "repository": item.input.slug,
-                    "commit": item.input.commit_sha,
-                    "chat_model": (
-                        pair.cache_chat_identity() if pair is not None else self._chat_model
-                    ),
-                    "prompt_version": self._prompt_version,
-                    "output_schema_version": self._output_schema_version,
-                    "validation_version": self._validation_version,
-                    "analysis_output_policy_version": ANALYSIS_OUTPUT_POLICY_VERSION,
-                    "analysis_max_output_tokens": self._analysis_max_output_tokens,
-                    "token_estimator_version": self._token_estimator_version,
-                    "termination_validation_version": self._termination_validation_version,
-                    "analysis_generation_policy": analysis_generation_policy_identity(
-                        self._analysis_max_output_tokens,
-                        runtime,
-                    ),
-                },
-                payload=_cacheable_result(result),
+                metadata=self._result_cache_metadata(item, pair, runtime),
+                payload=_cacheable_result(result, item),
             )
             return result
         except BatchExecutionError:
@@ -173,9 +162,14 @@ class PinnedBatchItemRunner:
             raise _batch_error(exc) from exc
         except GuidedOnboardingError as exc:
             raise _onboarding_error(exc) from exc
-        except BatchRuntimeError:
+        except BatchRuntimeError as exc:
             # A lost lease means another terminal action already owns the
             # outcome.  Never attempt another upstream/provider call.
+            if exc.code in {
+                "ANALYSIS_TIMEOUT",
+                "ANALYSIS_GENERATION_ATTEMPTS_EXHAUSTED",
+            }:
+                raise BatchExecutionError(exc.code) from None
             raise BatchExecutionError("CANCELLED") from None
 
     @contextmanager
@@ -249,6 +243,29 @@ class PinnedBatchItemRunner:
             analysis_generation_policy_identity(self._analysis_max_output_tokens, runtime),
         )
 
+    def _result_cache_metadata(
+        self,
+        item: ClaimedBatchItem,
+        pair: AnalysisModelPair | None,
+        runtime: ProviderRuntime | None,
+    ) -> dict[str, object]:
+        return {
+            "repository": item.input.slug,
+            "commit": item.input.commit_sha,
+            "chat_model": pair.cache_chat_identity() if pair is not None else self._chat_model,
+            "prompt_version": self._prompt_version,
+            "output_schema_version": self._output_schema_version,
+            "validation_version": self._validation_version,
+            "analysis_output_policy_version": ANALYSIS_OUTPUT_POLICY_VERSION,
+            "analysis_max_output_tokens": self._analysis_max_output_tokens,
+            "token_estimator_version": self._token_estimator_version,
+            "termination_validation_version": self._termination_validation_version,
+            "analysis_generation_policy": analysis_generation_policy_identity(
+                self._analysis_max_output_tokens,
+                runtime,
+            ),
+        }
+
 
 def _immutable_repository(item: ClaimedBatchItem) -> ResolvedRepository:
     slug = item.input.slug
@@ -261,16 +278,6 @@ def _immutable_repository(item: ClaimedBatchItem) -> ResolvedRepository:
         commit_sha=commit,
         is_archived=False,
         archive_url=f"{GITHUB_ARCHIVE_BASE_URL}/repos/{owner}/{name}/tarball/{commit}",
-    )
-
-
-def _cache_matches_item(payload: dict[str, object], item: ClaimedBatchItem) -> bool:
-    repository = payload.get("repository")
-    if not isinstance(repository, dict):
-        return False
-    return (
-        repository.get("slug") == item.input.slug
-        and repository.get("commit_sha") == item.input.commit_sha
     )
 
 
@@ -312,30 +319,121 @@ class _ExtendableDeadline:
         self._deadline += max(0.0, seconds)
 
 
-def _cacheable_result(result: dict[str, object]) -> dict[str, object]:
+def _cacheable_result(result: dict[str, object], item: ClaimedBatchItem) -> dict[str, object]:
     """Persist validated model result metadata but never repository text/excerpts."""
 
-    repository = result.get("repository")
-    inferences = result.get("inferences")
-    skipped = result.get("skipped_summary")
-    if (
-        not isinstance(repository, dict)
-        or not isinstance(inferences, list)
-        or not isinstance(skipped, dict)
-    ):
+    cached = _parse_cached_payload(
+        {
+            "repository": result.get("repository"),
+            "inferences": result.get("inferences"),
+            "skipped_summary": result.get("skipped_summary"),
+        },
+        item,
+    )
+    if cached is None:
         raise BatchExecutionError("ANALYSIS_FAILED")
-    return {
-        "repository": repository,
-        "inferences": inferences,
-        "skipped_summary": skipped,
-    }
+    return cached
 
 
-def _cached_result(payload: dict[str, object]) -> dict[str, object]:
-    required = ("repository", "inferences", "skipped_summary")
-    if any(key not in payload for key in required):
-        raise BatchExecutionError("ANALYSIS_FAILED")
+def _cached_result(payload: dict[str, object], item: ClaimedBatchItem) -> dict[str, object] | None:
+    cached = _parse_cached_payload(payload, item)
+    if cached is None:
+        return None
     # Cached results contain no raw evidence excerpts. A later analysis may
     # rebuild sources to refresh displayed evidence, but cache reuse is safe
     # because outputs are already schema-validated and commit-bound.
-    return {**payload, "facts": []}
+    return {**cached, "facts": []}
+
+
+def _parse_cached_payload(
+    payload: dict[str, object], item: ClaimedBatchItem
+) -> dict[str, object] | None:
+    if set(payload) != {"repository", "inferences", "skipped_summary"}:
+        return None
+    repository = payload.get("repository")
+    inferences = payload.get("inferences")
+    skipped = payload.get("skipped_summary")
+    if not isinstance(repository, dict) or not _valid_cached_repository(repository, item):
+        return None
+    if not isinstance(inferences, list) or len(inferences) > 6:
+        return None
+    normalized_inferences: list[dict[str, object]] = []
+    for inference in inferences:
+        normalized = _valid_cached_inference(inference)
+        if normalized is None:
+            return None
+        normalized_inferences.append(normalized)
+    normalized_skipped = _valid_cached_skipped_summary(skipped)
+    if normalized_skipped is None:
+        return None
+    return {
+        "repository": dict(repository),
+        "inferences": normalized_inferences,
+        "skipped_summary": normalized_skipped,
+    }
+
+
+def _valid_cached_repository(value: object, item: ClaimedBatchItem) -> bool:
+    if not isinstance(value, dict):
+        return False
+    allowed = {"slug", "commit_sha", "default_branch", "html_url"}
+    if not {"slug", "commit_sha"}.issubset(value) or not set(value).issubset(allowed):
+        return False
+    if value.get("slug") != item.input.slug or value.get("commit_sha") != item.input.commit_sha:
+        return False
+    return all(
+        isinstance(field, str) and 0 < len(field) <= maximum
+        for key, maximum in (("slug", 201), ("commit_sha", 40))
+        if (field := value.get(key)) is not None
+    ) and all(
+        optional is None or (isinstance(optional, str) and 0 < len(optional) <= maximum)
+        for key, maximum in (("default_branch", 255), ("html_url", 2048))
+        if (optional := value.get(key)) is not None
+    )
+
+
+def _valid_cached_inference(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict) or set(value) != {
+        "evidence_class",
+        "statement",
+        "supporting_evidence_ids",
+    }:
+        return None
+    statement = value.get("statement")
+    evidence_ids = value.get("supporting_evidence_ids")
+    if value.get("evidence_class") != "MODEL_INFERENCE":
+        return None
+    if not isinstance(statement, dict) or set(statement) != {"zh-TW", "en"}:
+        return None
+    if not all(isinstance(text, str) and 0 < len(text) <= 2000 for text in statement.values()):
+        return None
+    if (
+        not isinstance(evidence_ids, list)
+        or not 1 <= len(evidence_ids) <= 8
+        or not all(
+            isinstance(evidence_id, str) and EVIDENCE_ID_RE.fullmatch(evidence_id)
+            for evidence_id in evidence_ids
+        )
+    ):
+        return None
+    return {
+        "evidence_class": "MODEL_INFERENCE",
+        "statement": {"zh-TW": statement["zh-TW"], "en": statement["en"]},
+        "supporting_evidence_ids": list(evidence_ids),
+    }
+
+
+def _valid_cached_skipped_summary(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict) or set(value) != {"count", "reasons"}:
+        return None
+    count = value.get("count")
+    reasons = value.get("reasons")
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        return None
+    if (
+        not isinstance(reasons, list)
+        or len(reasons) > 20
+        or not all(isinstance(reason, str) and 0 < len(reason) <= 100 for reason in reasons)
+    ):
+        return None
+    return {"count": count, "reasons": list(reasons)}

@@ -1,0 +1,24 @@
+{
+  "selection_generation": 7,
+  "chat": {
+    "profile_id": "chat-safe",
+    "connection_id": "chat-connection-safe",
+    "connection_revision": 3,
+    "provider": "ollama",
+    "model_id": "chat-model-safe"
+  },
+  "embedding": {
+    "profile_id": "embedding-safe",
+    "connection_id": "embedding-connection-safe",
+    "connection_revision": 5,
+    "provider": "ollama",
+    "identity": {
+      "adapter": "ollama",
+      "model_id": "embedding-model-safe",
+      "dimension": 2,
+      "normalized": true,
+      "query_prefix": "query: ",
+      "passage_prefix": "passage: "
+    }
+  }
+}

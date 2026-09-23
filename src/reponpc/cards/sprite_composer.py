@@ -1,48 +1,52 @@
-"""Deterministic composition of RepoNPC's built-in character sheet.
+"""Compile versioned built-in character packs to the canonical sprite sheet.
 
-The built-in character is intentionally drawn here instead of loading image
-files.  Keeping the masks and primitives in this module makes composition
-pure, reproducible, and safe to run while building an immutable bundle.  The
-result uses the same canonical sheet contract as uploaded characters: four
-``32 x 32`` RGBA frames for each of the seven ordered states.
+The compiler is deliberately species-agnostic. Pack-local option names and
+rendering live behind the registry boundary; the public core contract knows
+only a pack ID/version, bounded string options, and the canonical four-by-seven
+sprite output shared with uploaded characters.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from io import BytesIO
+from types import MappingProxyType
 from typing import Any, Final, NamedTuple
 
 from PIL import Image, ImageDraw
 
-from reponpc.config.models import BuiltinCharacterConfig
-
-CANVAS_WIDTH: Final = 128
-CANVAS_HEIGHT: Final = 224
-FRAME_WIDTH: Final = 32
-FRAME_HEIGHT: Final = 32
-FRAME_COLUMNS: Final = 4
-FRAME_ROWS: Final = 7
-STATE_NAMES: Final[tuple[str, ...]] = (
-    "idle",
-    "walk",
-    "listen",
-    "think",
-    "talk",
-    "success",
-    "offline",
+from reponpc.cards.assets import (
+    FRAME_COLUMNS,
+    FRAME_ROWS,
+    FRAME_SIZE,
+    HEIGHT,
+    STATE_ROWS,
+    WIDTH,
+    validate_sprite,
 )
-LAYER_ORDER: Final[tuple[str, ...]] = ("body", "outfit", "hair", "accessory")
+from reponpc.config.models import (
+    CHARACTER_OPTION_ID_RE,
+    CHARACTER_PACK_ID_RE,
+    BuiltinCharacterPackConfig,
+)
 
-BODY_IDS: Final[frozenset[str]] = frozenset({"standard"})
-SKIN_IDS: Final[frozenset[str]] = frozenset({"light", "medium", "dark"})
-HAIR_IDS: Final[frozenset[str]] = frozenset({"none", "short", "long"})
-OUTFIT_IDS: Final[frozenset[str]] = frozenset({"adventurer", "engineer", "mage"})
-ACCESSORY_IDS: Final[frozenset[str]] = frozenset({"none", "glasses", "headphones"})
+CANVAS_WIDTH: Final = WIDTH
+CANVAS_HEIGHT: Final = HEIGHT
+FRAME_WIDTH: Final = FRAME_SIZE
+FRAME_HEIGHT: Final = FRAME_SIZE
+STATE_NAMES: Final[tuple[str, ...]] = STATE_ROWS
+_HUMANOID_SOURCE_FRAME_SIZE: Final = 32
+_HUMANOID_LAYER_ORDER: Final[tuple[str, ...]] = ("body", "outfit", "hair", "accessory")
+_HUMANOID_BODY_IDS: Final[frozenset[str]] = frozenset({"standard"})
+_HUMANOID_TONE_IDS: Final[frozenset[str]] = frozenset({"light", "medium", "dark"})
+_HUMANOID_HAIRSTYLE_IDS: Final[frozenset[str]] = frozenset({"none", "short", "long"})
+_HUMANOID_ATTIRE_IDS: Final[frozenset[str]] = frozenset({"adventurer", "engineer", "mage"})
+_HUMANOID_ACCESSORY_IDS: Final[frozenset[str]] = frozenset({"none", "glasses", "headphones"})
 
 _HEX_COLOR = re.compile(r"^#[0-9a-f]{6}$")
-_SKIN_PALETTE: Final[dict[str, tuple[int, int, int, int]]] = {
+_HUMANOID_TONE_PALETTE: Final[dict[str, tuple[int, int, int, int]]] = {
     "light": (244, 194, 157, 255),
     "medium": (198, 137, 94, 255),
     "dark": (117, 73, 48, 255),
@@ -56,22 +60,46 @@ _GLASS: Final[tuple[int, int, int, int]] = (177, 225, 246, 235)
 class SpriteComposerError(ValueError):
     """Stable, safe failure raised for invalid composition input/registries."""
 
-    def __init__(self, code: str, message: str | None = None) -> None:
+    def __init__(self, code: str, message: str | None = None, *, field: str | None = None) -> None:
         self.code = code
         self.error_code = code
+        self.field = field
         super().__init__(
             f"{code}: {message or _ERROR_MESSAGES.get(code, 'sprite composition failed')}"
         )
 
 
 _ERROR_MESSAGES: Final[dict[str, str]] = {
-    "INVALID_CONFIG": "built-in character configuration is invalid",
+    "INVALID_CONFIG": "built-in character pack configuration is invalid",
     "MISSING_LAYER": "built-in character layer is missing",
-    "UNKNOWN_ID": "built-in character ID is not allowlisted",
-    "INVALID_COLOR": "built-in character color is invalid",
-    "INVALID_REGISTRY": "built-in character registry is invalid",
-    "RENDER_ERROR": "built-in character could not be rendered",
+    "UNKNOWN_ID": "built-in pack option is not allowlisted",
+    "INVALID_COLOR": "built-in pack color is invalid",
+    "INVALID_REGISTRY": "built-in character pack registry is invalid",
+    "UNKNOWN_PACK": "built-in character pack is not registered",
+    "PACK_VERSION_UNSUPPORTED": "built-in character pack version is unsupported",
+    "MISSING_OPTION": "required built-in pack option is missing",
+    "UNKNOWN_OPTION": "built-in pack option is unknown",
+    "INVALID_OPTION": "built-in pack option is invalid",
+    "RENDER_ERROR": "built-in character pack could not be rendered",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class CharacterPackOption:
+    """One pack-owned option contract; core code does not interpret its name."""
+
+    kind: str
+    choices: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True, slots=True)
+class CharacterPack:
+    """Trusted built-in pack manifest plus its deterministic renderer."""
+
+    pack_id: str
+    version: int
+    options: Mapping[str, CharacterPackOption]
+    renderer: Callable[[Mapping[str, str]], bytes]
 
 
 class _RenderSpec(NamedTuple):
@@ -90,96 +118,97 @@ class _RenderSpec(NamedTuple):
 
 def _hex(value: Any, field: str) -> tuple[int, int, int, int]:
     if not isinstance(value, str) or _HEX_COLOR.fullmatch(value) is None:
-        raise SpriteComposerError("INVALID_COLOR", field)
+        raise SpriteComposerError("INVALID_COLOR", field, field=field)
     try:
         return (*bytes.fromhex(value[1:]), 255)
     except ValueError:
-        raise SpriteComposerError("INVALID_COLOR", field) from None
+        raise SpriteComposerError("INVALID_COLOR", field, field=field) from None
 
 
-def _value(config: Any, field: str) -> Any:
-    """Read a config field without allowing a missing layer to disappear."""
-
-    if isinstance(config, Mapping):
-        if field not in config:
-            raise SpriteComposerError("MISSING_LAYER", field)
-        return config[field]
-    try:
-        return getattr(config, field)
-    except AttributeError:
-        raise SpriteComposerError("MISSING_LAYER", field) from None
-
-
-def _config_values(config: BuiltinCharacterConfig | Mapping[str, Any] | Any) -> dict[str, Any]:
-    if isinstance(config, BuiltinCharacterConfig):
-        return {field: getattr(config, field) for field in _CONFIG_FIELDS}
-    if isinstance(config, Mapping):
-        values = dict(config)
-    else:
-        # A model constructed by pydantic (or a small test double) still has
-        # the exact same field contract.  Unknown objects fail safely below.
-        values = {}
-        for field in _CONFIG_FIELDS:
-            values[field] = _value(config, field)
-    unknown = set(values) - set(_CONFIG_FIELDS)
-    if unknown:
+def _pack_config_values(
+    config: BuiltinCharacterPackConfig | Mapping[str, Any],
+) -> tuple[str, int, Mapping[str, str]]:
+    if isinstance(config, BuiltinCharacterPackConfig):
+        return config.pack_id, config.pack_version, config.options
+    if not isinstance(config, Mapping) or set(config) != {
+        "pack_id",
+        "pack_version",
+        "options",
+    }:
         raise SpriteComposerError("INVALID_CONFIG")
-    missing = set(_CONFIG_FIELDS) - set(values)
-    if missing:
-        raise SpriteComposerError("MISSING_LAYER", sorted(missing)[0])
-    return values
+    pack_id = config["pack_id"]
+    pack_version = config["pack_version"]
+    options = config["options"]
+    if (
+        not isinstance(pack_id, str)
+        or not isinstance(pack_version, int)
+        or isinstance(pack_version, bool)
+        or not isinstance(options, Mapping)
+        or any(
+            not isinstance(key, str) or not isinstance(value, str) for key, value in options.items()
+        )
+    ):
+        raise SpriteComposerError("INVALID_CONFIG")
+    return pack_id, pack_version, options
 
 
-_CONFIG_FIELDS: Final[tuple[str, ...]] = (
-    "body",
-    "skin",
-    "hair",
-    "hair_color",
-    "outfit",
-    "primary_color",
-    "secondary_color",
-    "accessory",
-)
+def _resolve_pack(
+    pack_id: str,
+    pack_version: int,
+    registry: Mapping[tuple[str, int], CharacterPack],
+) -> CharacterPack:
+    pack = registry.get((pack_id, pack_version))
+    if pack is not None:
+        return pack
+    if any(registered_id == pack_id for registered_id, _version in registry):
+        raise SpriteComposerError("PACK_VERSION_UNSUPPORTED")
+    raise SpriteComposerError("UNKNOWN_PACK")
 
 
-def _validate_values(config: BuiltinCharacterConfig | Mapping[str, Any] | Any) -> _RenderSpec:
-    values = _config_values(config)
-    body = values["body"]
-    skin_id = values["skin"]
-    hair_style = values["hair"]
-    outfit = values["outfit"]
-    accessory = values["accessory"]
+def _normalize_pack_options(pack: CharacterPack, supplied: Mapping[str, str]) -> Mapping[str, str]:
+    expected = set(pack.options)
+    actual = set(supplied)
+    if actual - expected:
+        field = sorted(actual - expected)[0]
+        raise SpriteComposerError("UNKNOWN_OPTION", field=field)
+    if expected - actual:
+        field = sorted(expected - actual)[0]
+        raise SpriteComposerError("MISSING_OPTION", field=field)
 
-    def allowlisted(value: Any, choices: frozenset[str]) -> bool:
-        return isinstance(value, str) and value in choices
+    normalized: dict[str, str] = {}
+    for field, contract in pack.options.items():
+        value = supplied[field]
+        if contract.kind == "choice":
+            if value not in contract.choices:
+                raise SpriteComposerError("INVALID_OPTION", field=field)
+            normalized[field] = value
+        elif contract.kind == "color":
+            if _HEX_COLOR.fullmatch(value) is None:
+                raise SpriteComposerError("INVALID_COLOR", field=field)
+            normalized[field] = value.lower()
+        else:
+            raise SpriteComposerError("INVALID_REGISTRY")
+    return MappingProxyType(normalized)
 
-    if not allowlisted(body, BODY_IDS):
-        raise SpriteComposerError("UNKNOWN_ID")
-    if not allowlisted(skin_id, SKIN_IDS):
-        raise SpriteComposerError("UNKNOWN_ID")
-    if not allowlisted(hair_style, HAIR_IDS):
-        raise SpriteComposerError("UNKNOWN_ID")
-    if not allowlisted(outfit, OUTFIT_IDS):
-        raise SpriteComposerError("UNKNOWN_ID")
-    if not allowlisted(accessory, ACCESSORY_IDS):
-        raise SpriteComposerError("UNKNOWN_ID")
+
+def _humanoid_render_spec(values: Mapping[str, str]) -> _RenderSpec:
     return _RenderSpec(
         state_index=0,
         frame_index=0,
         x=0,
         y=0,
-        skin=_SKIN_PALETTE[skin_id],
+        skin=_HUMANOID_TONE_PALETTE[values["tone"]],
         hair=_hex(values["hair_color"], "hair_color"),
         primary=_hex(values["primary_color"], "primary_color"),
         secondary=_hex(values["secondary_color"], "secondary_color"),
-        outfit=outfit,
-        hair_style=hair_style,
-        accessory=accessory,
+        outfit=values["attire"],
+        hair_style=values["hairstyle"],
+        accessory=values["accessory"],
     )
 
 
 def _pixel(draw: ImageDraw.ImageDraw, x: int, y: int, color: tuple[int, int, int, int]) -> None:
-    if 0 <= x < FRAME_WIDTH and 0 <= y < FRAME_HEIGHT:
+    if 0 <= x < _HUMANOID_SOURCE_FRAME_SIZE and 0 <= y < _HUMANOID_SOURCE_FRAME_SIZE:
         draw.point((x, y), fill=color)
 
 
@@ -302,18 +331,18 @@ def _draw_accessory(draw: ImageDraw.ImageDraw, spec: _RenderSpec) -> None:
         raise SpriteComposerError("UNKNOWN_ID")
 
 
-def _registry_is_valid() -> bool:
-    expected_layers = set(LAYER_ORDER)
-    if set(LAYER_REGISTRY) != expected_layers:
+def _humanoid_registry_is_valid() -> bool:
+    expected_layers = set(_HUMANOID_LAYER_ORDER)
+    if set(_HUMANOID_LAYER_REGISTRY) != expected_layers:
         return False
     expected_ids = {
-        "body": BODY_IDS,
-        "outfit": OUTFIT_IDS,
-        "hair": HAIR_IDS,
-        "accessory": ACCESSORY_IDS,
+        "body": _HUMANOID_BODY_IDS,
+        "outfit": _HUMANOID_ATTIRE_IDS,
+        "hair": _HUMANOID_HAIRSTYLE_IDS,
+        "accessory": _HUMANOID_ACCESSORY_IDS,
     }
     for layer, ids in expected_ids.items():
-        registry = LAYER_REGISTRY.get(layer)
+        registry = _HUMANOID_LAYER_REGISTRY.get(layer)
         if not isinstance(registry, Mapping) or set(registry) != set(ids):
             return False
         if any(not callable(drawer) for drawer in registry.values()):
@@ -321,34 +350,29 @@ def _registry_is_valid() -> bool:
     return True
 
 
-# Public to make the stable module-owned IDs auditable; composition verifies
-# its shape every call so accidental edits cannot silently select a fallback.
-LAYER_REGISTRY: dict[str, dict[str, Callable[[ImageDraw.ImageDraw, _RenderSpec], None]]] = {
+# This renderer is local to the humanoid pack. Core pack compilation never
+# branches on these layer names, so another pack can expose unrelated options.
+_HUMANOID_LAYER_REGISTRY: dict[
+    str, dict[str, Callable[[ImageDraw.ImageDraw, _RenderSpec], None]]
+] = {
     "body": {"standard": _draw_body},
-    "outfit": {name: _draw_outfit for name in OUTFIT_IDS},
-    "hair": {name: _draw_hair for name in HAIR_IDS},
-    "accessory": {name: _draw_accessory for name in ACCESSORY_IDS},
+    "outfit": {name: _draw_outfit for name in _HUMANOID_ATTIRE_IDS},
+    "hair": {name: _draw_hair for name in _HUMANOID_HAIRSTYLE_IDS},
+    "accessory": {name: _draw_accessory for name in _HUMANOID_ACCESSORY_IDS},
 }
 
 
-def compose_builtin(config: BuiltinCharacterConfig) -> bytes:
-    """Compose one canonical deterministic RGBA PNG from a built-in config.
-
-    ``BuiltinCharacterConfig`` is the supported public input.  A mapping is
-    accepted only as a convenience for callers decoding strict YAML; it is
-    validated against the exact same field and ID contract and never falls
-    back to another character.
-    """
-
-    if not _registry_is_valid():
+def _render_humanoid_pack(options: Mapping[str, str]) -> bytes:
+    if not _humanoid_registry_is_valid():
         raise SpriteComposerError("INVALID_REGISTRY")
-    base = _validate_values(config)
+    base = _humanoid_render_spec(options)
     image = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
     try:
         for state_index, _state in enumerate(STATE_NAMES):
             for frame_index in range(FRAME_COLUMNS):
                 # Tiny deterministic offsets create readable state animation
-                # while keeping the silhouette inside the 32x32 frame.
+                # while keeping the silhouette inside this pack's private
+                # 32px source frame before canonical 64px expansion.
                 if state_index == 1:
                     x_offset = (0, 1, 0, -1)[frame_index]
                 elif state_index == 5:
@@ -364,15 +388,24 @@ def compose_builtin(config: BuiltinCharacterConfig) -> bytes:
                 )
                 # Draw into absolute sheet coordinates by translating each
                 # primitive's local frame coordinates through a temporary
-                # 32x32 image.  This keeps clipping and layer order explicit.
-                local = Image.new("RGBA", (FRAME_WIDTH, FRAME_HEIGHT), (0, 0, 0, 0))
+                # 32px source image. This keeps this pack's clipping/layer
+                # order explicit before expansion to the shared 64px format.
+                local = Image.new(
+                    "RGBA",
+                    (_HUMANOID_SOURCE_FRAME_SIZE, _HUMANOID_SOURCE_FRAME_SIZE),
+                    (0, 0, 0, 0),
+                )
                 draw = ImageDraw.Draw(local)
-                LAYER_REGISTRY["body"]["standard"](draw, spec)
-                LAYER_REGISTRY["outfit"][spec.outfit](draw, spec)
-                LAYER_REGISTRY["hair"][spec.hair_style](draw, spec)
-                LAYER_REGISTRY["accessory"][spec.accessory](draw, spec)
+                _HUMANOID_LAYER_REGISTRY["body"]["standard"](draw, spec)
+                _HUMANOID_LAYER_REGISTRY["outfit"][spec.outfit](draw, spec)
+                _HUMANOID_LAYER_REGISTRY["hair"][spec.hair_style](draw, spec)
+                _HUMANOID_LAYER_REGISTRY["accessory"][spec.accessory](draw, spec)
+                canonical_frame = local.resize(
+                    (FRAME_WIDTH, FRAME_HEIGHT), Image.Resampling.NEAREST
+                )
                 image.alpha_composite(
-                    local, (frame_index * FRAME_WIDTH, state_index * FRAME_HEIGHT)
+                    canonical_frame,
+                    (frame_index * FRAME_WIDTH, state_index * FRAME_HEIGHT),
                 )
     except SpriteComposerError:
         raise
@@ -387,21 +420,114 @@ def compose_builtin(config: BuiltinCharacterConfig) -> bytes:
     return output.getvalue()
 
 
+_HUMANOID_PACK = CharacterPack(
+    pack_id="core/humanoid",
+    version=1,
+    options=MappingProxyType(
+        {
+            "tone": CharacterPackOption("choice", _HUMANOID_TONE_IDS),
+            "hairstyle": CharacterPackOption("choice", _HUMANOID_HAIRSTYLE_IDS),
+            "attire": CharacterPackOption("choice", _HUMANOID_ATTIRE_IDS),
+            "accessory": CharacterPackOption("choice", _HUMANOID_ACCESSORY_IDS),
+            "hair_color": CharacterPackOption("color"),
+            "primary_color": CharacterPackOption("color"),
+            "secondary_color": CharacterPackOption("color"),
+        }
+    ),
+    renderer=_render_humanoid_pack,
+)
+
+PACK_REGISTRY: Final[Mapping[tuple[str, int], CharacterPack]] = MappingProxyType(
+    {(_HUMANOID_PACK.pack_id, _HUMANOID_PACK.version): _HUMANOID_PACK}
+)
+
+
+def _pack_registry_is_valid(registry: Mapping[tuple[str, int], CharacterPack]) -> bool:
+    if not registry:
+        return False
+    for key, pack in registry.items():
+        if not isinstance(key, tuple) or len(key) != 2 or not isinstance(pack, CharacterPack):
+            return False
+        if (
+            key != (pack.pack_id, pack.version)
+            or not isinstance(pack.pack_id, str)
+            or CHARACTER_PACK_ID_RE.fullmatch(pack.pack_id) is None
+            or not isinstance(pack.version, int)
+            or isinstance(pack.version, bool)
+            or pack.version < 1
+        ):
+            return False
+        if (
+            not isinstance(pack.options, Mapping)
+            or not callable(pack.renderer)
+            or len(pack.options) > 32
+        ):
+            return False
+        for option_id, option in pack.options.items():
+            if (
+                not isinstance(option_id, str)
+                or CHARACTER_OPTION_ID_RE.fullmatch(option_id) is None
+                or not isinstance(option, CharacterPackOption)
+            ):
+                return False
+            if option.kind == "choice" and (
+                not option.choices
+                or any(
+                    not isinstance(choice, str) or not choice or len(choice) > 128
+                    for choice in option.choices
+                )
+            ):
+                return False
+            if option.kind == "color" and option.choices:
+                return False
+            if option.kind not in {"choice", "color"}:
+                return False
+    return True
+
+
+def validate_builtin_pack(
+    config: BuiltinCharacterPackConfig | Mapping[str, Any],
+    *,
+    registry: Mapping[tuple[str, int], CharacterPack] = PACK_REGISTRY,
+) -> tuple[CharacterPack, Mapping[str, str]]:
+    """Resolve and validate a pack config without rendering it."""
+
+    if not _pack_registry_is_valid(registry):
+        raise SpriteComposerError("INVALID_REGISTRY")
+    pack_id, pack_version, options = _pack_config_values(config)
+    pack = _resolve_pack(pack_id, pack_version, registry)
+    return pack, _normalize_pack_options(pack, options)
+
+
+def compose_builtin(
+    config: BuiltinCharacterPackConfig | Mapping[str, Any],
+    *,
+    registry: Mapping[tuple[str, int], CharacterPack] = PACK_REGISTRY,
+) -> bytes:
+    """Compile a registered built-in pack without knowing its species or slots."""
+
+    pack, options = validate_builtin_pack(config, registry=registry)
+    try:
+        rendered = pack.renderer(options)
+        return validate_sprite(rendered).content
+    except SpriteComposerError:
+        raise
+    except Exception as exc:
+        raise SpriteComposerError("RENDER_ERROR") from exc
+
+
 __all__ = [
-    "ACCESSORY_IDS",
-    "BODY_IDS",
     "CANVAS_HEIGHT",
     "CANVAS_WIDTH",
     "FRAME_COLUMNS",
     "FRAME_HEIGHT",
     "FRAME_ROWS",
     "FRAME_WIDTH",
-    "HAIR_IDS",
-    "LAYER_ORDER",
-    "LAYER_REGISTRY",
-    "OUTFIT_IDS",
-    "SKIN_IDS",
+    "PACK_REGISTRY",
     "STATE_NAMES",
+    "CharacterPack",
+    "CharacterPackOption",
     "SpriteComposerError",
     "compose_builtin",
+    "validate_builtin_pack",
 ]

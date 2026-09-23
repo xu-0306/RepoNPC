@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -157,6 +158,42 @@ def test_analysis_model_pair_round_trips_legal_empty_embedding_prefixes() -> Non
     )
 
     assert AnalysisModelPair.from_safe_dict(pair.safe_dict()) == pair
+
+
+def test_analysis_model_pair_safe_shape_matches_frontend_contract_fixture() -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[2]
+        / "apps"
+        / "web"
+        / "src"
+        / "features"
+        / "admin"
+        / "__fixtures__"
+        / "analysisModelPair.safe.json"
+    )
+    expected = json.loads(fixture_path.read_text(encoding="utf-8"))
+    pair = AnalysisModelPair(
+        selection_generation=7,
+        chat_profile_id="chat-safe",
+        chat_connection_id="chat-connection-safe",
+        chat_connection_revision=3,
+        chat_provider="ollama",
+        chat_model_id="chat-model-safe",
+        embedding_profile_id="embedding-safe",
+        embedding_connection_id="embedding-connection-safe",
+        embedding_connection_revision=5,
+        embedding_provider="ollama",
+        embedding_identity=EmbeddingIdentity(
+            adapter="ollama",
+            model_id="embedding-model-safe",
+            dimension=2,
+            normalized=True,
+            query_prefix="query: ",
+            passage_prefix="passage: ",
+        ),
+    )
+
+    assert pair.safe_dict() == expected
 
 
 def test_analysis_selection_never_selects_an_unprobed_role(tmp_path: Path) -> None:

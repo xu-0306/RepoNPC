@@ -15,7 +15,9 @@ export const CHARACTER_STATES = [
 export type CharacterState = (typeof CHARACTER_STATES)[number];
 export type CharacterMovement = "none" | "subtle";
 
-export const CHARACTER_FRAME_SIZE = 32;
+export const CHARACTER_FRAME_SIZE = 64;
+export const CHARACTER_SHEET_WIDTH = 256;
+export const CHARACTER_SHEET_HEIGHT = 448;
 export const CHARACTER_FRAME_COUNT = 4;
 export const DEFAULT_CHARACTER_FRAME_DURATION_MS = 160;
 export const MIN_CHARACTER_FRAME_DURATION_MS = 80;
@@ -120,17 +122,17 @@ export function CharacterRenderer({
             alt=""
             className="character-renderer__sheet-image"
             draggable={false}
-            height={224}
+            height={CHARACTER_SHEET_HEIGHT}
             src={assetUrl}
-            width={128}
+            width={CHARACTER_SHEET_WIDTH}
           />
           <img
             alt=""
             className="character-renderer__sheet-image"
             draggable={false}
-            height={224}
+            height={CHARACTER_SHEET_HEIGHT}
             src={assetUrl}
-            width={128}
+            width={CHARACTER_SHEET_WIDTH}
           />
         </span>
       </span>

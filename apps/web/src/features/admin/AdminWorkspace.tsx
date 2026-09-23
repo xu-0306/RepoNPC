@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 
+import { Base64PngCanvas } from "./Base64PngCanvas";
 import {
   ADMIN_UI_SCALES,
   applyAdminUiScale,
@@ -10,6 +11,11 @@ import {
 } from "./adminUiScale";
 
 export type AdminLocale = "zh-TW" | "en";
+export type AdminWorkspaceMode =
+  | "guided"
+  | "character"
+  | "publish"
+  | "advanced";
 
 export interface ValidationIssue {
   path: string;
@@ -46,6 +52,12 @@ export interface PreviewCard {
 }
 
 export interface AdminPreview {
+  repositories?: Array<{
+    slug: string;
+    role: Record<string, string>;
+    summary: Record<string, string>;
+    claims: Array<{ id: string; statement: Record<string, string> }>;
+  }>;
   profile?: Record<string, PreviewProfile> | PreviewProfile;
   character?: PreviewCharacter;
   cards?: Record<string, PreviewCard>;
@@ -92,8 +104,10 @@ export interface AdminWorkspaceProps {
   onLocaleChange?: (locale: AdminLocale) => void;
   guidedView?: ReactNode;
   embeddingProfileView?: ReactNode;
-  advancedMode?: boolean;
-  onAdvancedModeChange?: (advanced: boolean) => void;
+  characterAssetView?: ReactNode;
+  publicationView?: ReactNode;
+  workspaceMode?: AdminWorkspaceMode;
+  onWorkspaceModeChange?: (mode: AdminWorkspaceMode) => void;
 }
 
 const COPY = {
@@ -132,6 +146,7 @@ const COPY = {
     cards: "卡片",
     cardAlt: "未儲存的 RepoNPC 卡片預覽",
     characterAlt: "未儲存的角色預覽",
+    previewFailed: "圖片預覽無法顯示，請重新產生預覽。",
     statusHeading: "發布狀態",
     activeBundle: "目前網站資料版本",
     previousBundle: "上一個網站資料版本",
@@ -147,6 +162,7 @@ const COPY = {
     busy: "處理中…",
     copyReady: "片段已準備好。",
     guidedMode: "引導設定",
+    characterMode: "角色與動畫",
     advancedMode: "進階：編輯原始 YAML",
   },
   en: {
@@ -188,6 +204,8 @@ const COPY = {
     cards: "Cards",
     cardAlt: "Unsaved RepoNPC card preview",
     characterAlt: "Unsaved character preview",
+    previewFailed:
+      "The image preview could not be shown. Generate the preview again.",
     statusHeading: "Publication status",
     activeBundle: "Current website data version",
     previousBundle: "Previous website data version",
@@ -204,6 +222,7 @@ const COPY = {
     busy: "Working…",
     copyReady: "Snippet is ready.",
     guidedMode: "Guided setup",
+    characterMode: "Character & animation",
     advancedMode: "Advanced: edit raw YAML",
   },
 } as const;
@@ -270,8 +289,10 @@ export function AdminWorkspace({
   onLocaleChange,
   guidedView,
   embeddingProfileView,
-  advancedMode = false,
-  onAdvancedModeChange,
+  characterAssetView,
+  publicationView,
+  workspaceMode = guidedView ? "guided" : "advanced",
+  onWorkspaceModeChange,
 }: AdminWorkspaceProps) {
   const copy = COPY[locale];
   const [uiScale, setUiScale] = useState<AdminUiScale>(readAdminUiScale);
@@ -335,7 +356,6 @@ export function AdminWorkspace({
                 <button
                   aria-label={option === "zh-TW" ? "繁體中文" : "English"}
                   aria-pressed={locale === option}
-                  disabled={busy}
                   key={option}
                   onClick={() => onLocaleChange(option)}
                   type="button"
@@ -385,9 +405,11 @@ export function AdminWorkspace({
           <a
             className="admin-workspace__help"
             href={
-              advancedMode
+              workspaceMode === "advanced"
                 ? "#admin-draft-heading"
-                : "#guided-onboarding-heading"
+                : workspaceMode === "character"
+                  ? "#admin-character-converter-heading"
+                  : "#guided-onboarding-heading"
             }
           >
             <span aria-hidden="true">?</span>
@@ -412,34 +434,37 @@ export function AdminWorkspace({
         </div>
       </header>
 
-      {notice && (!guidedView || advancedMode) && (
-        <p className="admin-workspace__notice" role="alert">
-          {notice}
-        </p>
-      )}
-
-      {authenticated && (!guidedView || advancedMode) && embeddingProfileView}
-
-      {!authenticated && (
-        <p role="alert" className="admin-workspace__auth-message">
-          {copy.authRequired}
-        </p>
-      )}
-
       {guidedView && (
         <nav aria-label={copy.title} className="admin-workspace__mode-switch">
           <button
-            aria-pressed={!advancedMode}
+            aria-pressed={workspaceMode === "guided"}
             disabled={busy}
-            onClick={() => onAdvancedModeChange?.(false)}
+            onClick={() => onWorkspaceModeChange?.("guided")}
             type="button"
           >
             {copy.guidedMode}
           </button>
           <button
-            aria-pressed={advancedMode}
+            aria-pressed={workspaceMode === "character"}
             disabled={busy}
-            onClick={() => onAdvancedModeChange?.(true)}
+            onClick={() => onWorkspaceModeChange?.("character")}
+            type="button"
+          >
+            {copy.characterMode}
+          </button>
+          {publicationView && (
+            <button
+              type="button"
+              aria-pressed={workspaceMode === "publish"}
+              onClick={() => onWorkspaceModeChange?.("publish")}
+            >
+              {locale === "zh-TW" ? "預覽與分享" : "Preview & share"}
+            </button>
+          )}
+          <button
+            aria-pressed={workspaceMode === "advanced"}
+            disabled={busy}
+            onClick={() => onWorkspaceModeChange?.("advanced")}
             type="button"
           >
             {copy.advancedMode}
@@ -447,9 +472,28 @@ export function AdminWorkspace({
         </nav>
       )}
 
-      {guidedView && !advancedMode && guidedView}
+      {notice && (!guidedView || workspaceMode !== "guided") && (
+        <p className="admin-workspace__notice" role="alert">
+          {notice}
+        </p>
+      )}
 
-      {(!guidedView || advancedMode) && (
+      {authenticated &&
+        (!guidedView || workspaceMode === "advanced") &&
+        embeddingProfileView}
+
+      {authenticated && workspaceMode === "character" && characterAssetView}
+
+      {!authenticated && (
+        <p role="alert" className="admin-workspace__auth-message">
+          {copy.authRequired}
+        </p>
+      )}
+
+      {guidedView && workspaceMode === "guided" && guidedView}
+      {authenticated && workspaceMode === "publish" && publicationView}
+
+      {(!guidedView || workspaceMode === "advanced") && (
         <>
           <section
             aria-labelledby="admin-draft-heading"
@@ -553,11 +597,12 @@ export function AdminWorkspace({
                 <article aria-labelledby="admin-preview-character-heading">
                   <h3 id="admin-preview-character-heading">{copy.character}</h3>
                   <p>{preview.character.mode}</p>
-                  <img
-                    alt={copy.characterAlt}
-                    height={224}
-                    src={`data:image/png;base64,${preview.character.png_base64}`}
-                    width={128}
+                  <Base64PngCanvas
+                    failureText={copy.previewFailed}
+                    height={448}
+                    label={copy.characterAlt}
+                    pngBase64={preview.character.png_base64}
+                    width={256}
                   />
                 </article>
               )}
@@ -570,10 +615,11 @@ export function AdminWorkspace({
                         <li key={variant}>
                           <figure>
                             <figcaption>{variant}</figcaption>
-                            <img
-                              alt={`${copy.cardAlt}: ${variant}`}
+                            <Base64PngCanvas
+                              failureText={copy.previewFailed}
                               height={180}
-                              src={`data:image/png;base64,${card.png_base64}`}
+                              label={`${copy.cardAlt}: ${variant}`}
+                              pngBase64={card.png_base64}
                               width={600}
                             />
                           </figure>

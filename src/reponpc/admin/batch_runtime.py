@@ -46,6 +46,10 @@ ITEM_ACTIVE_STAGES: Final = frozenset(
     }
 )
 ITEM_SCHEDULABLE_STATES: Final = frozenset({"queued", "waiting_rate_limit"})
+FAILED_ITEM_STATES: Final = frozenset({"failed", "needs_retry_confirmation"})
+TERMINAL_BATCH_STATES: Final = frozenset(
+    {"cancelled", "completed", "completed_with_errors", "failed"}
+)
 
 
 class BatchRuntimeError(RuntimeError):
@@ -221,6 +225,7 @@ class BatchItemInput:
     include: tuple[str, ...]
     exclude: tuple[str, ...]
     commit_sha: str
+    source_item_id: str | None = None
 
     def policy_json(self) -> str:
         return json.dumps(
@@ -244,6 +249,9 @@ class BatchCreateRequest:
     maximum_generation_attempts: int = 3
     execution_budget_seconds: int = 1800
     analysis_model_pair: dict[str, object] | None = None
+    source_batch_id: str | None = None
+    analysis_round: int = 1
+    idempotency_request_hash: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,12 +272,17 @@ class BatchItemSnapshot:
     commit_sha: str | None
     state: str
     retryable: bool
+    reanalyzable: bool
+    retry_blocker: str | None
     error_code: str | None
     error_reason: str | None
+    failure_stage: str | None
     retry_at: str | None
     execution_elapsed_seconds: int
     execution_budget_seconds: int
+    recovery_execution_budget_seconds: int
     generation_attempt_count: int
+    source_item_id: str | None
     result: dict[str, object] | None
 
 
@@ -280,6 +293,10 @@ class BatchSnapshot:
     plan_id: str
     selection_hash: str
     maximum_generation_attempts: int
+    recovery_maximum_generation_attempts: int
+    source_batch_id: str | None
+    analysis_round: int
+    analysis_model_pair: dict[str, object] | None
     created_at: str
     started_at: str | None
     completed_at: str | None
@@ -313,6 +330,17 @@ class ClaimedBatchItem:
     execution_elapsed_seconds: int
     execution_budget_seconds: int
     generation_attempt_count: int
+    maximum_generation_attempts: int
+    analysis_model_pair: dict[str, object] | None
+
+
+@dataclass(frozen=True, slots=True)
+class BatchReanalysisSource:
+    """Validated secret-free inputs for one successor analysis round."""
+
+    source_batch_id: str
+    analysis_round: int
+    items: tuple[BatchItemInput, ...]
     analysis_model_pair: dict[str, object] | None
 
 
@@ -432,6 +460,19 @@ class BatchRuntimeStore:
             request.analysis_model_pair
         ):
             raise BatchRuntimeError("VALIDATION_ERROR")
+        if request.source_batch_id is not None and not 1 <= len(request.source_batch_id) <= 64:
+            raise BatchRuntimeError("VALIDATION_ERROR")
+        if request.analysis_round < 1:
+            raise BatchRuntimeError("VALIDATION_ERROR")
+        if request.idempotency_request_hash is not None and not _is_hash(
+            request.idempotency_request_hash
+        ):
+            raise BatchRuntimeError("VALIDATION_ERROR")
+        if any(
+            item.source_item_id is not None and not 1 <= len(item.source_item_id) <= 64
+            for item in request.items
+        ):
+            raise BatchRuntimeError("VALIDATION_ERROR")
         if len({item.slug.casefold() for item in request.items}) != len(request.items):
             raise BatchRuntimeError("VALIDATION_ERROR")
         idempotency_hash = _hash(request.idempotency_key)
@@ -449,6 +490,7 @@ class BatchRuntimeStore:
                 item.policy_json(),
                 "queued",
                 request.execution_budget_seconds,
+                item.source_item_id,
                 now,
                 now,
             )
@@ -457,6 +499,28 @@ class BatchRuntimeStore:
         try:
             with self._database.connection() as connection:
                 connection.execute("BEGIN IMMEDIATE")
+                receipt = connection.execute(
+                    "SELECT * FROM analysis_batch_idempotency_receipts "
+                    "WHERE idempotency_key_hash = ?",
+                    (idempotency_hash,),
+                ).fetchone()
+                if receipt is not None:
+                    if (
+                        request.idempotency_request_hash is None
+                        or str(receipt["request_hash"]) != request.idempotency_request_hash
+                    ):
+                        connection.execute("ROLLBACK")
+                        raise BatchRuntimeError("ANALYSIS_IDEMPOTENCY_CONFLICT")
+                    receipt_batch_id = str(receipt["batch_id"])
+                    receipt_batch = connection.execute(
+                        "SELECT batch_id FROM analysis_batches WHERE batch_id = ?",
+                        (receipt_batch_id,),
+                    ).fetchone()
+                    if receipt_batch is None:
+                        connection.execute("ROLLBACK")
+                        raise BatchRuntimeError("ANALYSIS_IDEMPOTENCY_CONFLICT")
+                    connection.execute("COMMIT")
+                    return self.get_batch(receipt_batch_id), False
                 existing = connection.execute(
                     "SELECT * FROM analysis_batches WHERE idempotency_key_hash = ?",
                     (idempotency_hash,),
@@ -466,10 +530,115 @@ class BatchRuntimeStore:
                         "SELECT * FROM analysis_batch_items WHERE batch_id = ? ORDER BY position",
                         (str(existing["batch_id"]),),
                     ).fetchall()
-                    connection.execute("COMMIT")
                     if not _request_matches_existing(request, existing, existing_items):
-                        raise BatchRuntimeError("VALIDATION_ERROR")
+                        connection.execute("ROLLBACK")
+                        raise BatchRuntimeError("ANALYSIS_IDEMPOTENCY_CONFLICT")
+                    if request.idempotency_request_hash is not None:
+                        self._bind_reanalysis_receipt_locked(
+                            connection,
+                            idempotency_hash=idempotency_hash,
+                            request_hash=request.idempotency_request_hash,
+                            batch_id=str(existing["batch_id"]),
+                            created_at=now,
+                        )
+                    connection.execute("COMMIT")
                     return self.get_batch(str(existing["batch_id"])), False
+                if request.source_batch_id is not None:
+                    source_batch = connection.execute(
+                        "SELECT * FROM analysis_batches WHERE batch_id = ?",
+                        (request.source_batch_id,),
+                    ).fetchone()
+                    if source_batch is None:
+                        connection.execute("ROLLBACK")
+                        raise BatchRuntimeError("NOT_FOUND")
+                    if (
+                        str(source_batch["state"]) not in {"failed", "completed_with_errors"}
+                        or request.analysis_round != int(source_batch["analysis_round"]) + 1
+                    ):
+                        connection.execute("ROLLBACK")
+                        raise BatchRuntimeError("ANALYSIS_SOURCE_STATE_CHANGED")
+                    source_ids = tuple(item.source_item_id for item in request.items)
+                    if any(item_id is None for item_id in source_ids):
+                        connection.execute("ROLLBACK")
+                        raise BatchRuntimeError("ANALYSIS_REANALYZE_ITEM_INVALID")
+                    placeholders = ",".join("?" for _ in source_ids)
+                    source_rows = connection.execute(
+                        f"SELECT * FROM analysis_batch_items WHERE batch_id = ? "
+                        f"AND item_id IN ({placeholders})",
+                        (request.source_batch_id, *source_ids),
+                    ).fetchall()
+                    source_by_id = {str(row["item_id"]): row for row in source_rows}
+                    if len(source_by_id) != len(request.items):
+                        connection.execute("ROLLBACK")
+                        raise BatchRuntimeError("ANALYSIS_REANALYZE_ITEM_INVALID")
+                    for item in request.items:
+                        source_row = source_by_id[str(item.source_item_id)]
+                        retryable, _blocker = _retry_eligibility(
+                            source_row,
+                            request.maximum_generation_attempts,
+                            execution_budget_seconds=request.execution_budget_seconds,
+                            batch_state=str(source_batch["state"]),
+                        )
+                        source_input = _input_from_row(source_row)
+                        if (
+                            str(source_row["state"]) not in FAILED_ITEM_STATES
+                            or retryable
+                            or source_input.slug != item.slug
+                            or source_input.ref != item.ref
+                            or source_input.include != item.include
+                            or source_input.exclude != item.exclude
+                            or source_input.commit_sha != item.commit_sha
+                        ):
+                            connection.execute("ROLLBACK")
+                            raise BatchRuntimeError("ANALYSIS_SOURCE_STATE_CHANGED")
+                    # A successor request has a durable identity in addition
+                    # to its transport idempotency key.  This closes the
+                    # response-loss/two-tab gap where another key could create
+                    # the same round after the first successor became terminal.
+                    successor = connection.execute(
+                        """
+                        SELECT * FROM analysis_batches
+                        WHERE source_batch_id = ? AND analysis_round = ?
+                          AND selection_hash = ?
+                        """,
+                        (
+                            request.source_batch_id,
+                            request.analysis_round,
+                            request.selection_hash,
+                        ),
+                    ).fetchone()
+                    if successor is not None:
+                        successor_items = connection.execute(
+                            "SELECT * FROM analysis_batch_items "
+                            "WHERE batch_id = ? ORDER BY position",
+                            (str(successor["batch_id"]),),
+                        ).fetchall()
+                        if not _request_matches_existing(request, successor, successor_items):
+                            connection.execute("ROLLBACK")
+                            raise BatchRuntimeError("ANALYSIS_SUCCESSOR_CONFLICT")
+                        if request.idempotency_request_hash is not None:
+                            self._bind_reanalysis_receipt_locked(
+                                connection,
+                                idempotency_hash=idempotency_hash,
+                                request_hash=request.idempotency_request_hash,
+                                batch_id=str(successor["batch_id"]),
+                                created_at=now,
+                            )
+                        connection.execute("COMMIT")
+                        return self.get_batch(str(successor["batch_id"])), False
+                    if any(
+                        _optional_text(row["successor_batch_id"]) is not None for row in source_rows
+                    ):
+                        connection.execute("ROLLBACK")
+                        raise BatchRuntimeError("ANALYSIS_SUCCESSOR_CONFLICT")
+                    overlapping = connection.execute(
+                        f"SELECT item_id FROM analysis_batch_items "
+                        f"WHERE source_item_id IN ({placeholders}) LIMIT 1",
+                        source_ids,
+                    ).fetchone()
+                    if overlapping is not None:
+                        connection.execute("ROLLBACK")
+                        raise BatchRuntimeError("ANALYSIS_SUCCESSOR_CONFLICT")
                 active = connection.execute(
                     """
                     SELECT batch_id FROM analysis_batches
@@ -485,9 +654,9 @@ class BatchRuntimeStore:
                     INSERT INTO analysis_batches(
                       batch_id, owner_scope, plan_id, selection_hash,
                       idempotency_key_hash, selected_credential_id, analysis_model_pair_json, state,
-                      maximum_generation_attempts,
+                      maximum_generation_attempts, source_batch_id, analysis_round,
                       created_at, updated_at
-                    ) VALUES (?, 'singleton', ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
+                    ) VALUES (?, 'singleton', ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)
                     """,
                     (
                         batch_id,
@@ -501,6 +670,8 @@ class BatchRuntimeStore:
                             else None
                         ),
                         request.maximum_generation_attempts,
+                        request.source_batch_id,
+                        request.analysis_round,
                         now,
                         now,
                     ),
@@ -510,11 +681,29 @@ class BatchRuntimeStore:
                     INSERT INTO analysis_batch_items(
                       item_id, batch_id, position, repository_slug, requested_ref,
                       selection_hash, resolved_commit_sha, selection_json, state,
-                      execution_budget_seconds, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      execution_budget_seconds, source_item_id, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     item_rows,
                 )
+                if request.source_batch_id is not None:
+                    changed = connection.execute(
+                        f"UPDATE analysis_batch_items SET successor_batch_id = ? "
+                        f"WHERE batch_id = ? AND item_id IN ({placeholders}) "
+                        "AND successor_batch_id IS NULL",
+                        (batch_id, request.source_batch_id, *source_ids),
+                    ).rowcount
+                    if changed != len(source_ids):
+                        connection.execute("ROLLBACK")
+                        raise BatchRuntimeError("ANALYSIS_SUCCESSOR_CONFLICT")
+                if request.idempotency_request_hash is not None:
+                    self._bind_reanalysis_receipt_locked(
+                        connection,
+                        idempotency_hash=idempotency_hash,
+                        request_hash=request.idempotency_request_hash,
+                        batch_id=batch_id,
+                        created_at=now,
+                    )
                 self._event_locked(
                     connection,
                     batch_id=batch_id,
@@ -530,18 +719,52 @@ class BatchRuntimeStore:
             raise RuntimeDatabaseError("runtime_analysis_batch_failed") from exc
         return self.get_batch(batch_id), True
 
-    def get_batch(self, batch_id: str) -> BatchSnapshot:
+    def get_batch(
+        self,
+        batch_id: str,
+        *,
+        execution_budget_seconds: int | None = None,
+        maximum_generation_attempts: int | None = None,
+    ) -> BatchSnapshot:
+        expired = False
         with self._database.connection() as connection:
             batch = connection.execute(
                 "SELECT * FROM analysis_batches WHERE batch_id = ?", (batch_id,)
             ).fetchone()
             if batch is None:
                 raise BatchRuntimeError("NOT_FOUND")
-            rows = connection.execute(
-                "SELECT * FROM analysis_batch_items WHERE batch_id = ? ORDER BY position",
-                (batch_id,),
-            ).fetchall()
-        return _snapshot(batch, rows, now=_timestamp(_utc(self._now())))
+            expires_at = _parse_optional_timestamp(batch["expires_at"])
+            expired = (
+                str(batch["state"]) in TERMINAL_BATCH_STATES
+                and expires_at is not None
+                and expires_at <= _utc(self._now())
+            )
+            if expired:
+                rows = []
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT item.*,
+                           (item.successor_batch_id IS NOT NULL OR EXISTS(
+                             SELECT 1 FROM analysis_batch_items AS successor
+                             WHERE successor.source_item_id = item.item_id
+                           )) AS has_successor
+                    FROM analysis_batch_items AS item
+                    WHERE item.batch_id = ?
+                    ORDER BY item.position
+                    """,
+                    (batch_id,),
+                ).fetchall()
+        if expired:
+            self.cleanup_expired()
+            raise BatchRuntimeError("NOT_FOUND")
+        return _snapshot(
+            batch,
+            rows,
+            now=_timestamp(_utc(self._now())),
+            execution_budget_seconds=execution_budget_seconds,
+            maximum_generation_attempts=maximum_generation_attempts,
+        )
 
     def active_batch(self) -> BatchSnapshot:
         with self._database.connection() as connection:
@@ -556,6 +779,234 @@ class BatchRuntimeStore:
         if row is None:
             raise BatchRuntimeError("NOT_FOUND")
         return self.get_batch(str(row["batch_id"]))
+
+    def idempotent_create(
+        self,
+        *,
+        idempotency_key: str,
+        plan_id: str,
+        selections: Sequence[RepositorySelection],
+    ) -> BatchSnapshot | None:
+        """Recover an accepted create before consulting the in-memory plan cache."""
+
+        if not idempotency_key or len(idempotency_key) > 512:
+            raise BatchRuntimeError("VALIDATION_ERROR")
+        with self._database.connection() as connection:
+            receipt = connection.execute(
+                "SELECT 1 FROM analysis_batch_idempotency_receipts WHERE idempotency_key_hash = ?",
+                (_hash(idempotency_key),),
+            ).fetchone()
+            if receipt is not None:
+                raise BatchRuntimeError("ANALYSIS_IDEMPOTENCY_CONFLICT")
+            batch = connection.execute(
+                "SELECT * FROM analysis_batches WHERE idempotency_key_hash = ?",
+                (_hash(idempotency_key),),
+            ).fetchone()
+            if batch is None:
+                return None
+            rows = connection.execute(
+                "SELECT * FROM analysis_batch_items WHERE batch_id = ? ORDER BY position",
+                (str(batch["batch_id"]),),
+            ).fetchall()
+        matches = (
+            str(batch["plan_id"]) == plan_id
+            and batch["source_batch_id"] is None
+            and len(rows) == len(selections)
+        )
+        if matches:
+            for row, selection in zip(rows, selections, strict=True):
+                persisted = _input_from_row(row)
+                if (
+                    persisted.slug != selection.slug
+                    or persisted.ref != selection.ref
+                    or persisted.include != selection.include
+                    or persisted.exclude != selection.exclude
+                ):
+                    matches = False
+                    break
+        if not matches:
+            raise BatchRuntimeError("ANALYSIS_IDEMPOTENCY_CONFLICT")
+        return self.get_batch(str(batch["batch_id"]))
+
+    def idempotent_reanalysis(
+        self,
+        *,
+        idempotency_key: str,
+        source_batch_id: str,
+        item_ids: Sequence[str],
+        model_selection: str,
+        confirm_model_change: bool,
+        expected_selection_generation: int | None,
+    ) -> BatchSnapshot | None:
+        """Recover an accepted successor before re-reading mutable model state."""
+
+        if not idempotency_key or len(idempotency_key) > 512:
+            raise BatchRuntimeError("VALIDATION_ERROR")
+        request_hash = reanalysis_request_hash(
+            source_batch_id=source_batch_id,
+            item_ids=item_ids,
+            model_selection=model_selection,
+            confirm_model_change=confirm_model_change,
+            expected_selection_generation=expected_selection_generation,
+        )
+        with self._database.connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            receipt = connection.execute(
+                "SELECT * FROM analysis_batch_idempotency_receipts WHERE idempotency_key_hash = ?",
+                (_hash(idempotency_key),),
+            ).fetchone()
+            if receipt is not None:
+                if str(receipt["request_hash"]) != request_hash:
+                    connection.execute("ROLLBACK")
+                    raise BatchRuntimeError("ANALYSIS_IDEMPOTENCY_CONFLICT")
+                batch_id = str(receipt["batch_id"])
+                connection.execute("COMMIT")
+                return self.get_batch(batch_id)
+            batch = connection.execute(
+                "SELECT * FROM analysis_batches WHERE idempotency_key_hash = ?",
+                (_hash(idempotency_key),),
+            ).fetchone()
+            if batch is None:
+                source = connection.execute(
+                    "SELECT analysis_round FROM analysis_batches WHERE batch_id = ?",
+                    (source_batch_id,),
+                ).fetchone()
+                if source is None:
+                    connection.execute("COMMIT")
+                    return None
+                expected_round = int(source["analysis_round"]) + 1
+                expected_plan = reanalysis_plan_id(
+                    source_batch_id=source_batch_id,
+                    analysis_round=expected_round,
+                    model_selection=model_selection,
+                    confirm_model_change=confirm_model_change,
+                    expected_selection_generation=expected_selection_generation,
+                )
+                candidates = connection.execute(
+                    "SELECT * FROM analysis_batches WHERE source_batch_id = ? "
+                    "AND analysis_round = ? AND plan_id = ?",
+                    (source_batch_id, expected_round, expected_plan),
+                ).fetchall()
+                for candidate in candidates:
+                    candidate_rows = connection.execute(
+                        "SELECT source_item_id FROM analysis_batch_items "
+                        "WHERE batch_id = ? ORDER BY position",
+                        (str(candidate["batch_id"]),),
+                    ).fetchall()
+                    candidate_ids = tuple(
+                        _optional_text(row["source_item_id"]) for row in candidate_rows
+                    )
+                    if set(candidate_ids) == set(item_ids) and len(candidate_ids) == len(item_ids):
+                        batch = candidate
+                        break
+                if batch is None:
+                    connection.execute("COMMIT")
+                    return None
+            rows = connection.execute(
+                "SELECT source_item_id FROM analysis_batch_items "
+                "WHERE batch_id = ? ORDER BY position",
+                (str(batch["batch_id"]),),
+            ).fetchall()
+            expected_plan = reanalysis_plan_id(
+                source_batch_id=source_batch_id,
+                analysis_round=int(batch["analysis_round"]),
+                model_selection=model_selection,
+                confirm_model_change=confirm_model_change,
+                expected_selection_generation=expected_selection_generation,
+            )
+            persisted_ids = tuple(_optional_text(row["source_item_id"]) for row in rows)
+            if (
+                _optional_text(batch["source_batch_id"]) != source_batch_id
+                or str(batch["plan_id"]) != expected_plan
+                or set(persisted_ids) != set(item_ids)
+                or len(persisted_ids) != len(item_ids)
+            ):
+                connection.execute("ROLLBACK")
+                raise BatchRuntimeError("ANALYSIS_IDEMPOTENCY_CONFLICT")
+            batch_id = str(batch["batch_id"])
+            self._bind_reanalysis_receipt_locked(
+                connection,
+                idempotency_hash=_hash(idempotency_key),
+                request_hash=request_hash,
+                batch_id=batch_id,
+                created_at=_timestamp(_utc(self._now())),
+            )
+            connection.execute("COMMIT")
+        return self.get_batch(batch_id)
+
+    def reanalysis_source(
+        self,
+        batch_id: str,
+        *,
+        item_ids: Sequence[str],
+        execution_budget_seconds: int | None = None,
+        maximum_generation_attempts: int | None = None,
+    ) -> BatchReanalysisSource:
+        """Return validated failed-item inputs for an explicit successor round."""
+
+        requested = tuple(dict.fromkeys(item_ids))
+        if not requested or len(requested) != len(item_ids) or len(requested) > 50:
+            raise BatchRuntimeError("ANALYSIS_REANALYZE_ITEM_INVALID")
+        with self._database.connection() as connection:
+            batch = connection.execute(
+                "SELECT * FROM analysis_batches WHERE batch_id = ?", (batch_id,)
+            ).fetchone()
+            if batch is None:
+                raise BatchRuntimeError("NOT_FOUND")
+            if str(batch["state"]) not in {"failed", "completed_with_errors"}:
+                raise BatchRuntimeError("ANALYSIS_SOURCE_BATCH_NOT_TERMINAL")
+            placeholders = ",".join("?" for _ in requested)
+            rows = connection.execute(
+                f"""
+                SELECT item.*,
+                       (item.successor_batch_id IS NOT NULL OR EXISTS(
+                         SELECT 1 FROM analysis_batch_items AS successor
+                         WHERE successor.source_item_id = item.item_id
+                       )) AS has_successor
+                FROM analysis_batch_items AS item
+                WHERE batch_id = ? AND item_id IN ({placeholders})
+                ORDER BY position
+                """,
+                (batch_id, *requested),
+            ).fetchall()
+        if len(rows) != len(requested):
+            raise BatchRuntimeError("ANALYSIS_REANALYZE_ITEM_INVALID")
+        maximum_attempts = (
+            int(batch["maximum_generation_attempts"])
+            if maximum_generation_attempts is None
+            else maximum_generation_attempts
+        )
+        items: list[BatchItemInput] = []
+        for row in rows:
+            retryable, blocker = _retry_eligibility(
+                row,
+                maximum_attempts,
+                execution_budget_seconds=execution_budget_seconds,
+                batch_state=str(batch["state"]),
+            )
+            if (
+                str(row["state"]) not in FAILED_ITEM_STATES
+                or retryable
+                or blocker == "SUCCESSOR_EXISTS"
+            ):
+                raise BatchRuntimeError("ANALYSIS_REANALYZE_NOT_AVAILABLE")
+            source = _input_from_row(row)
+            items.append(
+                BatchItemInput(
+                    slug=source.slug,
+                    ref=source.ref,
+                    include=source.include,
+                    exclude=source.exclude,
+                    commit_sha=source.commit_sha,
+                    source_item_id=str(row["item_id"]),
+                )
+            )
+        return BatchReanalysisSource(
+            source_batch_id=batch_id,
+            analysis_round=int(batch["analysis_round"]) + 1,
+            items=tuple(items),
+            analysis_model_pair=_json_object_optional(batch["analysis_model_pair_json"]),
+        )
 
     def transition_batch(self, batch_id: str, *, action: str) -> BatchSnapshot:
         """Apply idempotent owner actions without changing terminal results."""
@@ -581,7 +1032,7 @@ class BatchRuntimeStore:
                     connection.execute("ROLLBACK")
                     raise BatchRuntimeError("NOT_FOUND")
                 state = str(row["state"])
-                if state in {"cancelled", "completed", "completed_with_errors", "failed"}:
+                if state in TERMINAL_BATCH_STATES:
                     connection.execute("COMMIT")
                     return self.get_batch(batch_id)
                 if state not in source_states and state != target:
@@ -643,28 +1094,87 @@ class BatchRuntimeStore:
                 if batch is None:
                     connection.execute("ROLLBACK")
                     raise BatchRuntimeError("NOT_FOUND")
+                if str(batch["state"]) not in {"failed", "completed_with_errors"}:
+                    connection.execute("ROLLBACK")
+                    raise BatchRuntimeError("ANALYSIS_RETRY_NOT_AVAILABLE")
+                other_active = connection.execute(
+                    """
+                    SELECT batch_id FROM analysis_batches
+                    WHERE batch_id <> ? AND owner_scope = 'singleton'
+                      AND state IN ('queued', 'running', 'paused', 'cancelling')
+                    """,
+                    (batch_id,),
+                ).fetchone()
+                if other_active is not None:
+                    connection.execute("ROLLBACK")
+                    raise BatchRuntimeError("ANALYSIS_BATCH_ACTIVE")
                 effective_attempts = (
                     int(batch["maximum_generation_attempts"])
                     if maximum_generation_attempts is None
                     else maximum_generation_attempts
                 )
+                candidates = connection.execute(
+                    """
+                SELECT item.*,
+                           (item.successor_batch_id IS NOT NULL OR EXISTS(
+                             SELECT 1 FROM analysis_batch_items AS successor
+                             WHERE successor.source_item_id = item.item_id
+                           )) AS has_successor
+                    FROM analysis_batch_items AS item
+                    WHERE item.batch_id = ?
+                      AND item.state IN (
+                        'needs_retry_confirmation', 'failed', 'waiting_reconnection'
+                      )
+                    """,
+                    (batch_id,),
+                ).fetchall()
                 changed = connection.execute(
                     """
                     UPDATE analysis_batch_items
                     SET state = 'queued', error_code = NULL, error_reason = NULL,
                         retry_at = NULL,
                         lease_id = NULL, execution_started_at = NULL,
+                        failure_stage = NULL,
                         execution_budget_seconds = COALESCE(?, execution_budget_seconds),
                         updated_at = ?
                     WHERE batch_id = ?
                       AND state IN ('needs_retry_confirmation', 'failed', 'waiting_reconnection')
                       AND generation_attempt_count < ?
+                      AND execution_elapsed_seconds < COALESCE(?, execution_budget_seconds)
+                      AND NOT EXISTS (
+                        SELECT 1 FROM analysis_batch_items AS successor
+                        WHERE successor.source_item_id = analysis_batch_items.item_id
+                      )
+                      AND successor_batch_id IS NULL
                     """,
-                    (execution_budget_seconds, now, batch_id, effective_attempts),
+                    (
+                        execution_budget_seconds,
+                        now,
+                        batch_id,
+                        effective_attempts,
+                        execution_budget_seconds,
+                    ),
                 ).rowcount
                 if not changed:
                     connection.execute("ROLLBACK")
-                    raise BatchRuntimeError("VALIDATION_ERROR")
+                    if any(bool(row["has_successor"]) for row in candidates):
+                        raise BatchRuntimeError("ANALYSIS_SUCCESSOR_CONFLICT")
+                    if any(
+                        int(row["generation_attempt_count"]) >= effective_attempts
+                        for row in candidates
+                    ):
+                        raise BatchRuntimeError("ANALYSIS_GENERATION_ATTEMPTS_EXHAUSTED")
+                    if any(
+                        int(row["execution_elapsed_seconds"])
+                        >= (
+                            int(row["execution_budget_seconds"])
+                            if execution_budget_seconds is None
+                            else execution_budget_seconds
+                        )
+                        for row in candidates
+                    ):
+                        raise BatchRuntimeError("ANALYSIS_EXECUTION_BUDGET_EXHAUSTED")
+                    raise BatchRuntimeError("ANALYSIS_RETRY_NOT_AVAILABLE")
                 connection.execute(
                     """
                     UPDATE analysis_batches SET state = 'running', error_code = NULL,
@@ -699,8 +1209,8 @@ class BatchRuntimeStore:
             with self._database.connection() as connection:
                 connection.execute("BEGIN IMMEDIATE")
                 batch = connection.execute(
-                    "SELECT state, analysis_model_pair_json FROM analysis_batches "
-                    "WHERE batch_id = ?",
+                    "SELECT state, analysis_model_pair_json, maximum_generation_attempts "
+                    "FROM analysis_batches WHERE batch_id = ?",
                     (batch_id,),
                 ).fetchone()
                 if batch is None:
@@ -719,6 +1229,50 @@ class BatchRuntimeStore:
                 elif state != "running":
                     connection.execute("COMMIT")
                     return None
+                exhausted = connection.execute(
+                    """
+                    SELECT * FROM analysis_batch_items
+                    WHERE batch_id = ? AND lease_id IS NULL
+                      AND state IN ('queued', 'waiting_rate_limit')
+                      AND (
+                        execution_elapsed_seconds >= execution_budget_seconds
+                        OR generation_attempt_count >= ?
+                      )
+                    ORDER BY position
+                    """,
+                    (batch_id, int(batch["maximum_generation_attempts"])),
+                ).fetchall()
+                for exhausted_row in exhausted:
+                    attempts_exhausted = int(exhausted_row["generation_attempt_count"]) >= int(
+                        batch["maximum_generation_attempts"]
+                    )
+                    code = (
+                        "ANALYSIS_GENERATION_ATTEMPTS_EXHAUSTED"
+                        if attempts_exhausted
+                        else "ANALYSIS_TIMEOUT"
+                    )
+                    connection.execute(
+                        """
+                        UPDATE analysis_batch_items
+                        SET state = 'failed', error_code = ?, failure_stage = ?,
+                          execution_started_at = NULL, retry_at = NULL, updated_at = ?
+                        WHERE item_id = ?
+                        """,
+                        (
+                            code,
+                            _failure_stage(exhausted_row),
+                            now,
+                            str(exhausted_row["item_id"]),
+                        ),
+                    )
+                    self._event_locked(
+                        connection,
+                        batch_id=batch_id,
+                        item_id=str(exhausted_row["item_id"]),
+                        event_type="item_terminal",
+                        payload={"state": "failed", "error_code": code},
+                        occurred_at=now,
+                    )
                 row = connection.execute(
                     """
                     SELECT * FROM analysis_batch_items
@@ -770,6 +1324,7 @@ class BatchRuntimeStore:
                 int(row["execution_budget_seconds"]) - int(row["execution_elapsed_seconds"]),
             ),
             generation_attempt_count=int(row["generation_attempt_count"]),
+            maximum_generation_attempts=int(batch["maximum_generation_attempts"]),
             analysis_model_pair=_json_object_optional(batch["analysis_model_pair_json"]),
         )
 
@@ -945,6 +1500,7 @@ class BatchRuntimeStore:
                     )
                     """
                 ).fetchall()
+                affected_batches: set[str] = set()
                 for row in rows:
                     state = str(row["state"])
                     elapsed = _elapsed_since(row["execution_started_at"], now)
@@ -971,10 +1527,23 @@ class BatchRuntimeStore:
                         UPDATE analysis_batch_items
                         SET state = ?, resume_state = ?, lease_id = NULL,
                           execution_started_at = NULL,
-                          execution_elapsed_seconds = execution_elapsed_seconds + ?, updated_at = ?
+                          execution_elapsed_seconds = execution_elapsed_seconds + ?,
+                          failure_stage = CASE
+                            WHEN ? = 'needs_retry_confirmation' THEN ?
+                            ELSE failure_stage
+                          END,
+                          updated_at = ?
                         WHERE item_id = ?
                         """,
-                        (next_state, state, elapsed, now, str(row["item_id"])),
+                        (
+                            next_state,
+                            state,
+                            elapsed,
+                            next_state,
+                            state if state in ITEM_ACTIVE_STAGES else None,
+                            now,
+                            str(row["item_id"]),
+                        ),
                     )
                     self._event_locked(
                         connection,
@@ -985,11 +1554,9 @@ class BatchRuntimeStore:
                         occurred_at=now,
                     )
                     recovered.append(str(row["item_id"]))
-                cancelling_batches = connection.execute(
-                    "SELECT batch_id FROM analysis_batches WHERE state = 'cancelling'"
-                ).fetchall()
-                for batch_row in cancelling_batches:
-                    self._finish_batch_locked(connection, str(batch_row["batch_id"]), now)
+                    affected_batches.add(str(row["batch_id"]))
+                for affected_batch_id in affected_batches:
+                    self._finish_batch_locked(connection, affected_batch_id, now)
                 connection.execute("COMMIT")
         except sqlite3.Error as exc:
             raise RuntimeDatabaseError("runtime_analysis_batch_failed") from exc
@@ -1012,7 +1579,15 @@ class BatchRuntimeStore:
             or ttl <= timedelta(0)
         ):
             raise BatchRuntimeError("VALIDATION_ERROR")
+        raw_metadata = _safe_json(metadata)
         raw_payload = _safe_json(payload)
+        entry_digest = _analysis_cache_digest(
+            cache_key=cache_key,
+            cache_kind=cache_kind,
+            derived_index_key=derived_index_key,
+            metadata=metadata,
+            payload=payload,
+        )
         now = _utc(self._now())
         try:
             with self._database.connection() as connection:
@@ -1023,6 +1598,8 @@ class BatchRuntimeStore:
                       payload_sha256, size_bytes, created_at, last_accessed_at, expires_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(cache_key) DO UPDATE SET
+                      cache_kind = excluded.cache_kind,
+                      derived_index_key = excluded.derived_index_key,
                       metadata_json = excluded.metadata_json,
                       payload_json = excluded.payload_json,
                       payload_sha256 = excluded.payload_sha256,
@@ -1034,10 +1611,10 @@ class BatchRuntimeStore:
                         cache_key,
                         cache_kind,
                         derived_index_key,
-                        _safe_json(metadata),
+                        raw_metadata,
                         raw_payload,
-                        hashlib.sha256(raw_payload.encode()).hexdigest(),
-                        len(raw_payload.encode()),
+                        entry_digest,
+                        len(raw_metadata.encode()) + len(raw_payload.encode()),
                         _timestamp(now),
                         _timestamp(now),
                         _timestamp(now + ttl),
@@ -1061,8 +1638,30 @@ class BatchRuntimeStore:
                 ).fetchone()
                 if row is None:
                     return None
-                payload = str(row["payload_json"])
-                if hashlib.sha256(payload.encode()).hexdigest() != str(row["payload_sha256"]):
+                try:
+                    row_cache_key = str(row["cache_key"])
+                    cache_kind = str(row["cache_kind"])
+                    derived_index_key = str(row["derived_index_key"])
+                    metadata = _json_object(str(row["metadata_json"]))
+                    payload = _json_object(str(row["payload_json"]))
+                    valid_entry = (
+                        row_cache_key == cache_key
+                        and cache_kind in {"derived_index", "validated_analysis"}
+                        and _is_hash(derived_index_key)
+                        and secrets.compare_digest(
+                            _analysis_cache_digest(
+                                cache_key=row_cache_key,
+                                cache_kind=cache_kind,
+                                derived_index_key=derived_index_key,
+                                metadata=metadata,
+                                payload=payload,
+                            ),
+                            str(row["payload_sha256"]),
+                        )
+                    )
+                except (BatchRuntimeError, ValueError):
+                    valid_entry = False
+                if not valid_entry:
                     connection.execute(
                         "DELETE FROM analysis_cache_entries WHERE cache_key = ?", (cache_key,)
                     )
@@ -1073,16 +1672,24 @@ class BatchRuntimeStore:
                 )
         except sqlite3.Error as exc:
             raise RuntimeDatabaseError("runtime_analysis_cache_failed") from exc
+        return CacheEntry(
+            cache_key=row_cache_key,
+            cache_kind=cache_kind,
+            derived_index_key=derived_index_key,
+            metadata=metadata,
+            payload=payload,
+        )
+
+    def delete_cache(self, cache_key: str) -> None:
+        if not _is_hash(cache_key):
+            raise BatchRuntimeError("VALIDATION_ERROR")
         try:
-            return CacheEntry(
-                cache_key=str(row["cache_key"]),
-                cache_kind=str(row["cache_kind"]),
-                derived_index_key=str(row["derived_index_key"]),
-                metadata=_json_object(str(row["metadata_json"])),
-                payload=_json_object(payload),
-            )
-        except ValueError:
-            return None
+            with self._database.connection() as connection:
+                connection.execute(
+                    "DELETE FROM analysis_cache_entries WHERE cache_key = ?", (cache_key,)
+                )
+        except sqlite3.Error as exc:
+            raise RuntimeDatabaseError("runtime_analysis_cache_failed") from exc
 
     def cleanup_expired(self) -> None:
         now = _timestamp(_utc(self._now()))
@@ -1099,8 +1706,42 @@ class BatchRuntimeStore:
                     """,
                     (now,),
                 )
+                connection.execute(
+                    "DELETE FROM analysis_batch_idempotency_receipts "
+                    "WHERE NOT EXISTS (SELECT 1 FROM analysis_batches "
+                    "WHERE analysis_batches.batch_id = "
+                    "analysis_batch_idempotency_receipts.batch_id)"
+                )
         except sqlite3.Error as exc:
             raise RuntimeDatabaseError("runtime_analysis_batch_failed") from exc
+
+    @staticmethod
+    def _bind_reanalysis_receipt_locked(
+        connection: sqlite3.Connection,
+        *,
+        idempotency_hash: str,
+        request_hash: str,
+        batch_id: str,
+        created_at: str,
+    ) -> None:
+        existing = connection.execute(
+            "SELECT request_hash, batch_id FROM analysis_batch_idempotency_receipts "
+            "WHERE idempotency_key_hash = ?",
+            (idempotency_hash,),
+        ).fetchone()
+        if existing is not None:
+            if (
+                str(existing["request_hash"]) != request_hash
+                or str(existing["batch_id"]) != batch_id
+            ):
+                raise BatchRuntimeError("ANALYSIS_IDEMPOTENCY_CONFLICT")
+            return
+        connection.execute(
+            "INSERT INTO analysis_batch_idempotency_receipts("
+            "idempotency_key_hash, operation, request_hash, batch_id, created_at"
+            ") VALUES (?, 'reanalyze', ?, ?, ?)",
+            (idempotency_hash, request_hash, batch_id, created_at),
+        )
 
     def _update_item(
         self,
@@ -1115,21 +1756,27 @@ class BatchRuntimeStore:
     ) -> None:
         now = _timestamp(_utc(self._now()))
         result_json = _safe_json(result) if result is not None else None
+        cancellation_intercepted = False
         try:
             with self._database.connection() as connection:
                 connection.execute("BEGIN IMMEDIATE")
                 batch = connection.execute(
-                    "SELECT state FROM analysis_batches WHERE batch_id = ?", (claimed.batch_id,)
+                    "SELECT state, maximum_generation_attempts FROM analysis_batches "
+                    "WHERE batch_id = ?",
+                    (claimed.batch_id,),
                 ).fetchone()
                 if batch is None:
                     connection.execute("ROLLBACK")
                     raise BatchRuntimeError("NOT_FOUND")
                 batch_state = str(batch["state"])
                 effective_state = "cancelled" if batch_state == "cancelling" else state
+                cancellation_intercepted = batch_state == "cancelling" and state != "cancelled"
                 generation_increment = 1 if effective_state == "generating" else 0
                 item_row = connection.execute(
                     """
-                    SELECT execution_started_at, execution_elapsed_seconds
+                    SELECT state, resume_state, execution_started_at,
+                      execution_elapsed_seconds, execution_budget_seconds,
+                      generation_attempt_count
                     FROM analysis_batch_items
                     WHERE item_id = ? AND batch_id = ? AND lease_id = ?
                     """,
@@ -1139,8 +1786,23 @@ class BatchRuntimeStore:
                     connection.execute("ROLLBACK")
                     raise BatchRuntimeError("ANALYSIS_LEASE_LOST")
                 elapsed = _elapsed_since(item_row["execution_started_at"], now)
+                total_elapsed = int(item_row["execution_elapsed_seconds"]) + elapsed
+                if not terminal and total_elapsed >= int(item_row["execution_budget_seconds"]):
+                    connection.execute("ROLLBACK")
+                    raise BatchRuntimeError("ANALYSIS_TIMEOUT")
+                if effective_state == "generating" and int(
+                    item_row["generation_attempt_count"]
+                ) >= int(batch["maximum_generation_attempts"]):
+                    connection.execute("ROLLBACK")
+                    raise BatchRuntimeError("ANALYSIS_GENERATION_ATTEMPTS_EXHAUSTED")
                 holds_lease = not (
                     terminal or effective_state in {"waiting_rate_limit", "waiting_reconnection"}
+                )
+                releases_lease = not holds_lease
+                failure_stage = (
+                    _failure_stage(item_row)
+                    if terminal and effective_state in FAILED_ITEM_STATES
+                    else None
                 )
                 changed = connection.execute(
                     """
@@ -1149,7 +1811,12 @@ class BatchRuntimeStore:
                       generation_attempt_count = generation_attempt_count + ?,
                       execution_elapsed_seconds = execution_elapsed_seconds + ?,
                       lease_id = CASE WHEN ? THEN NULL ELSE lease_id END,
-                      execution_started_at = CASE WHEN ? THEN ? ELSE execution_started_at END,
+                      execution_started_at = CASE
+                        WHEN ? THEN NULL
+                        WHEN ? THEN ?
+                        ELSE execution_started_at
+                      END,
+                      failure_stage = CASE WHEN ? THEN ? ELSE failure_stage END,
                       updated_at = ?
                     WHERE item_id = ? AND batch_id = ? AND lease_id = ?
                     """,
@@ -1163,8 +1830,11 @@ class BatchRuntimeStore:
                         elapsed,
                         terminal
                         or effective_state in {"waiting_rate_limit", "waiting_reconnection"},
+                        releases_lease,
                         holds_lease,
                         now,
+                        terminal and effective_state in FAILED_ITEM_STATES,
+                        failure_stage,
                         now,
                         claimed.item_id,
                         claimed.batch_id,
@@ -1190,6 +1860,11 @@ class BatchRuntimeStore:
                 )
                 self._finish_batch_locked(connection, claimed.batch_id, now)
                 connection.execute("COMMIT")
+                if cancellation_intercepted:
+                    # The durable cancellation has already released the lease.
+                    # Tell the runner to stop before it performs work for the
+                    # stage whose transition was intercepted.
+                    raise BatchRuntimeError("CANCELLED")
         except BatchRuntimeError:
             raise
         except sqlite3.Error as exc:
@@ -1261,14 +1936,30 @@ class BatchRuntimeStore:
 
 
 def _snapshot(
-    batch: sqlite3.Row, rows: Sequence[sqlite3.Row], *, now: str | None = None
+    batch: sqlite3.Row,
+    rows: Sequence[sqlite3.Row],
+    *,
+    now: str | None = None,
+    execution_budget_seconds: int | None = None,
+    maximum_generation_attempts: int | None = None,
 ) -> BatchSnapshot:
+    persisted_maximum_attempts = int(batch["maximum_generation_attempts"])
+    recovery_maximum_attempts = (
+        int(batch["maximum_generation_attempts"])
+        if maximum_generation_attempts is None
+        else maximum_generation_attempts
+    )
+    batch_state = str(batch["state"])
     return BatchSnapshot(
         batch_id=str(batch["batch_id"]),
         state=str(batch["state"]),
         plan_id=str(batch["plan_id"]),
         selection_hash=str(batch["selection_hash"]),
-        maximum_generation_attempts=int(batch["maximum_generation_attempts"]),
+        maximum_generation_attempts=persisted_maximum_attempts,
+        recovery_maximum_generation_attempts=recovery_maximum_attempts,
+        source_batch_id=_optional_text(batch["source_batch_id"]),
+        analysis_round=int(batch["analysis_round"]),
+        analysis_model_pair=_json_object_optional(batch["analysis_model_pair_json"]),
         created_at=str(batch["created_at"]),
         started_at=_optional_text(batch["started_at"]),
         completed_at=_optional_text(batch["completed_at"]),
@@ -1281,15 +1972,49 @@ def _snapshot(
                 requested_ref=_optional_text(row["requested_ref"]),
                 commit_sha=_optional_text(row["resolved_commit_sha"]),
                 state=str(row["state"]),
-                retryable=str(row["state"])
-                in {"needs_retry_confirmation", "failed", "waiting_reconnection"},
+                retryable=_retry_eligibility(
+                    row,
+                    recovery_maximum_attempts,
+                    execution_budget_seconds=execution_budget_seconds,
+                    batch_state=batch_state,
+                )[0],
+                reanalyzable=(
+                    batch_state in {"failed", "completed_with_errors"}
+                    and str(row["state"]) in FAILED_ITEM_STATES
+                    and not bool(row["has_successor"])
+                    and not _retry_eligibility(
+                        row,
+                        recovery_maximum_attempts,
+                        execution_budget_seconds=execution_budget_seconds,
+                        batch_state=batch_state,
+                    )[0]
+                ),
+                retry_blocker=_retry_eligibility(
+                    row,
+                    recovery_maximum_attempts,
+                    execution_budget_seconds=execution_budget_seconds,
+                    batch_state=batch_state,
+                )[1],
                 error_code=_optional_text(row["error_code"]),
                 error_reason=_optional_text(row["error_reason"]),
+                failure_stage=_optional_text(row["failure_stage"]),
                 retry_at=_optional_text(row["retry_at"]),
                 execution_elapsed_seconds=int(row["execution_elapsed_seconds"])
-                + (_elapsed_since(row["execution_started_at"], now) if now is not None else 0),
-                execution_budget_seconds=int(row["execution_budget_seconds"]),
+                + (
+                    _elapsed_since(row["execution_started_at"], now)
+                    if now is not None
+                    and str(row["state"]) in ITEM_ACTIVE_STAGES
+                    and row["lease_id"] is not None
+                    else 0
+                ),
+                execution_budget_seconds=(int(row["execution_budget_seconds"])),
+                recovery_execution_budget_seconds=(
+                    int(row["execution_budget_seconds"])
+                    if execution_budget_seconds is None
+                    else execution_budget_seconds
+                ),
                 generation_attempt_count=int(row["generation_attempt_count"]),
+                source_item_id=_optional_text(row["source_item_id"]),
                 result=_json_object_optional(row["result_json"]),
             )
             for row in rows
@@ -1315,6 +2040,8 @@ def _request_matches_existing(
             else None
         )
         or int(batch["maximum_generation_attempts"]) != request.maximum_generation_attempts
+        or _optional_text(batch["source_batch_id"]) != request.source_batch_id
+        or int(batch["analysis_round"]) != request.analysis_round
         or len(rows) != len(request.items)
     ):
         return False
@@ -1325,9 +2052,95 @@ def _request_matches_existing(
             or _optional_text(row["resolved_commit_sha"]) != item.commit_sha
             or str(row["selection_json"]) != item.policy_json()
             or int(row["execution_budget_seconds"]) != request.execution_budget_seconds
+            or _optional_text(row["source_item_id"]) != item.source_item_id
         ):
             return False
     return True
+
+
+def _retry_eligibility(
+    row: sqlite3.Row,
+    maximum_attempts: int,
+    *,
+    execution_budget_seconds: int | None = None,
+    batch_state: str | None = None,
+) -> tuple[bool, str | None]:
+    if batch_state is not None and batch_state not in {"failed", "completed_with_errors"}:
+        return False, None
+    if str(row["state"]) not in {
+        "needs_retry_confirmation",
+        "failed",
+        "waiting_reconnection",
+    }:
+        return False, None
+    # sqlite3.Row membership checks values, so inspect its named columns explicitly.
+    if "has_successor" in set(row.keys()) and bool(row["has_successor"]):
+        return False, "SUCCESSOR_EXISTS"
+    if int(row["generation_attempt_count"]) >= maximum_attempts:
+        return False, "ATTEMPTS_EXHAUSTED"
+    effective_budget = (
+        int(row["execution_budget_seconds"])
+        if execution_budget_seconds is None
+        else execution_budget_seconds
+    )
+    if int(row["execution_elapsed_seconds"]) >= effective_budget:
+        return False, "EXECUTION_BUDGET_EXHAUSTED"
+    return True, None
+
+
+def reanalysis_plan_id(
+    *,
+    source_batch_id: str,
+    analysis_round: int,
+    model_selection: str,
+    confirm_model_change: bool,
+    expected_selection_generation: int | None,
+) -> str:
+    """Persist the complete caller-confirmed successor request identity."""
+
+    identity = _safe_json(
+        {
+            "source_batch_id": source_batch_id,
+            "analysis_round": analysis_round,
+            "model_selection": model_selection,
+            "confirm_model_change": confirm_model_change,
+            "expected_selection_generation": expected_selection_generation,
+        }
+    )
+    return f"reanalyze:{hashlib.sha256(identity.encode()).hexdigest()}"
+
+
+def reanalysis_request_hash(
+    *,
+    source_batch_id: str,
+    item_ids: Sequence[str],
+    model_selection: str,
+    confirm_model_change: bool,
+    expected_selection_generation: int | None,
+) -> str:
+    """Hash the full request bound to a reanalysis idempotency key."""
+
+    return _hash(
+        _safe_json(
+            {
+                "source_batch_id": source_batch_id,
+                "item_ids": sorted(item_ids),
+                "model_selection": model_selection,
+                "confirm_model_change": confirm_model_change,
+                "expected_selection_generation": expected_selection_generation,
+            }
+        )
+    )
+
+
+def _failure_stage(row: sqlite3.Row) -> str:
+    state = str(row["state"])
+    if state in ITEM_ACTIVE_STAGES:
+        return state
+    resume_state = _optional_text(row["resume_state"])
+    if resume_state in ITEM_ACTIVE_STAGES:
+        return resume_state
+    return "queued"
 
 
 def _github_resolution_key(kind: str, slug: str, requested_ref: str | None) -> str:
@@ -1385,6 +2198,29 @@ def _safe_json(value: dict[str, object]) -> str:
         return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     except (TypeError, ValueError) as exc:
         raise BatchRuntimeError("VALIDATION_ERROR") from exc
+
+
+def _analysis_cache_digest(
+    *,
+    cache_key: str,
+    cache_kind: str,
+    derived_index_key: str,
+    metadata: dict[str, object],
+    payload: dict[str, object],
+) -> str:
+    """Bind every logical cache-entry field using canonical JSON."""
+
+    return _hash(
+        _safe_json(
+            {
+                "cache_key": cache_key,
+                "cache_kind": cache_kind,
+                "derived_index_key": derived_index_key,
+                "metadata": metadata,
+                "payload": payload,
+            }
+        )
+    )
 
 
 def _is_analysis_model_pair(value: dict[str, object]) -> bool:

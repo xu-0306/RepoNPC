@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { consumeSse, syncDocumentLanguage } from "./App";
+import { focusQuestionAfterPendingClears } from "./visitorFocus";
 import { messages } from "../i18n/messages";
 
 describe("visitor locale contract", () => {
@@ -29,6 +30,23 @@ describe("visitor locale contract", () => {
     });
     syncDocumentLanguage("en");
     expect(element.lang).toBe("en");
+  });
+
+  it("returns focus only after a failed request makes the question input usable", () => {
+    const requested = { current: true };
+    let focusCount = 0;
+    const input = { focus: () => (focusCount += 1) };
+
+    focusQuestionAfterPendingClears(true, requested, input);
+    expect(focusCount).toBe(0);
+    expect(requested.current).toBe(true);
+
+    focusQuestionAfterPendingClears(false, requested, input);
+    expect(focusCount).toBe(1);
+    expect(requested.current).toBe(false);
+
+    focusQuestionAfterPendingClears(false, requested, input);
+    expect(focusCount).toBe(1);
   });
 
   it("delivers already validated SSE events progressively across chunk boundaries", async () => {

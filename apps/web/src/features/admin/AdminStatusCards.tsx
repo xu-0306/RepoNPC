@@ -37,7 +37,7 @@ const COPY = {
     projects: "已選專案",
     chat: "分析與回答模型",
     embedding: "資料查找模型",
-    publicSite: "公開網站",
+    publicSite: "訪客資料",
     notStarted: "尚未開始",
     current: (current: number, total: number) =>
       `目前第 ${current} 步，共 ${total} 步`,
@@ -46,7 +46,7 @@ const COPY = {
     projectCount: (count: number) => `${count} 個專案`,
     confirmed: "清單已確認",
     unconfirmed: "尚未確認清單",
-    publicReady: "網站資料已啟用",
+    publicReady: "資料版本已啟用",
     publicPending: "尚未就緒",
     connection: (value: string) => `連線：${value}`,
     modelStates: {
@@ -63,7 +63,7 @@ const COPY = {
     projects: "Selected projects",
     chat: "Analysis and chat",
     embedding: "Content finder",
-    publicSite: "Public website",
+    publicSite: "Visitor content",
     notStarted: "Not started",
     current: (current: number, total: number) => `Step ${current} of ${total}`,
     completed: (completed: number, total: number) =>
@@ -71,7 +71,7 @@ const COPY = {
     projectCount: (count: number) => `${count} projects`,
     confirmed: "Selection confirmed",
     unconfirmed: "Selection not confirmed",
-    publicReady: "Website data is active",
+    publicReady: "Content version is active",
     publicPending: "Not ready yet",
     connection: (value: string) => `Connection: ${value}`,
     modelStates: {

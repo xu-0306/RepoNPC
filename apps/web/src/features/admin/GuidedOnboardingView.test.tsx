@@ -61,7 +61,7 @@ const analysis: RepositoryAnalysis = {
       path: "src/parser.ts",
       start_line: 4,
       end_line: 12,
-      text: "export function parse(input: string)",
+      excerpt: "export function parse(input: string)",
     },
   ],
   inferences: [
@@ -91,6 +91,7 @@ function repository(
     analysis,
     ownerStatement: "I maintained the parser with another contributor.",
     proposal,
+    previousContribution: null,
     confirmedContribution: null,
     ...overrides,
   };
@@ -318,6 +319,9 @@ describe("GuidedOnboardingView", () => {
       /<button[^>]*disabled[^>]*>Review information you can verify and describe contribution<\/button>/,
     );
     expect(terminalMarkup).toMatch(/<button[^>]*>Back<\/button>/);
+    expect(terminalMarkup).toContain('data-analysis-result="octocat/demo"');
+    expect(terminalMarkup).toContain("src/parser.ts");
+    expect(terminalMarkup).toContain("export function parse(input: string)");
   });
 
   it("renders explicit proposal edit, accept, and reject controls", () => {
@@ -448,7 +452,7 @@ describe("GuidedOnboardingView", () => {
       />,
     );
     expect(reviewMarkup).toContain("Review confirmed content");
-    expect(reviewMarkup).toContain("Create complete YAML draft");
+    expect(reviewMarkup).toContain("Finish content and preview");
     expect(reviewMarkup).toContain("Confirmed");
     expect(reviewMarkup).toContain("共同維護者");
     expect(reviewMarkup).toContain("Co-maintainer");
@@ -463,10 +467,10 @@ describe("GuidedOnboardingView", () => {
       />,
     );
     expect(draftMarkup).toContain(
-      "The YAML draft is ready to inspect in advanced mode.",
+      "Content is ready. Open Preview &amp; share to prepare the NPC.",
     );
     expect(draftMarkup).toContain("Copy YAML");
-    expect(draftMarkup).toContain("Download YAML");
+    expect(draftMarkup).toContain("Back up settings (YAML)");
   });
 
   it("keeps the bilingual surface and safe operation error visible", () => {

@@ -9,7 +9,7 @@ import json
 from collections.abc import Callable
 from contextlib import suppress
 from threading import Event
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Cookie, File, Form, Header, Path, Query, Request, UploadFile
@@ -41,6 +41,7 @@ from reponpc.admin.embedding_profiles import (
     embedding_model_catalog,
 )
 from reponpc.admin.github import GitHubAdminError
+from reponpc.admin.local_portfolio import LocalPortfolioError, apply_character
 from reponpc.admin.model_connections import (
     ModelConnectionError,
     ModelConnectionInput,
@@ -54,6 +55,17 @@ from reponpc.admin.onboarding import (
 from reponpc.admin.operations import AdminOperations
 from reponpc.api.public import error_response
 from reponpc.cards.assets import CanonicalSprite, SpriteValidationError
+from reponpc.cards.conversion import (
+    MAX_PACK_ENTRIES,
+    MAX_SOURCE_BYTES,
+    MAX_SOURCE_MEMBER_BYTES,
+    MAX_SOURCE_UNCOMPRESSED_BYTES,
+    ConversionStrategy,
+    MaterialEntry,
+    SpriteConversion,
+    SpriteConversionError,
+    SpriteSelection,
+)
 from reponpc.cards.render import CardRenderError
 from reponpc.config.models import ConfigValidationError, PublicConfig
 
@@ -140,6 +152,24 @@ class ConfigContentRequest(_StrictRequest):
     content: str = Field(min_length=1, max_length=1024 * 1024)
 
 
+class PortfolioRequest(ConfigContentRequest):
+    sprite_base64: str | None = Field(default=None, max_length=3 * 1024 * 1024)
+    expected_revision: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class PreparePortfolioRequest(_StrictRequest):
+    expected_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    selection_generation: int = Field(ge=0)
+    confirmed: Literal[True]
+
+
+class ShareProfileRequest(_StrictRequest):
+    account: str = Field(
+        min_length=1, max_length=39, pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$"
+    )
+    filename: Literal["reponpc-card.gif"] = "reponpc-card.gif"
+
+
 class ConfigWriteRequest(ConfigContentRequest):
     expected_blob_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
     commit_message: str = Field(default="Update RepoNPC configuration", max_length=120)
@@ -202,6 +232,22 @@ class AnalysisBatchPreflightRequest(_StrictRequest):
 class AnalysisBatchCreateRequest(AnalysisBatchPreflightRequest):
     plan_id: str = Field(min_length=16, max_length=256)
     idempotency_key: str = Field(min_length=16, max_length=512)
+
+
+class AnalysisBatchReanalyzeRequest(_StrictRequest):
+    item_ids: tuple[str, ...] = Field(min_length=1, max_length=50)
+    idempotency_key: str = Field(min_length=16, max_length=512)
+    model_selection: Literal["frozen", "current"] = "frozen"
+    confirm_model_change: bool = False
+    expected_selection_generation: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def unique_items(self) -> AnalysisBatchReanalyzeRequest:
+        if len(set(self.item_ids)) != len(self.item_ids):
+            raise ValueError("analysis item IDs must be unique")
+        if any(not 1 <= len(item_id) <= 64 for item_id in self.item_ids):
+            raise ValueError("invalid analysis item ID")
+        return self
 
 
 class ContributionSuggestRequest(_StrictRequest):
@@ -1162,6 +1208,200 @@ def create_admin_router(
     async def delete_github_connection(request: Request) -> Response:
         return _github_public_read_removed(request)
 
+    def local_error(request: Request, exc: Exception) -> Response:
+        code = getattr(exc, "code", "PORTFOLIO_INVALID")
+        return error_response(
+            request,
+            status_code=409
+            if code in {"PORTFOLIO_CONFLICT", "PORTFOLIO_BUSY", "EMBEDDING_REINDEX_ACTIVE"}
+            else 422,
+            code=code,
+            message="Local portfolio operation could not be completed.",
+        )
+
+    @router.get("/portfolio")
+    async def read_portfolio(
+        request: Request, session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None
+    ) -> Response:
+        boundary = protected(request, session_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _ = boundary
+        if configured.local_portfolio is None:
+            return error_response(
+                request,
+                status_code=503,
+                code="SERVICE_NOT_READY",
+                message="Local storage is unavailable.",
+            )
+        try:
+            draft = await asyncio.to_thread(configured.local_portfolio.read)
+            return JSONResponse(
+                draft.as_dict()
+                if draft
+                else {"content": "", "sprite_base64": None, "revision": None},
+                headers={"Cache-Control": "no-store"},
+            )
+        except LocalPortfolioError as exc:
+            return local_error(request, exc)
+
+    @router.put("/portfolio")
+    async def save_portfolio(
+        request: Request,
+        body: PortfolioRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        configured, _ = boundary
+        if configured.local_portfolio is None:
+            return error_response(
+                request,
+                status_code=503,
+                code="SERVICE_NOT_READY",
+                message="Local storage is unavailable.",
+            )
+        try:
+            draft = await asyncio.to_thread(
+                configured.local_portfolio.save,
+                content=body.content,
+                sprite_base64=body.sprite_base64,
+                expected_revision=body.expected_revision,
+            )
+            return JSONResponse(draft.as_dict(), headers={"Cache-Control": "no-store"})
+        except LocalPortfolioError as exc:
+            return local_error(request, exc)
+        except ConfigValidationError as exc:
+            return _config_error(request, exc)
+
+    @router.post("/portfolio/character")
+    @router.post("/portfolio/preview")
+    async def preview_portfolio(
+        request: Request,
+        body: PortfolioRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        configured, _ = boundary
+        try:
+            if request.url.path.endswith("/character"):
+                draft = await asyncio.to_thread(
+                    apply_character, body.content, body.sprite_base64 or ""
+                )
+                return JSONResponse(draft.as_dict(), headers={"Cache-Control": "no-store"})
+            parsed = configured.validate_config(body.content.encode("utf-8"))
+            sprite = (
+                base64.b64decode(body.sprite_base64, validate=True) if body.sprite_base64 else None
+            )
+            if parsed.character.mode == "custom" and sprite is None:
+                raise LocalPortfolioError("PORTFOLIO_ASSET_REQUIRED")
+            if parsed.character.mode == "builtin" and sprite is not None:
+                raise LocalPortfolioError("PORTFOLIO_INVALID")
+            preview = await asyncio.to_thread(
+                configured.preview_config, body.content.encode("utf-8"), sprite_content=sprite
+            )
+            return JSONResponse(preview, headers={"Cache-Control": "no-store"})
+        except ConfigValidationError as exc:
+            return _config_error(request, exc)
+        except (LocalPortfolioError, ValueError, SpriteValidationError, CardRenderError) as exc:
+            return local_error(request, exc)
+
+    @router.get("/portfolio/status")
+    @router.delete("/portfolio/prepare")
+    async def portfolio_status(
+        request: Request,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(
+            request, session_token, (csrf_token or "") if request.method == "DELETE" else None
+        )
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        configured, _ = boundary
+        if configured.local_publication is None:
+            return error_response(
+                request,
+                status_code=503,
+                code="SERVICE_NOT_READY",
+                message="Local preparation is unavailable.",
+            )
+        try:
+            operation = (
+                configured.local_publication.cancel
+                if request.method == "DELETE"
+                else configured.local_publication.status
+            )
+            result = await asyncio.to_thread(operation)
+            return JSONResponse(result, headers={"Cache-Control": "no-store"})
+        except LocalPortfolioError as exc:
+            return local_error(request, exc)
+
+    @router.post("/portfolio/prepare")
+    async def prepare_portfolio(
+        request: Request,
+        body: PreparePortfolioRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        configured, _ = boundary
+        if configured.local_publication is None or configured.analysis_selection is None:
+            return error_response(
+                request,
+                status_code=503,
+                code="SERVICE_NOT_READY",
+                message="Local preparation is unavailable.",
+            )
+        view = configured.analysis_selection.view()
+        if not view.eligible or view.selection.generation != body.selection_generation:
+            return local_error(request, LocalPortfolioError("PORTFOLIO_MODEL_CHANGED"))
+        try:
+            result = await asyncio.to_thread(
+                configured.local_publication.prepare,
+                expected_revision=body.expected_revision,
+                embedding_profile_id=view.selection.embedding_profile_id or "",
+                chat_profile_id=view.selection.chat_profile_id or "",
+            )
+            return JSONResponse(result, status_code=202, headers={"Cache-Control": "no-store"})
+        except (LocalPortfolioError, EmbeddingProfileError, ChatProfileError) as exc:
+            return local_error(request, exc)
+
+    @router.post("/portfolio/github-profile")
+    async def share_profile(
+        request: Request,
+        body: ShareProfileRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        configured, _ = boundary
+        if configured.local_publication is None:
+            return error_response(
+                request,
+                status_code=503,
+                code="SERVICE_NOT_READY",
+                message="Public metadata is unavailable.",
+            )
+        result = await asyncio.to_thread(
+            configured.local_publication.resolver.profile_card_metadata,
+            account=body.account,
+            filename=body.filename,
+        )
+        return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
     @router.get("/config")
     async def read_config(
         request: Request,
@@ -1270,6 +1510,70 @@ def create_admin_router(
         except SpriteValidationError as exc:
             return _asset_error(request, exc)
         return JSONResponse(_asset_result(canonical))
+
+    @router.post("/assets/character/convert")
+    async def convert_asset(
+        request: Request,
+        file: Annotated[UploadFile | None, File()] = None,
+        files: Annotated[list[UploadFile] | None, File()] = None,
+        paths_json: Annotated[str | None, Form(max_length=32_768)] = None,
+        strategy: Annotated[Literal["pixel_exact", "pixelize"], Form()] = "pixelize",
+        candidate_id: Annotated[
+            str | None, Form(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+        ] = None,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        boundary = protected(request, session_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        configured, _session_hash = boundary
+        try:
+            folder_uploads = files or []
+            if file is not None and folder_uploads:
+                raise SpriteConversionError("SOURCE_SELECTION_INVALID")
+            if file is not None:
+                if paths_json is not None:
+                    raise SpriteConversionError("SOURCE_SELECTION_INVALID")
+                content: bytes | None = await file.read(MAX_SOURCE_BYTES + 1)
+                entries: tuple[MaterialEntry, ...] = ()
+            else:
+                if (
+                    not folder_uploads
+                    or len(folder_uploads) > MAX_PACK_ENTRIES
+                    or paths_json is None
+                ):
+                    raise SpriteConversionError("SOURCE_SELECTION_INVALID")
+                try:
+                    relative_paths = json.loads(paths_json)
+                except json.JSONDecodeError as exc:
+                    raise SpriteConversionError("SOURCE_SELECTION_INVALID") from exc
+                if (
+                    not isinstance(relative_paths, list)
+                    or len(relative_paths) != len(folder_uploads)
+                    or any(not isinstance(path, str) for path in relative_paths)
+                ):
+                    raise SpriteConversionError("SOURCE_SELECTION_INVALID")
+                material_entries: list[MaterialEntry] = []
+                total_size = 0
+                for upload, relative_path in zip(folder_uploads, relative_paths, strict=True):
+                    member_content = await upload.read(MAX_SOURCE_MEMBER_BYTES + 1)
+                    total_size += len(member_content)
+                    if total_size > MAX_SOURCE_UNCOMPRESSED_BYTES:
+                        raise SpriteConversionError("PACK_LIMIT_EXCEEDED")
+                    material_entries.append(
+                        MaterialEntry(path=relative_path, content=member_content)
+                    )
+                content = None
+                entries = tuple(material_entries)
+            preparation = configured.convert_asset(
+                content=content,
+                entries=entries,
+                strategy=cast(ConversionStrategy, strategy),
+                candidate_id=candidate_id,
+            )
+        except SpriteConversionError as exc:
+            return _conversion_error(request, exc)
+        return JSONResponse(_preparation_result(preparation))
 
     @router.put("/assets/character/{filename}")
     async def write_asset(
@@ -1605,6 +1909,35 @@ def create_admin_router(
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )
 
+    @router.post("/onboarding/analysis-batches/{batch_id}/reanalyze")
+    async def reanalyze_batch_items(
+        request: Request,
+        body: AnalysisBatchReanalyzeRequest,
+        batch_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            snapshot, created = await asyncio.to_thread(
+                configured.reanalyze_batch_items,
+                batch_id=batch_id,
+                item_ids=body.item_ids,
+                idempotency_key=body.idempotency_key,
+                model_selection=body.model_selection,
+                confirm_model_change=body.confirm_model_change,
+                expected_selection_generation=body.expected_selection_generation,
+            )
+        except BatchRuntimeError as exc:
+            return _batch_error(request, exc)
+        return _batch_response({"batch": _batch_snapshot_payload(snapshot), "created": created})
+
     @router.post("/onboarding/analysis-batches/{batch_id}/{action}")
     async def action_analysis_batch(
         request: Request,
@@ -1734,6 +2067,22 @@ def _asset_error(request: Request, error: SpriteValidationError) -> JSONResponse
         status_code=status,
         code="ASSET_INVALID",
         message="Character asset is invalid.",
+        details={"reason": error.code},
+    )
+
+
+def _conversion_error(request: Request, error: SpriteConversionError) -> JSONResponse:
+    status = (
+        413
+        if error.code
+        in {"SOURCE_FILE_TOO_LARGE", "PACK_LIMIT_EXCEEDED", "SOURCE_DIMENSIONS_UNSAFE"}
+        else 422
+    )
+    return error_response(
+        request,
+        status_code=status,
+        code="ASSET_CONVERSION_FAILED",
+        message="Character material could not be converted.",
         details={"reason": error.code},
     )
 
@@ -1917,6 +2266,17 @@ def _batch_error(request: Request, error: Exception) -> JSONResponse:
         "NOT_FOUND": 404,
         "ANALYSIS_BATCH_ACTIVE": 409,
         "ANALYSIS_PLAN_STALE": 409,
+        "ANALYSIS_RETRY_NOT_AVAILABLE": 409,
+        "ANALYSIS_REANALYZE_NOT_AVAILABLE": 409,
+        "ANALYSIS_SOURCE_BATCH_NOT_TERMINAL": 409,
+        "ANALYSIS_REANALYZE_ITEM_INVALID": 409,
+        "ANALYSIS_SUCCESSOR_CONFLICT": 409,
+        "ANALYSIS_IDEMPOTENCY_CONFLICT": 409,
+        "ANALYSIS_SOURCE_STATE_CHANGED": 409,
+        "ANALYSIS_MODEL_SELECTION_STALE": 409,
+        "ANALYSIS_MODEL_CHANGE_CONFIRMATION_REQUIRED": 409,
+        "ANALYSIS_GENERATION_ATTEMPTS_EXHAUSTED": 409,
+        "ANALYSIS_EXECUTION_BUDGET_EXHAUSTED": 409,
         "GITHUB_RATE_LIMITED": 429,
         "RATE_LIMITED": 429,
         "MODEL_UNAVAILABLE": 503,
@@ -2005,6 +2365,10 @@ def _batch_snapshot_payload(snapshot: BatchSnapshot) -> dict[str, object]:
         "plan_id": snapshot.plan_id,
         "selection_hash": snapshot.selection_hash,
         "maximum_generation_attempts": snapshot.maximum_generation_attempts,
+        "recovery_maximum_generation_attempts": (snapshot.recovery_maximum_generation_attempts),
+        "source_batch_id": snapshot.source_batch_id,
+        "analysis_round": snapshot.analysis_round,
+        "analysis_model_pair": snapshot.analysis_model_pair,
         "created_at": snapshot.created_at,
         "started_at": snapshot.started_at,
         "completed_at": snapshot.completed_at,
@@ -2019,12 +2383,17 @@ def _batch_snapshot_payload(snapshot: BatchSnapshot) -> dict[str, object]:
                 "commit_sha": item.commit_sha,
                 "state": item.state,
                 "retryable": item.retryable,
+                "reanalyzable": item.reanalyzable,
+                "retry_blocker": item.retry_blocker,
                 "error_code": item.error_code,
                 "error_reason": item.error_reason,
+                "failure_stage": item.failure_stage,
                 "retry_at": item.retry_at,
                 "execution_elapsed_seconds": item.execution_elapsed_seconds,
                 "execution_budget_seconds": item.execution_budget_seconds,
+                "recovery_execution_budget_seconds": (item.recovery_execution_budget_seconds),
                 "generation_attempt_count": item.generation_attempt_count,
+                "source_item_id": item.source_item_id,
                 "result": item.result,
             }
             for item in snapshot.items
@@ -2085,6 +2454,68 @@ def _asset_result(canonical: CanonicalSprite) -> dict[str, object]:
         "width": canonical.width,
         "height": canonical.height,
         "png_base64": base64.b64encode(canonical.content).decode("ascii"),
+    }
+
+
+def _conversion_result(conversion: SpriteConversion) -> dict[str, object]:
+    return {
+        "status": "converted",
+        "asset": _asset_result(conversion.sprite),
+        "edge_cleanup": (
+            {
+                "asset": _asset_result(conversion.cleanup.sprite),
+                "affected_frames": [
+                    {"state": state, "frame": frame}
+                    for state, frame in conversion.cleanup.affected_frames
+                ],
+                "removed_source_pixels": conversion.cleanup.removed_source_pixels,
+            }
+            if conversion.cleanup is not None
+            else None
+        ),
+        "conversion": {
+            "source_kind": conversion.source_kind,
+            "strategy": conversion.strategy,
+            "source_frame_sizes": [list(size) for size in conversion.source_frame_sizes],
+            "candidate_id": conversion.candidate_id,
+            "source_path": conversion.source_path,
+            "warnings": [
+                {"code": warning.code, "items": list(warning.items)}
+                for warning in conversion.warnings
+            ],
+        },
+    }
+
+
+def _preparation_result(
+    preparation: SpriteConversion | SpriteSelection,
+) -> dict[str, object]:
+    if isinstance(preparation, SpriteConversion):
+        return _conversion_result(preparation)
+    return {
+        "status": "selection_required",
+        "discovery": {
+            "source_kind": "bundle",
+            "strategy": preparation.strategy,
+            "ignored_count": preparation.ignored_count,
+            "candidates": [
+                {
+                    "candidate_id": candidate.candidate_id,
+                    "source_path": candidate.source_path,
+                    "asset": _asset_result(candidate.conversion.sprite),
+                    "conversion": {
+                        "source_frame_sizes": [
+                            list(size) for size in candidate.conversion.source_frame_sizes
+                        ],
+                        "warnings": [
+                            {"code": warning.code, "items": list(warning.items)}
+                            for warning in candidate.conversion.warnings
+                        ],
+                    },
+                }
+                for candidate in preparation.candidates
+            ],
+        },
     }
 
 

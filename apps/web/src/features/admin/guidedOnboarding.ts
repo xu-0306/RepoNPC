@@ -22,7 +22,7 @@ export interface RepositoryFact {
   path: string;
   start_line: number | null;
   end_line: number | null;
-  text: string;
+  excerpt: string;
 }
 
 export interface ModelInference {
@@ -79,6 +79,7 @@ export interface GuidedRepository {
   analysis: RepositoryAnalysis | null;
   ownerStatement: string;
   proposal: ContributionProposal | null;
+  previousContribution: ContributionProposal | null;
   confirmedContribution: ConfirmedContribution | null;
 }
 
@@ -138,6 +139,8 @@ export type GuidedOnboardingAction =
   | { type: "CONTINUE_TO_CONTRIBUTIONS" }
   | { type: "SET_OWNER_STATEMENT"; slug: string; statement: string }
   | { type: "BEGIN_MANUAL_CONTRIBUTION"; slug: string }
+  | { type: "EDIT_CONFIRMED_CONTRIBUTION"; slug: string }
+  | { type: "RESTORE_PREVIOUS_CONTRIBUTION"; slug: string }
   | {
       type: "SET_CONTRIBUTION_PROPOSAL";
       slug: string;
@@ -289,7 +292,8 @@ export function guidedOnboardingFromConfig(
       analysisStatus: "idle",
       analysis: null,
       ownerStatement: summary["zh-TW"],
-      proposal: null,
+      proposal: cloneProposal({ role, summary, claims }),
+      previousContribution: null,
       confirmedContribution: {
         evidence_class: "OWNER_ASSERTION",
         role,
@@ -419,6 +423,7 @@ export function guidedOnboardingReducer(
             analysis: null,
             ownerStatement: "",
             proposal: null,
+            previousContribution: null,
             confirmedContribution: null,
           };
         }),
@@ -498,12 +503,26 @@ export function guidedOnboardingReducer(
       return { ...state, step: "contributions" };
     case "SET_OWNER_STATEMENT":
       requireStep(state, "contributions");
-      return updateSelectedRepository(state, action.slug, (repository) => ({
-        ...repository,
-        ownerStatement: action.statement,
-        proposal: null,
-        confirmedContribution: null,
-      }));
+      return updateSelectedRepository(state, action.slug, (repository) => {
+        const editableProposal =
+          repository.proposal ??
+          (repository.confirmedContribution
+            ? cloneProposal(repository.confirmedContribution)
+            : null);
+        return {
+          ...repository,
+          ownerStatement: action.statement,
+          // Changing the source assertion invalidates confirmation, but the
+          // owner's prior editable wording remains available for revision.
+          proposal: editableProposal,
+          previousContribution:
+            repository.previousContribution ??
+            (repository.confirmedContribution
+              ? cloneProposal(repository.confirmedContribution)
+              : null),
+          confirmedContribution: null,
+        };
+      });
     case "BEGIN_MANUAL_CONTRIBUTION":
       requireStep(state, "contributions");
       return updateSelectedRepository(state, action.slug, (repository) => {
@@ -517,6 +536,22 @@ export function guidedOnboardingReducer(
             summary: { "zh-TW": "", en: "" },
             claims: [],
           },
+          previousContribution: repository.confirmedContribution
+            ? cloneProposal(repository.confirmedContribution)
+            : repository.previousContribution,
+          confirmedContribution: null,
+        };
+      });
+    case "EDIT_CONFIRMED_CONTRIBUTION":
+      requireStep(state, "contributions");
+      return updateSelectedRepository(state, action.slug, (repository) => {
+        if (!repository.confirmedContribution) {
+          throw new Error("ONBOARDING_CONFIRMATION_REQUIRED");
+        }
+        return {
+          ...repository,
+          proposal: cloneProposal(repository.confirmedContribution),
+          previousContribution: cloneProposal(repository.confirmedContribution),
           confirmedContribution: null,
         };
       });
@@ -526,7 +561,16 @@ export function guidedOnboardingReducer(
         if (repository.ownerStatement !== action.originalStatement) {
           throw new Error("ONBOARDING_OWNER_STATEMENT_CHANGED");
         }
-        return { ...repository, proposal: cloneProposal(action.proposal) };
+        return {
+          ...repository,
+          proposal: cloneProposal(action.proposal),
+          previousContribution: repository.confirmedContribution
+            ? cloneProposal(repository.confirmedContribution)
+            : repository.previousContribution,
+          // A provider result or any subsequent edit is a new draft version.
+          // It must never inherit confirmation from older visible text.
+          confirmedContribution: null,
+        };
       });
     case "CONFIRM_CONTRIBUTION":
       requireStep(state, "contributions");
@@ -543,15 +587,40 @@ export function guidedOnboardingReducer(
             ...cloneProposal(action.contribution),
             evidence_class: "OWNER_ASSERTION",
           },
+          previousContribution: null,
+        };
+      });
+    case "RESTORE_PREVIOUS_CONTRIBUTION":
+      requireStep(state, "contributions");
+      return updateSelectedRepository(state, action.slug, (repository) => {
+        if (!repository.previousContribution) {
+          throw new Error("ONBOARDING_PROPOSAL_REQUIRED");
+        }
+        return {
+          ...repository,
+          proposal: cloneProposal(repository.previousContribution),
+          previousContribution: null,
+          confirmedContribution: null,
         };
       });
     case "REJECT_CONTRIBUTION":
       requireStep(state, "contributions");
-      return updateSelectedRepository(state, action.slug, (repository) => ({
-        ...repository,
-        proposal: null,
-        confirmedContribution: null,
-      }));
+      return updateSelectedRepository(state, action.slug, (repository) => {
+        if (repository.previousContribution) {
+          return {
+            ...repository,
+            proposal: cloneProposal(repository.previousContribution),
+            previousContribution: null,
+            confirmedContribution: null,
+          };
+        }
+        return {
+          ...repository,
+          proposal: null,
+          previousContribution: null,
+          confirmedContribution: null,
+        };
+      });
     case "CONTINUE_TO_PROFILE":
       requireStep(state, "contributions");
       if (
@@ -676,7 +745,10 @@ export function parseGuidedOnboarding(
         analysisStatus: "idle",
         analysis: null,
         ownerStatement: persisted.ownerStatement,
-        proposal: null,
+        proposal: persisted.confirmedContribution
+          ? cloneProposal(persisted.confirmedContribution)
+          : null,
+        previousContribution: null,
         confirmedContribution: persisted.confirmedContribution,
       });
     }
@@ -727,8 +799,28 @@ export function guidedErrorMessage(locale: Locale, code: string): string {
       en: "The configured model is unavailable. Your selection is preserved; retry later or continue with manual contribution details.",
     },
     PROVIDER_TIMEOUT: {
-      "zh-TW": "分析逾時且未儲存部分結果。你的選擇已保留，可以重新分析。",
-      en: "Analysis timed out and no partial result was saved. Your selection is preserved and can be analyzed again.",
+      "zh-TW":
+        "模型操作逾時且未儲存部分結果。你的輸入已保留，可明確重試或改為手動填寫。",
+      en: "The model operation timed out and no partial result was saved. Your input is preserved; retry explicitly or continue manually.",
+    },
+    PROVIDER_OUTPUT_LIMIT_REACHED: {
+      "zh-TW":
+        "模型回覆達到輸出上限，因此未採用不完整提案。請精簡原始說明後重試，或改為手動填寫。",
+      en: "The model response reached its output limit, so the incomplete proposal was not used. Shorten the original description and retry, or continue manually.",
+    },
+    PROVIDER_OUTPUT_SCHEMA_INVALID: {
+      "zh-TW":
+        "模型沒有回傳可安全使用的完整提案。你的原始說明已保留，可重試或改為手動填寫。",
+      en: "The model did not return a complete proposal that can be used safely. Your original description is preserved; retry or continue manually.",
+    },
+    CONFIG_INVALID: {
+      "zh-TW": "目前的設定無效。請檢查欄位內容後再試一次。",
+      en: "The current configuration is invalid. Review the fields and try again.",
+    },
+    CONTRIBUTION_CONTEXT_INVALID: {
+      "zh-TW":
+        "目前模型的內容空間不足以安全處理完整說明與提案格式。請精簡說明、調整模型設定，或改為手動填寫。",
+      en: "The current model does not have enough context space for the complete description and proposal format. Shorten the description, adjust the model, or continue manually.",
     },
     NO_ELIGIBLE_CONTENT: {
       "zh-TW":
@@ -770,6 +862,7 @@ function newGuidedRepository(metadata: RepositoryMetadata): GuidedRepository {
     analysis: null,
     ownerStatement: "",
     proposal: null,
+    previousContribution: null,
     confirmedContribution: null,
   };
 }

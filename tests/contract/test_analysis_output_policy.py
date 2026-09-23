@@ -10,7 +10,11 @@ import pytest
 
 from reponpc.admin.onboarding import AnalysisEnvelope
 from reponpc.config.environment import load_environment
-from reponpc.main import _analysis_chat_capabilities, _chat_provider_from_connection
+from reponpc.main import (
+    _analysis_chat_capabilities,
+    _chat_provider_from_connection,
+    _contribution_chat_capabilities,
+)
 from reponpc.providers.contracts import ProviderMessage
 from reponpc.providers.http_transport import ProviderHttpResponse, UrllibProviderHttpTransport
 
@@ -59,6 +63,7 @@ def test_analysis_and_public_budgets_reach_production_transport(
     for capabilities, output_tokens in (
         (_analysis_chat_capabilities(settings), settings.analysis_max_output_tokens),
         (None, settings.chat_max_output_tokens),
+        (_contribution_chat_capabilities(settings), 700),
     ):
         provider = _chat_provider_from_connection(
             settings,
@@ -75,9 +80,34 @@ def test_analysis_and_public_budgets_reach_production_transport(
             45,
         )
 
-    assert len(requests) == 2
+    assert len(requests) == 3
     limits = [
         request["options"]["num_predict"] if provider_name == "ollama" else request["max_tokens"]
         for request in requests
     ]
-    assert limits == [8192 if budget is None else 16384, 4096]
+    assert limits == [8192 if budget is None else 16384, 4096, 700]
+
+
+def test_contribution_capability_remains_700_when_analysis_budget_is_smaller(
+    tmp_path: Path,
+) -> None:
+    settings = load_environment(
+        {
+            "REPONPC_DATA_DIR": str(tmp_path),
+            "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
+            "REPONPC_CONFIG_REPOSITORY": "example/portfolio",
+            "REPONPC_INDEX_MANIFEST_URL": (
+                "https://raw.githubusercontent.com/example/portfolio/main/stable-manifest.json"
+            ),
+            "REPONPC_CHAT_PROVIDER": "ollama",
+            "REPONPC_CHAT_MODEL": "fixture-chat",
+            "REPONPC_CHAT_BASE_URL": "http://127.0.0.1:11434",
+            "REPONPC_EMBEDDING_MODEL": "fixture-embed",
+            "REPONPC_EMBEDDING_BASE_URL": "http://127.0.0.1:11434",
+            "REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS": "1",
+        },
+        secret_roots=(tmp_path,),
+    )
+
+    assert _analysis_chat_capabilities(settings).max_output_tokens == 1
+    assert _contribution_chat_capabilities(settings).max_output_tokens == 700

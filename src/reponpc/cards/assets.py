@@ -11,9 +11,11 @@ from typing import Final
 from PIL import Image, UnidentifiedImageError
 
 PNG_SIGNATURE: Final = b"\x89PNG\r\n\x1a\n"
-WIDTH: Final = 128
-HEIGHT: Final = 224
-FRAME_SIZE: Final = 32
+FRAME_COLUMNS: Final = 4
+FRAME_ROWS: Final = 7
+FRAME_SIZE: Final = 64
+WIDTH: Final = FRAME_COLUMNS * FRAME_SIZE
+HEIGHT: Final = FRAME_ROWS * FRAME_SIZE
 STATE_ROWS: Final = ("idle", "walk", "listen", "think", "talk", "success", "offline")
 DEFAULT_MAX_BYTES: Final = 1024 * 1024
 HARD_MAX_BYTES: Final = 2 * 1024 * 1024
@@ -46,7 +48,7 @@ def validate_sprite(
         raise ValueError("max_bytes must be within the supported asset limit")
     if len(content) > max_bytes:
         raise SpriteValidationError("FILE_TOO_LARGE")
-    chunks, dimensions = _png_chunks(content)
+    chunks, dimensions = inspect_png(content)
     if b"acTL" in chunks or b"fcTL" in chunks or b"fdAT" in chunks:
         raise SpriteValidationError("ANIMATED_PNG")
     if dimensions != (WIDTH, HEIGHT):
@@ -73,9 +75,17 @@ def validate_sprite(
     if minimum == 255:
         raise SpriteValidationError("MISSING_TRANSPARENCY")
     for row, _state in enumerate(STATE_ROWS):
-        first_frame = image.crop((0, row * FRAME_SIZE, FRAME_SIZE, (row + 1) * FRAME_SIZE))
-        if first_frame.getbbox() is None:
-            raise SpriteValidationError("EMPTY_STATE")
+        for column in range(FRAME_COLUMNS):
+            alpha = image.getchannel("A").crop(
+                (
+                    column * FRAME_SIZE,
+                    row * FRAME_SIZE,
+                    (column + 1) * FRAME_SIZE,
+                    (row + 1) * FRAME_SIZE,
+                )
+            )
+            if alpha.getbbox() is None:
+                raise SpriteValidationError("EMPTY_FRAME")
 
     output = io.BytesIO()
     image.save(output, format="PNG", optimize=False, compress_level=9, interlace=False)
@@ -93,7 +103,7 @@ def validate_sprite_filename(filename: str) -> str:
     return filename
 
 
-def _png_chunks(content: bytes) -> tuple[frozenset[bytes], tuple[int, int]]:
+def inspect_png(content: bytes) -> tuple[frozenset[bytes], tuple[int, int]]:
     """Parse the complete PNG framing and reject truncation or trailing polyglot bytes."""
 
     if not content.startswith(PNG_SIGNATURE):

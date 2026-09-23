@@ -31,6 +31,8 @@ from reponpc.admin.embedding_profiles import (
 )
 from reponpc.admin.embedding_reindex import EmbeddingReindexCoordinator
 from reponpc.admin.github import GitCommit, GitFile, GitHubAdminClient, GitHubAdminError
+from reponpc.admin.local_portfolio import LocalPortfolioStore
+from reponpc.admin.local_publication import LocalPublication
 from reponpc.admin.model_connections import (
     ModelConnection,
     ModelConnectionError,
@@ -48,6 +50,14 @@ from reponpc.admin.onboarding import (
     GuidedRepositoryDraft,
 )
 from reponpc.cards.assets import CanonicalSprite, validate_sprite, validate_sprite_filename
+from reponpc.cards.conversion import (
+    ConversionStrategy,
+    MaterialEntry,
+    SpriteConversion,
+    SpriteSelection,
+    prepare_sprite_entries,
+    prepare_sprite_material,
+)
 from reponpc.cards.render import (
     CardCopy,
     CardPalette,
@@ -76,6 +86,8 @@ class AdminOperations:
     embedding_reindex: EmbeddingReindexCoordinator | None = None
     ollama_model_operations: OllamaModelOperationCoordinator | None = None
     connection_model_lister: Callable[[str], tuple[str, ...]] | None = None
+    local_portfolio: LocalPortfolioStore | None = None
+    local_publication: LocalPublication | None = None
 
     def read_config(self) -> GitFile:
         return self._github().read_config()
@@ -83,9 +95,13 @@ class AdminOperations:
     def validate_config(self, content: bytes) -> PublicConfig:
         return parse_public_config_bytes(content)
 
-    def preview_config(self, content: bytes) -> dict[str, Any]:
+    def preview_config(
+        self, content: bytes, *, sprite_content: bytes | None = None
+    ) -> dict[str, Any]:
         config = self.validate_config(content)
-        sprite = self._sprite(config)
+        sprite = (
+            validate_sprite(sprite_content) if sprite_content is not None else self._sprite(config)
+        )
         encoded_sprite = base64.b64encode(sprite.content).decode("ascii")
         cards: dict[str, dict[str, str]] = {}
         for locale in config.locales.supported:
@@ -128,6 +144,18 @@ class AdminOperations:
                 "png_base64": encoded_sprite,
                 "sha256": sprite.sha256,
             },
+            "repositories": [
+                {
+                    "slug": item.slug,
+                    "role": item.role,
+                    "summary": item.summary,
+                    "claims": [
+                        {"id": claim.id, "statement": claim.statement} for claim in item.claims
+                    ],
+                }
+                for item in config.repositories
+                if item.enabled
+            ],
             "cards": cards,
         }
 
@@ -154,6 +182,28 @@ class AdminOperations:
     def validate_asset(self, *, filename: str, content: bytes) -> CanonicalSprite:
         validate_sprite_filename(filename)
         return validate_sprite(content)
+
+    def convert_asset(
+        self,
+        *,
+        content: bytes | None,
+        entries: tuple[MaterialEntry, ...] = (),
+        strategy: ConversionStrategy,
+        candidate_id: str | None = None,
+    ) -> SpriteConversion | SpriteSelection:
+        if content is not None and entries:
+            raise ValueError("choose one material input form")
+        if content is not None:
+            return prepare_sprite_material(
+                content,
+                strategy=strategy,
+                candidate_id=candidate_id,
+            )
+        return prepare_sprite_entries(
+            entries,
+            strategy=strategy,
+            candidate_id=candidate_id,
+        )
 
     def write_asset(
         self,
@@ -438,6 +488,25 @@ class AdminOperations:
 
     def analysis_batch_action(self, *, batch_id: str, action: str) -> BatchSnapshot:
         return self._analysis_batches().action(batch_id, action=action)
+
+    def reanalyze_batch_items(
+        self,
+        *,
+        batch_id: str,
+        item_ids: tuple[str, ...],
+        idempotency_key: str,
+        model_selection: str,
+        confirm_model_change: bool,
+        expected_selection_generation: int | None,
+    ) -> tuple[BatchSnapshot, bool]:
+        return self._analysis_batches().reanalyze(
+            batch_id,
+            item_ids=item_ids,
+            idempotency_key=idempotency_key,
+            model_selection=model_selection,
+            confirm_model_change=confirm_model_change,
+            expected_selection_generation=expected_selection_generation,
+        )
 
     def suggest_contributions(
         self,

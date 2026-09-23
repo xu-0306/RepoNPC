@@ -49,6 +49,8 @@ from reponpc.admin.embedding_reindex import (
     ProductionFrozenProfileBuilder,
 )
 from reponpc.admin.github import GitHubAdminClient, UrllibGitHubAdminTransport
+from reponpc.admin.local_portfolio import LocalPortfolioError, LocalPortfolioStore
+from reponpc.admin.local_publication import LocalArchiveResolver, LocalPublication
 from reponpc.admin.model_connections import (
     ModelConnectionError,
     ModelConnectionRegistry,
@@ -56,6 +58,7 @@ from reponpc.admin.model_connections import (
 )
 from reponpc.admin.model_operations import OllamaModelOperationCoordinator
 from reponpc.admin.onboarding import (
+    CONTRIBUTION_MAX_OUTPUT_TOKENS,
     GuidedOnboardingService,
     analysis_generation_policy_identity,
 )
@@ -192,9 +195,13 @@ def create_app(
     admin_session_service: AdminSessionService | None = None,
     admin_origins: tuple[str, ...] = (),
     admin_operations: AdminOperations | None = None,
+    analysis_batch_service: AnalysisBatchService | None = None,
+    analysis_cleanup_seconds: float = 60.0,
 ) -> FastAPI:
     """Construct the real application and its optional immutable-bundle lifecycle."""
 
+    if analysis_cleanup_seconds <= 0:
+        raise ValueError("analysis cleanup interval must be positive")
     state = setup_state or SetupState()
 
     @asynccontextmanager
@@ -217,6 +224,9 @@ def create_app(
         provider = application.state.provider_runtime
 
         def poll_and_publish_provider_state() -> None:
+            provider = application.state.provider_runtime
+            if provider is None:
+                return
             provider_status = provider.poll_health()
             registry = getattr(application.state, "embedding_profile_registry", None)
             profile_ready = registry is None or registry.active_matches(
@@ -244,16 +254,44 @@ def create_app(
                 except TimeoutError:
                     await asyncio.to_thread(poll_and_publish_provider_state)
 
+        async def analysis_cleanup_lifecycle() -> None:
+            while not stopped.is_set():
+                try:
+                    await asyncio.wait_for(
+                        stopped.wait(),
+                        timeout=getattr(
+                            application.state,
+                            "analysis_cleanup_seconds",
+                            analysis_cleanup_seconds,
+                        ),
+                    )
+                except TimeoutError:
+                    batch_service = application.state.analysis_batch_service
+                    if batch_service is not None:
+                        await asyncio.to_thread(batch_service.cleanup_expired)
+
         polling_tasks: list[asyncio.Task[None]] = []
         if provider is not None:
             await asyncio.to_thread(poll_and_publish_provider_state)
-            polling_tasks.append(asyncio.create_task(provider_lifecycle()))
+        polling_tasks.append(asyncio.create_task(provider_lifecycle()))
+        batch_service = application.state.analysis_batch_service
+        if batch_service is not None:
+            await asyncio.to_thread(batch_service.cleanup_expired)
+            polling_tasks.append(asyncio.create_task(analysis_cleanup_lifecycle()))
 
         updater = application.state.bundle_updater
         manager = application.state.bundle_manager
 
         def poll_and_publish_state() -> None:
-            updater.poll_once()
+            current_updater = application.state.bundle_updater
+            publication_lock = getattr(application.state, "publication_lock", None)
+            if publication_lock is not None:
+                with publication_lock:
+                    current_updater = application.state.bundle_updater
+                    if current_updater is not None:
+                        current_updater.poll_once()
+            elif current_updater is not None:
+                current_updater.poll_once()
             runtime_state = configured_database.bundle_state() if configured_database else None
             bundle_status = manager.status()
             current_state = application.state.reponpc
@@ -282,9 +320,10 @@ def create_app(
                 except TimeoutError:
                     await asyncio.to_thread(poll_and_publish_state)
 
-        if updater is not None and manager is not None:
+        if manager is not None:
             await asyncio.to_thread(poll_and_publish_state)
-            polling_tasks.append(asyncio.create_task(polling_lifecycle()))
+            if updater is not None:
+                polling_tasks.append(asyncio.create_task(polling_lifecycle()))
         try:
             yield
         finally:
@@ -340,6 +379,7 @@ def create_app(
     application.state.bundle_poll_seconds = bundle_poll_seconds
     application.state.provider_runtime = provider_runtime
     application.state.analysis_runtime_supplier = lambda: application.state.provider_runtime
+    application.state.contribution_runtime_supplier = lambda: application.state.provider_runtime
     application.state.provider_adapter = provider_adapter
     application.state.provider_health_seconds = provider_health_seconds
     application.state.chat_service = chat_service
@@ -350,6 +390,8 @@ def create_app(
     application.state.admin_session_service = admin_session_service
     application.state.admin_origins = admin_origins
     application.state.admin_operations = admin_operations
+    application.state.analysis_batch_service = analysis_batch_service
+    application.state.analysis_cleanup_seconds = analysis_cleanup_seconds
     application.state.chat_profile_registry = (
         admin_operations.chat_profiles if admin_operations is not None else None
     )
@@ -362,6 +404,7 @@ def create_app(
         create_public_router(
             state,
             state_supplier=lambda: application.state.reponpc,
+            bundle_manager_supplier=lambda: application.state.bundle_manager,
             chat_service_supplier=lambda: application.state.chat_service,
             max_message_characters=max_message_characters,
             max_history_messages=max_history_messages,
@@ -409,6 +452,7 @@ def run() -> None:
         if hasattr(settings, "chat_provider"):
             _configure_provider_lifecycle(settings, runtime_database)
             _configure_embedding_reindex(settings)
+            _configure_local_publication(settings)
         batch_service = getattr(app.state, "analysis_batch_service", None)
         if batch_service is not None:
             batch_service.recover()
@@ -473,6 +517,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
             rate_limiter=rate_limiter,
         ),
         providers_supplier=lambda: app.state.analysis_runtime_supplier(),
+        contribution_providers_supplier=lambda: app.state.contribution_runtime_supplier(),
         limits_supplier=lambda: app.state.chat_limits,
         staging_root=settings.data_dir / "onboarding-staging",
         provider_timeout_seconds=settings.chat_timeout_seconds,
@@ -506,6 +551,8 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
             max_single_file_bytes=settings.analysis_archive_max_single_file_bytes,
         ),
     )
+    app.state.local_archive_source = archive_source
+    app.state.local_stage_gates = stage_gates
     store = BatchRuntimeStore(runtime_database)
     runner = PinnedBatchItemRunner(
         store=store,
@@ -673,6 +720,24 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         except ModelConnectionError:
             return None
 
+    def resolve_contribution_chat_profile(profile: ChatProfile) -> ChatProvider | None:
+        """Resolve the selected profile with the fixed contribution budget."""
+
+        try:
+            revision = model_connections.revision_for(
+                profile.connection_id, profile.connection_revision
+            )
+            return _chat_provider_from_connection(
+                settings,
+                revision.provider,
+                profile.model_id,
+                revision.secret.base_url,
+                revision.secret.api_key,
+                capabilities=_contribution_chat_capabilities(settings),
+            )
+        except ModelConnectionError:
+            return None
+
     chat_profiles = ChatProfileRegistry(
         runtime_database,
         model_connections,
@@ -704,6 +769,32 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
                 chat=chat_provider,
                 embedding=embedding_provider,
                 max_attempts=settings.analysis_generation_attempts,
+                retry_base_seconds=5.0,
+            )
+        except Exception:
+            return None
+
+    def contribution_runtime_supplier() -> ProviderRuntime | None:
+        """Resolve the same selected pair with contribution-purpose capabilities."""
+
+        view = analysis_selection.view()
+        if not view.eligible:
+            return None
+        try:
+            chat_profile = chat_profiles.get(view.selection.chat_profile_id or "")
+            embedding_profile = embedding_profiles.get(view.selection.embedding_profile_id or "")
+            chat_provider = resolve_contribution_chat_profile(chat_profile)
+            embedding_provider = embedding_profiles.resolve_provider(embedding_profile)
+            if (
+                chat_provider is None
+                or embedding_provider is None
+                or not isinstance(embedding_provider, RuntimeEmbeddingProvider)
+            ):
+                return None
+            return ProviderRuntime(
+                chat=chat_provider,
+                embedding=embedding_provider,
+                max_attempts=1,
                 retry_base_seconds=5.0,
             )
         except Exception:
@@ -747,6 +838,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
             return None
 
     app.state.analysis_runtime_supplier = analysis_runtime_supplier
+    app.state.contribution_runtime_supplier = contribution_runtime_supplier
     app.state.analysis_frozen_runtime_resolver = frozen_analysis_runtime
     app.state.analysis_selection_registry = analysis_selection
     app.state.embedding_profile_registry = embedding_profiles
@@ -821,7 +913,7 @@ def _configure_bundle_lifecycle(
             manager.status().active_bundle_id,
         )
     manifest_url = getattr(settings, "index_manifest_url", None)
-    if not manifest_url:
+    if not manifest_url or (settings.data_dir / "local-portfolio" / "source-local").exists():
         app.state.bundle_updater = None
         return
     app.state.bundle_updater = BundleUpdater(
@@ -857,6 +949,7 @@ def _configure_provider_lifecycle(
         max_output_tokens=settings.chat_max_output_tokens,
     )
     chat: ChatProvider | None = None
+    selected_chat_provider = settings.chat_provider
     chat_profiles: ChatProfileRegistry | None = (
         app.state.chat_profile_registry
         if isinstance(getattr(app.state, "chat_profile_registry", None), ChatProfileRegistry)
@@ -865,6 +958,18 @@ def _configure_provider_lifecycle(
     active_chat = chat_profiles.active() if isinstance(chat_profiles, ChatProfileRegistry) else None
     if active_chat is not None and chat_profiles is not None:
         chat = chat_profiles.resolve_provider(active_chat)
+        operations = app.state.admin_operations
+        connections = operations.model_connections if operations is not None else None
+        try:
+            selected_chat_provider = (
+                connections.revision_for(
+                    active_chat.connection_id, active_chat.connection_revision
+                ).provider
+                if connections is not None
+                else "unconfigured"
+            )
+        except ModelConnectionError:
+            selected_chat_provider = "unconfigured"
     elif (
         settings.chat_provider in {"ollama", "openai_compatible", "vllm"}
         and settings.chat_model
@@ -883,6 +988,10 @@ def _configure_provider_lifecycle(
             and settings.embedding_base_url
             else None
         )
+    app.state.provider_health_seconds = settings.provider_health_seconds
+    app.state.max_message_characters = settings.max_message_characters
+    app.state.max_history_messages = settings.max_history_messages
+    app.state.max_history_characters = settings.max_history_characters
     if embedding is None or chat is None:
         app.state.provider_runtime = None
         app.state.provider_adapter = (
@@ -906,7 +1015,11 @@ def _configure_provider_lifecycle(
         return
     providers = ProviderRuntime(chat=chat, embedding=embedding)
     app.state.provider_runtime = providers
-    app.state.provider_adapter = _provider_contract_adapter(settings.chat_provider)
+    app.state.provider_adapter = (
+        _provider_contract_adapter(selected_chat_provider)
+        if selected_chat_provider in {"ollama", "openai_compatible", "vllm"}
+        else None
+    )
     app.state.provider_health_seconds = settings.provider_health_seconds
     app.state.max_message_characters = settings.max_message_characters
     app.state.max_history_messages = settings.max_history_messages
@@ -942,16 +1055,9 @@ def _configure_embedding_reindex(settings: EnvironmentSettings) -> None:
         app.state, "embedding_profile_registry", None
     )
     manager: BundleManager | None = app.state.bundle_manager
-    runtime: ProviderRuntime | None = app.state.provider_runtime
     operations: AdminOperations | None = app.state.admin_operations
     rate_limiter: GitHubRateLimiter | None = getattr(app.state, "github_rate_limiter", None)
-    if (
-        registry is None
-        or manager is None
-        or runtime is None
-        or operations is None
-        or rate_limiter is None
-    ):
+    if registry is None or manager is None or operations is None or rate_limiter is None:
         return
 
     def provider_transition(
@@ -960,15 +1066,21 @@ def _configure_embedding_reindex(settings: EnvironmentSettings) -> None:
     ):
         if not isinstance(provider, RuntimeEmbeddingProvider):
             raise ValueError("runtime embedding provider is unavailable")
-        previous = runtime.replace_embedding(provider)
+        current_runtime = app.state.provider_runtime
+        if current_runtime is None:
+            raise ValueError("public chat model is unavailable")
+        previous = current_runtime.replace_embedding(provider)
 
         def rollback() -> None:
-            runtime.replace_embedding(previous)
+            current_runtime.replace_embedding(previous)
 
         return rollback
 
     def publish_activation(profile: EmbeddingProfile, bundle_id: str) -> None:
-        provider_status = runtime.poll_health()
+        current_runtime = app.state.provider_runtime
+        if current_runtime is None:
+            return
+        provider_status = current_runtime.poll_health()
         current = app.state.reponpc
         app.state.reponpc = replace(
             current,
@@ -998,6 +1110,112 @@ def _configure_embedding_reindex(settings: EnvironmentSettings) -> None:
     )
     app.state.embedding_reindex_coordinator = coordinator
     app.state.admin_operations = replace(operations, embedding_reindex=coordinator)
+
+
+def _configure_local_publication(settings: EnvironmentSettings) -> None:
+    import threading
+
+    operations = app.state.admin_operations
+    coordinator = getattr(app.state, "embedding_reindex_coordinator", None)
+    manager = app.state.bundle_manager
+    if operations is None or coordinator is None or manager is None:
+        return
+    store = LocalPortfolioStore(settings.data_dir)
+    app.state.publication_lock = threading.RLock()
+
+    def stop_remote() -> None:
+        with app.state.publication_lock:
+            marker = settings.data_dir / "local-portfolio" / "source-local"
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("local-v1\n", encoding="utf-8")
+            app.state.bundle_updater = None
+
+    def transition_factory(chat_id: str):
+        chat_registry = app.state.chat_profile_registry
+        frozen = chat_registry.get(chat_id)
+        if frozen.status != "ready" or frozen.last_probed_at is None:
+            raise LocalPortfolioError("CHAT_PROBE_REQUIRED")
+        chat = chat_registry.resolve_provider(frozen)
+        if chat is None:
+            raise LocalPortfolioError("CHAT_CONNECTION_REQUIRED")
+
+        def transition(profile: EmbeddingProfile, embedding: EmbeddingProvider):
+            if chat_registry.get(chat_id) != frozen:
+                raise LocalPortfolioError("PORTFOLIO_MODEL_CHANGED")
+            if not isinstance(embedding, RuntimeEmbeddingProvider):
+                raise LocalPortfolioError("EMBEDDING_CONNECTION_REQUIRED")
+            previous_runtime = app.state.provider_runtime
+            previous_service = app.state.chat_service
+            previous_adapter = app.state.provider_adapter
+            # The callback used by ordinary activation may mutate the old runtime.
+            old_chat = previous_runtime.chat if previous_runtime is not None else None
+            rollback_chat = chat_registry.activate_with_rollback(chat_id)
+            try:
+                providers = ProviderRuntime(chat=chat, embedding=embedding)
+                adapter = _provider_contract_adapter(
+                    operations.model_connections.revision_for(
+                        frozen.connection_id, frozen.connection_revision
+                    ).provider
+                )
+                service = GroundedChatService(
+                    bundles=manager,
+                    providers=providers,
+                    limits=app.state.chat_limits,
+                    max_output_tokens=settings.chat_max_output_tokens,
+                    timeout_seconds=settings.chat_timeout_seconds,
+                )
+                app.state.provider_runtime = providers
+                app.state.provider_adapter = adapter
+                app.state.chat_service = service
+            except Exception:
+                rollback_chat()
+                app.state.provider_runtime = previous_runtime
+                app.state.chat_service = previous_service
+                app.state.provider_adapter = previous_adapter
+                if previous_runtime is not None and old_chat is not None:
+                    previous_runtime.replace_chat(old_chat)
+                raise
+
+            def rollback() -> None:
+                rollback_chat()
+                if previous_runtime is not None and old_chat is not None:
+                    previous_runtime.replace_chat(old_chat)
+                app.state.provider_runtime = previous_runtime
+                app.state.chat_service = previous_service
+                app.state.provider_adapter = previous_adapter
+
+            return rollback
+
+        return transition
+
+    publication = LocalPublication(
+        store=store,
+        data_directory=settings.data_dir,
+        coordinator=coordinator,
+        registry=app.state.embedding_profile_registry,
+        manager=manager,
+        resolver=GitHubSourceResolver(
+            api_base_url=settings.github_api_url, rate_limiter=app.state.github_rate_limiter
+        ),
+        max_bundle_bytes=settings.max_bundle_bytes,
+        transition_factory=transition_factory,
+        stop_remote=stop_remote,
+        source_resolver=LocalArchiveResolver(
+            GitHubRESTMetadataResolver(
+                transport=UrllibGitHubRESTTransport(
+                    timeout_seconds=float(settings.analysis_github_timeout_seconds)
+                ),
+                limiter=app.state.github_rate_limiter,
+                api_url=settings.github_api_url,
+            ),
+            app.state.local_archive_source,
+            app.state.local_stage_gates,
+        ),
+    )
+    app.state.local_publication = publication
+    app.state.admin_operations = replace(
+        operations, local_portfolio=store, local_publication=publication
+    )
 
 
 def _environment_embedding_provider(
@@ -1058,9 +1276,22 @@ def _analysis_chat_capabilities(settings: EnvironmentSettings) -> ProviderCapabi
         health_check=True,
         max_context_tokens=settings.chat_max_context_tokens,
         max_output_tokens=min(
-            settings.analysis_max_output_tokens,
-            settings.chat_max_context_tokens,
+            settings.analysis_max_output_tokens, settings.chat_max_context_tokens
         ),
+    )
+
+
+def _contribution_chat_capabilities(settings: EnvironmentSettings) -> ProviderCapabilities:
+    """Expose the fixed contribution budget without changing analysis identity."""
+
+    return ProviderCapabilities(
+        streaming=False,
+        system_role=True,
+        structured_output=True,
+        usage_reporting=True,
+        health_check=True,
+        max_context_tokens=settings.chat_max_context_tokens,
+        max_output_tokens=min(CONTRIBUTION_MAX_OUTPUT_TOKENS, settings.chat_max_context_tokens),
     )
 
 

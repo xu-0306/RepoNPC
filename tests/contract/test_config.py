@@ -33,6 +33,52 @@ def test_normative_example_is_sufficient() -> None:
     assert config.retrieval.embedding.dimension == 1024
 
 
+def test_builtin_character_uses_versioned_pack_contract() -> None:
+    config = load_public_config(ROOT / "reponpc.example.yml")
+    assert config.character.builtin is not None
+    assert config.character.builtin.pack_id == "core/humanoid"
+    assert config.character.builtin.pack_version == 1
+    assert config.character.builtin.options["attire"] == "adventurer"
+
+
+def test_legacy_humanoid_fields_are_rejected_without_compatibility_aliases() -> None:
+    data = example_data()
+    data["character"]["builtin"] = {
+        "body": "standard",
+        "skin": "medium",
+        "hair": "short",
+        "outfit": "adventurer",
+        "accessory": "glasses",
+        "hair_color": "#2b1d14",
+        "primary_color": "#6d5dfc",
+        "secondary_color": "#f2c14e",
+    }
+    error = assert_invalid(data, "character.builtin")
+    assert any(issue.code == "missing" for issue in error.issues)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_path", "expected_code"),
+    [
+        (("pack_id", "community/unknown"), "character.builtin", "unknown_pack"),
+        (("pack_version", 2), "character.builtin", "pack_version_unsupported"),
+        (("options.cape", "yes"), "character.builtin.options.cape", "unknown_option"),
+    ],
+)
+def test_builtin_pack_registry_rejects_unknown_contract_values(
+    mutation: tuple[str, object], expected_path: str, expected_code: str
+) -> None:
+    data = example_data()
+    path, value = mutation
+    if path.startswith("options."):
+        data["character"]["builtin"]["options"][path.removeprefix("options.")] = value
+    else:
+        data["character"]["builtin"][path] = value
+
+    error = assert_invalid(data, expected_path)
+    assert error.issues[0].code == expected_code
+
+
 @pytest.mark.parametrize("key", ["api_key", "password", "github_token", "private_url"])
 def test_secret_fields_are_rejected_without_echoing_values(key: str) -> None:
     data = example_data()

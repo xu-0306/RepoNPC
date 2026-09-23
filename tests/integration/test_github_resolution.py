@@ -217,3 +217,63 @@ def test_production_discovery_updates_and_honors_the_shared_rate_budget(monkeypa
     assert blocked.value.code == "github_rate_limited"
     assert blocked.value.retry_after_seconds == 3600
     assert len(requests) == 1
+
+
+@pytest.mark.parametrize(
+    "readme_error,image_error,profile_status,image_status",
+    [
+        (None, None, "ready", "ready"),
+        ("github_not_found", None, "missing_readme", "ready"),
+        (None, "github_not_found", "ready", "missing"),
+        ("github_request_failed", "github_request_failed", "unavailable", "unavailable"),
+    ],
+)
+def test_profile_card_uses_real_branch_and_distinguishes_failures(
+    monkeypatch, readme_error, image_error, profile_status, image_status
+):
+    calls = []
+
+    def get_json(_self, path):
+        calls.append(path)
+        if path == "/repos/visitor/visitor":
+            return {
+                "full_name": "visitor/visitor",
+                "name": "visitor",
+                "default_branch": "profile/v2",
+                "html_url": "https://github.com/visitor/visitor",
+                "private": False,
+                "fork": False,
+                "archived": False,
+            }
+        name = "README.md" if "README.md" in path else "reponpc-card.gif"
+        error = readme_error if name == "README.md" else image_error
+        if error:
+            raise SourceResolutionError(error)
+        return {"type": "file", "path": name}
+
+    monkeypatch.setattr(GitHubSourceResolver, "_get_json", get_json)
+    result = GitHubSourceResolver().profile_card_metadata(
+        account="visitor", filename="reponpc-card.gif"
+    )
+    assert result["profile_status"] == profile_status
+    assert result["image_status"] == image_status
+    assert all("ref=profile%2Fv2" in path for path in calls[1:])
+    if not readme_error:
+        assert (
+            result["readme_url"] == "https://github.com/visitor/visitor/edit/profile%2Fv2/README.md"
+        )
+
+
+@pytest.mark.parametrize(
+    "error,status", [("github_not_found", "missing"), ("github_rate_limited", "unavailable")]
+)
+def test_profile_card_does_not_call_read_failure_missing(monkeypatch, error, status):
+    def fail(*args):
+        raise SourceResolutionError(error)
+
+    monkeypatch.setattr(GitHubSourceResolver, "_get_json", fail)
+    result = GitHubSourceResolver().profile_card_metadata(
+        account="visitor", filename="reponpc-card.gif"
+    )
+    assert result["profile_status"] == status
+    assert result["image_status"] == "unchecked"

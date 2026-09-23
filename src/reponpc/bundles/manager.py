@@ -102,11 +102,18 @@ class BundleManager:
         candidate: VerifiedBundle,
         *,
         before_pointer_swap: Callable[[], None] | None = None,
+        before_commit: Callable[[], None] | None = None,
         expected_embedding: EmbeddingIdentity | None = None,
         state_transition: Callable[[], ActivationTransition | Callable[[], None] | None]
         | None = None,
     ) -> BundleStatus:
-        """Promote a fully verified staged candidate in one pointer transition."""
+        """Promote a fully verified staged candidate in one pointer transition.
+
+        ``before_commit`` runs after any coordinated state transition has been
+        prepared, but before the active pointer is written.  Callers that have
+        a cooperative cancellation boundary can use it to reject the commit
+        while the existing transition rollback hooks are still available.
+        """
 
         with self._lock:
             selected_embedding = expected_embedding or self._embedding
@@ -139,6 +146,8 @@ class BundleManager:
                     before_pointer_swap()
                 if state_transition is not None:
                     transition_hooks = state_transition()
+                if before_commit is not None:
+                    before_commit()
                 self._write_pointer(candidate.manifest.bundle_id)
             except Exception as exc:
                 _run_rollback(transition_hooks)

@@ -36,6 +36,8 @@ from reponpc.admin.batch_runtime import (
     BatchRuntimeStore,
     BatchSnapshot,
     ClaimedBatchItem,
+    reanalysis_plan_id,
+    reanalysis_request_hash,
 )
 from reponpc.admin.onboarding import (
     ANALYSIS_MAX_OUTPUT_TOKENS,
@@ -228,6 +230,13 @@ class AnalysisBatchService:
     ) -> tuple[BatchSnapshot, bool]:
         """Create a persisted batch from an unexpired exact-selection plan."""
 
+        existing = self._store.idempotent_create(
+            idempotency_key=idempotency_key,
+            plan_id=plan_id,
+            selections=selections,
+        )
+        if existing is not None:
+            return existing, False
         with self._plans_lock:
             stored = self._plans.get(plan_id)
             self._prune_expired_plans_locked()
@@ -284,10 +293,19 @@ class AnalysisBatchService:
         return snapshot, created
 
     def active(self) -> BatchSnapshot:
-        return self._store.active_batch()
+        snapshot = self._store.active_batch()
+        return self._store.get_batch(
+            snapshot.batch_id,
+            execution_budget_seconds=self._analysis_timeout_seconds,
+            maximum_generation_attempts=self._analysis_generation_attempts,
+        )
 
     def get(self, batch_id: str) -> BatchSnapshot:
-        return self._store.get_batch(batch_id)
+        return self._store.get_batch(
+            batch_id,
+            execution_budget_seconds=self._analysis_timeout_seconds,
+            maximum_generation_attempts=self._analysis_generation_attempts,
+        )
 
     def events(self, batch_id: str, *, after_event_id: int | None):
         return self._store.events_after(batch_id, after_event_id=after_event_id)
@@ -304,6 +322,92 @@ class AnalysisBatchService:
         if snapshot.state == "running":
             self._start_worker(batch_id)
         return snapshot
+
+    def reanalyze(
+        self,
+        batch_id: str,
+        *,
+        item_ids: Sequence[str],
+        idempotency_key: str,
+        model_selection: str = "frozen",
+        confirm_model_change: bool = False,
+        expected_selection_generation: int | None = None,
+    ) -> tuple[BatchSnapshot, bool]:
+        """Create one explicit successor round without mutating source results."""
+
+        if model_selection not in {"frozen", "current"}:
+            raise BatchRuntimeError("VALIDATION_ERROR")
+        existing = self._store.idempotent_reanalysis(
+            idempotency_key=idempotency_key,
+            source_batch_id=batch_id,
+            item_ids=item_ids,
+            model_selection=model_selection,
+            confirm_model_change=confirm_model_change,
+            expected_selection_generation=expected_selection_generation,
+        )
+        if existing is not None:
+            return existing, False
+        source = self._store.reanalysis_source(
+            batch_id,
+            item_ids=item_ids,
+            execution_budget_seconds=self._analysis_timeout_seconds,
+            maximum_generation_attempts=self._analysis_generation_attempts,
+        )
+        pair = source.analysis_model_pair
+        if model_selection == "current":
+            current = self._analysis_pair()
+            if current is None:
+                raise BatchRuntimeError("MODEL_UNAVAILABLE")
+            if expected_selection_generation != current.selection_generation:
+                raise BatchRuntimeError("ANALYSIS_MODEL_SELECTION_STALE")
+            current_pair = current.safe_dict()
+            if current_pair != pair and not confirm_model_change:
+                raise BatchRuntimeError("ANALYSIS_MODEL_CHANGE_CONFIRMATION_REQUIRED")
+            pair = current_pair
+        elif pair is None and self._analysis_pair_supplier is not None:
+            raise BatchRuntimeError("MODEL_UNAVAILABLE")
+
+        selection_hash = hashlib.sha256(
+            json.dumps(
+                {
+                    "source_batch_id": source.source_batch_id,
+                    "analysis_round": source.analysis_round,
+                    "source_item_ids": [item.source_item_id for item in source.items],
+                    "model_pair": pair,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        snapshot, created = self._store.create_batch(
+            BatchCreateRequest(
+                plan_id=reanalysis_plan_id(
+                    source_batch_id=source.source_batch_id,
+                    analysis_round=source.analysis_round,
+                    model_selection=model_selection,
+                    confirm_model_change=confirm_model_change,
+                    expected_selection_generation=expected_selection_generation,
+                ),
+                selection_hash=selection_hash,
+                idempotency_key=idempotency_key,
+                items=source.items,
+                maximum_generation_attempts=self._analysis_generation_attempts,
+                execution_budget_seconds=self._analysis_timeout_seconds,
+                analysis_model_pair=pair,
+                source_batch_id=source.source_batch_id,
+                analysis_round=source.analysis_round,
+                idempotency_request_hash=reanalysis_request_hash(
+                    source_batch_id=source.source_batch_id,
+                    item_ids=item_ids,
+                    model_selection=model_selection,
+                    confirm_model_change=confirm_model_change,
+                    expected_selection_generation=expected_selection_generation,
+                ),
+            )
+        )
+        if created:
+            self._start_worker(snapshot.batch_id)
+        return snapshot, created
 
     def analyze_one_compatibility(
         self,
@@ -346,6 +450,7 @@ class AnalysisBatchService:
     def recover(self) -> tuple[str, ...]:
         """Recover non-generation leases and resume any runnable batch."""
 
+        self._store.cleanup_expired()
         recovered = self._store.recover_after_restart()
         try:
             active = self._store.active_batch()
@@ -354,6 +459,11 @@ class AnalysisBatchService:
         if active.state in {"queued", "running"}:
             self._start_worker(active.batch_id)
         return recovered
+
+    def cleanup_expired(self) -> None:
+        """Remove expired safe batch data without touching live leases."""
+
+        self._store.cleanup_expired()
 
     @property
     def stage_gates(self) -> BatchStageGates:
@@ -477,6 +587,20 @@ class AnalysisBatchService:
                 )
             else:
                 self._store.fail_item(item, code=exc.code, reason=exc.reason)
+        except BatchRuntimeError as exc:
+            # Stage transitions enforce cancellation and the per-item budgets
+            # transactionally.  A rejected transition must stop the runner;
+            # it must never fall through to a provider call or be rewritten as
+            # an unrelated generic analysis failure.
+            if exc.code in {"CANCELLED", "ANALYSIS_LEASE_LOST", "NOT_FOUND"}:
+                return
+            if exc.code in {
+                "ANALYSIS_TIMEOUT",
+                "ANALYSIS_GENERATION_ATTEMPTS_EXHAUSTED",
+            }:
+                self._store.fail_item(item, code=exc.code)
+                return
+            self._store.fail_item(item, code="ANALYSIS_FAILED")
         except Exception:
             self._store.fail_item(item, code="ANALYSIS_FAILED")
 
@@ -488,8 +612,8 @@ class AnalysisBatchService:
         policy_identity: str | None = None,
     ) -> CachePrediction:
         # A deliberately strict key includes every identity component known at
-        # preflight. The runner writes a validated-result cache only after its
-        # evidence/output validation succeeds.
+        # preflight. The derived hit is an identity marker, not reopenable index
+        # content; only a validated-result hit currently skips execution work.
         derived_key = _cache_key(
             repository.slug,
             repository.commit_sha,

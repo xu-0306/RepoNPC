@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-09-19T20:20:54+08:00",
+  "base_head": "c643affcead613db19f2f388fffe95341e541fdb",
+  "worktree_fingerprint": {
+    "algorithm": "sha256",
+    "value": "4f1c1333d7e5d895211a28a0084a40346f620cf19af58ccba6c4be9e5126cc7d",
+    "file_count": 22,
+    "scope": "Files materially involved in the production visitor chat acceptance. This evidence file, local launch addresses, runtime data, generated frontend output, and unrelated user-owned untracked directories are excluded. The fingerprint hashes the UTF-8 sorted manifest text '<path> <sha256>\\n'.",
+    "files": [
+      {
+        "path": "apps/web/src/app/App.test.ts",
+        "sha256": "537541736c3a78b4ef90094ddcde6cd9739d575148ef62a565a387de86a37eff"
+      },
+      {
+        "path": "apps/web/src/app/App.tsx",
+        "sha256": "5f707e4209662e87ee6c41d3f89aca82a3b7fcda0ed7cd45a73e5d66a5ba65b1"
+      },
+      {
+        "path": "apps/web/src/app/sse.ts",
+        "sha256": "46120f76f1a3eb47da65f48db3e199158a7278bd81ee229f254cd13e14b19607"
+      },
+      {
+        "path": "apps/web/src/app/visitorChat.test.ts",
+        "sha256": "99baafd100190b0470ec12eba6370b9479306a16ffd2daae860aebbb850e1360"
+      },
+      {
+        "path": "apps/web/src/app/visitorChat.ts",
+        "sha256": "46571bb8f52803bfd1be288e081fff5baee0c1e1c0f5749f20d316504d231998"
+      },
+      {
+        "path": "apps/web/src/app/VisitorConversation.test.tsx",
+        "sha256": "909379ac4bf81e1f9d0f536cce4a398d01c7628d73d82f9b77408ceb41028af9"
+      },
+      {
+        "path": "apps/web/src/app/VisitorConversation.tsx",
+        "sha256": "ebbb64e5ca6ca2b6f16de0197cc19767746aad6f9de32d24c18135d2f01af8c9"
+      },
+      {
+        "path": "apps/web/src/app/visitorFocus.ts",
+        "sha256": "fb82f11d971693c608efea0eefbfb354f3afede32f7db4767afb30e19baa73ae"
+      },
+      {
+        "path": "apps/web/src/features/character/CharacterRenderer.css",
+        "sha256": "7ca809986d4e26ff0f2927b5e2ce34ef8e50794de5f4e441e7c3d032a7f43217"
+      },
+      {
+        "path": "apps/web/src/features/character/CharacterRenderer.test.tsx",
+        "sha256": "14fe8d61424bc5aea54d08967e82c1a947cc8205a11e451b2b68782b5b640032"
+      },
+      {
+        "path": "apps/web/src/features/character/CharacterRenderer.tsx",
+        "sha256": "fa7d8e21c9dcdef3a88650e51043465cd91bd8861ba8474c337d4f7ada1d9563"
+      },
+      {
+        "path": "docs/ACCEPTANCE_CRITERIA.md",
+        "sha256": "fc33cb20f13a28d5d74cb3c2586f7be329633f1c42bad510b3f14723e3eb8b79"
+      },
+      {
+        "path": "docs/REPAIR_PROGRESS_2026-09-17.md",
+        "sha256": "f1f4bdb678244437229e641c986e577b6a293bf5cb9cf51fb69bbdaa0f11bd92"
+      },
+      {
+        "path": "docs/TECHNICAL_SPEC.md",
+        "sha256": "62168a10722adecb523d8656cd26ed007a8390b35530bb89d2d0b08641ed63c7"
+      },
+      {
+        "path": "src/reponpc/api/public.py",
+        "sha256": "c3743afdbaa237a0bf3cb7f2fc31052670495e593a1424bf147880f607cfb6cf"
+      },
+      {
+        "path": "src/reponpc/chat/service.py",
+        "sha256": "97421965dcc7c0dad33e9676243775c94d1e9a044b223feb3fa5d525b0ce26ee"
+      },
+      {
+        "path": "src/reponpc/main.py",
+        "sha256": "30ff8b652ead8b8e8a6ccc4617f8ba7934020d0fb84189742fd2079f2f44044c"
+      },
+      {
+        "path": "tests/browser/check-visitor-chat.js",
+        "sha256": "f00c85f999964d92dd9ffd4ee45432588cbcadbb22dea06fd98d3610168ab325"
+      },
+      {
+        "path": "tests/browser/README.md",
+        "sha256": "8383f9f9fefa58abd725aacdff6f4cbad5ea5af6f85f9dcc2c46df154d67378e"
+      },
+      {
+        "path": "tests/browser/visitor_chat_server.py",
+        "sha256": "ddb2bd693258746fdc45ac28aaa2c7f7c8b35c21e35e742502392f5f9b1226a5"
+      },
+      {
+        "path": "tests/integration/test_chat_sse_api.py",
+        "sha256": "8031819d17717c2c160acc3162ee572671c903425184752090105fd1331641fb"
+      },
+      {
+        "path": "tests/integration/test_mvp_api.py",
+        "sha256": "c42e728526fe6bcda113416c1a1977636b1b33c7292c5f6231f0c48673d32b2f"
+      }
+    ]
+  },
+  "environment": {
+    "platform": "Windows",
+    "browser_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+    "server": "tests/browser/visitor_chat_server.py",
+    "checker": "tests/browser/check-visitor-chat.js",
+    "external_network_used": false,
+    "live_credentials_used": false,
+    "live_provider_used": false
+  },
+  "runs": [
+    {
+      "id": "fresh-normal-motion-runtime",
+      "runtime_id": "reponpc-visitor-final-normal-0919",
+      "status": "passed",
+      "checks_passed": 25,
+      "viewport_width": 1280,
+      "chat_calls": 19,
+      "successful_history": {
+        "maximum_messages": 10,
+        "roles_alternated": true,
+        "contiguous_suffix": true,
+        "round_six_history_code_points": 205,
+        "round_seven_dropped_oldest_exchange_only": true
+      },
+      "long_answer": {
+        "visible_code_points": 4001,
+        "following_history_messages": 0
+      },
+      "failure_retry": {
+        "attempts": 2,
+        "failed_attempt_history_messages": 0,
+        "following_success_history_messages": 2,
+        "focus_returned_after_input_enabled": true
+      },
+      "incomplete_transport": {
+        "partial_content_visible": true,
+        "following_history_messages": 0,
+        "retry_available": true
+      },
+      "rapid_submission_provider_calls": 1,
+      "unmount_disconnect_observed": true,
+      "locales_checked": [
+        "zh-TW",
+        "en"
+      ],
+      "character_state_sequences": {
+        "normal_success": [
+          "idle",
+          "listen",
+          "think",
+          "talk",
+          "success",
+          "idle"
+        ],
+        "degraded_recovery": [
+          "idle",
+          "listen",
+          "think",
+          "idle",
+          "offline",
+          "idle"
+        ]
+      }
+    },
+    {
+      "id": "fresh-reduced-motion-runtime",
+      "runtime_id": "reponpc-visitor-final-reduced-0919",
+      "status": "passed",
+      "desktop_checks_passed": 6,
+      "narrow_checks_passed": 6,
+      "viewport_widths": [
+        1280,
+        375
+      ],
+      "computed_sprite_animation_disabled": true,
+      "semantic_state_label_preserved": true,
+      "horizontal_overflow": false
+    }
+  ],
+  "contract_coverage": {
+    "requirements": [
+      "FR-013",
+      "FR-014",
+      "FR-015",
+      "FR-022",
+      "FR-023",
+      "NFR-003",
+      "NFR-005",
+      "NFR-009",
+      "NFR-013"
+    ],
+    "acceptance_criteria": [
+      "AC-017",
+      "AC-018",
+      "AC-019",
+      "AC-020",
+      "AC-023"
+    ],
+    "real_production_frontend": true,
+    "real_public_fastapi_routes": [
+      "/api/public/profile",
+      "/api/public/status",
+      "/api/public/character.png",
+      "/api/public/chat/stream"
+    ],
+    "deterministic_boundary": "external validated chat answer only"
+  },
+  "automated_verification": {
+    "python_non_container": "977 passed, 2 skipped, 1 warning",
+    "web": "24 files, 188 passed",
+    "focused_web": "4 files, 36 passed",
+    "focused_public_api": "21 passed, 1 warning",
+    "analysis_recovery_browser": "running 37/37; completed 37/37",
+    "ruff": "passed; 198 files formatted",
+    "mypy": "passed; 69 source files",
+    "prettier": "passed",
+    "eslint": "passed with 16 Fast Refresh warnings",
+    "typescript": "passed",
+    "production_build": "passed",
+    "git_diff_check": "passed",
+    "docker_smoke": "1 passed"
+  },
+  "known_scope_limits": [
+    "No live GitHub, provider, credentials, paid service, or external network was used.",
+    "This closes visitor chat/history and already-implemented NPC-state acceptance only.",
+    "Card text/layout, character setup guidance, protected custom preview, publication, R08, R11-R13, and the rest of R14 remain open."
+  ],
+  "manifest_refreshed_at": "2026-09-19T20:55:48+08:00",
+  "manifest_refresh_reason": "Documentation-only scope hash refresh after R12-A; visitor behavior was not rerun."
+}

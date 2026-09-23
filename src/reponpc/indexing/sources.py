@@ -126,6 +126,7 @@ class ResolvedConfiguration:
     path: str
     content: str
     github_html_url: str
+    origin: str = "github"
 
     def __post_init__(self) -> None:
         if not _REPOSITORY_SLUG_RE.fullmatch(self.repository_slug):
@@ -135,5 +136,11 @@ class ResolvedConfiguration:
         normalize_source_path(self.path)
         if not self.content:
             raise ValueError("configuration content must be non-empty")
-        if not self.github_html_url.startswith("https://"):
+        if self.origin not in {"github", "local"}:
+            raise ValueError("unsupported configuration origin")
+        if self.origin == "local" and (
+            self.repository_slug != "local/portfolio" or self.github_html_url != "/"
+        ):
+            raise ValueError("local configuration origin is invalid")
+        if self.origin == "github" and not self.github_html_url.startswith("https://"):
             raise ValueError("configuration HTML URL must use HTTPS")

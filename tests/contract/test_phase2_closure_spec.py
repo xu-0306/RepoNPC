@@ -15,8 +15,10 @@ def test_technical_spec_freezes_phase2_closure_contracts() -> None:
     specification = _read("docs/TECHNICAL_SPEC.md")
 
     assert "| Status | **Approved** |" in specification
-    assert "| Version | 0.3.0 |" in specification
-    assert "ADR-037" in specification
+    assert "| Version | 0.3.9 |" in specification
+    assert "ADR-046" in specification
+    assert "LOCAL_PUBLICATION_CONTRACT_2026-09-22.md" in specification
+    assert "ADR-044" in specification
     assert "Version 0.1.1 records the owner-approved Phase 2 closure boundary" in specification
     assert "reponpc index publish-manifest --bundle-dir <directory>" in specification
     assert "MUST NOT mutate the remote stable manifest" in specification
@@ -31,13 +33,17 @@ def test_acceptance_and_adr_require_derived_formal_evidence() -> None:
     acceptance = _read("docs/ACCEPTANCE_CRITERIA.md")
     decisions = _read("docs/DECISIONS.md")
 
-    assert "Technical Specification 0.3.0" in acceptance
+    assert "Technical Specification 0.3.9" in acceptance
     assert "Docker inspection and an access probe prove" in acceptance
     assert "host controller derives every pass/provenance boolean" in acceptance
     assert "## ADR-015:" in decisions
     assert "- **Status:** Accepted" in decisions.split("## ADR-015:", maxsplit=1)[1]
     assert "normal runtime image is not bloated" in decisions
     assert "prior failed delta evidence remains immutable history" in decisions
+    assert "## ADR-038:" in decisions
+    assert "## ADR-039:" in decisions
+    assert "## ADR-042:" in decisions
+    assert "## ADR-044:" in decisions
 
 
 def test_vllm_preset_is_documented_without_expanding_browser_or_bundle_contracts() -> None:

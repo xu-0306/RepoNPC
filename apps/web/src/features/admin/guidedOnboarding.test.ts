@@ -23,6 +23,12 @@ describe("guided onboarding errors", () => {
     expect(guidedErrorMessage("zh-TW", "VALIDATION_ERROR")).toContain(
       "格式無效",
     );
+    expect(guidedErrorMessage("en", "CONFIG_INVALID")).toContain(
+      "configuration is invalid",
+    );
+    expect(guidedErrorMessage("en", "CONTRIBUTION_CONTEXT_INVALID")).toContain(
+      "context space",
+    );
   });
 });
 
@@ -53,6 +59,7 @@ describe("guided onboarding config hydration", () => {
     expect(state?.repositories[0].confirmedContribution?.role.en).toBe(
       "Maintainer",
     );
+    expect(state?.repositories[0].proposal?.role.en).toBe("Maintainer");
     expect(state?.repositories[0].include).toEqual(["src/**"]);
   });
 });
@@ -225,6 +232,70 @@ describe("guidedOnboardingReducer", () => {
     expect(state.repositories[0].confirmedContribution?.evidence_class).toBe(
       "OWNER_ASSERTION",
     );
+    state = guidedOnboardingReducer(state, {
+      type: "SET_CONTRIBUTION_PROPOSAL",
+      slug: metadata.slug,
+      originalStatement: "I maintained the parser with another contributor.",
+      proposal: {
+        ...proposal,
+        summary: {
+          "zh-TW": "再次編輯的摘要",
+          en: "An edited summary",
+        },
+      },
+    });
+    expect(state.repositories[0].proposal?.summary.en).toBe(
+      "An edited summary",
+    );
+    expect(state.repositories[0].confirmedContribution).toBeNull();
+    expect(state.repositories[0].previousContribution?.summary.en).toBe(
+      "Co-maintained the public parser",
+    );
+    state = guidedOnboardingReducer(state, {
+      type: "RESTORE_PREVIOUS_CONTRIBUTION",
+      slug: metadata.slug,
+    });
+    expect(state.repositories[0].proposal?.summary.en).toBe(
+      "Co-maintained the public parser",
+    );
+    expect(state.repositories[0].confirmedContribution).toBeNull();
+    state = guidedOnboardingReducer(state, {
+      type: "SET_CONTRIBUTION_PROPOSAL",
+      slug: metadata.slug,
+      originalStatement: "I maintained the parser with another contributor.",
+      proposal: {
+        ...proposal,
+        summary: {
+          "zh-TW": "再次編輯的摘要",
+          en: "An edited summary",
+        },
+      },
+    });
+    expect(() =>
+      guidedOnboardingReducer(state, { type: "CONTINUE_TO_PROFILE" }),
+    ).toThrow("ONBOARDING_CONFIRMATION_REQUIRED");
+    state = guidedOnboardingReducer(state, {
+      type: "CONFIRM_CONTRIBUTION",
+      slug: metadata.slug,
+      contribution: state.repositories[0].proposal!,
+    });
+    state = guidedOnboardingReducer(state, {
+      type: "SET_OWNER_STATEMENT",
+      slug: metadata.slug,
+      statement: "I assisted with the parser after the scope changed.",
+    });
+    expect(state.repositories[0].confirmedContribution).toBeNull();
+    expect(state.repositories[0].proposal?.summary.en).toBe(
+      "An edited summary",
+    );
+    expect(() =>
+      guidedOnboardingReducer(state, { type: "CONTINUE_TO_PROFILE" }),
+    ).toThrow("ONBOARDING_CONFIRMATION_REQUIRED");
+    state = guidedOnboardingReducer(state, {
+      type: "CONFIRM_CONTRIBUTION",
+      slug: metadata.slug,
+      contribution: state.repositories[0].proposal!,
+    });
     state = guidedOnboardingReducer(state, { type: "CONTINUE_TO_PROFILE" });
     state = guidedOnboardingReducer(state, { type: "SET_PROFILE", profile });
     expect(
@@ -469,7 +540,7 @@ describe("guided onboarding resume data", () => {
             path: "README.md",
             start_line: 1,
             end_line: 1,
-            text: "CANARY-RAW-REPOSITORY-BODY",
+            excerpt: "CANARY-RAW-REPOSITORY-BODY",
           },
         ],
       },
@@ -502,6 +573,17 @@ describe("guided onboarding resume data", () => {
     const resumed = parseGuidedOnboarding(serialized, [metadata]);
     expect(resumed?.repositories[0].analysis).toBeNull();
     expect(resumed?.repositories[0].confirmedContribution?.role.en).toBe(
+      "Co-maintainer",
+    );
+    expect(resumed?.repositories[0].proposal?.role.en).toBe("Co-maintainer");
+    expect(resumed?.repositories[0].previousContribution).toBeNull();
+    const editing = guidedOnboardingReducer(
+      { ...resumed!, step: "contributions" },
+      { type: "EDIT_CONFIRMED_CONTRIBUTION", slug: metadata.slug },
+    );
+    expect(editing.repositories[0].confirmedContribution).toBeNull();
+    expect(editing.repositories[0].proposal?.role.en).toBe("Co-maintainer");
+    expect(editing.repositories[0].previousContribution?.role.en).toBe(
       "Co-maintainer",
     );
   });

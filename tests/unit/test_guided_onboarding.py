@@ -36,6 +36,7 @@ from reponpc.providers.contracts import (
     ProviderError,
     ProviderFailureCode,
     ProviderHealth,
+    ProviderMessage,
     ProviderResult,
 )
 from reponpc.providers.response_diagnostics import ProviderResponseError, ResponseIssue
@@ -153,6 +154,7 @@ class FakeChat:
         self.analysis_content = analysis_content
         self.calls = 0
         self.max_output_tokens: list[int] = []
+        self.messages: list[tuple[ProviderMessage, ...]] = []
 
     def capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(False, True, True, True, True, 8192, 1000)
@@ -161,6 +163,7 @@ class FakeChat:
         del response_schema
         self.calls += 1
         self.max_output_tokens.append(max_output_tokens)
+        self.messages.append(messages)
         assert 0 < timeout <= 300
         if self.failure is not None:
             raise self.failure
@@ -212,6 +215,25 @@ class LargeCapacityFakeChat(FakeChat):
 class TinyContextFakeChat(FakeChat):
     def capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(False, True, True, True, True, 1000, 1000)
+
+
+class SmallOutputFakeChat(FakeChat):
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(False, True, True, True, True, 8192, 400)
+
+
+class InvalidContributionFakeChat(LargeCapacityFakeChat):
+    def generate(self, messages, response_schema, max_output_tokens, timeout):
+        result = super().generate(messages, response_schema, max_output_tokens, timeout)
+        if "UNTRUSTED OWNER DRAFT" in messages[-1].content:
+            return ProviderResult(
+                {"role": {"zh-TW": "共同維護者", "en": "Co-maintainer"}},
+                "stop",
+                None,
+                None,
+                result.duration_ms,
+            )
+        return result
 
 
 def _metadata() -> PublicRepositoryMetadata:
@@ -412,6 +434,92 @@ def test_contribution_suggestion_keeps_700_token_cap_with_analysis_provider(
     )
 
     assert chat.max_output_tokens == [700]
+    system_prompt = chat.messages[0][0].content
+    assert "collaborator work in context claims" in system_prompt
+    assert "Create an achievement claim only when the owner states an outcome" in system_prompt
+    assert "do not write workflow labels" in system_prompt
+
+
+def test_contribution_suggestion_respects_smaller_provider_output_cap(tmp_path: Path) -> None:
+    chat = SmallOutputFakeChat()
+    service, _database, _resolver, _chat = _service(tmp_path, chat=chat)
+
+    service.suggest_contributions(
+        session_hash="session-a",
+        slug="octocat/demo",
+        owner_statement="I assisted with the parser alongside another contributor.",
+    )
+
+    assert chat.max_output_tokens == [400]
+
+
+def test_contribution_suggestion_rejects_context_shortage_before_generation(
+    tmp_path: Path,
+) -> None:
+    chat = TinyContextFakeChat()
+    service, _database, _resolver, _chat = _service(tmp_path, chat=chat)
+
+    with pytest.raises(GuidedOnboardingError) as error:
+        service.suggest_contributions(
+            session_hash="session-a",
+            slug="octocat/demo",
+            owner_statement="我協助維護解析器。",
+        )
+
+    assert error.value.code == "CONFIG_INVALID"
+    assert chat.calls == 0
+
+
+def test_contribution_suggestion_rejects_legal_json_marked_as_truncated(
+    tmp_path: Path,
+) -> None:
+    chat = LargeCapacityFakeChat(finish_reason="length")
+    service, _database, _resolver, _chat = _service(tmp_path, chat=chat)
+
+    with pytest.raises(GuidedOnboardingError) as error:
+        service.suggest_contributions(
+            session_hash="session-a",
+            slug="octocat/demo",
+            owner_statement="I maintained the parser with another contributor.",
+        )
+
+    assert error.value.code == "PROVIDER_ERROR"
+    assert error.value.reason == "PROVIDER_OUTPUT_LIMIT_REACHED"
+    assert chat.calls == 1
+
+
+def test_contribution_suggestion_preserves_adapter_output_limit_diagnostic(
+    tmp_path: Path,
+) -> None:
+    chat = LargeCapacityFakeChat(failure=ProviderResponseError(ResponseIssue.OUTPUT_LIMIT))
+    service, _database, _resolver, _chat = _service(tmp_path, chat=chat)
+
+    with pytest.raises(GuidedOnboardingError) as error:
+        service.suggest_contributions(
+            session_hash="session-a",
+            slug="octocat/demo",
+            owner_statement="I maintained the parser with another contributor.",
+        )
+
+    assert error.value.code == "PROVIDER_ERROR"
+    assert error.value.reason == "PROVIDER_OUTPUT_LIMIT_REACHED"
+    assert chat.calls == 1
+
+
+def test_contribution_suggestion_classifies_invalid_complete_schema(tmp_path: Path) -> None:
+    chat = InvalidContributionFakeChat()
+    service, _database, _resolver, _chat = _service(tmp_path, chat=chat)
+
+    with pytest.raises(GuidedOnboardingError) as error:
+        service.suggest_contributions(
+            session_hash="session-a",
+            slug="octocat/demo",
+            owner_statement="I maintained the parser with another contributor.",
+        )
+
+    assert error.value.code == "PROVIDER_ERROR"
+    assert error.value.reason == "PROVIDER_OUTPUT_SCHEMA_INVALID"
+    assert chat.calls == 1
 
 
 @pytest.mark.parametrize(
@@ -603,6 +711,165 @@ def test_analysis_validation_reports_safe_failure_reason(
 
     assert error.value.code == "PROVIDER_ERROR"
     assert error.value.reason == reason
+
+
+@pytest.mark.parametrize(
+    ("zh_tw", "en"),
+    [
+        ("模組負責轉換音訊", "The module is responsible for audio conversion."),
+        ("設定影響記憶體使用", "The configuration impacts memory usage."),
+        ("快取層負責資料去重", "The cache layer handles data deduplication."),
+        ("責任映射會產生影響分析", "Responsibility mapping produces impact analysis."),
+        ("作者欄位影響排序", "Author metadata impacts sorting."),
+        ("角色欄位影響排序", "Worker role mapping controls permissions."),
+        ("員工資料表使用複合索引", "The employee table uses a composite index."),
+        ("開發者工具使用此模組", "Developer tooling uses this module."),
+        ("維護者設定由 YAML 載入", "The maintainer configuration is loaded from YAML."),
+    ],
+)
+def test_analysis_person_policy_allows_nonhuman_technical_subjects(zh_tw: str, en: str) -> None:
+    envelope = _parse_analysis(
+        {
+            "inferences": [
+                {
+                    "statement": {"zh-TW": zh_tw, "en": en},
+                    "supporting_evidence_ids": ["E_allowed"],
+                }
+            ]
+        },
+        frozenset({"E_allowed"}),
+    )
+
+    assert envelope.inferences[0].statement.zh_tw == zh_tw
+    assert envelope.inferences[0].supporting_evidence_ids == ("E_allowed",)
+
+
+@pytest.mark.parametrize(
+    ("zh_tw", "en"),
+    [
+        ("我負責轉換音訊", "Architecture summary"),
+        ("本人完成全部功能", "Architecture summary"),
+        ("作者主導架構", "Architecture summary"),
+        ("作者在專案中負責核心模組。", "Architecture summary"),
+        ("架構摘要", "I led this project"),
+        ("架構摘要", "I am responsible for the parser."),
+        ("架構摘要", "The author led the architecture work."),
+        ("架構摘要", "THE CONTRIBUTOR'S ACHIEVEMENT improved delivery."),
+        ("架構摘要", "The feature was implemented by the maintainer."),
+        ("首席工程師設計架構", "Architecture summary"),
+        ("架構摘要", "I am the maintainer."),
+        ("架構摘要", "The author is a developer."),
+        ("架構摘要", "My role is maintainer."),
+        ("架構摘要", "I work at Example Corp."),
+        ("架構摘要", "I joined Example Corp as an engineer."),
+        ("我是維護者。", "Architecture summary"),
+        ("我的角色是維護者。", "Architecture summary"),
+        ("作者是主要開發者。", "Architecture summary"),
+        ("我任職於 Example Corp。", "Architecture summary"),
+    ],
+)
+def test_analysis_person_policy_rejects_explicit_person_attribution(zh_tw: str, en: str) -> None:
+    with pytest.raises(GuidedOnboardingError) as error:
+        _parse_analysis(
+            {
+                "inferences": [
+                    {
+                        "statement": {"zh-TW": zh_tw, "en": en},
+                        "supporting_evidence_ids": ["E_allowed"],
+                    }
+                ]
+            },
+            frozenset({"E_allowed"}),
+        )
+
+    assert error.value.code == "PROVIDER_ERROR"
+    assert error.value.reason == "PROVIDER_PERSONAL_INFERENCE_REJECTED"
+
+
+def test_analysis_service_accepts_technical_responsibility_without_retry(
+    tmp_path: Path,
+) -> None:
+    chat = FakeChat()
+    service, _database, _resolver, _chat = _service(tmp_path, chat=chat)
+    original_generate = chat.generate
+
+    def generate(messages, response_schema, max_output_tokens, timeout):
+        result = original_generate(messages, response_schema, max_output_tokens, timeout)
+        evidence_ids = re.findall(r"persistent_id=(E_[0-9a-f]+)", messages[-1].content)
+        return ProviderResult(
+            {
+                "inferences": [
+                    {
+                        "statement": {
+                            "zh-TW": "模組負責轉換音訊",
+                            "en": "The module is responsible for audio conversion.",
+                        },
+                        "supporting_evidence_ids": [evidence_ids[0]],
+                    }
+                ]
+            },
+            result.finish_reason,
+            None,
+            None,
+            result.duration_ms,
+        )
+
+    chat.generate = generate  # type: ignore[method-assign]
+
+    result = service.analyze_repository(
+        session_hash="session-a",
+        slug="octocat/demo",
+        ref=None,
+        include=(),
+        exclude=(),
+        cancel_requested=threading.Event(),
+    )
+
+    assert result["inferences"][0]["statement"]["zh-TW"] == "模組負責轉換音訊"  # type: ignore[index]
+    assert chat.calls == 1
+
+
+def test_analysis_service_rejects_person_attribution_without_retry(tmp_path: Path) -> None:
+    chat = FakeChat()
+    service, _database, _resolver, _chat = _service(tmp_path, chat=chat)
+    original_generate = chat.generate
+
+    def generate(messages, response_schema, max_output_tokens, timeout):
+        result = original_generate(messages, response_schema, max_output_tokens, timeout)
+        evidence_ids = re.findall(r"persistent_id=(E_[0-9a-f]+)", messages[-1].content)
+        return ProviderResult(
+            {
+                "inferences": [
+                    {
+                        "statement": {
+                            "zh-TW": "作者主導架構",
+                            "en": "The author led the architecture work.",
+                        },
+                        "supporting_evidence_ids": [evidence_ids[0]],
+                    }
+                ]
+            },
+            result.finish_reason,
+            None,
+            None,
+            result.duration_ms,
+        )
+
+    chat.generate = generate  # type: ignore[method-assign]
+
+    with pytest.raises(GuidedOnboardingError) as error:
+        service.analyze_repository(
+            session_hash="session-a",
+            slug="octocat/demo",
+            ref=None,
+            include=(),
+            exclude=(),
+            cancel_requested=threading.Event(),
+        )
+
+    assert error.value.code == "PROVIDER_ERROR"
+    assert error.value.reason == "PROVIDER_PERSONAL_INFERENCE_REJECTED"
+    assert chat.calls == 1
 
 
 def test_analysis_retries_transient_provider_and_releases_session_on_failure(

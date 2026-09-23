@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import shutil
 import tempfile
 import threading
 import time
+import traceback
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
@@ -50,6 +52,17 @@ class ReindexCandidate:
     workspace: Path
 
 
+class CancellableSourceResolver(Protocol):
+    def resolve(
+        self,
+        *,
+        slug: str,
+        ref: str | None,
+        cancel_requested: Callable[[], bool] | None = None,
+        deadline: float | None = None,
+    ) -> ResolvedRepository: ...
+
+
 class FrozenProfileBuilder(Protocol):
     def __call__(
         self,
@@ -87,9 +100,23 @@ class EmbeddingReindexCoordinator:
         self._lock = threading.RLock()
         self._futures: dict[str, Future[None]] = {}
         self._cancellations: dict[str, threading.Event] = {}
+        # A cancellation remains effective until the activation commit
+        # boundary is acquired.  Once ``committing`` is recorded under the
+        # same lock used by ``cancel``, the active pointer/provider/profile
+        # transition is no longer cancellable and cancel() must return False.
+        self._activation_phases: dict[str, str] = {}
         self._closed = False
 
-    def queue(self, profile_id: str) -> EmbeddingProfile:
+    def queue(
+        self,
+        profile_id: str,
+        *,
+        builder: FrozenProfileBuilder | None = None,
+        force: bool = False,
+        transition: Callable[[EmbeddingProfile, EmbeddingProvider], Callable[[], None]]
+        | None = None,
+        on_finished: Callable[[str | None, str | None], None] | None = None,
+    ) -> EmbeddingProfile:
         """Probe and either switch a compatible profile or queue a frozen reindex."""
 
         with self._lock:
@@ -97,51 +124,62 @@ class EmbeddingReindexCoordinator:
                 raise EmbeddingProfileError("SERVICE_NOT_READY")
             existing = self._futures.get(profile_id)
             if existing is not None and not existing.done():
+                if force:
+                    raise EmbeddingProfileError("EMBEDDING_REINDEX_ACTIVE")
                 return self._registry.get(profile_id)
             if any(not future.done() for future in self._futures.values()):
                 raise EmbeddingProfileError("EMBEDDING_REINDEX_ACTIVE")
 
-        profile = self._registry.probe(profile_id)
-        if profile.last_error_code is not None:
-            raise EmbeddingProfileError(profile.last_error_code)
-        provider = self._registry.resolve_provider(profile)
-        if provider is None or not isinstance(provider, EmbeddingProvider):
-            raise EmbeddingProfileError("EMBEDDING_CONNECTION_REQUIRED")
+            profile = self._registry.get(profile_id)
+            if not force or profile.last_probed_at is None:
+                profile = self._registry.probe(profile_id)
+            if profile.last_error_code is not None:
+                raise EmbeddingProfileError(profile.last_error_code)
+            provider = self._registry.resolve_provider(profile)
+            if provider is None or not isinstance(provider, EmbeddingProvider):
+                raise EmbeddingProfileError("EMBEDDING_CONNECTION_REQUIRED")
 
-        if (
-            profile.status == "ready"
-            and self._manager.active_embedding_identity() == profile.identity
-        ):
-            rollback_provider = self._provider_transition(profile, provider)
-            try:
-                activated = self._registry.activate(profile_id)
-            except Exception:
-                rollback_provider()
-                raise
-            if self._on_activated is not None:
-                bundle_id = self._manager.status().active_bundle_id
-                if bundle_id is not None:
-                    self._on_activated(activated, bundle_id)
-            return activated
+            if (
+                not force
+                and profile.status == "ready"
+                and self._manager.active_embedding_identity() == profile.identity
+            ):
+                rollback_provider = self._provider_transition(profile, provider)
+                try:
+                    activated = self._registry.activate(profile_id)
+                except Exception:
+                    rollback_provider()
+                    raise
+                if self._on_activated is not None:
+                    bundle_id = self._manager.status().active_bundle_id
+                    if bundle_id is not None:
+                        self._on_activated(activated, bundle_id)
+                return activated
 
-        frozen = self._registry.begin_reindex(profile_id)
-        cancellation = threading.Event()
-        with self._lock:
-            if self._closed:
-                self._registry.fail_reindex(
-                    frozen.profile_id,
-                    frozen.reindex_generation,
-                    "EMBEDDING_REINDEX_CANCELLED",
-                )
-                raise EmbeddingProfileError("SERVICE_NOT_READY")
-            self._cancellations[profile_id] = cancellation
-            self._futures[profile_id] = self._executor.submit(
-                self._run,
-                frozen,
-                provider,
-                cancellation,
+            frozen = (
+                profile if force and profile.active else self._registry.begin_reindex(profile_id)
             )
-        return self._registry.get(profile_id)
+            cancellation = threading.Event()
+            with self._lock:
+                if self._closed:
+                    self._registry.fail_reindex(
+                        frozen.profile_id,
+                        frozen.reindex_generation,
+                        "EMBEDDING_REINDEX_CANCELLED",
+                    )
+                    raise EmbeddingProfileError("SERVICE_NOT_READY")
+                self._cancellations[profile_id] = cancellation
+                self._activation_phases[profile_id] = "building"
+                self._futures[profile_id] = self._executor.submit(
+                    self._run,
+                    frozen,
+                    provider,
+                    cancellation,
+                    builder or self._builder,
+                    transition or self._provider_transition,
+                    on_finished,
+                )
+            return self._registry.get(profile_id)
 
     def cancel(self, profile_id: str) -> bool:
         """Request cooperative cancellation of one known in-process generation."""
@@ -149,7 +187,14 @@ class EmbeddingReindexCoordinator:
         with self._lock:
             cancellation = self._cancellations.get(profile_id)
             future = self._futures.get(profile_id)
-            if cancellation is None or future is None or future.done():
+            phase = self._activation_phases.get(profile_id)
+            if (
+                cancellation is None
+                or future is None
+                or future.done()
+                or phase is None
+                or phase == "committing"
+            ):
                 return False
             cancellation.set()
             return True
@@ -177,11 +222,15 @@ class EmbeddingReindexCoordinator:
         profile: EmbeddingProfile,
         provider: EmbeddingProvider,
         cancellation: threading.Event,
+        builder: FrozenProfileBuilder,
+        provider_transition: Callable[[EmbeddingProfile, EmbeddingProvider], Callable[[], None]],
+        on_finished: Callable[[str | None, str | None], None] | None,
     ) -> None:
         candidate: ReindexCandidate | None = None
+        activated_bundle_id: str | None = None
         deadline = self._monotonic() + self._timeout_seconds
         try:
-            candidate = self._builder(
+            candidate = builder(
                 profile,
                 provider,
                 cancellation.is_set,
@@ -191,13 +240,25 @@ class EmbeddingReindexCoordinator:
             bundle_id = candidate.verified.manifest.bundle_id
 
             def transition() -> ActivationTransition:
-                profile_transition = self._registry.activate_reindexed(
-                    profile.profile_id,
-                    profile.reindex_generation,
-                    bundle_id,
+                previous_bundle = self._manager.status().active_bundle_id
+                if profile.active and self._registry.get(profile.profile_id) != profile:
+                    raise EmbeddingProfileError("EMBEDDING_REINDEX_STALE")
+                profile_transition = (
+                    ActivationTransition(
+                        rollback=lambda: self._registry.reconcile_active_bundle(
+                            profile.identity, previous_bundle
+                        ),
+                        commit=lambda: self._registry.reconcile_active_bundle(
+                            profile.identity, bundle_id
+                        ),
+                    )
+                    if profile.active
+                    else self._registry.activate_reindexed(
+                        profile.profile_id, profile.reindex_generation, bundle_id
+                    )
                 )
                 try:
-                    rollback_provider = self._provider_transition(profile, provider)
+                    rollback_provider = provider_transition(profile, provider)
                 except Exception:
                     profile_transition.rollback()
                     raise
@@ -211,24 +272,60 @@ class EmbeddingReindexCoordinator:
                     commit=profile_transition.commit,
                 )
 
+            def before_commit() -> None:
+                # Serialize cancellation admission with the irreversible
+                # bundle pointer write.  If cancellation won, raising here
+                # makes BundleManager run the transition rollback hooks while
+                # its active/previous pointers are still unchanged.
+                with self._lock:
+                    _raise_if_stopped(cancellation.is_set, deadline, self._monotonic)
+                    if self._activation_phases.get(profile.profile_id) != "building":
+                        raise ReindexCancelled
+                    self._activation_phases[profile.profile_id] = "committing"
+
             self._manager.activate(
                 candidate.verified,
                 expected_embedding=profile.identity,
                 state_transition=transition,
+                before_commit=before_commit,
             )
+            activated_bundle_id = bundle_id
             if self._on_activated is not None:
                 self._on_activated(self._registry.get(profile.profile_id), bundle_id)
+            if on_finished is not None:
+                on_finished(bundle_id, None)
         except Exception as exc:
+            # Record only code locations and closed typed failures; never exception text.
+            frames = traceback.extract_tb(exc.__traceback__)
+            logging.getLogger(__name__).warning(
+                "Reindex failed type=%s code=%s cause=%s location=%s",
+                type(exc).__name__,
+                _safe_reindex_error(exc),
+                (
+                    exc.__cause__.code
+                    if isinstance(exc.__cause__, BundleError)
+                    else type(exc.__cause__).__name__
+                ),
+                ";".join(f"{Path(frame.filename).name}:{frame.lineno}" for frame in frames[-4:]),
+            )
+            # Notification failures cannot undo a committed verified activation.
+            if activated_bundle_id is not None:
+                if on_finished is not None:
+                    on_finished(activated_bundle_id, None)
+                return
             self._registry.fail_reindex(
                 profile.profile_id,
                 profile.reindex_generation,
                 _safe_reindex_error(exc),
             )
+            if on_finished is not None:
+                on_finished(None, _safe_reindex_error(exc))
         finally:
             if candidate is not None:
                 shutil.rmtree(candidate.workspace, ignore_errors=True)
             with self._lock:
                 self._cancellations.pop(profile.profile_id, None)
+                self._activation_phases.pop(profile.profile_id, None)
 
 
 class ProductionFrozenProfileBuilder:
@@ -347,7 +444,7 @@ class ProductionFrozenProfileBuilder:
 
 @dataclass(frozen=True, slots=True)
 class _BoundedResolver:
-    delegate: GitHubSourceResolver
+    delegate: CancellableSourceResolver
     cancel_requested: Callable[[], bool]
     deadline: float
     monotonic: Callable[[], float]
@@ -378,8 +475,14 @@ def _safe_reindex_error(error: Exception) -> str:
         return "EMBEDDING_REINDEX_CANCELLED"
     if isinstance(error, ReindexTimedOut):
         return "EMBEDDING_REINDEX_TIMEOUT"
+    if isinstance(error, ProviderError) and error.code.value == "timeout":
+        return "EMBEDDING_REINDEX_TIMEOUT"
     if isinstance(error, EmbeddingProfileError):
         return error.code
+    if isinstance(error, BundleActivationError) and isinstance(error.__cause__, ReindexTimedOut):
+        return "EMBEDDING_REINDEX_TIMEOUT"
+    if isinstance(error, BundleActivationError) and isinstance(error.__cause__, ReindexCancelled):
+        return "EMBEDDING_REINDEX_CANCELLED"
     if isinstance(error, (BundleActivationError, BundleError)):
         return "EMBEDDING_ACTIVATION_FAILED"
     if isinstance(error, (IndexPipelineError, SourceResolutionError, ProviderError)):

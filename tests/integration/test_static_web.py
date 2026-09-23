@@ -27,6 +27,8 @@ def test_same_origin_web_shell_preserves_api_routes_and_safe_headers() -> None:
     assert "RepoNPC" in shell.text
     assert "script-src 'self'" in shell.headers["Content-Security-Policy"]
     assert "style-src 'self'" in shell.headers["Content-Security-Policy"]
+    assert "img-src 'self'" in shell.headers["Content-Security-Policy"]
+    assert "img-src 'self' data:" not in shell.headers["Content-Security-Policy"]
     assert "*" not in shell.headers["Content-Security-Policy"]
     assert "access-control-allow-origin" not in shell.headers
     assert admin_shell.status_code == 200

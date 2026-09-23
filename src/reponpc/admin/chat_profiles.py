@@ -246,6 +246,28 @@ class ChatProfileRegistry:
             )
         return self.get(profile_id)
 
+    def activate_with_rollback(self, profile_id: str) -> Callable[[], None]:
+        """Join a local bundle activation without losing the previous chat selection."""
+        selected = self.get(profile_id)
+        previous = self.active()
+        self.activate(profile_id)
+
+        def rollback() -> None:
+            with self._database.connection() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "UPDATE chat_profiles SET active = ?, status = ? WHERE profile_id = ?",
+                    (int(selected.active), selected.status, selected.profile_id),
+                )
+                if previous is not None and previous.profile_id != selected.profile_id:
+                    connection.execute(
+                        "UPDATE chat_profiles SET active = 1, status = ? WHERE profile_id = ?",
+                        (previous.status, previous.profile_id),
+                    )
+                connection.execute("COMMIT")
+
+        return rollback
+
     def activate(self, profile_id: str) -> ChatProfile:
         profile = self.get(profile_id)
         if profile.status != "ready" or profile.last_probed_at is None:

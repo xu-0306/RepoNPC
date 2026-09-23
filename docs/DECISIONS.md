@@ -1,6 +1,6 @@
 # RepoNPC Architecture Decision Log
 
-**Document status:** ADR-001 through ADR-037 accepted; ADR-037 approved 2026-09-14. Historical supersession is stated in each record.
+**Document status:** ADR-001 through ADR-045 accepted; ADR-045 approved 2026-09-22. Historical supersession is stated in each record.
 **Approval rule:** These records were accepted together when the project owner approved `TECHNICAL_SPEC.md` 0.1.0. A later incompatible change requires a new ADR; do not silently rewrite an accepted decision.
 
 ## ADR-001: Use a modular monolith
@@ -97,8 +97,8 @@
 
 ## ADR-014: Use one canonical 4-by-7 character sheet
 
-- **Status:** Accepted
-- **Decision:** Built-in composition and custom uploads both produce a transparent `128x224` PNG consisting of four `32x32` frames for each of seven ordered states: idle, walk, listen, think, talk, success, and offline.
+- **Status:** Accepted for the 4-by-7 state protocol; frame/sheet dimensions superseded by ADR-040 before deployment.
+- **Decision:** Built-in composition and custom uploads both produce one transparent four-column/seven-row PNG with four frames for each ordered state: idle, walk, listen, think, talk, success, and offline. The historical `32x32`／`128x224` dimensions are not supported runtime formats after ADR-040; canonical dimensions are now `64x64`／`256x448`.
 - **Why:** One fixed format keeps animation, validation, card generation, preview, reduced motion, and custom assets interoperable.
 - **Consequences:** Custom artists must follow the documented grid. Changing dimensions, rows, or state order is a versioned asset-contract change.
 
@@ -327,4 +327,77 @@ The owner rejected the inferred Chinese HTTP 402 billing explanation and explici
 - **Alternatives rejected:** Merely raising the old 120/45 constants still charges scheduler waits and remains inflexible. Removing all ceilings permits decompression bombs, unbounded memory/cost and stuck workers. Switching provider/model after failure changes owner intent and remains forbidden.
 - **Consequences:** Technical Specification advances to 0.3.0. Large repositories and reasoning models can complete without artificial queue failures, while deployment operators retain explicit disaster ceilings. Complete buffered adapters can only approximate inactivity through socket timeouts; truthful first-token/token-idle progress remains dependent on a future streaming provider contract.
 
+## ADR-038: Separate same-round retry from a controlled successor analysis round
+
+- **Status:** Accepted for implementation on 2026-09-17.
+- **Authorization:** After reviewing the repair plan and ChatGPT's workspace analysis, the owner explicitly instructed Codex to implement the recommended endpoint and runtime migration.
+- **Decision:** Keep `/retry` as a continuation of the existing round and make its snapshot/action eligibility one shared predicate over terminal state, remaining generation attempts, remaining active-work time, and absence of an existing successor. Add explicit `/reanalyze` to create an idempotent successor batch for selected failed items after the source batch is terminal. Each source item may be consumed by only one direct successor; another round starts from that successor's latest failed item. The successor copies the immutable commit and selection policy, defaults to the source frozen model pair, resets only the new round's attempt/time counters, and preserves the source batch, source errors, successful siblings, and owner-confirmed content until their ordinary TTL. The durable request identity includes model selection, confirmation, and expected selection generation; an accepted create remains replayable after the in-memory preflight cache expires. Selecting the current model pair requires explicit confirmation bound to the expected selection generation. One-active-batch and lease rules remain unchanged.
+- **Diagnostics and storage:** Runtime migration 26 adds only secret-free source batch/item IDs, analysis round, and failure stage. Migration 27 adds a secret-free source-consumed marker and bounded reanalysis idempotency receipts so cleanup cannot reopen consumed work and every accepted key remains request-bound. Existing frozen pair JSON remains the model identity record. Snapshot counts separate processed from successful results; terminal active clocks are settled once; `completed_with_errors` is terminal in SSE and UI. Stable 409 codes distinguish unavailable retry, invalid successor selection, non-terminal source, active-batch conflict, and missing model-change confirmation.
+- **Consequences:** Technical Specification advances to 0.3.1. FR-027/033/041/042 and AC-039/040/045/060/061 govern concurrency, idempotency, source/model pinning, recovery, bilingual UI, migration rollback, privacy, and preservation. No automatic provider/model fallback, latest-commit refresh, hidden retry, new hosted dependency, or raw provider/source persistence is introduced.
+
+## ADR-039: Use species-neutral versioned character packs
+
+- **Status:** Accepted for implementation on 2026-09-21.
+- **Authorization:** The owner explicitly rejected retaining the old humanoid-shaped public fields and instructed that they be corrected directly because RepoNPC has not been deployed.
+- **Decision:** Built-in character configuration contains only `pack_id`, positive `pack_version`, and a bounded string `options` mapping. The trusted in-process registry maps that identity to a pack-owned option manifest and deterministic renderer. Core configuration/composition does not define a species enum and does not interpret anatomy- or costume-specific keys. Every pack and arbitrary custom character converges on ADR-014's canonical 4-by-7 sheet. The row name `walk` is a semantic locomotion/activity state, not a humanoid anatomy claim.
+- **Compatibility:** Remove the undeployed top-level `body`, `skin`, `hair`, `outfit`, color, and `accessory` fields without aliases, dual-read behavior, or migration code. Unknown pack/version/option contracts fail closed without fallback. Existing humanoid rendering details remain private to `core/humanoid` version 1 and do not constrain future packs.
+- **Consequences:** Technical Specification advances to 0.3.2. Adding a supported built-in form is a registry/pack addition plus tests and provenance, not a core schema edit. User-created forms outside the built-in catalog use the canonical custom-sheet path without declaring a species. Pack implementations remain trusted application code; YAML cannot inject code, paths, URLs, or renderer names.
+
+## ADR-040: Normalize open-world character material to a 64px canonical protocol
+
+- **Status:** Accepted for implementation on 2026-09-21.
+- **Authorization:** After the species-neutral pack correction, the owner approved direct implementation of a larger canonical format and a conversion mechanism because uploaded material will not always match RepoNPC's requirements and the project has not been deployed.
+- **Decision:** Replace the undeployed 32px frame with one `64x64` frame, making the 4x7 sheet `256x448`, without a legacy path. Runtime animation remains a fixed closed protocol. Ingestion is an open-world adapter: derive any square-cell 4x7 PNG structurally, or require schema-1 `sprite-pack.json` to map all 28 PNG frames in a bounded ZIP. Offer deterministic `pixel_exact` and `pixelize` policies behind one verifier and return a canonical preview plus warnings before any write.
+- **Security and integrity:** User packs are data, never executable plugins. Normalize archive paths, reject links/encryption/traversal/duplicates/unsafe framing/animation/resource excess, and never infer frames from filenames or invent missing content. Conversion does not overwrite or persist the source; ordinary writeback receives only the revalidated canonical PNG after explicit owner action.
+- **Consequences:** Technical Specification advances to 0.3.3. Web animation, cards, built-in rendering, custom validation, examples and tests use the same centralized 64px constants. High-resolution antialiased art can produce a deterministic draft, but warnings and visual review remain necessary; conversion is not evidence that the artwork is artistically release-ready.
+
+## ADR-041: Discover structural sprite candidates in novice ZIP and folder uploads
+
+- **Status:** Accepted for implementation on 2026-09-21.
+- **Authorization:** After seeing that directly zipping `PixelNPC/Man` would not satisfy the strict manifest contract, the owner asked for a workflow that an inexperienced repository owner can use without preparing special files, approved researching established browser-upload patterns, and then approved implementation.
+- **Decision:** The authenticated converter accepts one PNG/ZIP through drag, drop, or file selection and accepts a browser-selected folder as relative-path/file pairs. A root manifest retains ADR-040's strict deterministic behavior. Otherwise the server scans bounded PNG members by the closed 4-by-7 square-cell protocol. Exactly one candidate converts automatically; multiple candidates return canonical visual previews for explicit selection; none return actionable failure. Candidate IDs hash normalized path and bytes and are recomputed when selected.
+- **Anti-hardcode boundary:** Filenames, folder names, source dimensions, species, anatomy, and visual meaning are open-world data and never choose the character automatically. The 4-by-7 state contract, canonical 64px frame, deterministic policies, and resource/security ceilings remain closed protocol. Standard folder input is a progressive enhancement; PNG/ZIP remains the interoperable fallback, without making experimental directory APIs mandatory.
+- **Security and consequences:** Archive/folder paths, counts, bytes, pixels, animation, links, encryption, duplicates, and candidate count remain bounded and validated. Inspection and selection do not write, execute, or retain source material. Technical Specification advances to 0.3.4; human visual review remains necessary when several structurally valid layers/sheets exist.
+
+## ADR-042: Make character and animation setup an ordinary owner workspace
+
+- **Status:** Accepted for implementation on 2026-09-22.
+- **Authorization:** After testing the admin page, the owner identified that an ordinary user would not enter a control labelled raw YAML and required every design decision to begin from ordinary-user experience rather than developer structure.
+- **Decision:** Add `Character & animation` as a first-level authenticated workspace beside guided setup and advanced YAML. The normal flow is task-oriented: choose material, choose the intended character when ambiguous, preview each of the seven animation states, then download or save. Raw YAML, canonical dimensions, conversion policies, sheet layout and diagnostic codes are not primary navigation or primary copy; they remain available through explicit advanced/technical disclosure.
+- **Accessibility and behavior:** Reuse the production character renderer so preview semantics match runtime behavior. State selection is keyboard-operable and programmatically pressed, primary targets are at least 44px, status changes remain announced, layouts collapse without horizontal scrolling, and operating-system reduced-motion preference stops frame motion.
+- **Consequences:** Technical Specification advances to 0.3.5. Admin-only remains the correct authorization boundary, but technical implementation structure no longer determines information architecture. This changes no sprite, API, trust, writeback, or provider contract.
+
+## ADR-043: Make frame-position repair opt-in, visual, and canonical
+
+- **Status:** Accepted for implementation on 2026-09-22.
+- **Authorization:** After viewing the Orange animation in the in-app browser, the owner approved repairing the abnormal frame movement. The observed idle and walk frames had changing horizontal pixel positions while the preview canvas remained fixed.
+- **Decision:** The authenticated character workspace offers a reversible, geometry-only horizontal alignment suggestion for each four-frame state and pixel-level manual X/Y adjustments. It uses per-frame alpha occupancy, not filenames, species, anatomy, or an artwork-specific template. Suggested and manual offsets are constrained so no existing opaque pixel leaves its 64px frame. The original conversion result remains unchanged until the owner explicitly applies the edit.
+- **Integrity boundary:** Browser compositing is only a draft preview. Applying the edit submits the draft PNG to the existing authenticated `/api/admin/assets/character/validate` endpoint; only its canonical re-encoded response may be downloaded or sent through normal GitHub writeback. A validation failure preserves the original result and blocks adjusted download/writeback. No new asset format, endpoint, persistence model, source overwrite, or silent alignment is introduced.
+- **Consequences:** Technical Specification advances to 0.3.6. Automatic suggestions may not infer intended motion, and edge noise can limit safe offsets; the owner still reviews all seven states and may restore the original.
+
+## ADR-044: Offer conservative edge-spill cleanup within material conversion
+
+- **Status:** Accepted for implementation on 2026-09-22.
+- **Authorization:** After the owner saw brown lines above some Orange animation poses, inspection found pixels from the preceding source-grid row inside the next row's cells. The owner approved adding cleanup directly to conversion, with a before/after preview and no silent source overwrite.
+- **Decision:** Only structural grid PNGs may produce an optional cleaned variant. A source-cell-relative shallow top fragment must continue the preceding row's bottom pixels, end before a transparent gap, and leave independently occupied current-frame art. No filename, species, color, anatomy, or pose rule is allowed. The ordinary conversion remains unchanged; the alternate sheet is independently canonical-validated. The authenticated response returns nullable `edge_cleanup` containing its canonical asset, affected state/frame coordinates, and removed-source-pixel count.
+- **Owner boundary:** The workspace compares the same state/frame of both versions and requires an explicit cleaned/original choice before download or GitHub writeback. Ambiguous content and separate manifest frames remain untouched. Source material is never overwritten or persisted, no new endpoint or server-side choice state is introduced, and subsequent position alignment uses the chosen version under ADR-043's validation gate.
+- **Consequences:** Technical Specification advances to 0.3.7. This removes a conservative class of grid-boundary remnants but cannot infer arbitrary visual intent; human review of all states remains necessary.
+
+## ADR-045: Auto-validate repeated layout drift and expose exact pixel offsets
+
+- **Status:** Accepted for implementation on 2026-09-22.
+- **Authorization:** After testing Man, the owner asked that safe frame-position correction run during conversion and that ordinary users receive an adjustment box for each position's pixel offset.
+- **Decision:** The chosen canonical conversion is inspected without another click. A horizontal correction is automatic only when non-clipping per-column displacement agrees across at least half of the seven independent animation states, within frame-relative bounds and one unambiguous pattern. Isolated or conflicting movement remains a suggestion for review; neither species nor filename nor anatomy drives the decision. After any explicit edge-cleanup choice, the same check runs on that selected version. The owner may edit each selected frame's X and Y offsets in labeled integer-pixel fields, use one-pixel controls, or restore the unaligned version.
+- **Integrity boundary:** Automatic composition and later manual edits use the existing authenticated canonical PNG validator. Automatic bytes become downloadable/writeable only after its success; invalid manual drafts cannot be applied, and a validation failure leaves the chosen original available. Source files and unselected variants are never changed, and GitHub writeback remains explicit.
+- **Tradeoff:** Repeated deliberate motion can resemble repeated layout drift. The preview identifies automatic adjustment, keeps original restoration, and asks the owner to review all seven states. This supersedes ADR-043's opt-in-only timing but retains its non-clipping, validation, and reversibility guarantees. Technical Specification advances to 0.3.8.
+
 Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVALID_RESPONSE` despite a working service. Inspection found a separate 32-token probe cap and collapsed parser failures. Main corrected the internal probe budget to the configured capability and added source-labelled, closed-set parser evidence under the existing diagnostic field, without inventing provider text or model-name special cases. No claim is made about the owner's actual response, which was not retained. Details: `docs/CHAT_PROBE_RESPONSE_CHECKS_2026-09-12.md`.
+
+
+## ADR-046: Owner-controlled local publication and guided GitHub cards
+
+- **Status:** Accepted for implementation, 2026-09-22.
+- **Authorization:** Owner explicitly requested Luna Max implementation after correcting the plan to local embedding, local chat, and GitHub card-only sharing.
+- **Decision:** Adopt [the frozen local publication contract](LOCAL_PUBLICATION_CONTRACT_2026-09-22.md). Local public drafts, verified bundles and disposable passage vectors live on the owner host. No Actions, Release or write credential is needed for the normal journey. Use explicit preparation/activation and the existing last-known-good controls. Local assertions have truthful same-origin citations.
+- **UX:** Apply character to the shared draft, preview/try locally, then three short GitHub steps with actual account/file/link values. External reachability remains separately verified.
+- **Compatibility:** This supersedes GitHub-only transport in ADR-001/005/010/030; legacy polling must stop at a durable local-source transition. No public model/admin access, automatic GitHub write, hosted dependency or model fallback is added.

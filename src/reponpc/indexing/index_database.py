@@ -26,6 +26,7 @@ from reponpc.indexing.exclusions import (
     classify_source,
 )
 from reponpc.indexing.parsing import ChunkCandidate, chunk_source
+from reponpc.indexing.passage_cache import PassageVectorCache
 from reponpc.indexing.sources import (
     EmbeddingIdentity,
     PassageEmbeddingProvider,
@@ -176,7 +177,13 @@ def create_schema(connection: sqlite3.Connection) -> None:
 class IndexDatabaseBuilder:
     """Build a new immutable index database from pinned source snapshots."""
 
-    def __init__(self, embedding_provider: PassageEmbeddingProvider) -> None:
+    def __init__(
+        self,
+        embedding_provider: PassageEmbeddingProvider,
+        *,
+        passage_cache: PassageVectorCache | None = None,
+    ) -> None:
+        self._passage_cache = passage_cache
         self._embedding_provider = embedding_provider
         self._identity = embedding_provider.identity()
 
@@ -380,7 +387,7 @@ class IndexDatabaseBuilder:
                 owner_claim_id=f"profile_{field}",
                 title=f"profile_{field}",
                 language="yaml",
-                metadata={"source_type": "owner_assertions"},
+                metadata={"source_type": "owner_assertions", "origin": configuration_source.origin},
             )
             self._insert_evidence(connection, source_id, evidence)
             assertions.append(evidence)
@@ -405,6 +412,7 @@ class IndexDatabaseBuilder:
                     metadata={
                         "repository_slug": repository.slug,
                         "source_type": "owner_assertions",
+                        "origin": configuration_source.origin,
                     },
                 )
                 self._insert_evidence(connection, source_id, evidence)
@@ -427,6 +435,7 @@ class IndexDatabaseBuilder:
                         "repository_slug": repository.slug,
                         "claim_kind": claim.kind,
                         "source_type": "owner_assertions",
+                        "origin": configuration_source.origin,
                     },
                 )
                 self._insert_evidence(connection, source_id, evidence)
@@ -542,8 +551,11 @@ class IndexDatabaseBuilder:
         batch_size = _embedding_batch_size(self._identity.dimension)
         for start in range(0, len(ordered), batch_size):
             batch = ordered[start : start + batch_size]
-            vectors = self._embedding_provider.embed_passages(
-                [evidence.content for evidence in batch]
+            texts = [evidence.content for evidence in batch]
+            vectors = (
+                self._passage_cache.embed_passages(self._embedding_provider, texts)
+                if self._passage_cache is not None
+                else self._embedding_provider.embed_passages(texts)
             )
             try:
                 matrix = validate_vector_matrix(

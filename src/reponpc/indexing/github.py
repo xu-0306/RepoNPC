@@ -117,6 +117,56 @@ class GitHubSourceResolver:
             self.metadata_observer(metadata)
         return metadata
 
+    def profile_card_metadata(self, *, account: str, filename: str) -> dict[str, object]:
+        """Inspect public profile preparation without credentials, writes or branch guesses."""
+        normalized = normalize_github_account(account)
+        if filename != "reponpc-card.gif":
+            raise SourceResolutionError("github_filename_invalid")
+        slug = f"{normalized}/{normalized}"
+        base = f"https://github.com/{slug}"
+        result: dict[str, object] = {
+            "account": normalized,
+            "repository_url": base,
+            "profile_url": f"https://github.com/{normalized}",
+            "readme_url": base,
+            "create_url": (
+                f"https://github.com/new?name={quote(normalized, safe='')}&visibility=public"
+            ),
+            "profile_status": "unavailable",
+            "image_status": "unchecked",
+            "default_branch": None,
+        }
+        try:
+            metadata = self.repository_metadata(repository=slug)
+        except SourceResolutionError as exc:
+            if exc.code == "github_not_found":
+                result["profile_status"] = "missing"
+            return result
+        branch = metadata.default_branch
+        result["default_branch"] = branch
+        if not branch:
+            return result
+        result["profile_status"] = "ready"
+        for name, field in (("README.md", "profile_status"), (filename, "image_status")):
+            try:
+                item = self._get_json(
+                    f"/repos/{quote(normalized, safe='')}/{quote(normalized, safe='')}/contents/"
+                    f"{quote(name, safe='')}?ref={quote(branch, safe='')}"
+                )
+                if item.get("type") != "file" or item.get("path") != name:
+                    result[field] = "unavailable"
+                else:
+                    result[field] = "ready"
+                    if name == "README.md":
+                        result["readme_url"] = f"{base}/edit/{quote(branch, safe='')}/README.md"
+            except SourceResolutionError as exc:
+                result[field] = (
+                    ("missing_readme" if name == "README.md" else "missing")
+                    if exc.code == "github_not_found"
+                    else "unavailable"
+                )
+        return result
+
     def resolve(
         self,
         *,

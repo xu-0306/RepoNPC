@@ -335,6 +335,152 @@ def test_cancelled_reindex_cleans_staging_and_preserves_last_known_good(
         coordinator.shutdown()
 
 
+def test_cancel_after_provider_transition_rolls_back_before_activation_commit(
+    tmp_path: Path,
+) -> None:
+    """Cancellation accepted during transition must prevent pointer commit."""
+
+    _database, providers, manager, registry, selected, base_transition = _system(tmp_path)
+    coordinator_box: dict[str, EmbeddingReindexCoordinator] = {}
+    cancel_results: list[bool] = []
+    build_count = 0
+
+    def builder(profile, provider, cancel_requested, deadline):
+        nonlocal build_count
+        del cancel_requested, deadline
+        build_count += 1
+        return _candidate(tmp_path, profile, provider, build_count)
+
+    def transition(profile, provider):
+        rollback = base_transition(profile, provider)
+        if profile.model_id == "b":
+            # The provider has already been selected when cancellation is
+            # accepted.  The activation guard must still roll both transitions
+            # back before the bundle pointer can change.
+            cancel_results.append(coordinator_box["coordinator"].cancel(profile.profile_id))
+        return rollback
+
+    coordinator = EmbeddingReindexCoordinator(
+        registry=registry,
+        manager=manager,
+        builder=builder,
+        provider_transition=transition,
+    )
+    coordinator_box["coordinator"] = coordinator
+    try:
+        profile_a = registry.create(_profile(providers["a"]))
+        coordinator.queue(profile_a.profile_id)
+        coordinator.wait(profile_a.profile_id, timeout=10)
+        prior = manager.status()
+
+        profile_b = registry.create(_profile(providers["b"]))
+        coordinator.queue(profile_b.profile_id)
+        cancelled = coordinator.wait(profile_b.profile_id, timeout=10)
+
+        assert cancel_results == [True]
+        assert cancelled.status == "reindex_required"
+        assert cancelled.last_error_code == "EMBEDDING_REINDEX_CANCELLED"
+        assert manager.status() == prior
+        assert registry.active() is not None
+        assert registry.active().profile_id == profile_a.profile_id  # type: ignore[union-attr]
+        assert selected["provider"] is providers["a"]
+    finally:
+        coordinator.shutdown()
+
+
+def test_cancel_after_activation_commit_boundary_returns_false(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once the manager owns the commit boundary, cancellation is rejected."""
+
+    _database, providers, manager, registry, selected, transition = _system(tmp_path)
+    build_count = 0
+
+    def builder(profile, provider, cancel_requested, deadline):
+        nonlocal build_count
+        del cancel_requested, deadline
+        build_count += 1
+        return _candidate(tmp_path, profile, provider, build_count)
+
+    coordinator = EmbeddingReindexCoordinator(
+        registry=registry,
+        manager=manager,
+        builder=builder,
+        provider_transition=transition,
+    )
+    try:
+        profile_a = registry.create(_profile(providers["a"]))
+        coordinator.queue(profile_a.profile_id)
+        coordinator.wait(profile_a.profile_id, timeout=10)
+
+        profile_b = registry.create(_profile(providers["b"]))
+        cancel_results: list[bool] = []
+        original_write_pointer = manager._write_pointer
+
+        def write_pointer(bundle_id: str) -> None:
+            cancel_results.append(coordinator.cancel(profile_b.profile_id))
+            original_write_pointer(bundle_id)
+
+        monkeypatch.setattr(manager, "_write_pointer", write_pointer)
+        coordinator.queue(profile_b.profile_id)
+        completed = coordinator.wait(profile_b.profile_id, timeout=10)
+
+        assert cancel_results == [False]
+        assert completed.status == "ready"
+        assert completed.last_error_code is None
+        assert manager.status().active_bundle_id == completed.bundle_id
+        assert selected["provider"] is providers["b"]
+    finally:
+        coordinator.shutdown()
+
+
+def test_deadline_after_provider_transition_rolls_back_before_activation_commit(
+    tmp_path: Path,
+) -> None:
+    """A transition that exhausts its deadline cannot publish a bundle."""
+
+    _database, providers, manager, registry, selected, base_transition = _system(tmp_path)
+    clock = 0.0
+
+    def builder(profile, provider, cancel_requested, deadline):
+        del cancel_requested, deadline
+        return _candidate(tmp_path, profile, provider, int(clock) + 1)
+
+    def transition(profile, provider):
+        nonlocal clock
+        rollback = base_transition(profile, provider)
+        if profile.model_id == "b":
+            clock = 2.0
+        return rollback
+
+    coordinator = EmbeddingReindexCoordinator(
+        registry=registry,
+        manager=manager,
+        builder=builder,
+        provider_transition=transition,
+        timeout_seconds=1,
+        monotonic=lambda: clock,
+    )
+    try:
+        profile_a = registry.create(_profile(providers["a"]))
+        coordinator.queue(profile_a.profile_id)
+        coordinator.wait(profile_a.profile_id, timeout=10)
+        prior = manager.status()
+
+        profile_b = registry.create(_profile(providers["b"]))
+        coordinator.queue(profile_b.profile_id)
+        timed_out = coordinator.wait(profile_b.profile_id, timeout=10)
+
+        assert timed_out.status == "reindex_required"
+        assert timed_out.last_error_code == "EMBEDDING_REINDEX_TIMEOUT"
+        assert manager.status() == prior
+        assert registry.active() is not None
+        assert registry.active().profile_id == profile_a.profile_id  # type: ignore[union-attr]
+        assert selected["provider"] is providers["a"]
+    finally:
+        coordinator.shutdown()
+
+
 def test_timed_out_reindex_preserves_last_known_good(tmp_path: Path) -> None:
     _database, providers, manager, registry, selected, transition = _system(tmp_path)
 

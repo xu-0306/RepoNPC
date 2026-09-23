@@ -320,3 +320,47 @@ def test_environment_connection_resolves_changed_model_from_frozen_profile(
 
     managed_profile = replace(profile, connection_reference="environment-embedding")
     assert _environment_embedding_provider(settings, managed_profile) is None
+
+
+def test_restart_reports_selected_chat_adapter_instead_of_environment_default(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    from types import SimpleNamespace
+
+    from reponpc.admin.chat_profiles import ChatProfileRegistry
+
+    settings = load_environment(
+        {
+            "REPONPC_DATA_DIR": str(tmp_path),
+            "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
+            "REPONPC_CHAT_PROVIDER": "ollama",
+            "REPONPC_CHAT_MODEL": "environment-default",
+            "REPONPC_CONFIG_REPOSITORY": "example/portfolio",
+            "REPONPC_INDEX_MANIFEST_URL": "https://raw.githubusercontent.com/example/portfolio/main/stable-manifest.json",
+            "REPONPC_CHAT_BASE_URL": "http://127.0.0.1:11434",
+            "REPONPC_EMBEDDING_PROVIDER": "ollama",
+            "REPONPC_EMBEDDING_MODEL": "fixture-embed",
+            "REPONPC_EMBEDDING_BASE_URL": "http://127.0.0.1:11434",
+            "REPONPC_EMBEDDING_DIMENSION": "2",
+        },
+        secret_roots=(tmp_path,),
+    )
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    application = create_app(runtime_database=database)
+    selected = SimpleNamespace(connection_id="selected-chat", connection_revision=2)
+    connections = SimpleNamespace(
+        revision_for=lambda connection_id, revision: SimpleNamespace(provider="openai_compatible")
+    )
+    registry = ChatProfileRegistry(database, connections, lambda _: None)
+    chosen_chat = LifecycleChat(ProviderHealth(True, "2026-09-23T00:00:00Z"))
+    monkeypatch.setattr(registry, "active", lambda: selected)
+    monkeypatch.setattr(registry, "resolve_provider", lambda _: chosen_chat)
+    application.state.chat_profile_registry = registry
+    application.state.admin_operations = SimpleNamespace(model_connections=connections)
+    monkeypatch.setattr("reponpc.main.app", application)
+
+    _configure_provider_lifecycle(settings, database)
+
+    assert application.state.provider_runtime.chat is chosen_chat
+    assert application.state.provider_adapter == "openai_compatible"

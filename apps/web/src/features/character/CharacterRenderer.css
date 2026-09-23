@@ -1,26 +1,26 @@
 .character-renderer {
   display: inline-block;
-  height: 32px;
+  height: 64px;
   line-height: 0;
   vertical-align: middle;
-  width: 32px;
+  width: 64px;
 }
 
 .character-renderer__viewport {
   display: block;
-  height: 32px;
+  height: 64px;
   overflow: hidden;
-  width: 32px;
+  width: 64px;
 }
 
 .character-renderer__sheet {
   display: flex;
-  height: 224px;
+  height: 448px;
   transform: translate(
     var(--character-frame-start-x),
     var(--character-row-offset-y)
   );
-  width: 256px;
+  width: 512px;
 }
 
 .character-renderer[data-reduced-motion="false"] .character-renderer__sheet {
@@ -34,12 +34,12 @@
 
 .character-renderer__sheet-image {
   display: block;
-  flex: 0 0 128px;
-  height: 224px;
+  flex: 0 0 256px;
+  height: 448px;
   image-rendering: pixelated;
   max-width: none;
   user-select: none;
-  width: 128px;
+  width: 256px;
 }
 
 @keyframes character-renderer-frames {

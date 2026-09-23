@@ -58,18 +58,18 @@ RepoNPC 不讓模型自由搜尋、執行程式或自行拼湊 GitHub 連結。�
 - Ollama、vLLM 與通用 OpenAI-compatible 聊天／embedding 服務。
 - 引導式 repository 選擇、貢獻撰寫、預覽與設定匯出。
 - 單一擁有者管理介面：本機啟動免註冊／免密碼，遠端部署保留密碼；公開 repository 的讀取不要求 OAuth 或 PAT。
-- 內建角色組合器與自訂 sprite sheet。
+- 版本化、物種中立的內建角色包，以及可容納任意物種／造型的自訂 sprite sheet；核心不以固定物種清單限制使用者設計。
 - 不可變索引包、校驗、原子切換、保留上一個可用版本與 rollback。
 
 ## 建立前需要準備什麼？
 
-要看到管理介面，Windows 本機評估只需要開發工具與一個可連線的模型服務。要建立可公開使用的完整作品集，則還需要 GitHub 發布與正式部署環境。
+要看到管理介面，Windows 本機評估只需要開發工具與一個可連線的模型服務。本機即可建立完整作品集並試聊；對外分享時再準備公開 HTTPS 訪客入口。
 
 | 用途 | 需要準備 |
 | --- | --- |
 | Windows 本機評估 | Git、PowerShell、[uv](https://docs.astral.sh/uv/)、Node.js 24／Corepack，以及正在執行的 Ollama 或其他已設定 provider。 |
-| 完整作品集 | 一個公開 GitHub 帳號、你要展示的公開 repositories、`reponpc.yml`、聊天 provider，以及至少一個外部 embedding provider。 |
-| 正式部署 | x86_64 Linux、Docker Engine、Compose v2、持久化磁碟、公開網域、HTTPS reverse proxy，以及你在部署 repository 維護的 GitHub Actions／Releases。參考主機為 4 CPU、8 GB RAM，另加模型所需資源。 |
+| 完整作品集 | 一個公開 GitHub 帳號、你要展示的公開 repositories、已測試的回答與資料查找模型。內容可由管理介面建立，Ollama 可在本機運行。 |
+| 正式部署 | x86_64 Linux、Docker Engine、Compose v2、持久化磁碟、公開網域、HTTPS reverse proxy。參考主機為 4 CPU、8 GB RAM，另加模型所需資源。 |
 
 RepoNPC 的 Compose 檔只啟動應用程式，不會順便啟動 Ollama 或 vLLM。模型服務必須由你另外部署，而且必須能從 `app` container 連線。
 
@@ -99,11 +99,23 @@ RepoNPC 的 Compose 檔只啟動應用程式，不會順便啟動 Ollama 或 vLL
 
 啟動器會在需要時安裝鎖定的 Python／Web 依賴、建立前端、只監聽 `localhost:8090`，並以兩分鐘、僅能使用一次的本機授權開啟 `/admin`。瀏覽器會把它交換成受保護的管理 session 並立即清除網址片段；之後重新整理會恢復仍有效的 session，不需要再次執行啟動器。本機評估不需要註冊、帳號、密碼或 GitHub OAuth。若直接開啟 `/admin` 而沒有有效 session，重新執行啟動器即可。
 
-如果你已建立 `.env`，本機 provider URL 必須能從 Windows 主機連線，例如 Ollama 通常是 `http://127.0.0.1:11434`。若服務使用其他 port，可在管理介面直接編輯環境預設連線並輸入完整新網址；可安全修改的關聯模型會一起更新為新 revision，之後只需明確按一次「測試模型」，不必再編輯儲存模型。轉為使用者管理後，重啟也不會再用 `.env` 的模型名稱覆寫已編輯的模型設定。也可在沒有模型引用後刪除該預設，兩種選擇都會跨重啟保留。完整訪客問答仍需要一個已發布並啟用、且 embedding 身分相符的索引包。
+如果你已建立 `.env`，本機 provider URL 必須能從 Windows 主機連線，例如 Ollama 通常是 `http://127.0.0.1:11434`。若服務使用其他 port，可在管理介面直接編輯環境預設連線並輸入完整新網址；可安全修改的關聯模型會一起更新為新 revision，之後只需明確按一次「測試模型」，不必再編輯儲存模型。轉為使用者管理後，重啟也不會再用 `.env` 的模型名稱覆寫已編輯的模型設定。也可在沒有模型引用後刪除該預設，兩種選擇都會跨重啟保留。管理介面的「預覽與分享 → 準備 NPC 並套用」會在本機建立並啟用相符索引；完成後即可試聊。
 
 ## 建立自己的 RepoNPC
 
-完整流程可以理解成五個階段。
+1. 在管理介面選好並測試回答／資料查找模型，選擇公開專案，確認要展示的貢獻與雙語介紹。
+2. 在「角色與動畫」匯入素材、檢查動畫，按「套用到作品集」。
+3. 在「預覽與分享」檢查介紹、專案、角色與卡片，儲存本機草稿，再按「準備 NPC 並套用」。分析及索引都在你的主機完成，不需要 GitHub token、Actions 或 Release。
+4. 準備完成後按「開啟目前版本並試聊」。更新專案時再按更新；相同內容的有效向量快取會重用，新問題仍需要查詢 embedding。
+5. 要讓卡片出現在 GitHub 個人頁，先確認或建立與帳號同名的公開 repository（例如 `帳號/帳號`）；GitHub 帳號本身不等於這個 repository，也不需要另建卡片專用 repository。依頁內三步驟將下載的 `reponpc-card.gif` 上傳到同名 repository 根目錄，再把卡片 Markdown 貼進該 repository 的 `README.md`，保留原文並預覽、儲存。引導使用實際預設分支，不能連線時會顯示尚未確認。
+
+沒有公開網址也能完成前四步。分享需要可對外連線的 HTTPS **訪客頁**網址；localhost 只供本機試用。公開入口只開放訪客頁與 API，管理頁及模型服務保持私人連線。GitHub 卡片不會執行模型，也不會替你啟動主機。
+
+YAML 只供備份或搬移，不需上傳到 GitHub 才能使用 NPC。自訂角色要連同角色 PNG 備份；完整恢復請在停止服務後備份資料目錄（包含本機草稿、模型加密設定與已驗證 bundle），不要公開該目錄。詳見 [本機發布契約](docs/LOCAL_PUBLICATION_CONTRACT_2026-09-22.md)。
+
+## 進階：既有 CLI／GitHub Release 整合
+
+下列手動發布方式保留給既有部署；一般本機流程不需完成这些步驟。啟用本機模式後 Release 自動輪詢會停止，切回方式見 Operations。
 
 ### 1. 寫下你想展示的內容
 
@@ -118,7 +130,11 @@ cp reponpc.example.yml reponpc.yml
 - `profile`：你的名稱、簡介、連結、招呼語與建議問題。
 - `repositories`：只加入你明確選擇的公開 repository。
 - `role`、`summary`、`claims`：寫下你願意公開並親自確認的貢獻。
-- `character` 與 `card`：選擇 NPC 外觀和 README 卡片樣式。
+- `character` 與 `card`：以 `pack_id`／`pack_version` 選擇內建角色包，或提供標準 `256x448` 自訂 sprite sheet；自訂角色不必宣告物種。管理工作區提供獨立的「角色與動畫」入口，無須進入 raw YAML：可直接拖放 PNG／ZIP 或選擇整個素材資料夾，系統依 4×7 結構找出可轉換圖片，單一候選自動預覽，多個候選讓使用者看圖選擇，並可切換七種動畫狀態後再下載或寫入。一般 ZIP 不必改檔名、宣告物種或手寫 manifest；若提供嚴格 manifest，仍會依其明確映射處理。
+
+「角色與動畫」會在轉換時檢查影格站位；多個動作呈現一致欄位偏移且不會裁切時，會自動校正並驗證。其他情況可預覽建議，再用每格的 X、Y 像素輸入框或方向按鈕微調；手動修改需按「套用校正並驗證」。隨時可還原，原始素材不會改動。
+
+若上傳的 4×7 素材在格線邊界有明顯殘影，轉換流程會在能安全辨識時提供「原版／清理版」同格預覽。請選擇要使用的版本，再下載或儲存；不確定的圖案不會被自動刪除，原始檔也不會被覆寫。
 
 `reponpc.yml` 預期會公開，請勿放入 token、API key、密碼、內部 URL 或私人 repository 名稱。
 
@@ -251,7 +267,7 @@ docker compose exec app reponpc admin setup-code
 - 搜尋：SQLite FTS5、NumPy、向量檢索、RRF
 - 程式碼解析：Tree-sitter（Python、JavaScript／TypeScript、Go、Rust）
 - 模型：Ollama、vLLM、OpenAI-compatible chat／embedding profiles
-- 發布：GitHub Actions、GitHub Releases、stable manifest
+- 發布：本機驗證與啟用；GitHub Actions／Releases／stable manifest 為既有進階整合
 - 部署：單一 RepoNPC application image、Docker Compose、持久化 SQLite
 
 ## v1 刻意不做的事
@@ -291,6 +307,8 @@ pnpm run web:check
 Repository AI 分析會同時使用兩個已選角色：Embedding 模型負責將來源與問題轉成向量並找出證據，Chat 模型再根據證據產生雙語分析。空白 include 會套用目錄、manifest 與常見程式碼副檔名的預設規則，因此只有根目錄檔案的平坦 repository 也能進入分析；秘密、二進位、產物與大小限制仍會先行排除。
 
 規格 0.3.0 / ADR-037 將大型 repository 分析改為彈性 active-work 配置：每 repository 預設 1,800 秒、provider 無活動預設 300 秒、GitHub I/O 預設 60 秒，暫時性錯誤最多使用同一凍結 provider/model 三次；archive、index 與 provider 容量等待不消耗有效執行時間。管理分析輸出維持 `REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS=8192`、最高 `16384`，訪客聊天改為 4,096／最高 8,192。Archive/source 限制可由 `.env` 調整；超過單檔 materialization 門檻會安全跳過並回報，只有不安全結構或總量天花板才終止。Migration 25 保留舊批次並擴大 durable budget。完整設定與安全界線見 `.env.example`、`docs/OPERATIONS.md` 與 ADR-037。
+
+規格 0.3.1 / ADR-038 將「同輪重試」與「建立後繼分析輪次」分開：同輪重試只有在模型嘗試次數與有效執行時間都未用盡時可用；用盡後可由管理員明確選擇失敗項目重新分析。新輪次預設保留原 commit、include/exclude、凍結模型組合與來源結果，僅重設新輪次的計數；每個來源失敗項目只能建立一個直接後繼。若改用目前模型，確認會綁定畫面顯示的 selection generation，設定已變更時必須重新檢視。Migration 26 新增不含秘密的批次／項目 lineage、輪次與失敗階段；migration 27 讓來源使用標記與有界冪等綁定在一般清理後仍維持正確。
 
 只改服務名稱時保留原網址與金鑰；更換網址是獨立選項。同一連線方式且協定、主機與有效連接埠不變時，只修正路徑（例如補上 `/v1`）可沿用已儲存的金鑰；更換 origin 或連線方式仍須替換或移除金鑰。所有服務新增、更新、刪除與清單更新失敗都會在實際操作的面板顯示單一錯誤摘要，說明安全原因、原設定是否保留及下一步，並在可用時提供診斷代碼。新輸入的金鑰會在送出或收合表單後清除，失敗重試時會明確提醒重新填入。
 

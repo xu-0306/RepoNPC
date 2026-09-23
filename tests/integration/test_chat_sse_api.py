@@ -210,6 +210,11 @@ def test_configured_message_and_history_limits_reject_before_service_cost() -> N
     assert message_response.status_code == history_response.status_code == 413
     assert message_response.json()["error"]["code"] == "PAYLOAD_TOO_LARGE"
     assert history_response.json()["error"]["code"] == "PAYLOAD_TOO_LARGE"
+    assert history_response.json()["error"]["details"] == {
+        "max_message_characters": 8,
+        "max_history_messages": 1,
+        "max_history_characters": 6,
+    }
     assert service.calls == 0
 
 

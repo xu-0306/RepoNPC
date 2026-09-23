@@ -249,6 +249,7 @@ def create_public_router(
     state: SetupState,
     *,
     state_supplier: Callable[[], SetupState] | None = None,
+    bundle_manager_supplier: Callable[[], object | None] | None = None,
     chat_service: GroundedChatService | None = None,
     chat_service_supplier: Callable[[], GroundedChatService | None] | None = None,
     max_message_characters: int = 2000,
@@ -318,6 +319,11 @@ def create_public_router(
                     field="request",
                     reason="too large",
                 ),
+                details={
+                    "max_message_characters": message_limit,
+                    "max_history_messages": history_count_limit,
+                    "max_history_characters": history_character_limit,
+                },
             )
         current = current_state()
         service = current_chat_service()
@@ -454,6 +460,37 @@ def create_public_router(
                 "X-Accel-Buffering": "no",
             },
         )
+
+    @router.get("/api/public/owner-statements/{revision}/{evidence_id}")
+    async def owner_statement(request: Request, revision: str, evidence_id: str) -> Response:
+        from reponpc.bundles.manager import BundleActivationError, BundleManager
+        from reponpc.domain.evidence import COMMIT_RE, EVIDENCE_ID_RE
+
+        manager = bundle_manager_supplier() if bundle_manager_supplier is not None else None
+        if (
+            not COMMIT_RE.fullmatch(revision)
+            or not EVIDENCE_ID_RE.fullmatch(evidence_id)
+            or not isinstance(manager, BundleManager)
+        ):
+            return Response(status_code=404)
+        try:
+            with manager.acquire() as index:
+                evidence = index.evidence(evidence_id)
+                if (
+                    evidence is None
+                    or evidence.evidence_class != "OWNER_ASSERTION"
+                    or evidence.repository_slug != "local/portfolio"
+                    or evidence.commit_sha != revision
+                    or evidence.metadata.get("origin") != "local"
+                ):
+                    return Response(status_code=404)
+                return Response(
+                    content="Owner-confirmed statement / 本人確認的陳述\n\n" + evidence.content,
+                    media_type="text/plain",
+                    headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+                )
+        except BundleActivationError:
+            return Response(status_code=404)
 
     @router.get("/api/public/profile")
     async def profile(request: Request) -> Response:

@@ -141,6 +141,8 @@ type Copy = {
   claimLabel: (kind: string) => string;
   accept: string;
   saveEditsAndAccept: string;
+  editConfirmed: string;
+  restorePrevious: string;
   reject: string;
   proposalRequired: string;
   assertionConfirmed: string;
@@ -317,6 +319,8 @@ const COPY: Record<Locale, Copy> = {
       })[kind] ?? kind,
     accept: "確認這份貢獻",
     saveEditsAndAccept: "儲存編輯並接受",
+    editConfirmed: "編輯已確認內容",
+    restorePrevious: "還原上一個已確認版本",
     reject: "拒絕並重新填寫",
     proposalRequired: "先產生建議，或拒絕後重新填寫你的貢獻說明。",
     assertionConfirmed: "此專案的貢獻已由你確認。",
@@ -338,13 +342,13 @@ const COPY: Record<Locale, Copy> = {
       "再次確認哪些文字會進入設定草稿；尚未確認的 AI 推論不會進入草稿。",
     confirmed: "已確認",
     notConfirmed: "尚未確認",
-    createDraft: "建立完整 YAML 草稿",
+    createDraft: "完成內容並預覽",
     draftHeading: "草稿已準備好",
     draftDescription:
-      "草稿可先通過既有的驗證與預覽；儲存到 GitHub 是另一個明確動作。",
+      "草稿保存在你的主機，套用後才會更新 NPC。GitHub 只需放上卡片。",
     copyDraft: "複製 YAML",
-    downloadDraft: "下載 YAML",
-    draftReady: "YAML 草稿已建立，可在進階模式中檢視。",
+    downloadDraft: "備份設定（YAML）",
+    draftReady: "內容已完成，可前往「預覽與分享」準備 NPC。",
     advancedMode: "進階 raw YAML 模式",
     guidedMode: "返回引導模式",
     rawYamlWarning: "raw YAML 有無法對應回引導欄位的變更；請在進階模式中處理。",
@@ -510,6 +514,8 @@ const COPY: Record<Locale, Copy> = {
       })[kind] ?? kind,
     accept: "Confirm contribution",
     saveEditsAndAccept: "Save edits and accept",
+    editConfirmed: "Edit confirmed content",
+    restorePrevious: "Restore previous confirmed version",
     reject: "Reject and rewrite",
     proposalRequired:
       "Generate a suggestion first, or reject it and write a new contribution description.",
@@ -534,13 +540,13 @@ const COPY: Record<Locale, Copy> = {
       "Confirm which text enters the configuration draft; unconfirmed AI inferences stay out of the draft.",
     confirmed: "Confirmed",
     notConfirmed: "Not confirmed",
-    createDraft: "Create complete YAML draft",
+    createDraft: "Finish content and preview",
     draftHeading: "Draft ready",
     draftDescription:
-      "Run the existing checks and preview first; saving to GitHub remains a separate explicit action.",
+      "Keep the draft on your host and apply it to update your NPC. GitHub only needs the card.",
     copyDraft: "Copy YAML",
-    downloadDraft: "Download YAML",
-    draftReady: "The YAML draft is ready to inspect in advanced mode.",
+    downloadDraft: "Back up settings (YAML)",
+    draftReady: "Content is ready. Open Preview & share to prepare the NPC.",
     advancedMode: "Advanced raw YAML mode",
     guidedMode: "Return to guided mode",
     rawYamlWarning:
@@ -715,7 +721,7 @@ function EvidenceFact({ fact }: { fact: RepositoryFact }) {
   return (
     <li>
       <strong>{location}</strong>
-      <span>{fact.text}</span>
+      <span>{fact.excerpt}</span>
       <code>{fact.evidence_id}</code>
     </li>
   );
@@ -797,6 +803,39 @@ function EvidenceGroups({
         )}
       </section>
     </div>
+  );
+}
+
+function BatchAnalysisResults({
+  repositories,
+  locale,
+  copy,
+}: {
+  repositories: GuidedRepository[];
+  locale: Locale;
+  copy: Copy;
+}) {
+  const completed = repositories.filter(analysisReady);
+  if (completed.length === 0) return null;
+  return (
+    <section aria-label={copy.factsHeading}>
+      <ul>
+        {completed.map((repository) => (
+          <li
+            className="guided-onboarding__repository"
+            data-analysis-result={repository.metadata.slug}
+            key={repository.metadata.slug}
+          >
+            <h3>{repository.metadata.slug}</h3>
+            <EvidenceGroups
+              copy={copy}
+              locale={locale}
+              repository={repository}
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -1017,6 +1056,7 @@ function ContributionEditor({
   }
 
   const proposal = repository.proposal;
+  const proposalLocked = repository.confirmedContribution !== null;
   const proposalMissingBilingual = proposal
     ? [
         proposal.role["zh-TW"],
@@ -1088,9 +1128,23 @@ function ContributionEditor({
       )}
 
       {repository.confirmedContribution && (
-        <p className="guided-onboarding__confirmed" role="status">
-          {copy.assertionConfirmed}
-        </p>
+        <>
+          <p className="guided-onboarding__confirmed" role="status">
+            {copy.assertionConfirmed}
+          </p>
+          <button
+            disabled={busy}
+            onClick={() =>
+              onAction({
+                type: "EDIT_CONFIRMED_CONTRIBUTION",
+                slug: repository.metadata.slug,
+              })
+            }
+            type="button"
+          >
+            {copy.editConfirmed}
+          </button>
+        </>
       )}
 
       {proposal && (
@@ -1121,7 +1175,7 @@ function ContributionEditor({
               >
                 {copy.roleLabel} ({copy.profileLocale(proposalLocale)})
                 <input
-                  disabled={busy}
+                  disabled={busy || proposalLocked}
                   id={`guided-role-${slugId}-${proposalLocale}`}
                   onChange={(event) =>
                     proposalChange(
@@ -1144,7 +1198,7 @@ function ContributionEditor({
               >
                 {copy.summaryLabel} ({copy.profileLocale(proposalLocale)})
                 <textarea
-                  disabled={busy}
+                  disabled={busy || proposalLocked}
                   id={`guided-summary-${slugId}-${proposalLocale}`}
                   onChange={(event) =>
                     proposalChange(
@@ -1161,7 +1215,7 @@ function ContributionEditor({
                 />
               </label>
             ))}
-            <fieldset disabled={busy}>
+            <fieldset disabled={busy || proposalLocked}>
               <legend>{copy.claimsHeading}</legend>
               {proposal.claims.flatMap((claim, index) =>
                 (["zh-TW", "en"] as const).map((proposalLocale) => (
@@ -1191,36 +1245,54 @@ function ContributionEditor({
               )}
             </fieldset>
           </section>
-          <div className="guided-onboarding__proposal-actions">
-            <button
-              aria-describedby={
-                proposalDisabledReason
-                  ? `guided-proposal-reason-${slugId}`
-                  : undefined
-              }
-              disabled={Boolean(proposalDisabledReason)}
-              className="ux-primary"
-              onClick={() => confirmContribution(proposal)}
-              type="button"
-            >
-              {copy.accept}
-            </button>
-            <button
-              disabled={busy}
-              onClick={() =>
-                onAction({
-                  type: "REJECT_CONTRIBUTION",
-                  slug: repository.metadata.slug,
-                })
-              }
-              type="button"
-            >
-              {copy.reject}
-            </button>
-          </div>
-          {disabledReason(
-            proposalDisabledReason,
-            `guided-proposal-reason-${slugId}`,
+          {!proposalLocked && (
+            <>
+              <div className="guided-onboarding__proposal-actions">
+                <button
+                  aria-describedby={
+                    proposalDisabledReason
+                      ? `guided-proposal-reason-${slugId}`
+                      : undefined
+                  }
+                  disabled={Boolean(proposalDisabledReason)}
+                  className="ux-primary"
+                  onClick={() => confirmContribution(proposal)}
+                  type="button"
+                >
+                  {copy.accept}
+                </button>
+                {repository.previousContribution && (
+                  <button
+                    disabled={busy}
+                    onClick={() =>
+                      onAction({
+                        type: "RESTORE_PREVIOUS_CONTRIBUTION",
+                        slug: repository.metadata.slug,
+                      })
+                    }
+                    type="button"
+                  >
+                    {copy.restorePrevious}
+                  </button>
+                )}
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    onAction({
+                      type: "REJECT_CONTRIBUTION",
+                      slug: repository.metadata.slug,
+                    })
+                  }
+                  type="button"
+                >
+                  {copy.reject}
+                </button>
+              </div>
+              {disabledReason(
+                proposalDisabledReason,
+                `guided-proposal-reason-${slugId}`,
+              )}
+            </>
           )}
         </section>
       )}
@@ -1603,6 +1675,11 @@ function AnalysisStep({
       {hasBatchAnalysis ? (
         <>
           {batchAnalysisView}
+          <BatchAnalysisResults
+            copy={copy}
+            locale={locale}
+            repositories={repositories}
+          />
           {onCreateBatch && (
             <div className="guided-onboarding__analysis-action">
               <button
@@ -2077,8 +2154,8 @@ function DraftStep({
       <p>{copy.draftDescription}</p>
       <p>
         {chinese
-          ? "設定草稿已完成，尚未發布。你可以下載保存，或進入進階模式驗證與預覽。"
-          : "Your configuration draft is complete but not published. Download it, or open advanced mode to validate and preview."}
+          ? "內容草稿已完成，尚未套用。前往「預覽與分享」預覽、準備 NPC 並取得 GitHub 卡片。下方設定檔僅供備份／搬移，不是已上線網站。"
+          : "Content is complete but not applied. Open Preview & share to preview, prepare your NPC and get its GitHub card. The settings file below is a backup, not a deployed website."}
       </p>
       <p role="status">{copy.draftReady}</p>
       <div className="guided-onboarding__draft-actions">
@@ -2115,7 +2192,7 @@ function DraftStep({
       {copyStatus === "failed" && (
         <p role="alert">
           {chinese
-            ? "無法使用剪貼簿，請改用下載 YAML。"
+            ? "無法使用剪貼簿，請改用備份設定（YAML）。"
             : "Clipboard unavailable. Download the YAML instead."}
         </p>
       )}
@@ -2166,6 +2243,7 @@ export function GuidedOnboardingView({
   workspaceStatus,
 }: GuidedOnboardingViewProps & { workspaceStatus?: AdminWorkspaceStatus }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const errorRef = useRef<HTMLParagraphElement>(null);
   const previousStep = useRef(state.step);
   useEffect(() => {
     if (previousStep.current !== state.step) {
@@ -2173,6 +2251,9 @@ export function GuidedOnboardingView({
       previousStep.current = state.step;
     }
   }, [state.step]);
+  useEffect(() => {
+    if (errorCode) errorRef.current?.focus();
+  }, [errorCode]);
   const copy = COPY[locale];
   const error = errorCode ? guidedErrorMessage(locale, errorCode) : "";
   const navigationBatchActive =
@@ -2263,7 +2344,12 @@ export function GuidedOnboardingView({
         </p>
       )}
       {error && (
-        <p className="guided-onboarding__error" role="alert">
+        <p
+          className="guided-onboarding__error"
+          ref={errorRef}
+          role="alert"
+          tabIndex={-1}
+        >
           <strong>{copy.errorHeading}</strong> {error}
         </p>
       )}

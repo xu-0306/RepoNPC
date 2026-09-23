@@ -1,0 +1,345 @@
+{
+  "schema_version": 3,
+  "recorded_at": "2026-09-19T20:55:18+08:00",
+  "base_head": "c643affcead613db19f2f388fffe95341e541fdb",
+  "worktree_fingerprint": {
+    "algorithm": "sha256",
+    "value": "5f85446e3aa76d2e6f9e32696797ae28282983560ae65284594ea04b86d92625",
+    "file_count": 49,
+    "scope": "All tracked modifications plus relevant untracked files under apps/web/src/app, apps/web/src/features/admin, and tests/browser. Evidence JSON files and unrelated user-owned untracked directories are excluded. The fingerprint hashes the UTF-8 sorted manifest text '<path> <sha256>\\n'.",
+    "files": [
+      {
+        "path": "apps/web/src/app/App.test.ts",
+        "sha256": "537541736c3a78b4ef90094ddcde6cd9739d575148ef62a565a387de86a37eff"
+      },
+      {
+        "path": "apps/web/src/app/App.tsx",
+        "sha256": "5f707e4209662e87ee6c41d3f89aca82a3b7fcda0ed7cd45a73e5d66a5ba65b1"
+      },
+      {
+        "path": "apps/web/src/app/visitorFocus.ts",
+        "sha256": "fb82f11d971693c608efea0eefbfb354f3afede32f7db4767afb30e19baa73ae"
+      },
+      {
+        "path": "apps/web/src/features/admin/__fixtures__/analysisModelPair.safe.json",
+        "sha256": "d8fca287845df4eb2fc45da97e751e0d0023c9068904d43ddf91476455159333"
+      },
+      {
+        "path": "apps/web/src/features/admin/AdminPage.test.tsx",
+        "sha256": "19d24558e8967e2e0c542ec37ec0acc51b7d4199aa415e472666c0ed285c1a33"
+      },
+      {
+        "path": "apps/web/src/features/admin/AdminPage.tsx",
+        "sha256": "efdcf6bd1bfc14683e9996bef5b4618a72834ed9da216b573a0b4b86e9f24a8b"
+      },
+      {
+        "path": "apps/web/src/features/admin/AdminWorkspace.tsx",
+        "sha256": "5b58094bb72c0808be6ad9650eece16d689665789d676c73ed2a447582959ac1"
+      },
+      {
+        "path": "apps/web/src/features/admin/analysisModelConfirmation.ts",
+        "sha256": "ab5faee880be6657064c3b8f703baad747ff68703b08da20e0efdc5639973aad"
+      },
+      {
+        "path": "apps/web/src/features/admin/BatchAnalysisPanel.test.tsx",
+        "sha256": "69d21d68df28a261fc83245f0893d5fcb97c85c3ccdbf15957d2cec24201d5e9"
+      },
+      {
+        "path": "apps/web/src/features/admin/BatchAnalysisPanel.tsx",
+        "sha256": "5c889e7a4fd9fc2ea46ad393dc57ecfa0c0a1cdb3840e1ec256b95e691067ffd"
+      },
+      {
+        "path": "apps/web/src/features/admin/batchMutationRecovery.test.ts",
+        "sha256": "91a0acc684c53a2164290ade86a027a4f81570bc4eb252647299eec3d957e8c5"
+      },
+      {
+        "path": "apps/web/src/features/admin/batchMutationRecovery.ts",
+        "sha256": "3ab4a4ad4c32b53dba46fe4fa9875baee6e5c5f9016a07e3d4be5b2d8e3194e8"
+      },
+      {
+        "path": "apps/web/src/features/admin/guidedOnboarding.test.ts",
+        "sha256": "988fb16475943f905c4613e45e40638726381f063333b2965539440cd2de7de0"
+      },
+      {
+        "path": "apps/web/src/features/admin/guidedOnboarding.ts",
+        "sha256": "48729128b617d57af9d95c2b811e648a916d415aa8efd5c697481cf82e942d04"
+      },
+      {
+        "path": "apps/web/src/features/admin/GuidedOnboardingView.test.tsx",
+        "sha256": "ef8d47acfa64b4583e01a29fee98986183c6390b212430200eed4302a7bbb442"
+      },
+      {
+        "path": "apps/web/src/features/admin/GuidedOnboardingView.tsx",
+        "sha256": "e1bb8f8370867ec9e9925137b4ab672e56e5550ff00daecfeca663a5030f65b4"
+      },
+      {
+        "path": "docs/ACCEPTANCE_CRITERIA.md",
+        "sha256": "fc33cb20f13a28d5d74cb3c2586f7be329633f1c42bad510b3f14723e3eb8b79"
+      },
+      {
+        "path": "docs/DECISIONS.md",
+        "sha256": "10fbd8890246d79f18c264d6e0eecb4f8aa0fd0698e4b45eb9844761a9bb3cd2"
+      },
+      {
+        "path": "docs/OPERATIONS.md",
+        "sha256": "a9ca677a6ae796bf05b2462b1600b0892c4ac0f7db1056dea5b032f65909c670"
+      },
+      {
+        "path": "docs/REPAIR_PROGRESS_2026-09-17.md",
+        "sha256": "f1f4bdb678244437229e641c986e577b6a293bf5cb9cf51fb69bbdaa0f11bd92"
+      },
+      {
+        "path": "docs/SECURITY.md",
+        "sha256": "5dfcae5f81dfce2962abcf900795c4db8be6fa12d19d090f99219b2616bdb55b"
+      },
+      {
+        "path": "docs/TECHNICAL_SPEC.md",
+        "sha256": "62168a10722adecb523d8656cd26ed007a8390b35530bb89d2d0b08641ed63c7"
+      },
+      {
+        "path": "README.md",
+        "sha256": "c8ba9393c018232ea4cd6dfc6475a86ca7796c28d1b9caf5d5a48c11a7b81480"
+      },
+      {
+        "path": "src/reponpc/admin/batch_execution.py",
+        "sha256": "c38d269dfca057ebb4ac7197a693a224bad84a0d98e6bb68bad089d8b491043b"
+      },
+      {
+        "path": "src/reponpc/admin/batch_runtime.py",
+        "sha256": "cac5f43a056662c3485cef1aef24eb04e3f0eef1754244e0cb720a75b678afc2"
+      },
+      {
+        "path": "src/reponpc/admin/batches.py",
+        "sha256": "58a073d3bde5ec42c8cfe197ba33336ef261ea589978c46e06880412b03bb1d1"
+      },
+      {
+        "path": "src/reponpc/admin/onboarding.py",
+        "sha256": "1a2e0639c03a06e19eb8910634e92b6d01e887986bc8e0f8224e3fa1474e6086"
+      },
+      {
+        "path": "src/reponpc/admin/operations.py",
+        "sha256": "77769ade087406981c83ec1280c0d563d8c2aa0c93e58043ce1ee684df289914"
+      },
+      {
+        "path": "src/reponpc/api/admin.py",
+        "sha256": "d534ee9866ebc3902d84a5325175973f299909fbdc99740779b32c4ee48de4a0"
+      },
+      {
+        "path": "src/reponpc/cards/render.py",
+        "sha256": "ac5618c9b25abd88f57bf3498eee288c660914a6d8dde8de11ab2046cd11d760"
+      },
+      {
+        "path": "src/reponpc/main.py",
+        "sha256": "30ff8b652ead8b8e8a6ccc4617f8ba7934020d0fb84189742fd2079f2f44044c"
+      },
+      {
+        "path": "src/reponpc/runtime/database.py",
+        "sha256": "3570a5a21f095128140e17d6a4a11631cc27a4c9674c2da5f778c722f5aae99b"
+      },
+      {
+        "path": "tests/browser/analysis_recovery_server.py",
+        "sha256": "f5878128b4e49bc998f56ed64a05399a282f4eb7e9ea91c2f586ce8b33194bc5"
+      },
+      {
+        "path": "tests/browser/check-analysis-recovery.js",
+        "sha256": "6a6d8eb3510adfe4b2e0a7668ac489c2b593c2797763af9e07d1842cdb4e1de0"
+      },
+      {
+        "path": "tests/browser/check-visitor-chat.js",
+        "sha256": "f00c85f999964d92dd9ffd4ee45432588cbcadbb22dea06fd98d3610168ab325"
+      },
+      {
+        "path": "tests/browser/README.md",
+        "sha256": "8383f9f9fefa58abd725aacdff6f4cbad5ea5af6f85f9dcc2c46df154d67378e"
+      },
+      {
+        "path": "tests/browser/visitor_chat_server.py",
+        "sha256": "ddb2bd693258746fdc45ac28aaa2c7f7c8b35c21e35e742502392f5f9b1226a5"
+      },
+      {
+        "path": "tests/contract/test_analysis_output_policy.py",
+        "sha256": "47224632cda84a79cf02f92ad97e1764990fc5d1ee39c46461764651b0edd3b4"
+      },
+      {
+        "path": "tests/contract/test_phase2_closure_spec.py",
+        "sha256": "d58718fed58a27c8bfb0ad33697b61de0664cccac1586fad31949b8ab24a5126"
+      },
+      {
+        "path": "tests/integration/test_admin_onboarding.py",
+        "sha256": "737f51212964aeeeadd3b8505a3f74db40be3b351b066234902201f12ece0aab"
+      },
+      {
+        "path": "tests/integration/test_analysis_batch_api.py",
+        "sha256": "d09081442fe6a11f93b8bf918b38e77864becfdf4ef6b141dd2fb2b8c20bf6bc"
+      },
+      {
+        "path": "tests/integration/test_card_producer_consumer.py",
+        "sha256": "d01a6667e4f9b342bb8a18e61c1d142aac9d033797ba7cd77b7aa7cf84b5a048"
+      },
+      {
+        "path": "tests/integration/test_runtime_database.py",
+        "sha256": "e71a7a1f8da1980df49d3c2cc2bdba63b1aaced34300e67d94c74e9180cae160"
+      },
+      {
+        "path": "tests/unit/test_analysis_selection.py",
+        "sha256": "b19eb3aeb8a2023f96d8bb5d4f7ed1ff99a97711855d71daa92472b868956608"
+      },
+      {
+        "path": "tests/unit/test_batch_execution.py",
+        "sha256": "399063ba5f8d3a1fc2dc7036cb5ebb826952903b2660e0d94adf02897001f949"
+      },
+      {
+        "path": "tests/unit/test_batch_runtime.py",
+        "sha256": "1db9c61da88de8c8982773ce75ce85474f5715a6bbd7de35ba7e43221a2a4008"
+      },
+      {
+        "path": "tests/unit/test_batches.py",
+        "sha256": "5e553ec98993eb24e624fe94c76a8855d60773924f4b69a1e6480c1f4609e14e"
+      },
+      {
+        "path": "tests/unit/test_card_rendering.py",
+        "sha256": "5fe9c04f3b425bf6b9ffd2ea746c6c53546f08093d70fc66dddf1a74344c3c60"
+      },
+      {
+        "path": "tests/unit/test_guided_onboarding.py",
+        "sha256": "9d25a505ad3ca4a649234f06e13ace79e928165646e233f1fac2e566e807844f"
+      }
+    ]
+  },
+  "environment": {
+    "platform": "Windows",
+    "browser_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+    "server": "tests/browser/analysis_recovery_server.py",
+    "checker": "tests/browser/check-analysis-recovery.js",
+    "external_network_used": false,
+    "live_credentials_used": false,
+    "live_provider_used": false
+  },
+  "runs": [
+    {
+      "id": "r12a-iteration-1-running-runtime",
+      "status": "passed",
+      "checks_passed": 37,
+      "mode": "running_reconciliation_with_delayed_original_request",
+      "fresh_runtime": true,
+      "initial_batch": {
+        "total": 3,
+        "succeeded": 2,
+        "failed": 1
+      },
+      "provider_calls": {
+        "browser-chat-a|fixture/alpha": 1,
+        "browser-chat-a|fixture/beta": 1,
+        "browser-chat-a|fixture/fails-once": 2,
+        "browser-chat-b|fixture/fails-once": 1
+      },
+      "contribution": {
+        "provider_calls": 5,
+        "every_max_output_tokens": 700,
+        "every_schema_closed": true,
+        "every_schema_required": [
+          "role",
+          "summary",
+          "claims"
+        ],
+        "context_shortage_rejected_before_generation": true,
+        "delayed_response_discarded": true,
+        "output_limit_rejected": true,
+        "invalid_schema_rejected": true,
+        "manual_recovery_available": true,
+        "previous_confirmed_version_restored": true,
+        "confirmed_edit_required_reconfirmation": true,
+        "confirmed_only_yaml_boundary_passed": true
+      },
+      "terminal_api_snapshots": {
+        "compared": 2,
+        "state": "completed_with_errors",
+        "item_state": "failed",
+        "execution_elapsed_seconds": 4,
+        "values_matched": true
+      },
+      "delayed_status_transitions": [
+        "running"
+      ]
+    },
+    {
+      "id": "r12a-iteration-1-completed-runtime",
+      "status": "passed",
+      "checks_passed": 37,
+      "mode": "completed_reconciliation_from_current_production_snapshot",
+      "fresh_runtime": true,
+      "initial_batch": {
+        "total": 3,
+        "succeeded": 2,
+        "failed": 1
+      },
+      "provider_calls": {
+        "browser-chat-a|fixture/alpha": 1,
+        "browser-chat-a|fixture/beta": 1,
+        "browser-chat-a|fixture/fails-once": 2,
+        "browser-chat-b|fixture/fails-once": 1
+      },
+      "contribution": {
+        "provider_calls": 5,
+        "every_max_output_tokens": 700,
+        "every_schema_closed": true,
+        "every_schema_required": [
+          "role",
+          "summary",
+          "claims"
+        ],
+        "context_shortage_rejected_before_generation": true,
+        "delayed_response_discarded": true,
+        "output_limit_rejected": true,
+        "invalid_schema_rejected": true,
+        "manual_recovery_available": true,
+        "previous_confirmed_version_restored": true,
+        "confirmed_edit_required_reconfirmation": true,
+        "confirmed_only_yaml_boundary_passed": true
+      },
+      "terminal_api_snapshots": {
+        "compared": 2,
+        "state": "completed_with_errors",
+        "item_state": "failed",
+        "execution_elapsed_seconds": 0,
+        "values_matched": true
+      },
+      "delayed_status_transitions": []
+    }
+  ],
+  "evidence_contract": {
+    "exact_paths_and_lines": [
+      "src/main.py:1-2",
+      "src/main.py:4-5"
+    ],
+    "evidence_ids_and_excerpts_visible": true,
+    "successful_sibling_results_preserved": true,
+    "same_key_and_equivalent_key_deduplicated": true,
+    "stale_batch_and_contribution_generations_rejected": true,
+    "terminal_elapsed_and_completed_at_fixed": true,
+    "terminal_eta_stopped_and_disconnect_absent": true,
+    "locales_checked": [
+      "zh-TW",
+      "en"
+    ],
+    "contribution_fixed_budget": 700,
+    "analysis_budget_identity_unchanged": true,
+    "confirmed_only_yaml_draft": true,
+    "r10_person_subject_policy_regression": true,
+    "r12a_cache_integrity_regression": true
+  },
+  "automated_verification": {
+    "r10_focused": "65 passed",
+    "python_non_container": "1023 passed, 2 skipped, 1 warning",
+    "web": "24 files, 188 passed",
+    "ruff": "passed; 198 files formatted",
+    "mypy": "passed; 69 source files",
+    "prettier": "passed",
+    "eslint": "passed with 16 Fast Refresh warnings",
+    "typescript": "passed",
+    "production_build": "passed",
+    "git_diff_check": "passed",
+    "docker_smoke": "1 passed",
+    "r12a_focused": "53 passed"
+  }
+}

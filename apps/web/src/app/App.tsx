@@ -15,11 +15,12 @@ import {
 } from "../features/character/CharacterRenderer";
 import { messages, type Locale } from "../i18n/messages";
 import {
-  buildChatHistory,
+  requestPortfolioChat,
   collectValidatedReply,
   retainSuccessfulExchanges,
   type SuccessfulExchange,
 } from "./visitorChat";
+import { focusQuestionAfterPendingClears } from "./visitorFocus";
 
 import { AdminAccessLayout } from "../features/admin/AdminAccessLayout";
 import {
@@ -85,6 +86,7 @@ export function App() {
   const chatStatus = useRef<HTMLParagraphElement>(null);
   const statusController = useRef<AbortController | null>(null);
   const requestController = useRef<AbortController | null>(null);
+  const focusQuestionWhenIdle = useRef(false);
   const characterTimer = useRef<number | null>(null);
   const copy = messages[locale];
   const reducedMotion = useMemo(
@@ -164,6 +166,14 @@ export function App() {
   }, [refreshStatus]);
 
   useEffect(() => {
+    focusQuestionAfterPendingClears(
+      pending,
+      focusQuestionWhenIdle,
+      questionInput.current,
+    );
+  }, [pending]);
+
+  useEffect(() => {
     const controller = new AbortController();
     setProfile(null);
     setProfileError(false);
@@ -213,7 +223,6 @@ export function App() {
     // Set synchronously: two clicks before React renders must not submit twice.
     const controller = new AbortController();
     requestController.current = controller;
-    const history = buildChatHistory(exchanges);
     const requestId =
       window.crypto?.randomUUID?.() ??
       `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -233,12 +242,12 @@ export function App() {
     setPending(true);
     transitionCharacter("think");
     try {
-      const response = await fetch("/api/public/chat/stream", {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed, locale, history }),
-      });
+      const response = await requestPortfolioChat(
+        trimmed,
+        locale,
+        exchanges,
+        controller.signal,
+      );
       if (!response.ok || !response.body) throw new Error("chat unavailable");
       const answer = await collectValidatedReply(response.body, (event) => {
         if (requestController.current !== controller) return;
@@ -299,7 +308,7 @@ export function App() {
       // A rejected request is not proof that the model service is offline.
       transitionCharacter("idle");
       refreshStatus();
-      window.setTimeout(() => questionInput.current?.focus(), 0);
+      focusQuestionWhenIdle.current = true;
     } finally {
       if (requestController.current === controller) {
         requestController.current = null;

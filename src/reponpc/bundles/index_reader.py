@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import sqlite3
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -49,6 +50,12 @@ class IndexedEvidence:
     def github_permalink(self) -> str:
         """Build an immutable GitHub link only from validated index columns."""
 
+        if (
+            self.evidence_class == "OWNER_ASSERTION"
+            and self.repository_slug == "local/portfolio"
+            and self.metadata.get("origin") == "local"
+        ):
+            return f"/api/public/owner-statements/{self.commit_sha}/{self.evidence_id}"
         fragment = f"#L{self.start_line}"
         if self.end_line != self.start_line:
             fragment += f"-L{self.end_line}"
@@ -97,7 +104,9 @@ class ReadOnlyIndex:
             raise IndexReadError("index_missing")
         try:
             uri = f"file:{quote(index_path.resolve().as_posix())}?mode=ro"
-            connection = sqlite3.connect(uri, uri=True, isolation_level=None)
+            connection = sqlite3.connect(
+                uri, uri=True, isolation_level=None, check_same_thread=False
+            )
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA query_only = ON")
             connection.execute("PRAGMA foreign_keys = ON")
@@ -138,6 +147,17 @@ class ReadOnlyIndex:
             (evidence_id,),
         ).fetchone()
         return _evidence_from_row(row) if row is not None else None
+
+    def lexical_smoke_test(self) -> bool:
+        """Exercise search using this index's content, not a required topic word."""
+        if not self.vectors.evidence_ids:
+            return False
+        evidence = self.evidence(self.vectors.evidence_ids[0])
+        if evidence is None:
+            return False
+        term = re.search(r"\w+", evidence.path)
+        query = term.group(0)[:32] if term is not None else evidence.path[:2]
+        return bool(query and self.lexical_candidates(query, limit=1))
 
     def lexical_candidates(self, question: str, *, limit: int) -> list[str]:
         """Use both FTS tables with only P2-03-generated bound values."""

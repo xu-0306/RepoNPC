@@ -4,12 +4,18 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AdminAccessPanel,
   AdminPage,
+  batchAnalysisResult,
+  contributionSuggestionBody,
+  shouldApplyContributionResponse,
+  shouldApplyBatchSnapshot,
   takeLocalLaunchGrant,
   safeDraftForSessionStorage,
 } from "./AdminPage";
+import { analysisModelConfirmationMessage } from "./analysisModelConfirmation";
 import { modelConnectionFailureMessage } from "./modelConnectionFeedback";
 import { adminErrorStateReducer, initialAdminErrorState } from "./adminErrors";
 import { preflightState } from "./batchPreflight";
+import safeModelPair from "./__fixtures__/analysisModelPair.safe.json";
 
 describe("batch preflight mapping", () => {
   it("preserves the longest safe retry time and transient GitHub state", () => {
@@ -53,6 +59,211 @@ describe("batch preflight mapping", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("batch snapshot generation guard", () => {
+  it("rejects predecessor, pre-retry, and post-reset responses", () => {
+    expect(shouldApplyBatchSnapshot(null, "batch-source", 1, 1)).toBe(true);
+    expect(
+      shouldApplyBatchSnapshot("batch-successor", "batch-successor", 2, 2),
+    ).toBe(true);
+    expect(
+      shouldApplyBatchSnapshot("batch-successor", "batch-source", 2, 2),
+    ).toBe(false);
+    expect(shouldApplyBatchSnapshot("batch-source", "batch-source", 2, 3)).toBe(
+      false,
+    );
+    expect(shouldApplyBatchSnapshot(null, "batch-source", 3, 4)).toBe(false);
+  });
+});
+
+describe("analysis model confirmation", () => {
+  it("uses the nested safe model-pair response shape", () => {
+    const message = analysisModelConfirmationMessage(
+      "en",
+      "a".repeat(40),
+      safeModelPair,
+      {
+        chat_profile_id: "chat-current",
+        embedding_profile_id: "embedding-current",
+      },
+    );
+
+    expect(message).toContain("chat-safe / embedding-safe");
+    expect(message).toContain("chat-current / embedding-current");
+  });
+});
+
+describe("analysis response boundary", () => {
+  const response = {
+    repository: {
+      slug: "octocat/demo",
+      commit_sha: "a".repeat(40),
+      default_branch: "main",
+      html_url: "https://github.com/octocat/demo",
+    },
+    facts: [
+      {
+        evidence_class: "REPOSITORY_FACT",
+        evidence_id: "fact-1",
+        path: "src/index.ts",
+        start_line: 1,
+        end_line: 2,
+        excerpt: "export const demo = true;",
+      },
+    ],
+    inferences: [
+      {
+        evidence_class: "MODEL_INFERENCE",
+        statement: { "zh-TW": "推論", en: "Inference" },
+        supporting_evidence_ids: ["fact-1"],
+      },
+    ],
+    skipped_summary: { count: 0, reasons: [] },
+  };
+
+  it("accepts the canonical excerpt contract", () => {
+    expect(batchAnalysisResult(response)?.facts[0].excerpt).toBe(
+      "export const demo = true;",
+    );
+  });
+
+  it("rejects legacy text fields and malformed nested values", () => {
+    const legacy = {
+      ...response,
+      facts: [{ ...response.facts[0], excerpt: undefined, text: "legacy" }],
+    };
+    expect(batchAnalysisResult(legacy)).toBeNull();
+    expect(
+      batchAnalysisResult({
+        ...response,
+        inferences: [
+          { ...response.inferences[0], supporting_evidence_ids: [1] },
+        ],
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("contribution response boundary", () => {
+  const statement = "I assisted with the parser alongside another contributor.";
+  const response = {
+    slug: "octocat/demo",
+    original_statement: statement,
+    proposal: {
+      role: { "zh-TW": "共同維護者", en: "Co-maintainer" },
+      summary: {
+        "zh-TW": "協助維護解析器",
+        en: "Assisted with parser maintenance",
+      },
+      claims: [
+        {
+          id: "parser_context",
+          kind: "context",
+          statement: {
+            "zh-TW": "與其他貢獻者共同完成",
+            en: "Completed with another contributor",
+          },
+        },
+      ],
+    },
+    confirmed: false,
+  };
+
+  it("accepts only the request-bound unconfirmed proposal", () => {
+    expect(
+      contributionSuggestionBody(response, "octocat/demo", statement),
+    ).toEqual(response);
+    expect(
+      contributionSuggestionBody(response, "octocat/other", statement),
+    ).toBeNull();
+    expect(
+      contributionSuggestionBody(
+        response,
+        "octocat/demo",
+        `${statement} changed`,
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects confirmed, duplicate-ID, and extra-field responses", () => {
+    expect(
+      contributionSuggestionBody(
+        { ...response, confirmed: true },
+        "octocat/demo",
+        statement,
+      ),
+    ).toBeNull();
+    expect(
+      contributionSuggestionBody(
+        {
+          ...response,
+          proposal: {
+            ...response.proposal,
+            claims: [response.proposal.claims[0], response.proposal.claims[0]],
+          },
+        },
+        "octocat/demo",
+        statement,
+      ),
+    ).toBeNull();
+    expect(
+      contributionSuggestionBody(
+        { ...response, provider_body: "must not cross the boundary" },
+        "octocat/demo",
+        statement,
+      ),
+    ).toBeNull();
+  });
+
+  it("uses Unicode code points and strict claim-kind types", () => {
+    const unicodeBoundary = {
+      ...response,
+      proposal: {
+        ...response.proposal,
+        summary: { "zh-TW": "😀".repeat(2000), en: "Valid summary" },
+      },
+    };
+    expect(
+      contributionSuggestionBody(unicodeBoundary, "octocat/demo", statement),
+    ).toEqual(unicodeBoundary);
+    expect(
+      contributionSuggestionBody(
+        {
+          ...unicodeBoundary,
+          proposal: {
+            ...unicodeBoundary.proposal,
+            summary: { "zh-TW": "😀".repeat(2001), en: "Valid summary" },
+          },
+        },
+        "octocat/demo",
+        statement,
+      ),
+    ).toBeNull();
+    expect(
+      contributionSuggestionBody(
+        {
+          ...response,
+          proposal: {
+            ...response.proposal,
+            claims: [
+              { ...response.proposal.claims[0], kind: { toString: "context" } },
+            ],
+          },
+        },
+        "octocat/demo",
+        statement,
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("contribution request generation guard", () => {
+  it("rejects responses from an earlier edit or locale generation", () => {
+    expect(shouldApplyContributionResponse(4, 4)).toBe(true);
+    expect(shouldApplyContributionResponse(4, 5)).toBe(false);
+    expect(shouldApplyContributionResponse(4, 6)).toBe(false);
   });
 });
 

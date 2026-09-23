@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { Locale } from "../../i18n/messages";
+import { batchMutationResultUnknown } from "./batchMutationRecovery";
 
 export type BatchPreflightStatus =
   | "idle"
@@ -90,10 +91,17 @@ export type BatchRepositoryState =
   | "complete";
 
 export interface BatchRepositoryItem {
+  id: string;
   slug: string;
   stage: BatchRepositoryStage;
   state: BatchRepositoryState;
   retryable: boolean;
+  reanalyzable: boolean;
+  retryBlocker?:
+    | "ATTEMPTS_EXHAUSTED"
+    | "EXECUTION_BUDGET_EXHAUSTED"
+    | "SUCCESSOR_EXISTS";
+  failureStage?: BatchRepositoryStage;
   executionElapsedSeconds?: number;
   executionBudgetSeconds?: number;
   generationAttemptCount?: number;
@@ -107,15 +115,17 @@ export interface BatchJobSnapshot {
 }
 
 export interface BatchProgressAnnouncement {
-  completedItems: number;
+  processedItems: number;
   totalItems: number;
 }
 
 export interface BatchProgressState {
   totalItems: number;
-  completedItems: number;
+  processedItems: number;
+  successfulItems: number;
   activeItems: number;
   failedItems: number;
+  attentionItems: number;
   cancelledItems: number;
   elapsedSeconds: number;
   estimatedRemaining: BatchDurationEstimate | null;
@@ -134,6 +144,7 @@ export type BatchSseConnectionState =
   | "connected"
   | "reconnecting"
   | "disconnected"
+  | "complete"
   | "error";
 
 export interface BatchSseState {
@@ -143,7 +154,13 @@ export interface BatchSseState {
   lastEventId: string | null;
 }
 
-export type BatchAction = "pause" | "resume" | "cancel" | "retry";
+export type BatchAction =
+  | "pause"
+  | "resume"
+  | "cancel"
+  | "retry"
+  | "reanalyze"
+  | "reconcile";
 
 export interface BatchActionState {
   pending: BatchAction | null;
@@ -168,6 +185,9 @@ export interface BatchAnalysisPanelProps {
   onResume: (batchId: string) => void;
   onCancel: (batchId: string) => void;
   onRetry: (batchId: string) => void;
+  onReanalyze: (batchId: string, itemId: string) => void;
+  onReanalyzeCurrent?: (batchId: string, itemId: string) => void;
+  onReconcile: (batchId: string) => void;
   onRetryPreflight: () => void;
 }
 
@@ -208,7 +228,9 @@ type Copy = {
   effectiveConcurrency: string;
   serverConcurrency: string;
   completed: string;
+  processed: string;
   failed: string;
+  attention: string;
   cancelled: string;
   active: string;
   repositoryHeading: string;
@@ -221,16 +243,25 @@ type Copy = {
   resume: string;
   cancel: string;
   retry: string;
+  reanalyze: string;
+  reanalyzeCurrent: string;
   retryPreflight: string;
   pauseUnavailable: string;
   resumeUnavailable: string;
   cancelUnavailable: string;
   retryUnavailable: string;
+  reanalyzeUnavailable: (
+    blocker: BatchRepositoryItem["retryBlocker"],
+  ) => string;
   actionPending: (action: BatchAction) => string;
   actionFailed: string;
+  resultUnknown: string;
+  checkStatus: string;
+  recoveryFailure: (code: string) => string | null;
   repositoryFailed: string;
   repositoryErrorCode: string;
   repositoryErrorReason: string;
+  failureStage: string;
   retryAfter: (seconds: number) => string;
   batchStatus: (status: BatchJobStatus) => string;
 };
@@ -286,21 +317,24 @@ const COPY: Record<Locale, Copy> = {
         connecting: "正在連接即時進度。",
         connected: "即時進度已連接。",
         disconnected: "即時進度已中斷；畫面會以最新快照繼續顯示。",
+        complete: "分析已結束；畫面顯示最終結果。",
         error: "即時進度暫時無法使用；畫面會以最新快照繼續顯示。",
         reconnecting: "",
       }[state.connection];
     },
     progress: "彙總進度",
     progressSummary: (progress) =>
-      `已完成 ${progress.completedItems}/${progress.totalItems}；進行中 ${progress.activeItems}；失敗 ${progress.failedItems}；已取消 ${progress.cancelledItems}。`,
+      `已處理 ${progress.processedItems}/${progress.totalItems}；成功 ${progress.successfulItems}；進行中 ${progress.activeItems}；失敗 ${progress.failedItems}；待確認 ${progress.attentionItems}；已取消 ${progress.cancelledItems}。`,
     progressAnnouncement: (announcement) =>
-      `批次進度：已完成 ${announcement.completedItems}/${announcement.totalItems}。`,
+      `批次進度：已處理 ${announcement.processedItems}/${announcement.totalItems}。`,
     elapsed: "已耗時間",
     remaining: "預估剩餘時間",
     effectiveConcurrency: "有效並行數",
     serverConcurrency: "伺服器上限",
     completed: "已完成",
+    processed: "已處理",
     failed: "失敗",
+    attention: "待確認",
     cancelled: "已取消",
     active: "進行中",
     repositoryHeading: "各 repository 的進度",
@@ -313,17 +347,47 @@ const COPY: Record<Locale, Copy> = {
     resume: "繼續批次",
     cancel: "取消批次",
     retry: "重試需要確認的項目",
+    reanalyze: "重新分析此專案",
+    reanalyzeCurrent: "使用目前模型重新分析",
     retryPreflight: "重新執行分析前檢查",
     pauseUnavailable: "只有執行中的批次可以暫停。",
     resumeUnavailable: "只有已暫停的批次可以繼續。",
     cancelUnavailable: "只有佇列中、執行中或已暫停的批次可以取消。",
     retryUnavailable: "沒有需要明確確認重試的 repository。",
+    reanalyzeUnavailable: (blocker) =>
+      blocker === "SUCCESSOR_EXISTS"
+        ? "此項目已有後繼分析；請讀取該輪次，不要改寫來源紀錄。"
+        : blocker === "ATTEMPTS_EXHAUSTED"
+          ? "此專案本輪的模型嘗試次數已用盡；可建立新的受控分析輪次。"
+          : "此專案本輪的有效執行時間已用盡；可建立新的受控分析輪次。",
     actionPending: (action) =>
-      `正在${{ pause: "暫停", resume: "繼續", cancel: "取消", retry: "重試" }[action]}批次。`,
+      `正在${{ pause: "暫停", resume: "繼續", cancel: "取消", retry: "重試", reanalyze: "建立新一輪分析", reconcile: "核對" }[action]}批次。`,
     actionFailed: "批次操作未完成。請確認目前狀態後再試。",
+    resultUnknown: "伺服器可能已接受操作，但目前無法確認結果。",
+    checkStatus: "重新檢查批次狀態",
+    recoveryFailure: (code) =>
+      ({
+        ANALYSIS_RETRY_NOT_AVAILABLE:
+          "目前狀態不可同輪重試；請重新讀取，若額度已用盡則建立新一輪分析。",
+        ANALYSIS_SUCCESSOR_CONFLICT:
+          "這個失敗項目已有後繼分析；請重新讀取目前批次。",
+        ANALYSIS_SOURCE_STATE_CHANGED:
+          "來源分析狀態已變更；請重新讀取後再選擇可恢復項目。",
+        ANALYSIS_MODEL_SELECTION_STALE:
+          "模型選擇已變更；請重新檢查目前模型並再次確認。",
+        ANALYSIS_BATCH_ACTIVE:
+          "已有另一個分析批次正在執行；請重新讀取目前批次，完成或取消後再試。",
+        ANALYSIS_GENERATION_ATTEMPTS_EXHAUSTED:
+          "本輪模型嘗試次數已用盡；原結果保持不變，請檢查後建立新的受控分析輪次。",
+        ANALYSIS_EXECUTION_BUDGET_EXHAUSTED:
+          "本輪有效執行時間已用盡；原結果保持不變，請檢查後建立新的受控分析輪次。",
+        ANALYSIS_IDEMPOTENCY_CONFLICT:
+          "這個操作識別碼已用於不同內容；請重新讀取目前狀態後再送出新操作。",
+      })[code] ?? null,
     repositoryFailed: "此 repository 需要處理。",
     repositoryErrorCode: "錯誤代碼",
     repositoryErrorReason: "失敗原因",
+    failureStage: "失敗階段",
     retryAfter: (seconds) =>
       `請在約 ${formatDuration(seconds, "zh-TW")} 後再試。`,
     batchStatus: (status) => batchStatusLabel(status, "zh-TW"),
@@ -392,6 +456,7 @@ const COPY: Record<Locale, Copy> = {
         connected: "Live progress is connected.",
         disconnected:
           "Live progress disconnected; the latest snapshot remains visible.",
+        complete: "Analysis has ended. The final snapshot is displayed.",
         error:
           "Live progress is temporarily unavailable; the latest snapshot remains visible.",
         reconnecting: "",
@@ -399,15 +464,17 @@ const COPY: Record<Locale, Copy> = {
     },
     progress: "Aggregate progress",
     progressSummary: (progress) =>
-      `${progress.completedItems}/${progress.totalItems} complete; ${progress.activeItems} active; ${progress.failedItems} failed; ${progress.cancelledItems} cancelled.`,
+      `${progress.processedItems}/${progress.totalItems} processed; ${progress.successfulItems} succeeded; ${progress.activeItems} active; ${progress.failedItems} failed; ${progress.attentionItems} need confirmation; ${progress.cancelledItems} cancelled.`,
     progressAnnouncement: (announcement) =>
-      `Batch progress: ${announcement.completedItems} of ${announcement.totalItems} complete.`,
+      `Batch progress: ${announcement.processedItems} of ${announcement.totalItems} processed.`,
     elapsed: "Elapsed",
     remaining: "Estimated remaining",
     effectiveConcurrency: "Effective concurrency",
     serverConcurrency: "Server limit",
     completed: "Complete",
+    processed: "Processed",
     failed: "Failed",
+    attention: "Needs confirmation",
     cancelled: "Cancelled",
     active: "Active",
     repositoryHeading: "Repository progress",
@@ -420,6 +487,8 @@ const COPY: Record<Locale, Copy> = {
     resume: "Resume batch",
     cancel: "Cancel batch",
     retry: "Retry items that need confirmation",
+    reanalyze: "Reanalyze this project",
+    reanalyzeCurrent: "Reanalyze with current models",
     retryPreflight: "Run preflight again",
     pauseUnavailable: "Only a running batch can be paused.",
     resumeUnavailable: "Only a paused batch can be resumed.",
@@ -427,13 +496,42 @@ const COPY: Record<Locale, Copy> = {
       "Only a queued, running, or paused batch can be cancelled.",
     retryUnavailable:
       "No repository currently needs an explicit retry confirmation.",
+    reanalyzeUnavailable: (blocker) =>
+      blocker === "SUCCESSOR_EXISTS"
+        ? "This item already has a successor. Open that round instead of rewriting the source record."
+        : blocker === "ATTEMPTS_EXHAUSTED"
+          ? "This project's model attempts are exhausted for the current round. You can start a new bounded round."
+          : "This project's active-time budget is exhausted for the current round. You can start a new bounded round.",
     actionPending: (action) =>
-      `Batch ${{ pause: "pause", resume: "resume", cancel: "cancellation", retry: "retry" }[action]} is in progress.`,
+      `Batch ${{ pause: "pause", resume: "resume", cancel: "cancellation", retry: "retry", reanalyze: "successor analysis", reconcile: "status check" }[action]} is in progress.`,
     actionFailed:
       "The batch action did not complete. Check the current status and try again.",
+    resultUnknown:
+      "The server may have accepted the operation, but its result is not confirmed yet.",
+    checkStatus: "Check batch status",
+    recoveryFailure: (code) =>
+      ({
+        ANALYSIS_RETRY_NOT_AVAILABLE:
+          "This state cannot continue the same round. Reload it and create a successor if the budget is exhausted.",
+        ANALYSIS_SUCCESSOR_CONFLICT:
+          "This failed item already has a successor. Reload the current batch instead.",
+        ANALYSIS_SOURCE_STATE_CHANGED:
+          "The source analysis changed. Reload it before selecting recoverable items again.",
+        ANALYSIS_MODEL_SELECTION_STALE:
+          "The model selection changed. Review the current models and confirm again.",
+        ANALYSIS_BATCH_ACTIVE:
+          "Another analysis batch is active. Reload the current batch, then finish or cancel it before retrying.",
+        ANALYSIS_GENERATION_ATTEMPTS_EXHAUSTED:
+          "This round exhausted its model attempts. Existing results are preserved; review them and start a bounded successor round.",
+        ANALYSIS_EXECUTION_BUDGET_EXHAUSTED:
+          "This round exhausted its active-time budget. Existing results are preserved; review them and start a bounded successor round.",
+        ANALYSIS_IDEMPOTENCY_CONFLICT:
+          "This operation identifier was already used for different content. Reload the current state before submitting a new operation.",
+      })[code] ?? null,
     repositoryFailed: "This repository needs attention.",
     repositoryErrorCode: "Error code",
     repositoryErrorReason: "Failure reason",
+    failureStage: "Failure stage",
     retryAfter: (seconds) =>
       `Try again in about ${formatDuration(seconds, "en")}.`,
     batchStatus: (status) => batchStatusLabel(status, "en"),
@@ -459,6 +557,9 @@ function batchActionAvailability(
   if (!job) {
     return { pause: false, resume: false, cancel: false, retry: false };
   }
+  if (batchMutationResultUnknown(actions)) {
+    return { pause: false, resume: false, cancel: false, retry: false };
+  }
 
   return {
     pause: job.status === "running" && actions.pending !== "pause",
@@ -469,6 +570,12 @@ function batchActionAvailability(
     retry:
       job.items.some((item) => item.retryable) && actions.pending !== "retry",
   };
+}
+
+function isTerminalJob(status: BatchJobStatus): boolean {
+  return ["cancelled", "completed", "completed_with_errors", "failed"].includes(
+    status,
+  );
 }
 
 export function BatchAnalysisPanel({
@@ -482,12 +589,14 @@ export function BatchAnalysisPanel({
   onResume,
   onCancel,
   onRetry,
+  onReanalyze,
+  onReanalyzeCurrent,
+  onReconcile,
   onRetryPreflight,
 }: BatchAnalysisPanelProps) {
   const copy = COPY[locale];
   const availability = batchActionAvailability(job, actions);
-  const activeJob =
-    job !== null && !["completed", "failed", "cancelled"].includes(job.status);
+  const activeJob = job !== null && !isTerminalJob(job.status);
 
   return (
     <section
@@ -511,9 +620,19 @@ export function BatchAnalysisPanel({
       />
 
       {actions.error && (
-        <p className="guided-onboarding__error" role="alert">
-          {operationErrorMessage(actions.error, copy)}
-        </p>
+        <div className="guided-onboarding__error" role="alert">
+          <p>{operationErrorMessage(actions.error, copy)}</p>
+          {actions.error.code === "ANALYSIS_RESULT_UNKNOWN" &&
+            actions.error.batchId && (
+              <button
+                disabled={actions.pending !== null}
+                onClick={() => onReconcile(actions.error?.batchId ?? "")}
+                type="button"
+              >
+                {copy.checkStatus}
+              </button>
+            )}
+        </div>
       )}
 
       <section aria-labelledby="batch-progress-heading">
@@ -556,7 +675,15 @@ export function BatchAnalysisPanel({
               onRetry={onRetry}
             />
 
-            <RepositoryList copy={copy} items={job.items} locale={locale} />
+            <RepositoryList
+              actions={actions}
+              batchId={job.id}
+              copy={copy}
+              items={job.items}
+              locale={locale}
+              onReanalyze={onReanalyze}
+              onReanalyzeCurrent={onReanalyzeCurrent}
+            />
           </>
         )}
       </section>
@@ -717,9 +844,9 @@ function ProgressSummary({
       <p>{copy.progressSummary(progress)}</p>
       <progress
         max={Math.max(progress.totalItems, 1)}
-        value={progress.completedItems}
+        value={progress.processedItems}
       >
-        {progress.completedItems}/{progress.totalItems}
+        {progress.processedItems}/{progress.totalItems}
       </progress>
       <p
         aria-atomic="true"
@@ -745,12 +872,16 @@ function ProgressSummary({
         <dd>{progress.effectiveConcurrency ?? copy.notReported}</dd>
         <dt>{copy.serverConcurrency}</dt>
         <dd>{progress.serverConcurrency ?? copy.notReported}</dd>
+        <dt>{copy.processed}</dt>
+        <dd>{progress.processedItems}</dd>
         <dt>{copy.completed}</dt>
-        <dd>{progress.completedItems}</dd>
+        <dd>{progress.successfulItems}</dd>
         <dt>{copy.active}</dt>
         <dd>{progress.activeItems}</dd>
         <dt>{copy.failed}</dt>
         <dd>{progress.failedItems}</dd>
+        <dt>{copy.attention}</dt>
+        <dd>{progress.attentionItems}</dd>
         <dt>{copy.cancelled}</dt>
         <dd>{progress.cancelledItems}</dd>
       </dl>
@@ -853,13 +984,21 @@ function BatchControls({
 }
 
 function RepositoryList({
+  actions,
+  batchId,
   copy,
   items,
   locale,
+  onReanalyze,
+  onReanalyzeCurrent,
 }: {
+  actions: BatchActionState;
+  batchId: string;
   copy: Copy;
   items: readonly BatchRepositoryItem[];
   locale: Locale;
+  onReanalyze: (batchId: string, itemId: string) => void;
+  onReanalyzeCurrent?: (batchId: string, itemId: string) => void;
 }) {
   return (
     <section aria-labelledby="batch-repository-progress-heading">
@@ -922,7 +1061,46 @@ function RepositoryList({
                         <dd>{safeRepositoryErrorReason(item.error.reason)}</dd>
                       </>
                     )}
+                    {item.failureStage && (
+                      <>
+                        <dt>{copy.failureStage}</dt>
+                        <dd>
+                          {repositoryStageLabel(item.failureStage, locale)}
+                        </dd>
+                      </>
+                    )}
                   </dl>
+                </div>
+              )}
+              {item.reanalyzable && (
+                <div className="guided-onboarding__analysis-action">
+                  <p className="guided-onboarding__disabled-reason">
+                    {copy.reanalyzeUnavailable(item.retryBlocker)}
+                  </p>
+                  <button
+                    aria-busy={actions.pending === "reanalyze" || undefined}
+                    disabled={
+                      actions.pending !== null ||
+                      batchMutationResultUnknown(actions)
+                    }
+                    onClick={() => onReanalyze(batchId, item.id)}
+                    type="button"
+                  >
+                    {copy.reanalyze}
+                  </button>
+                  {onReanalyzeCurrent && (
+                    <button
+                      aria-busy={actions.pending === "reanalyze" || undefined}
+                      disabled={
+                        actions.pending !== null ||
+                        batchMutationResultUnknown(actions)
+                      }
+                      onClick={() => onReanalyzeCurrent(batchId, item.id)}
+                      type="button"
+                    >
+                      {copy.reanalyzeCurrent}
+                    </button>
+                  )}
                 </div>
               )}
             </li>
@@ -936,6 +1114,7 @@ function RepositoryList({
 const REPOSITORY_ERROR_CODES = new Set([
   "ANALYSIS_FAILED",
   "ANALYSIS_TIMEOUT",
+  "ANALYSIS_GENERATION_ATTEMPTS_EXHAUSTED",
   "ARCHIVE_TOO_LARGE",
   "ARCHIVE_INVALID",
   "ARCHIVE_UNSAFE",
@@ -1011,6 +1190,8 @@ function repositoryErrorMessage(
       PROVIDER_ERROR: "聊天模型呼叫或回傳內容驗證失敗。",
       PROVIDER_TIMEOUT: "模型服務在此階段的無活動期限內沒有回應。",
       ANALYSIS_TIMEOUT: "此 repository 已達整體分析安全上限。",
+      ANALYSIS_GENERATION_ATTEMPTS_EXHAUSTED:
+        "此 repository 本輪可用的模型嘗試次數已用盡。",
       ARCHIVE_TOO_LARGE:
         "Repository 封存檔超過目前設定的總大小或項目數安全上限。",
       ARCHIVE_INVALID: "GitHub 回傳的 repository 封存檔無法解析。",
@@ -1038,6 +1219,8 @@ function repositoryErrorMessage(
         "The model service did not respond within this stage's inactivity timeout.",
       ANALYSIS_TIMEOUT:
         "This repository reached the overall analysis safety ceiling.",
+      ANALYSIS_GENERATION_ATTEMPTS_EXHAUSTED:
+        "This repository exhausted its model attempts for the current round.",
       ARCHIVE_TOO_LARGE:
         "The repository archive exceeded the configured total-size or entry-count safety ceiling.",
       ARCHIVE_INVALID:
@@ -1069,16 +1252,28 @@ function operationErrorMessage(error: BatchOperationError, copy: Copy): string {
   const retry = error.retryAfterSeconds
     ? ` ${copy.retryAfter(error.retryAfterSeconds)}`
     : "";
+  const requestId =
+    error.requestId &&
+    /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(error.requestId)
+      ? error.requestId
+      : null;
+  const withRequestId = (message: string) =>
+    requestId ? `${message} (${requestId})` : message;
+  if (error.code === "ANALYSIS_RESULT_UNKNOWN") {
+    return copy.resultUnknown;
+  }
   if (error.code === "RATE_LIMITED" || error.code === "GITHUB_RATE_LIMITED") {
-    return `${copy.blocker("rate_limited")}${retry}`;
+    return withRequestId(`${copy.blocker("rate_limited")}${retry}`);
   }
   if (error.scope === "preflight") {
-    return `${copy.preflightFailed}${retry}`;
+    return withRequestId(`${copy.preflightFailed}${retry}`);
   }
   if (error.code === "MODEL_UNAVAILABLE" || error.code === "PROVIDER_TIMEOUT") {
-    return `${copy.blocker("provider_unavailable")}${retry}`;
+    return withRequestId(`${copy.blocker("provider_unavailable")}${retry}`);
   }
-  return `${copy.actionFailed}${retry}`;
+  const recovery = copy.recoveryFailure(error.code);
+  if (recovery) return withRequestId(`${recovery}${retry}`);
+  return withRequestId(`${copy.actionFailed}${retry}`);
 }
 
 function batchStatusLabel(status: BatchJobStatus, locale: Locale): string {

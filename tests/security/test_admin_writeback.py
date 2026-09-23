@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from PIL import Image
 from reponpc.admin.auth import AdminSessionService
 from reponpc.admin.github import GitHubAdminClient, GitHubResponse
 from reponpc.admin.operations import AdminOperations
+from reponpc.cards.assets import FRAME_COLUMNS, FRAME_ROWS, FRAME_SIZE, HEIGHT, WIDTH
 from reponpc.main import create_app
 from reponpc.runtime.database import RuntimeDatabase
 
@@ -23,14 +25,16 @@ CUSTOM_CONFIG = CONFIG.decode().replace(
     """  mode: builtin
   revision: 0
   builtin:
-    body: standard
-    skin: medium
-    hair: short
-    hair_color: '#2b1d14'
-    outfit: engineer
-    primary_color: '#6d5dfc'
-    secondary_color: '#f2c14e'
-    accessory: glasses
+    pack_id: core/humanoid
+    pack_version: 1
+    options:
+      tone: medium
+      hairstyle: short
+      attire: engineer
+      hair_color: '#2b1d14'
+      primary_color: '#6d5dfc'
+      secondary_color: '#f2c14e'
+      accessory: glasses
 """,
     """  mode: custom
   revision: 0
@@ -79,12 +83,51 @@ class RecordingTransport:
 
 
 def _sprite() -> bytes:
-    image = Image.new("RGBA", (128, 224), (0, 0, 0, 0))
-    for row in range(7):
-        for column in range(4):
-            image.putpixel((column * 32 + 4, row * 32 + 4), (20, 30, 40, 255))
+    image = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    for row in range(FRAME_ROWS):
+        for column in range(FRAME_COLUMNS):
+            image.putpixel(
+                (column * FRAME_SIZE + 4, row * FRAME_SIZE + 4),
+                (20, 30, 40, 255),
+            )
     output = io.BytesIO()
     image.save(output, "PNG")
+    return output.getvalue()
+
+
+def _source_grid(cell_size: int = 73) -> bytes:
+    image = Image.new(
+        "RGBA",
+        (FRAME_COLUMNS * cell_size, FRAME_ROWS * cell_size),
+        (0, 0, 0, 0),
+    )
+    for row in range(FRAME_ROWS):
+        for column in range(FRAME_COLUMNS):
+            image.putpixel(
+                (column * cell_size + 8, row * cell_size + 8),
+                (20 + row, 30 + column, 40, 255),
+            )
+    output = io.BytesIO()
+    image.save(output, "PNG")
+    return output.getvalue()
+
+
+def _source_grid_with_edge_spill(cell_size: int = 73) -> bytes:
+    image = Image.open(io.BytesIO(_source_grid(cell_size))).convert("RGBA")
+    for x in range(cell_size // 3, cell_size // 2):
+        image.putpixel((x, cell_size - 1), (90, 45, 25, 160))
+        image.putpixel((x, cell_size), (90, 45, 25, 160))
+    output = io.BytesIO()
+    image.save(output, "PNG")
+    return output.getvalue()
+
+
+def _discovery_zip() -> bytes:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("unknown/readme.txt", "fixture")
+        archive.writestr("unknown/first.png", _source_grid(73))
+        archive.writestr("unknown/second.png", _source_grid(91))
     return output.getvalue()
 
 
@@ -264,6 +307,11 @@ def test_github_token_only_gates_github_backed_admin_endpoints(tmp_path: Path) -
                 "/api/admin/assets/character/validate",
                 files={"file": ("hero.png", _sprite(), "image/png")},
             ),
+            "asset_convert": client.post(
+                "/api/admin/assets/character/convert",
+                files={"file": ("source.png", _source_grid(), "image/png")},
+                data={"strategy": "pixelize"},
+            ),
             "snippet": client.get(
                 "/api/admin/readme-snippet",
                 params={
@@ -303,9 +351,15 @@ def test_github_token_only_gates_github_backed_admin_endpoints(tmp_path: Path) -
         "validate": 200,
         "preview": 200,
         "asset_validate": 200,
+        "asset_convert": 200,
         "snippet": 200,
         "status": 200,
     }
+    converted = local_responses["asset_convert"].json()
+    assert converted["asset"]["width"] == WIDTH
+    assert converted["asset"]["height"] == HEIGHT
+    assert converted["conversion"]["source_kind"] == "grid"
+    assert converted["edge_cleanup"] is None
     assert {name: response.status_code for name, response in github_responses.items()} == {
         "read": 503,
         "write": 503,
@@ -317,3 +371,79 @@ def test_github_token_only_gates_github_backed_admin_endpoints(tmp_path: Path) -
         for response in [*github_responses.values(), custom_preview]
     )
     assert custom_preview.status_code == 503
+
+
+def test_character_convert_returns_an_optional_validated_cleanup_without_writing(
+    tmp_path: Path,
+) -> None:
+    app = _application_without_github(tmp_path)
+    with TestClient(app, base_url=ORIGIN) as client:
+        _login(client)
+        response = client.post(
+            "/api/admin/assets/character/convert",
+            files={"file": ("unfamiliar.png", _source_grid_with_edge_spill(), "image/png")},
+            data={"strategy": "pixelize"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    cleanup = body["edge_cleanup"]
+    assert cleanup is not None
+    assert cleanup["affected_frames"] == [{"state": "walk", "frame": 0}]
+    assert cleanup["removed_source_pixels"] > 0
+    assert cleanup["asset"]["sha256"] != body["asset"]["sha256"]
+    with Image.open(io.BytesIO(base64.b64decode(body["asset"]["png_base64"]))) as original:
+        assert original.getpixel((FRAME_SIZE // 3, FRAME_SIZE))[3] > 0
+    with Image.open(io.BytesIO(base64.b64decode(cleanup["asset"]["png_base64"]))) as cleaned:
+        assert cleaned.getpixel((FRAME_SIZE // 3, FRAME_SIZE))[3] == 0
+
+
+def test_material_bundle_api_discovers_zip_and_folder_candidates_without_github(
+    tmp_path: Path,
+) -> None:
+    app = _application_without_github(tmp_path)
+    archive = _discovery_zip()
+    with TestClient(app, base_url=ORIGIN) as client:
+        _login(client)
+        discovery = client.post(
+            "/api/admin/assets/character/convert",
+            files={"file": ("anything.zip", archive, "application/zip")},
+            data={"strategy": "pixelize"},
+        )
+        assert discovery.status_code == 200
+        discovered = discovery.json()
+        assert discovered["status"] == "selection_required"
+        assert discovered["discovery"]["ignored_count"] == 1
+        candidates = discovered["discovery"]["candidates"]
+        assert len(candidates) == 2
+
+        selected = client.post(
+            "/api/admin/assets/character/convert",
+            files={"file": ("anything.zip", archive, "application/zip")},
+            data={
+                "strategy": "pixelize",
+                "candidate_id": candidates[1]["candidate_id"],
+            },
+        )
+        folder = client.post(
+            "/api/admin/assets/character/convert",
+            files=[
+                ("files", ("first.png", _source_grid(79), "image/png")),
+                ("files", ("second.png", _source_grid(97), "image/png")),
+                ("files", ("notes.txt", b"notes", "text/plain")),
+            ],
+            data={
+                "strategy": "pixelize",
+                "paths_json": json.dumps(
+                    ["custom/first.png", "custom/second.png", "custom/notes.txt"]
+                ),
+            },
+        )
+
+    assert selected.status_code == 200
+    assert selected.json()["status"] == "converted"
+    assert selected.json()["conversion"]["source_kind"] == "bundle"
+    assert selected.json()["conversion"]["source_path"] == "unknown/second.png"
+    assert folder.status_code == 200
+    assert folder.json()["status"] == "selection_required"
+    assert len(folder.json()["discovery"]["candidates"]) == 2

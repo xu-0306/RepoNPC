@@ -64,9 +64,9 @@ describe("CharacterRenderer", () => {
     expect(markup).toContain(
       'class="character-renderer character-renderer--visitor"',
     );
-    expect(markup).toMatch(/--character-frame-start-x:-64px/);
-    expect(markup).toMatch(/--character-frame-end-x:-192px/);
-    expect(markup).toMatch(/--character-row-offset-y:-96px/);
+    expect(markup).toMatch(/--character-frame-start-x:-128px/);
+    expect(markup).toMatch(/--character-frame-end-x:-384px/);
+    expect(markup).toMatch(/--character-row-offset-y:-192px/);
     expect(markup).toMatch(/--character-animation-duration:480ms/);
     expect(markup.match(/<img/g)).toHaveLength(2);
   });
@@ -85,8 +85,8 @@ describe("CharacterRenderer", () => {
 
     expect(markup).toContain('data-reduced-motion="true"');
     expect(markup).toMatch(/--character-frame-start-x:0px/);
-    expect(markup).toMatch(/--character-frame-end-x:-128px/);
-    expect(markup).toMatch(/--character-row-offset-y:-192px/);
+    expect(markup).toMatch(/--character-frame-end-x:-256px/);
+    expect(markup).toMatch(/--character-row-offset-y:-384px/);
     expect(markup).toMatch(/--character-animation-duration:320ms/);
   });
 

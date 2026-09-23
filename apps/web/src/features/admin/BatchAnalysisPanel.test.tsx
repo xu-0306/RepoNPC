@@ -31,17 +31,21 @@ const job: BatchJobSnapshot = {
   status: "running",
   items: [
     {
+      id: "item-demo",
       slug: "octocat/demo",
       stage: "embedding",
       state: "active",
       retryable: false,
+      reanalyzable: false,
       error: null,
     },
     {
+      id: "item-docs",
       slug: "octocat/docs",
       stage: "generating",
       state: "needs_retry_confirmation",
       retryable: true,
+      reanalyzable: false,
       error: {
         scope: "repository",
         code: "PROVIDER_TIMEOUT",
@@ -61,9 +65,11 @@ function props(
     job,
     progress: {
       totalItems: 3,
-      completedItems: 1,
+      processedItems: 1,
+      successfulItems: 1,
       activeItems: 1,
       failedItems: 1,
+      attentionItems: 1,
       cancelledItems: 0,
       elapsedSeconds: 75,
       estimatedRemaining: {
@@ -73,7 +79,7 @@ function props(
       },
       effectiveConcurrency: 2,
       serverConcurrency: 4,
-      announcement: { completedItems: 1, totalItems: 3 },
+      announcement: { processedItems: 1, totalItems: 3 },
     },
     stream: {
       connection: "connected",
@@ -85,6 +91,8 @@ function props(
     onResume: vi.fn(),
     onCancel: vi.fn(),
     onRetry: vi.fn(),
+    onReanalyze: vi.fn(),
+    onReconcile: vi.fn(),
     onRetryPreflight: vi.fn(),
     ...overrides,
   };
@@ -106,7 +114,7 @@ describe("BatchAnalysisPanel", () => {
     expect(markup).toContain("1m 30s–3m 0s");
     expect(markup).toContain('data-batch-status="running"');
     expect(markup).toContain("Live progress is connected.");
-    expect(markup).toContain("Batch progress: 1 of 3 complete.");
+    expect(markup).toContain("Batch progress: 1 of 3 processed.");
     expect(markup).toContain("octocat/demo");
     expect(markup).toContain("Embedding");
     expect(markup).toContain("Needs explicit retry confirmation");
@@ -148,7 +156,7 @@ describe("BatchAnalysisPanel", () => {
     expect(markup).not.toContain("Needs attention");
   });
 
-  it("uses one actionable alert for an operation failure and never renders unsafe error fields", () => {
+  it("uses one actionable alert with the safe request id for an operation failure", () => {
     const markup = renderToStaticMarkup(
       <BatchAnalysisPanel
         {...props({
@@ -157,7 +165,7 @@ describe("BatchAnalysisPanel", () => {
             error: {
               scope: "preflight",
               code: "UNSAFE_SERVER_DETAIL",
-              requestId: "request-id-is-not-rendered",
+              requestId: "request-safe-42",
             },
           },
           job: null,
@@ -172,8 +180,94 @@ describe("BatchAnalysisPanel", () => {
       '<button type="button">Run preflight again</button>',
     );
     expect(markup).not.toContain("UNSAFE_SERVER_DETAIL");
-    expect(markup).not.toContain("request-id-is-not-rendered");
+    expect(markup).toContain("request-safe-42");
     expect(markup).not.toContain("event-id-is-not-rendered");
+  });
+
+  it("offers an exact-batch status check while a mutation result is unknown", () => {
+    const view = props({
+      actions: {
+        pending: null,
+        error: {
+          scope: "batch_action",
+          code: "ANALYSIS_RESULT_UNKNOWN",
+          batchId: "batch-42",
+        },
+      },
+    });
+    const markup = renderToStaticMarkup(<BatchAnalysisPanel {...view} />);
+
+    expect(markup).toContain("may have accepted the operation");
+    expect(markup).toContain("Check batch status");
+    expect(markup).toMatch(
+      /<button[^>]*disabled[^>]*>Retry items that need confirmation<\/button>/,
+    );
+  });
+
+  it("disables the exact-batch status check while reconciliation is pending", () => {
+    const markup = renderToStaticMarkup(
+      <BatchAnalysisPanel
+        {...props({
+          actions: {
+            pending: "reconcile",
+            error: {
+              scope: "batch_action",
+              code: "ANALYSIS_RESULT_UNKNOWN",
+              batchId: "batch-42",
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(markup).toMatch(
+      /<button[^>]*disabled[^>]*>Check batch status<\/button>/,
+    );
+  });
+
+  it.each([
+    ["ANALYSIS_BATCH_ACTIVE", "Another analysis batch is active"],
+    ["ANALYSIS_GENERATION_ATTEMPTS_EXHAUSTED", "exhausted its model attempts"],
+    ["ANALYSIS_EXECUTION_BUDGET_EXHAUSTED", "exhausted its active-time budget"],
+    ["ANALYSIS_IDEMPOTENCY_CONFLICT", "already used for different content"],
+  ])("renders actionable recovery for %s", (code, expected) => {
+    const markup = renderToStaticMarkup(
+      <BatchAnalysisPanel
+        {...props({
+          actions: {
+            pending: null,
+            error: {
+              scope: "batch_action",
+              code,
+              requestId: "request-safe-43",
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(markup).toContain(expected);
+    expect(markup).toContain("request-safe-43");
+  });
+
+  it("omits an unsafe operation diagnostic id", () => {
+    const markup = renderToStaticMarkup(
+      <BatchAnalysisPanel
+        {...props({
+          actions: {
+            pending: null,
+            error: {
+              scope: "batch_action",
+              code: "ANALYSIS_BATCH_ACTIVE",
+              requestId: "<script>private-canary</script>",
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(markup).not.toContain("private-canary");
+    expect(markup).not.toContain("script");
   });
 
   it("turns GitHub rate-limit errors into a safe retry message", () => {
@@ -209,10 +303,12 @@ describe("BatchAnalysisPanel", () => {
             status: "failed",
             items: [
               {
+                id: "item-failed",
                 slug: "octocat/demo",
                 stage: "validating",
                 state: "failed",
                 retryable: true,
+                reanalyzable: false,
                 error: {
                   scope: "repository",
                   code: "PROVIDER_ERROR",
@@ -239,7 +335,7 @@ describe("BatchAnalysisPanel", () => {
     ["en", "The model stopped at its output token limit", "editing manually"],
   ] as const)(
     "explains output-limit failure in %s without calling retry",
-    (locale, explanation, recovery) => {
+    (locale: "zh-TW" | "en", explanation: string, recovery: string) => {
       const view = props({
         locale,
         job: {
@@ -247,10 +343,12 @@ describe("BatchAnalysisPanel", () => {
           status: "failed",
           items: [
             {
+              id: "item-output-limit",
               slug: "octocat/demo",
               stage: "validating",
               state: "failed",
               retryable: true,
+              reanalyzable: false,
               error: {
                 scope: "repository",
                 code: "PROVIDER_ERROR",
@@ -281,10 +379,12 @@ describe("BatchAnalysisPanel", () => {
             status: "failed",
             items: [
               {
+                id: "item-unsafe",
                 slug: "octocat/demo",
                 stage: "validating",
                 state: "failed",
                 retryable: false,
+                reanalyzable: false,
                 error: {
                   scope: "repository",
                   code: "UNSAFE_SERVER_DETAIL",
@@ -374,5 +474,46 @@ describe("BatchAnalysisPanel", () => {
     expect(markup).toContain(
       '<button type="button">Run preflight again</button>',
     );
+  });
+
+  it("shows successor reanalysis when the current round is exhausted", () => {
+    const onReanalyzeCurrent = vi.fn();
+    const view = props({
+      job: {
+        id: "batch-exhausted",
+        status: "completed_with_errors",
+        items: [
+          {
+            id: "item-exhausted",
+            slug: "octocat/demo",
+            stage: "failed",
+            state: "failed",
+            retryable: false,
+            reanalyzable: true,
+            retryBlocker: "ATTEMPTS_EXHAUSTED",
+            failureStage: "generating",
+            error: {
+              scope: "repository",
+              code: "ANALYSIS_GENERATION_ATTEMPTS_EXHAUSTED",
+            },
+          },
+        ],
+      },
+      stream: {
+        connection: "complete",
+        reconnectAttempts: 0,
+        lastEventId: "12",
+      },
+      onReanalyzeCurrent,
+    });
+    const markup = renderToStaticMarkup(<BatchAnalysisPanel {...view} />);
+
+    expect(markup).toContain("Analysis has ended.");
+    expect(markup).toContain("Reanalyze with current models");
+    expect(markup).toContain("Failure stage");
+    expect(markup).toContain("Generating");
+    expect(markup).toContain("model attempts are exhausted");
+    expect(markup).toContain("Reanalyze this project");
+    expect(markup).not.toContain("Live progress disconnected");
   });
 });

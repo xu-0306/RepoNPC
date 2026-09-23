@@ -213,6 +213,33 @@ def test_provider_routes_require_current_csrf_and_preserve_evidence_classes(
     assert [name for name, _values in onboarding.calls] == ["analyze", "suggest"]
 
 
+def test_contribution_failure_preserves_closed_truncation_reason(tmp_path: Path) -> None:
+    app, onboarding = _application(tmp_path)
+    onboarding.failure = GuidedOnboardingError(
+        "PROVIDER_ERROR", reason="PROVIDER_OUTPUT_LIMIT_REACHED"
+    )
+    with TestClient(app, base_url=ORIGIN) as client:
+        csrf = _login(client)
+        failed = client.post(
+            "/api/admin/onboarding/contributions/suggest",
+            headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
+            json={
+                "slug": "octocat/demo",
+                "owner_statement": "I maintained the parser with another contributor.",
+            },
+        )
+
+    assert failed.status_code == 502
+    assert failed.headers["cache-control"] == "no-store"
+    assert failed.json()["error"] == {
+        "code": "PROVIDER_ERROR",
+        "message": "Guided onboarding operation failed.",
+        "details": {"reason": "PROVIDER_OUTPUT_LIMIT_REACHED"},
+        "retry_after_seconds": None,
+        "request_id": failed.headers["x-request-id"],
+    }
+
+
 def test_draft_is_local_model_free_and_available_without_github_writeback(
     tmp_path: Path,
 ) -> None:

@@ -216,7 +216,7 @@ def verify_bundle_archive(
             )
         except IndexReadError as exc:
             raise BundleError("bundle_index_invalid") from exc
-        if not index.lexical_candidates("retrieval", limit=1):
+        if not index.lexical_smoke_test():
             index.close()
             raise BundleError("bundle_smoke_query_failed")
         return VerifiedBundle(directory=staging_directory, manifest=manifest, index=index)
@@ -257,7 +257,7 @@ def verify_retained_bundle_directory(
             )
         except IndexReadError as exc:
             raise BundleError("bundle_index_invalid") from exc
-        if not index.lexical_candidates("retrieval", limit=1):
+        if not index.lexical_smoke_test():
             index.close()
             raise BundleError("bundle_smoke_query_failed")
         return VerifiedBundle(directory=directory, manifest=manifest, index=index)

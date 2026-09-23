@@ -18,6 +18,8 @@ Locale = Literal["zh-TW", "en"]
 LocalizedText = dict[str, str]
 CLAIM_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
 HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+CHARACTER_PACK_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:[._/-][a-z0-9]+)*$")
+CHARACTER_OPTION_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 MAX_CONFIG_BYTES = 1024 * 1024
 SECRET_KEY_PARTS = (
     "api_key",
@@ -179,22 +181,28 @@ class RepositoryConfig(StrictModel):
         return tuple(_relative_pattern(value) for value in values)
 
 
-class BuiltinCharacterConfig(StrictModel):
-    body: Literal["standard"]
-    skin: Literal["light", "medium", "dark"]
-    hair: Literal["none", "short", "long"]
-    hair_color: str
-    outfit: Literal["adventurer", "engineer", "mage"]
-    primary_color: str
-    secondary_color: str
-    accessory: Literal["none", "glasses", "headphones"]
+class BuiltinCharacterPackConfig(StrictModel):
+    """Select one versioned built-in pack without encoding a species taxonomy."""
 
-    @field_validator("hair_color", "primary_color", "secondary_color")
+    pack_id: Annotated[str, Field(min_length=1, max_length=128)]
+    pack_version: Annotated[int, Field(ge=1)]
+    options: Annotated[dict[str, str], Field(max_length=32)] = Field(default_factory=dict)
+
+    @field_validator("pack_id")
     @classmethod
-    def validate_color(cls, value: str) -> str:
-        if not HEX_COLOR_RE.fullmatch(value):
-            raise ValueError("color must be a six-digit hexadecimal value")
-        return value.lower()
+    def validate_pack_id(cls, value: str) -> str:
+        if not CHARACTER_PACK_ID_RE.fullmatch(value):
+            raise ValueError("character pack ID is invalid")
+        return value
+
+    @field_validator("options")
+    @classmethod
+    def validate_option_shape(cls, value: dict[str, str]) -> dict[str, str]:
+        if any(not CHARACTER_OPTION_ID_RE.fullmatch(key) for key in value):
+            raise ValueError("character option ID is invalid")
+        if any(not option or len(option) > 128 for option in value.values()):
+            raise ValueError("character option value is invalid")
+        return value
 
 
 class CustomCharacterConfig(StrictModel):
@@ -219,7 +227,7 @@ class CharacterAnimationConfig(StrictModel):
 class CharacterConfig(StrictModel):
     mode: Literal["builtin", "custom"]
     revision: Annotated[int, Field(ge=0)]
-    builtin: BuiltinCharacterConfig | None = None
+    builtin: BuiltinCharacterPackConfig | None = None
     custom: CustomCharacterConfig | None = None
     animation: CharacterAnimationConfig
 
@@ -391,9 +399,29 @@ def validate_public_config(data: Any) -> PublicConfig:
 
     _reject_secret_keys(data)
     try:
-        return PublicConfig.model_validate(data)
+        config = PublicConfig.model_validate(data)
     except ValidationError as exc:
         raise ConfigValidationError(_safe_issues(exc)) from None
+    if config.character.builtin is not None:
+        # Import lazily so the generic configuration models do not own the
+        # finite built-in catalog. The pack registry remains the one source of
+        # truth for pack-local options and rendering capabilities.
+        from reponpc.cards.sprite_composer import SpriteComposerError, validate_builtin_pack
+
+        try:
+            validate_builtin_pack(config.character.builtin)
+        except SpriteComposerError as exc:
+            suffix = f".options.{exc.field}" if exc.field else ""
+            raise ConfigValidationError(
+                [
+                    ConfigIssue(
+                        path=f"character.builtin{suffix}",
+                        code=exc.code.lower(),
+                        message="built-in character pack configuration is invalid",
+                    )
+                ]
+            ) from None
+    return config
 
 
 def load_public_config(path: str | Path, *, max_bytes: int = MAX_CONFIG_BYTES) -> PublicConfig:
