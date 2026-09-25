@@ -111,6 +111,8 @@ RepoNPC 的 Compose 檔只啟動應用程式，不會順便啟動 Ollama 或 vLL
 
 沒有公開網址也能完成前四步。分享需要可對外連線的 HTTPS **訪客頁**網址；localhost 只供本機試用。公開入口只開放訪客頁與 API，管理頁及模型服務保持私人連線。GitHub 卡片不會執行模型，也不會替你啟動主機。
 
+免購買網域的公開入口已選定規劃使用 Tailscale Funnel 的 `*.ts.net` HTTPS 網址；[部署計劃](docs/TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md)仍待實作與外網驗收。目前的本機啟動器與 Compose 不會自動建立 Funnel，也不可把完整管理服務直接公開。下方正式部署條件仍是目前已文件化的自行管理 HTTPS 參考路徑。
+
 YAML 只供備份或搬移，不需上傳到 GitHub 才能使用 NPC。自訂角色要連同角色 PNG 備份；完整恢復請在停止服務後備份資料目錄（包含本機草稿、模型加密設定與已驗證 bundle），不要公開該目錄。詳見 [本機發布契約](docs/LOCAL_PUBLICATION_CONTRACT_2026-09-22.md)。
 
 ## 進階：既有 CLI／GitHub Release 整合

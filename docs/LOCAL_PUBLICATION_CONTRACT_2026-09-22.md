@@ -35,6 +35,8 @@ FR-006/012/015–025/028/033/039–042 and AC-020–032/034–040/046/049/053/05
 
 ## Current delivery boundary (2026-09-23)
 
+The owner's later 2026-09-24 ADR-047 decision selects Tailscale Funnel for a future no-purchase public visitor URL; see [the deployment plan](TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md). It does not retroactively make a tunnel, domain, external probe or GitHub write part of the verified 2026-09-23 local delivery.
+
 Browser acceptance found that the frontend's history ceiling could exceed the operator's configured chat limits. The existing `PAYLOAD_TOO_LARGE` error envelope now reports numeric admission bounds inside its extensible `details` object (`max_message_characters`, `max_history_messages`, `max_history_characters`). No acceptance threshold changes. The visitor client may retry once after a pre-provider 413, using a recent suffix of whole successful exchanges within those bounds and its original hard ceilings. It preserves the displayed transcript, never shortens the current question, and does not retry malformed limits, cancellation, unrelated errors, or a second rejection.
 
 The owner has no public HTTPS URL and explicitly requested completing local use and retaining share settings. External deployment, GitHub mutations, and actual external Profile-to-NPC validation are outside this delivery. Safe share fields persist for the current browser session; only a validated public HTTPS URL and normalized account are retained. No example URL is treated as a working destination.

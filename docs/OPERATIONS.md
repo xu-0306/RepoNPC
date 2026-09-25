@@ -282,6 +282,8 @@ curl --fail https://portfolio.example.com/api/public/status
 
 ## 8. HTTPS reverse proxy
 
+**Planned no-purchase entry (ADR-047; not yet an operational recipe):** The owner selected Tailscale Funnel with a `*.ts.net` HTTPS visitor URL. [The focused plan](TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md) requires a visitor-only gateway between Funnel and this admin-capable app, private production administration, proxy/IP and SSE verification, and real external acceptance. Do not point Funnel at the present full application port or use the Windows loopback launcher as a public server. The operator-domain recipe below remains the current documented production reference until the Funnel implementation and clean-host tests pass.
+
 - Forward the original HTTPS host/proto and client address only from a trusted proxy included in `REPONPC_TRUSTED_PROXY_CIDRS`.
 - Reject unknown hosts; redirect HTTP to HTTPS.
 - Do not buffer `text/event-stream`; allow request duration beyond `REPONPC_CHAT_TIMEOUT_SECONDS` plus a small margin.
