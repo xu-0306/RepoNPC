@@ -426,3 +426,18 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
 - **Supersedes:** ADR-047's deferral of the gateway (Funnel gateway F0/F2 is MVP); the external-only embedding default in §5.4/§13.3 and FR-006/FR-012; FR-011/§8 whole-answer abstention and the any-person-keyword rejection; the §18 external-origin exclusion, for the configured Pages origin only (credential-free CORS to visitor APIs).
 - **Boundaries:** No automatic GitHub write or push; the owner uploads the export manually. No silent provider/model switch or silent download. Visitors never see host uptime, hardware, provider, model or cost information. Views, visitor attachments, readiness tests, cost estimates, code signing and macOS installers are out of scope; browser-local microphone input is post-MVP. Personal roles are never inferred from code or participation.
 - **Consequences:** Technical Specification becomes 0.4.0. AC-062–AC-071 start not-run, and the release audit/ledger must be extended to them. Implementation order starts with the gateway (F0/F2) and FR-043–FR-049. D8 validation is owner-run.
+
+## ADR-049: Derive the visitor scene from the active character, never from a fixed species
+
+- **Status:** Accepted 2026-09-26; implementation pending. No acceptance evidence exists.
+- **Authorization:** On 2026-09-26 the owner stated that the visitor NPC and background must change with the character the owner uploads or selects, and that the cat in the reference mockup is only an example. The scene contract details (token roles, precedence, contrast solver and override limits) were drafted from that requirement under the anti-hardcode rule. The owner may revise them before implementation.
+- **Context:** `CharacterRenderer` already draws any canonical sheet. The surrounding visitor page, however, uses fixed `--ui-*` tokens and literal colours. `card.themes` covers only the GitHub card, and the admin guide mascot is a CSS-drawn humanoid. A per-species theme table would be a closed list for an open-world input.
+- **Decision:** Adopt [completion direction contract §4.4](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md) as Technical Specification 0.4.1 FR-050 / §12.3 and AC-072–AC-073:
+  - **Sheet-derived tokens:** deterministic scene tokens (a closed set of roles, light and dark) derived server-side from the canonical sheet's pixels.
+  - **Precedence:** owner override, then optional opaque pack scene hints, then sheet derivation, then the neutral default (only on derivation error, with the reason reported).
+  - **Contrast:** an AA contrast solver that adjusts lightness only and guarantees NPC/backdrop separation.
+  - **Background image:** an optional validated, re-encoded PNG/WebP owner background that is decorative only.
+  - **Delivery:** tokens are served in the public profile and exported in the hashed static-site manifest.
+  - **Admin:** a 「場景」 preview step in the Character & animation workspace, and the admin guide mascot replaced by the active character.
+- **Boundaries:** No species, `pack_id`, filename or option-name branching. No free-form CSS or arbitrary property names from configuration or packs. No text placed directly on an image. No animated backdrops, per-state scenes or visitor-selectable themes. `card.themes` stays explicit; an explicit copy-to-card action is optional. Visitor payloads remain free of host, model and cost data.
+- **Consequences:** Technical Specification becomes 0.4.1. AC-072 and AC-073 start not-run. Visitor CSS literal colours must move behind scene tokens with a style guard. Scene fixtures must be species-agnostic and generated programmatically.

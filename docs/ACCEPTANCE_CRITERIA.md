@@ -1,5 +1,7 @@
 # RepoNPC v1 Acceptance Criteria
 
+**2026-09-26 character-scene amendment (ADR-049, Technical Specification 0.4.1 FR-050):** AC-072 and AC-073 are added. The visitor NPC and scene follow the owner's active character through sheet-derived, contrast-checked tokens, and owner accent/background overrides are validated and reported. Both start **not-run**.
+
 **2026-09-26 completion-direction amendment (ADR-048, Technical Specification 0.4.0 §2.10):** AC-062 through AC-071 are added for segment answers, participation evidence, coverage/FAQ review, MVP live chat through the GitHub Pages shell and Funnel visitor gateway, the Windows installer and the built-in `bge-m3` embedding default. AC-057 is extended so that the device check and model guidance are owner-only. All new criteria start **not-run**; nothing is implemented yet.
 
 **2026-09-24 planned public-entry gate (ADR-047, updated by ADR-048):** [The Tailscale Funnel deployment plan](TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md) records owner selection and proposed external/security checks. The visitor gateway is MVP scope from 0.4.0, and its ingress/CORS contract is AC-068/AC-071. Its future tests do not count as passed AC-022/036/049 or as public-release evidence.
@@ -34,7 +36,7 @@
 
 2026-09-12 owner-approved novice setup regression scope (FR-038/039/040, AC-054/055/057/058; bilingual AC-023): optional embedding dimensions remain unknown until an explicit successful two-sample test; unknown/failed/stale profiles cannot be activated or selected as ready. Existing dimensions, selections, switch intents and foreign keys survive runtime migration 19, including rollback on migration failure. Name-only service edits retain protected endpoint/key and revision; destination changes require explicit credential intent. Newly entered keys clear after submission and form closure. Scoped Ollama listing is explicit and distinguishes failure from empty. Successful operation results survive a failed/stale list refresh. These focused checks do not constitute full v1 or release acceptance.
 
-**Document status:** Approved through 0.4.0 (AC-062–AC-071 added 2026-09-26)
+**Document status:** Approved through 0.4.1 (AC-062–AC-071 added 2026-09-26 for 0.4.0; AC-072–AC-073 added 2026-09-26 for 0.4.1)
 **Applies to:** RepoNPC v1 Technical Specification 0.4.0
 **Rule:** Every criterion is required unless its mapped requirement is changed through an approved specification update.
 
@@ -795,6 +797,68 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **Then** CORS allows only the configured origin for visitor read/chat APIs without `Access-Control-Allow-Credentials`; other origins receive no CORS grant; admin, model and unknown paths return 404 through the gateway; visitor rate limits and budgets still apply.
 - **Verification:** gateway contract tests and an external Funnel check recorded with date and hostname redacted from public evidence.
 
+### AC-072 - The visitor scene follows any character with accessible contrast
+
+**Maps to:** FR-050, FR-047, FR-015, NFR-009, NFR-011
+
+- **Given** programmatically generated canonical sheets with no cat:
+  - a non-humanoid object;
+  - a monochrome grey sprite;
+  - a near-white and a near-black sprite;
+  - a single saturated hue;
+  - a multi-hue sprite;
+  - a sprite whose dominant colour equals the former default background;
+  - `core/humanoid` rendered with two different colour options.
+- **When** each becomes the active character, and the visitor page renders live and from the static export in light and dark themes, available and resting states, and with reduced motion,
+- **Then**:
+  - the NPC is that character;
+  - distinct palettes produce distinct scene tokens whose base hue follows the dominant hue within tolerance;
+  - an achromatic sheet produces a neutral scene;
+  - every text pair is ≥ 4.5:1, every non-text pair ≥ 3:1, and NPC edge vs stage ≥ 3:1;
+  - identical input yields byte-identical tokens;
+  - live and exported pages render the same tokens.
+- **And**:
+  - renaming the sprite file or changing option key names with identical pixels does not change tokens;
+  - no scene code reads species, `pack_id`, filenames or option names;
+  - a style guard finds no literal colour in visitor CSS outside the neutral-default token block;
+  - the neutral default appears only on a derivation error, with an owner-visible reason.
+- **Verification:** backend unit tests for derivation and the solver over the fixture set, a style-guard test, and browser checks (axe plus computed-style contrast) of live and exported pages in both locales.
+
+### AC-073 - Owner scene overrides are validated, visible and exported
+
+**Maps to:** FR-050, FR-018, NFR-001, NFR-009
+
+- **Given** the Character & animation workspace 「場景」 step,
+- **When** the owner previews the scene, sets a custom accent (passing and failing contrast), uploads background images (valid PNG/WebP, SVG, animated, oversized, undersized, polyglot, metadata-bearing), switches characters, and resets to automatic,
+- **Then**:
+  - the preview shows the active character in both themes and states;
+  - a failing accent is adjusted, and the adjusted value and reason are shown before saving;
+  - invalid images are rejected with plain-language errors;
+  - accepted images are re-encoded without metadata and served only through `GET /api/public/scene-background`;
+  - text never sits directly on the image;
+  - overrides survive a character change with a visible notice, and 「重設為自動」 restores derived tokens;
+  - the export manifest hashes the tokens and backdrop;
+  - the admin guide mascot shows the active character.
+- **And** the configuration accepts no free-form CSS, property names or species fields, and visitor payloads stay free of host, model and cost data.
+- **Verification:** config-validation and image-guard tests, admin browser tests in both locales, and an export manifest check.
+
+**0.4.0/0.4.1 traceability additions:**
+
+| Requirement | Acceptance criteria |
+| --- | --- |
+| FR-043 | AC-062, AC-063, AC-064 |
+| FR-044 | AC-064, AC-065 |
+| FR-045 | AC-066 |
+| FR-046 | AC-067 |
+| FR-047 | AC-068, AC-071, AC-072 |
+| FR-048 | AC-069 |
+| FR-049 | AC-070 |
+| FR-050 | AC-072, AC-073 |
+| NFR-001 | AC-071, AC-073 |
+| NFR-009 | AC-072, AC-073 |
+| NFR-011 | AC-072 |
+| NFR-014 | AC-071 |
+
 **AC-057 extension (0.4.0):** the device check, `model_catalog.yml` guidance (適合 / 勉強可用 / 不建議), canirun.ai link, Ollama explicit pull, plain-language error mapping, one-line status and cloud data disclosure are owner-only admin surfaces; none of them appear in visitor pages or responses.
 
 ## 11. Approval result format
@@ -814,7 +878,7 @@ The current machine-readable evidence ledger is `release-evidence/acceptance-led
 
 **0.2.2 evidence boundary:** AC-053 through AC-057 are not-run until implemented and observed. The current release-audit code enumerates only AC-001 through AC-052 and must be extended during implementation; a passing old audit is not coverage of this amendment. Preserve historical evidence provenance and add current candidate evidence instead of relabeling old runs.
 
-**0.4.0 evidence boundary (2026-09-26):** AC-062 through AC-071 are not-run. The release audit and `release-evidence/acceptance-ledger.json` must be extended to enumerate them, with missing/duplicate-ID tests, during implementation. Existing ledger entries do not provide a completion percentage for this amendment.
+**0.4.0/0.4.1 evidence boundary (2026-09-26):** AC-062 through AC-073 are not-run. The release audit and `release-evidence/acceptance-ledger.json` must be extended to enumerate them, with missing/duplicate-ID tests, during implementation. Existing ledger entries do not provide a completion percentage for this amendment.
 
 **0.2.3 evidence boundary (2026-09-10):** Release coverage must extend through AC-060, excluding legacy AC-041 through AC-043. The auditor still enumerates only AC-052 at this review. Extend both document coverage and ledger validation, with missing/duplicate-new-ID tests, during the implementation package. Source presence is not full acceptance for AC-053 through AC-057 either.
 

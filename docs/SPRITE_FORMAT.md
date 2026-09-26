@@ -4,6 +4,8 @@
 **Format version:** 1  
 **Related requirements:** FR-015, FR-016; AC-020–AC-022
 
+> **0.4.1 note (ADR-049, FR-050):** the visitor scene (background, stage and accent colours) is derived from this canonical sheet's pixels, so a sheet needs no extra metadata to get a matching scene. See Technical Specification §12.3. The sheet format itself is unchanged.
+
 ## 1. Canonical sheet
 
 A custom RepoNPC character is one non-animated PNG with:

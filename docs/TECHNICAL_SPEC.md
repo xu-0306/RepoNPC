@@ -1,5 +1,14 @@
 # RepoNPC v1 Technical Specification
 
+**Character-driven visitor scene amendment (2026-09-26, ADR-049; FR-047/050, FR-015/018, NFR-001/009/011, AC-072–AC-073):** The owner clarified that the reference mockup's cat is only an example: the visitor NPC and its scene MUST follow whatever character the owner selects or uploads. [Completion direction contract §4.4](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md) is normative.
+- The scene is a closed set of token roles in light and dark themes. It is derived deterministically from the canonical sheet's pixels (OKLCH clustering).
+- Tokens resolve in this order: explicit owner override, optional opaque pack scene hints, sheet derivation, and a neutral default only on derivation error.
+- A contrast solver guarantees WCAG 2.2 AA text contrast and NPC/backdrop separation.
+- An optional validated owner background image is supported.
+- No code path may branch on species, `pack_id`, filename or option names.
+- Tokens are computed server-side and exported with the static site, so live and Pages rendering match.
+- This amendment is not implemented yet.
+
 **Owner-approved completion-direction amendment (2026-09-26, ADR-048; FR-006/011/012/014/040, FR-043–FR-049, AC-062–AC-071):** [The completion direction contract](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md) is normative. (1) Chat answers use envelope v2: typed segments (`person | participation | project | inference`) with per-segment citation rules, `{{owner}}` rendered by the backend, a centralized inflation lexicon and numeric-fact check, and silent per-segment drop instead of whole-answer abstention; person questions without an owner statement are answered with what the project does and how it is built plus participation facts, never with a visitor-facing gap message. (2) A new `PARTICIPATION` evidence class carries GitHub login-matched participation period, owner flag and other-contributors flag, never raw counts. (3) An informational coverage check and an owner-reviewed FAQ (approve / reject / regenerate / rewrite-as-statement) are added; only approved, bundle-bound FAQ entries are exported or served. (4) The MVP public experience includes free-form live chat with the animated NPC: the owner manually uploads an exported static site to their own GitHub Pages repository, which calls the Tailscale Funnel visitor gateway for live answers and falls back to in-browser matching of approved FAQ entries while the host is offline. ADR-047's gateway split and Funnel transport return to MVP scope; visitors never see host, model, provider or cost information. (5) Windows novices install through a PyInstaller onedir bundle in an unsigned per-user Inno Setup installer; Docker remains for Linux/advanced use. (6) A built-in ONNX Runtime `bge-m3` embedding adapter is the production default after an explicit first-use download; external embedding services remain selectable. (7) Owner-only model guidance adds a device check, Ollama helper, plain-language errors, a status line and a data disclosure. This supersedes the "no RepoNPC-local production embedding default" text in FR-006/FR-012/§5.4/§13.3/§17, the whole-answer person-claim abstention in FR-011/§8, and the "externally hosted frontend origins" exclusion in §18 for the configured Pages origin only. No GitHub write, silent provider switch, public admin route or model-authored URL is introduced. Nothing in this amendment is implemented yet.
 
 **2026-09-24 public-entry planning note (ADR-047):** The owner selected Tailscale Funnel as the future no-purchase HTTPS visitor entry. [The focused deployment plan](TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md) must settle gateway routing, private admin origin, proxy/client-IP trust, host support and credential lifecycle before implementation changes. Existing approved behavior and local-only acceptance are unchanged; no Funnel path has passed public deployment verification. **Updated 2026-09-26 (ADR-048):** the Funnel visitor gateway is MVP scope, and its CORS allowlist additionally admits exactly the configured GitHub Pages origin without credentials.
@@ -39,15 +48,15 @@
 | Field | Value |
 | --- | --- |
 | Status | **Approved** |
-| Version | 0.4.0 |
+| Version | 0.4.1 |
 | Product | RepoNPC v1 |
 | Audience | Implementation Agents, reviewers, maintainers |
 | Last updated | 2026-09-26 |
-| Approval date | 2026-08-10; Phase 2 closure amendment approved 2026-08-11; first-owner onboarding, personal-deployment convenience, and guided-onboarding amendments approved 2026-08-14; vLLM provider-preset amendment approved 2026-08-15; GitHub identity and connection amendment approved 2026-08-16; OAuth setup-guidance UX and ENGD-001/002/003/006 amendments approved 2026-08-30; passwordless loopback launch and connection-only GitHub amendment approved 2026-09-04; GitHub OAuth/public-read PAT retirement approved 2026-09-08; provider-neutral setup approved 2026-09-09; model-first guided workflow approved 2026-09-10; safe connection-revision rebinding and authenticated session resume approved 2026-09-13; same-service URL retention, actionable connection errors, Chat probe grace, and flexible analysis budgets approved 2026-09-14; controlled analysis recovery approved 2026-09-17; species-neutral character packs, direct legacy-field removal, 64px canonical sprites, bounded material conversion, and novice material discovery approved 2026-09-21; ordinary-owner character workspace and animated preview approved 2026-09-22; local publication approved 2026-09-22; completion direction (segment answers, participation, FAQ review, Pages + Funnel live chat, Windows installer, built-in bge-m3 embedding, owner model guidance) approved 2026-09-26 |
+| Approval date | 2026-08-10; Phase 2 closure amendment approved 2026-08-11; first-owner onboarding, personal-deployment convenience, and guided-onboarding amendments approved 2026-08-14; vLLM provider-preset amendment approved 2026-08-15; GitHub identity and connection amendment approved 2026-08-16; OAuth setup-guidance UX and ENGD-001/002/003/006 amendments approved 2026-08-30; passwordless loopback launch and connection-only GitHub amendment approved 2026-09-04; GitHub OAuth/public-read PAT retirement approved 2026-09-08; provider-neutral setup approved 2026-09-09; model-first guided workflow approved 2026-09-10; safe connection-revision rebinding and authenticated session resume approved 2026-09-13; same-service URL retention, actionable connection errors, Chat probe grace, and flexible analysis budgets approved 2026-09-14; controlled analysis recovery approved 2026-09-17; species-neutral character packs, direct legacy-field removal, 64px canonical sprites, bounded material conversion, and novice material discovery approved 2026-09-21; ordinary-owner character workspace and animated preview approved 2026-09-22; local publication approved 2026-09-22; completion direction (segment answers, participation, FAQ review, Pages + Funnel live chat, Windows installer, built-in bge-m3 embedding, owner model guidance) approved 2026-09-26; character-driven visitor scene (ADR-049) added 2026-09-26 |
 
 Application implementation is authorized under this approved specification. The words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RECOMMENDED, MAY, and OPTIONAL are normative as described by RFC 2119.
 
-Version 0.4.0 / ADR-048 approves the completion direction in §2.10 and the linked contract. Version 0.3.9 / ADR-046 approves the local-first portfolio, activation and guided GitHub card path. External testing is deferred by the owner until a public URL is supplied.
+Version 0.4.1 / ADR-049 adds the character-driven visitor scene (FR-050, §12.3). Version 0.4.0 / ADR-048 approves the completion direction in §2.10 and the linked contract. Version 0.3.9 / ADR-046 approves the local-first portfolio, activation and guided GitHub card path. External testing is deferred by the owner until a public URL is supplied.
 
 Technical Specification 0.3.8 / ADR-045 was approved on 2026-09-22 for validated automatic correction of repeated frame drift and exact per-frame pixel inputs. Version 0.3.7 / ADR-044 remains the approved preview-first structural edge-spill cleanup boundary.
 
@@ -262,8 +271,9 @@ The [completion direction contract](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md)
 | FR-047 | The MVP visitor experience MUST provide the profile card, project cards (name, description, language, stars, forks), the animated NPC with an available/resting indicator, free-form live chat with streamed answers, suggestion chips and collapsible citations. Live answers run on the owner host behind the ADR-047 visitor-only gateway exposed through Tailscale Funnel (route allowlist, rate limits, daily caps, size limits, SSE timeouts, no credentials, no host/model/provider/cost fields in visitor responses). An admin "Export share site" action MUST produce a self-contained static folder (HTML/CSS/JS, public JSON, character assets, `.nojekyll`, hashed manifest) that the owner uploads manually to their own GitHub Pages repository; RepoNPC performs no GitHub write. Gateway CORS MUST admit only the configured Pages origin without credentials. While the gateway is unreachable, the page MUST remain usable, show the resting state, and match typed questions in the browser against approved FAQ entries only, never generating text. Export MUST include only public data, pass a secret scan, respect GitHub Pages size limits, and exclude admin routes and data. The GitHub card links to the owner-entered page URL after a fetch and manifest-hash check. Views/traffic counts and attachments are excluded; microphone input is post-MVP and browser-local only. |
 | FR-048 | Windows novices MUST be able to install and start RepoNPC without Docker or a separate Python installation, using a PyInstaller onedir bundle wrapped in a per-user Inno Setup installer with shortcuts and an uninstaller. The launcher MUST start the loopback backend, wait for health and open the admin page in the default browser, with an obvious open-admin/quit control. User data lives outside the install folder, survives uninstall unless explicitly removed, and survives installing a newer version. The installer does not bundle the embedding model. Unsigned MVP releases MUST publish SHA-256 checksums and SmartScreen guidance. Docker remains supported for Linux and advanced deployments; macOS is out of first-release scope. |
 | FR-049 | The provider layer MUST include a `builtin_onnx` embedding adapter (ONNX Runtime, CPU, no PyTorch) serving `bge-m3` (1024 dimensions, no prompt prefix, 8192-token context) as the default embedding profile. The first time an index is needed, the owner MUST choose between downloading the built-in model (showing size, license and source, then a cancellable/resumable progress bar), configuring another embedding service, or deferring (building stays blocked with an explanation). Nothing is downloaded without that explicit choice. The download MUST be verified against a pinned source and checksum before use. Changing the embedding model MUST warn that a full re-index is required before confirmation. |
+| FR-050 | (0.4.1, ADR-049) The visitor NPC and its scene MUST follow the active character, whether built-in or uploaded. From the canonical sheet the system MUST derive a deterministic scene of closed token roles (`background`, `surface`, `ink`, `muted_ink`, `accent`, `accent_ink`, `border`, `stage`, `glow`, `focus`) for light and dark themes. Precedence is: owner override, then optional opaque pack scene hints, then sheet derivation, then a neutral default only on derivation error, with the reason reported. A contrast solver MUST enforce WCAG 2.2 AA text contrast, 3:1 non-text contrast, and 3:1 separation between the NPC edge colour and its stage. Owner accent and background-image overrides are validated, and adjustments are shown, never silent. Scene decisions MUST NOT depend on species, `pack_id`, filenames or option names. Tokens are computed server-side, served in the public profile and exported in the hashed static-site manifest (§12.3). |
 
-These extend FR-005–FR-014, FR-020, FR-038–FR-042 and NFR-001/002/003/008/009/011/013/014. Owner-only model guidance (device check against a RepoNPC-maintained `model_catalog.yml` graded suitable / marginal / not recommended using the public parameters-times-bits estimation method, a canirun.ai link without copying its data or calling its API, an Ollama helper with explicit pull, plain-language probe error mapping, a one-line active-model status, and a cloud data disclosure) extends FR-040 and is never shown to visitors; the readiness test and cost estimate are deferred. AC-062 through AC-071 are additional release gates.
+These extend FR-005–FR-014, FR-020, FR-038–FR-042 and NFR-001/002/003/008/009/011/013/014. Owner-only model guidance (device check against a RepoNPC-maintained `model_catalog.yml` graded suitable / marginal / not recommended using the public parameters-times-bits estimation method, a canirun.ai link without copying its data or calling its API, an Ollama helper with explicit pull, plain-language probe error mapping, a one-line active-model status, and a cloud data disclosure) extends FR-040 and is never shown to visitors; the readiness test and cost estimate are deferred. AC-062 through AC-071 are additional release gates. FR-050 (0.4.1, ADR-049) extends FR-015/FR-018/FR-047 and NFR-001/009/011; its gates are AC-072 and AC-073.
 
 ## 3. Normative repository structure
 
@@ -382,6 +392,7 @@ The normative populated example is `reponpc.example.yml`. Rules:
 - Character configuration contains no universal species field. Adding a built-in species or form means registering a new versioned pack; an unanticipated user-created species uses the canonical custom sheet without taxonomy changes.
 - The legacy top-level built-in fields `body`, `skin`, `hair`, `outfit`, `hair_color`, `primary_color`, `secondary_color`, and `accessory` are invalid. Because no deployment consumed that draft contract, v1 provides no compatibility aliases or migration shim.
 - A custom sprite path MUST be below `assets/character/`, must be a `.png`, and must satisfy section 12.
+- (0.4.1, FR-050) Optional `character.scene` contains exactly `accent` (null or `#rrggbb`), `background_path` (null, or a `.png`/`.webp` directly below `assets/scene/`) and `background_scaling` (`smooth` or `pixelated`, default `smooth`). Omitting it means an automatic scene. The block has no species, theme-name or free-form CSS field, and scene changes are versioned by `character.revision`.
 - `card.revision` is a non-negative integer used for cache-busting snippets.
 - Retrieval weights are non-negative finite numbers and at least one source weight must be positive.
 - `embedding.model`, `embedding.dimension`, and `embedding.query_prefix` become part of the bundle compatibility contract. The descriptor is a public compatibility record only; provider endpoints, credentials, and profile registry state remain deployment-local. `embedding.adapter` MUST be one of the external bundle identities (`ollama` or `openai_compatible`); `vllm` is normalized to `openai_compatible` in the bundle. A local adapter value is permitted only in explicitly marked benchmark fixtures.
@@ -697,7 +708,14 @@ Success `200`:
     "asset_url": "/api/public/character.png",
     "revision": 1,
     "frame_duration_ms": 160,
-    "movement": "subtle"
+    "movement": "subtle",
+    "scene": {
+      "source": "derived",
+      "revision": 1,
+      "themes": {"light": {"background": "#f4f1ea", "...": "#rrggbb"}, "dark": {"...": "#rrggbb"}},
+      "background_url": null,
+      "background_scaling": "smooth"
+    }
   },
   "index": {"version": "...", "built_at": "...", "repository_count": 1}
 }
@@ -775,6 +793,7 @@ data: {"finish_reason":"stop","usage":{"input_tokens":1234,"output_tokens":321},
 - `GET /api/public/card.gif?theme=light|dark&locale=zh-TW|en&rev=N`
 - `GET /api/public/card.png?theme=light|dark&locale=zh-TW|en&rev=N`
 - `GET /api/public/character.png?rev=N`
+- `GET /api/public/scene-background?rev=N` (0.4.1, FR-050): the validated, re-encoded owner background image. Returns 404 when none is configured. It sends `X-Content-Type-Options: nosniff` and the same ETag rules. Scene tokens are part of the profile payload; no endpoint accepts CSS.
 
 Unsupported query values return `400 VALIDATION_ERROR`. Outputs use an ETag including bundle version, variant, and revision. SVG response headers include `Content-Type: image/svg+xml`, `X-Content-Type-Options: nosniff`, and a restrictive `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:`. SVG contains no scripts, event handlers, foreign objects, or external URLs.
 
@@ -1105,6 +1124,43 @@ Unknown pack IDs, unsupported versions, unknown or missing option keys, and inva
 - user text is length-bounded and XML-escaped; remote fonts/images are forbidden;
 - card links are provided by Markdown around the image, never embedded executable behavior.
 
+### 12.3 Visitor scene (0.4.1, FR-050, ADR-049)
+
+The visitor scene is derived from the same canonical sheet that every built-in pack and custom upload produces. It therefore needs no species, pack or filename knowledge.
+
+**Derivation**
+- Use the opaque pixels of all frames.
+- Convert to OKLCH and median-cut into at most 8 clusters weighted by pixel share.
+- Base hue: the dominant chromatic cluster.
+- Accent: the cluster with the highest chroma × √share.
+- If the chromatic share is below a registry threshold, the scene is neutral (achromatic).
+- Per-role, per-theme lightness/chroma targets live in one registry table.
+
+**Contrast solver** (adjusts lightness only)
+- `ink` and `muted_ink` on `background`/`surface`: ≥ 4.5:1.
+- `accent_ink` on `accent`: ≥ 4.5:1.
+- `accent`, `border` and `focus` against adjacent colours: ≥ 3:1.
+- The average colour of the NPC's edge pixels vs `stage`: ≥ 3:1. When that conflicts with page constraints, `stage` becomes a contrasting plate behind the NPC.
+
+**Overrides and hints**
+- An owner accent that fails the solver is adjusted, and the adjusted value and reason are shown before saving.
+- A pack MAY declare an opaque, deterministic scene provider of its own options (hue/accent hint and/or backdrop PNG). Its output passes the same validation.
+
+**Background image**
+- Owner background images are PNG or WebP only: no SVG, no animation, ≤ 2 MB, 640×360 to 2560×1600.
+- They are decoded under the existing image guards and re-encoded with metadata stripped.
+- They are decorative only. Text always sits on opaque `surface` panels, and a `background`-derived scrim keeps dark mode legible.
+- Without an image, the backdrop is drawn from tokens (gradient, glow and floor ellipse under the NPC).
+
+**Frontend**
+- The frontend maps each role to a fixed `--scene-<role>` custom property through one mapping.
+- Visitor CSS MUST NOT contain literal colours outside the single neutral-default token block.
+
+**Computation and output**
+- Tokens are computed at validation/bundle time.
+- They are byte-identical for identical sheets and overrides.
+- They are included, with the backdrop, in the static-site export manifest.
+
 ## 13. Provider interfaces
 
 ### 13.1 Chat provider
@@ -1285,6 +1341,12 @@ Structured logs contain timestamp, severity, event name, request ID, route templ
 
 - The visitor route defaults to `/`; admin routes are below `/admin` and are not advertised publicly.
 - The UI renders profile and chat as semantic DOM. Canvas MAY render decorative scene elements but MUST NOT contain the only accessible content.
+- (0.4.1, FR-050) The visitor page applies the active character's scene tokens for the current colour scheme. The NPC is always the owner's active character; no page element depicts a fixed species. The Character & animation workspace has a 「場景」 step:
+  - a live preview in light and dark themes, available and resting states, and reduced motion;
+  - palette chips labelled by source;
+  - a custom accent, background upload and 「重設為自動」.
+
+  The admin guide mascot renders the active character, with the CSS mascot used only when no character exists.
 - Character states map to lifecycle: idle before input, listen while input is active, think during retrieval/provider wait, talk while validated tokens render, success on completion, offline on unavailable/error.
 - Suggested questions are keyboard-operable buttons and remain editable before submission.
 - Citation markers focus/scroll to a citation panel and links open immutable GitHub pages with safe `rel` attributes.
@@ -1366,7 +1428,7 @@ To approve, the project owner should explicitly state that RepoNPC v1 Technical 
 - any owner-requested exceptions before application implementation starts.
 
 **Approved by:** project owner  
-**Latest amendment:** Technical Specification 0.4.0 / ADR-048 approved 2026-09-26: envelope v2 segment answers, `PARTICIPATION` evidence, coverage check and reviewed FAQ, MVP live chat through an exported GitHub Pages site plus the Tailscale Funnel visitor gateway, Windows PyInstaller/Inno Setup installer, built-in `bge-m3` embedding default and owner-only model guidance (§2.10 and the completion direction contract). Not implemented yet; no acceptance evidence exists. Earlier: 0.3.9 / ADR-046 local publication (2026-09-22); 0.3.1 / ADR-038 controlled analysis recovery (2026-09-17). Same-round retry now requires remaining persisted attempts and active time; exhausted failed items may create an explicit idempotent successor round pinned to their source commit, policy and frozen pair. Migration 26 adds secret-free lineage/failure-stage diagnostics; migration 27 preserves source consumption and bounded request bindings across cleanup. Terminal clocks and `completed_with_errors` behavior are stable across API, SSE and UI. ADR-037 flexible budgets and all earlier amendments remain in force. This correction does not establish full v1 or live-provider acceptance.
+**Latest amendment:** Technical Specification 0.4.1 / ADR-049 (2026-09-26): character-driven visitor scene derived from the canonical sheet, with owner overrides and AA contrast solver (FR-050, §12.3, AC-072–AC-073); not implemented. Previous: 0.4.0 / ADR-048 approved 2026-09-26: envelope v2 segment answers, `PARTICIPATION` evidence, coverage check and reviewed FAQ, MVP live chat through an exported GitHub Pages site plus the Tailscale Funnel visitor gateway, Windows PyInstaller/Inno Setup installer, built-in `bge-m3` embedding default and owner-only model guidance (§2.10 and the completion direction contract). Not implemented yet; no acceptance evidence exists. Earlier: 0.3.9 / ADR-046 local publication (2026-09-22); 0.3.1 / ADR-038 controlled analysis recovery (2026-09-17). Same-round retry now requires remaining persisted attempts and active time; exhausted failed items may create an explicit idempotent successor round pinned to their source commit, policy and frozen pair. Migration 26 adds secret-free lineage/failure-stage diagnostics; migration 27 preserves source consumption and bounded request bindings across cleanup. Terminal clocks and `completed_with_errors` behavior are stable across API, SSE and UI. ADR-037 flexible budgets and all earlier amendments remain in force. This correction does not establish full v1 or live-provider acceptance.
 **Approved on:** 2026-08-10; Phase 2 closure amendment approved 2026-08-11; first-owner onboarding, personal-deployment convenience, and guided-onboarding amendments approved 2026-08-14; vLLM provider-preset amendment approved 2026-08-15; GitHub identity/connection and bounded batch-analysis amendments approved 2026-08-16; OAuth setup-guidance UX and ENGD-001/002/003/006 amendments approved 2026-08-30; passwordless loopback launch and connection-only GitHub amendment approved 2026-09-04; GitHub OAuth/public-read PAT retirement approved 2026-09-08; provider-neutral model setup approved 2026-09-09; model-first guided workflow approved 2026-09-10; environment-connection editing/deletion approved 2026-09-12; connection rebinding and authenticated session resume approved 2026-09-13; flexible analysis budgets approved 2026-09-14; controlled successor analysis recovery approved 2026-09-17; local publication approved 2026-09-22; completion direction approved 2026-09-26
 **Approval scope:** Technical Specification 0.1.0 and OR-001 through OR-007, version 0.1.1 Phase 2 closure decisions recorded in ADR-015, version 0.1.2 first-owner onboarding recorded in OR-008/ADR-016, version 0.1.3 loopback local-launcher defaults recorded in OR-009/ADR-017, version 0.1.4 guided onboarding recorded in OR-010/ADR-018, version 0.1.5 vLLM provider preset recorded in OR-011/ADR-019, historical version 0.1.6 GitHub identity/public-read connection recorded in OR-012/ADR-020, version 0.1.7 immutable public-repository resolver and durable batch analysis authorized by the owner on 2026-08-16 and recorded in ADR-021, historical version 0.1.8 OAuth setup-guidance UX recorded in ADR-022, version 0.1.9 external embedding profiles, deployment-aware password/private admin topology, local-first recovery, and bounded operations CLI recorded in ADR-023 through ADR-026, version 0.2.0 passwordless loopback launch plus connection-only GitHub recorded in ENGD-008/ADR-027, and version 0.2.1 OAuth/public-read PAT retirement plus anonymous REST resolution recorded in ENGD-009/ADR-028. The owner requested an MVP delivery phase; this is a sequencing decision and does not reduce the complete v1 scope except for the explicitly retired OAuth/public-read PAT capability.
 

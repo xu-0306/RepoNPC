@@ -3,7 +3,8 @@
 > **Status: Owner-approved 2026-09-26 (ADR-048); implementation pending.** Drafted
 > 2026-09-25, final confirmation of Q8/Q9 on 2026-09-26. This document is the frozen
 > contract referenced by `TECHNICAL_SPEC.md` 0.4.0 §2.10 (FR-043–FR-049),
-> `DECISIONS.md` ADR-048 and `ACCEPTANCE_CRITERIA.md` AC-062–AC-071. Where this contract
+> `DECISIONS.md` ADR-048 and `ACCEPTANCE_CRITERIA.md` AC-062–AC-071. §4.4 was added the same
+> day as ADR-049 / spec 0.4.1 (FR-050, AC-072–AC-073). Where this contract
 > and older spec text disagree, the spec's 0.4.0 amendments and this contract win.
 > Nothing here is implemented yet; no AC here is passed.
 
@@ -168,7 +169,7 @@ Replace the "stay close to confirmed wording / do not infer role" text with the 
 ### 4.0 Target experience (owner reference mockup, 2026-09-26)
 
 - Left: the owner's profile card (avatar, name, headline, bio, links) and project cards (name, description, language, stars, forks).
-- Right: the animated pixel NPC with an online / resting indicator, a dialog box for **free-form questions**, suggestion chips, streamed answers and a collapsible 「來源」 citation list.
+- Right: the animated pixel NPC with an online / resting indicator, a dialog box for **free-form questions**, suggestion chips, streamed answers and a collapsible 「來源」 citation list. The NPC is the owner's selected or uploaded character, and the scene around it follows that character (§4.4). The mockup's cat is only an illustration.
 - The NPC is a **guide that talks about the owner in the third person** (「王小明的這個專案…」), not the owner speaking as 「我」 (§1.8).
 - Mockup items **not** in the MVP:
   - **Views / traffic counts:** the GitHub traffic API needs a token with push access and covers only the last 14 days, so it is dropped. Stars and forks (public API) stay.
@@ -204,6 +205,107 @@ Replace the "stay close to confirmed wording / do not infer role" text with the 
   Free editing of the answer text is **not** offered, because edited text would no longer be validated evidence (confirmed Q3).
 - Approved FAQ entries serve as suggestion chips with instant answers and, in topology (b), as the offline fallback.
 - Only `approved` items are exported or served. Approval is bound to the bundle ID; when the bundle changes, items become 「需要重新確認」.
+
+### 4.4 Character-driven visitor scene (ADR-049, added 2026-09-26)
+
+**Owner requirement (2026-09-26):** 「NPC角色與背景應該根據使用者上傳不同的角色而有所變化，這只是我使用貓咪角色的示意」. The cat in the reference mockup is only an example. The visitor page's NPC **and** its scene (background, NPC stage, accent colours, dialog tint) must follow whatever character the owner selects or uploads.
+
+**Current gap (code evidence, 2026-09-26):**
+- `CharacterRenderer` already draws any canonical sheet, so the NPC itself is not the problem.
+- The page around it is fixed: the visitor CSS uses static `--ui-*` tokens and literal colours in `apps/web/src/styles.css`.
+- `card.themes` only styles the GitHub card.
+- The admin guide mascot (`.admin-workspace__npc`) is a CSS-drawn humanoid, not the owner's character.
+- No configuration, API field or export artefact describes a scene.
+
+**Classification (anti-hardcode):**
+- **Open set:** characters are arbitrary (humanoid, animal, object, abstract, user art in any palette). A per-species theme table, a "cat theme", or branching on `pack_id`, filename or options is forbidden.
+- **Closed set:** the scene *token roles* (below) and the precedence order are a fixed contract, like the seven animation states.
+
+**Invariant:** for any valid canonical sheet (ADR-040), RepoNPC produces a deterministic scene in both light and dark themes. Every text pair meets WCAG 2.2 AA, and the NPC stays visually separable from its backdrop. The result depends only on the sheet's pixels plus explicit owner choices, never on names.
+
+**Source of truth:** the canonical sheet. Built-in packs compile into the same sheet (ADR-039/040), so one derivation serves both modes.
+
+**Resolution order (per token, first available wins):**
+1. **Owner override** (explicit, in the character workspace):
+   - an optional accent colour;
+   - an optional background image.
+2. **Pack scene hints:** a pack manifest MAY declare an optional scene provider. It is a pack-owned deterministic function of its own options returning a hue/accent hint and/or a backdrop PNG. Core treats it as opaque, and its output passes the same validation. `core/humanoid` declares none today, so it uses derivation.
+3. **Derived from the sheet:**
+   - Take the opaque pixels of all 28 frames (bounded: 256×448), convert them to OKLCH and cluster them by pixel share (median cut, at most 8 clusters).
+   - The base hue comes from the dominant chromatic cluster.
+   - The accent comes from the cluster with the highest chroma × √share.
+   - If the chromatic share is below a fixed threshold, the scene is achromatic (neutral grey, not the old purple default).
+   - The OKLCH lightness/chroma targets for each token role and theme live in **one** registry table.
+4. **Neutral default:** used only when derivation raises an error (never silently for a valid sheet). The reason is reported to the owner.
+
+**Token roles (closed set):**
+- `background`, `surface`, `ink`, `muted_ink`, `accent`, `accent_ink`, `border`, `stage`, `glow`, `focus`.
+- Each role exists for `light` and `dark` and is stored as `#rrggbb`.
+- The frontend maps each role to a fixed `--scene-<role>` CSS variable through one mapping. Arbitrary property names or CSS strings from data are never applied.
+
+**Contrast solver:**
+- Before the tokens are accepted, the solver adjusts OKLCH lightness only (hue kept):
+  - `ink`, `muted_ink` on `background` and on `surface`: ≥ 4.5:1;
+  - `accent_ink` on `accent`: ≥ 4.5:1;
+  - `accent`, `border` and `focus` against their neighbours: ≥ 3:1 (WCAG 1.4.11).
+- **NPC separation:** the average colour of the sprite's edge pixels (opaque pixels adjacent to transparency) vs `stage` must reach ≥ 3:1. If `stage` cannot satisfy that together with the page constraints, `stage` becomes a contrasting plate behind the NPC rather than lowering text contrast.
+- An owner accent that fails is adjusted, and the adjusted value is shown with a plain reason. It is never silently accepted, and never silently replaced without being shown.
+
+**Background image (owner option):**
+- Format and size:
+  - PNG or WebP only;
+  - no SVG, no animation;
+  - at most 2 MB and 2560×1600, at least 640×360.
+- Handling:
+  - decoded with the existing bounded image guards and re-encoded server-side, with metadata stripped;
+  - stored at `assets/scene/<name>.png|webp` (no nesting);
+  - scaling is owner-chosen `smooth | pixelated`.
+- Placement:
+  - it is decorative (`alt=""`) and sits only behind the NPC stage and page margins;
+  - text always sits on opaque `surface` panels, so contrast never depends on the image;
+  - a theme scrim derived from `background` keeps dark mode legible.
+- Without an image, the backdrop is drawn from tokens only (gradient, glow and floor ellipse under the NPC); there is no species imagery.
+
+**Configuration (additive, backward compatible):**
+
+```yaml
+character:
+  scene:                      # omitted = automatic
+    accent: null              # or "#rrggbb"
+    background_path: null     # or assets/scene/<name>.png|webp
+    background_scaling: smooth  # smooth | pixelated
+```
+
+- The scene is re-derived whenever the character sheet changes. Owner overrides persist across a character change, and the workspace then shows a notice with 「重設為自動」.
+- `character.revision` versions the scene.
+
+**Public output:**
+- The profile gains `character.scene`, and the export writes the same object and backdrop file into the hashed manifest:
+
+  ```json
+  {
+    "source": "owner|pack|derived|default",
+    "revision": 3,
+    "themes": {"light": {...roles}, "dark": {...roles}},
+    "background_url": null,
+    "background_scaling": "smooth"
+  }
+  ```
+
+- New endpoint `GET /api/public/scene-background?rev=N`:
+  - 404 when there is no image;
+  - sends `nosniff` and an ETag.
+- Tokens are computed in Python at validation/bundle time, never in the browser, so the live page and the Pages export render identically.
+- The payload contains no host, model or cost fields.
+
+**Owner UX (Character & animation workspace, new 「場景」 step):**
+- A live visitor-page preview with the current character in light and dark themes, available and resting states, and reduced motion.
+- The derived palette shown as labelled chips with its source (自動 / 角色包 / 自訂).
+- A custom accent input, a background upload with preview, and 「重設為自動」.
+- The admin guide mascot renders the active character through `CharacterRenderer`. The CSS mascot remains only as the no-character fallback.
+- Admin chrome keeps its own neutral theme; only the preview is scene-themed.
+
+**Out of scope:** animated backdrops, per-state scene changes, visitor-selectable themes, and automatic restyling of the GitHub card. `card.themes` stays explicit; the workspace MAY offer an explicit 「套用角色配色到卡片」 action.
 
 ---
 
@@ -308,6 +410,7 @@ The owner connects their own model. RepoNPC must never choose or switch provider
 | Participation (§2) | §4 evidence classes, §6 indexing, §9.1 profile API | FR-045 | AC-066 dates, owner flag and other-contributors flag, no counts, unavailable ≠ zero |
 | Coverage and FAQ (§3, §4.3) | §11.x admin flows | FR-046 | AC-067 only approved FAQ exported or served; stale on bundle change; coverage check never blocks publishing |
 | Visitor page and live chat (§4.0–4.2) | new section; §12.2 card target | FR-047 | AC-068 free-form live chat through the visitor gateway; resting state shows no host/cost info; (b) page and FAQ fallback work with host offline |
+| Character-driven scene (§4.4, ADR-049) | §4 config, §9.2/§9.3, new §12.3, §16 | FR-050 | AC-072 scene follows any character with AA contrast in both themes; AC-073 owner accent/background overrides are validated, reported and exported |
 | ADR-047 back in MVP (§4.1) | Funnel plan, OPERATIONS, SECURITY, §18 | FR-047 | AC-071 gateway CORS limited to the configured Pages origin, no credentials, admin unreachable; existing Funnel/gateway checks stay MVP |
 | Installer (§5) | §15 deployment | FR-048 | AC-069 clean Windows host install without Docker |
 | Built-in embedding (§6) | §5.4, §13.3, FR-006, FR-012 | FR-049 | AC-070 first-run download consent, checksum, re-index warning |
@@ -335,6 +438,25 @@ The owner connects their own model. RepoNPC must never choose or switch provider
   - An organization-owned repository gives `is_repository_owner=false`.
   - A repository with a second contributor gives `other_contributors_visible=true`.
 - **Visitor gateway:** admin routes return 404 through Funnel; visitor responses and error bodies contain no host, model, provider or cost fields; rate limit and daily cap enforced.
+- **Character scene (§4.4):**
+  - Fixtures are generated programmatically and deliberately include no cat:
+    - a non-humanoid blob or object;
+    - a monochrome grey sprite;
+    - a near-white and a near-black sprite;
+    - a single saturated hue;
+    - a multi-hue sprite;
+    - a sprite whose dominant colour equals the old default background;
+    - the `core/humanoid` pack with two different colour options.
+  - Assert:
+    - distinct palettes give distinct token sets, and the base hue follows the dominant hue within tolerance;
+    - an achromatic sprite gives a neutral scene;
+    - every contrast pair and the NPC-separation check pass in both themes;
+    - identical input gives byte-identical tokens.
+  - Name independence: renaming the sprite file or changing option *key names* in a test pack with identical pixels leaves the tokens unchanged. No code path reads `pack_id`, filenames or option keys for scene decisions.
+  - A failing owner accent is adjusted and reported.
+  - Background upload rejects SVG, animated, oversized, undersized and polyglot files, and strips metadata.
+  - The export contains the same tokens and a hashed backdrop, and renders with the host stopped.
+  - A style guard fails if visitor CSS contains literal colours outside the single neutral-default token block.
 - **Static export (topology b):**
   - The site renders with the RepoNPC host stopped.
   - Unapproved FAQ entries are absent.
@@ -355,5 +477,6 @@ All resolved on 2026-09-26:
 
 - **Q8:** topology (b): GitHub Pages static shell uploaded manually by the owner + Funnel live API, with in-browser approved-FAQ fallback while the host is offline (§4.2). (a) rejected.
 - **Q9:** mockup adjustments accepted: drop Views; no attachment button; microphone post-MVP (Web Speech API only); the NPC speaks about the owner in the third person (§4.0).
+- **Q10 (2026-09-26, ADR-049):** the mockup's cat is illustrative. The NPC and the scene follow the owner's character through sheet-derived tokens, with optional pack hints and owner overrides (§4.4). Assumption made while drafting: the optional background image upload is MVP; the owner may remove it without affecting the derived scene.
 
 Deferred by owner: D8 novice/visitor walkthroughs (owner runs them personally); readiness test and cost estimate (§7).
