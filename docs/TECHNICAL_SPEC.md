@@ -1,12 +1,24 @@
 # RepoNPC v1 Technical Specification
 
-**Scene template and background image amendment (2026-09-26, ADR-050; FR-051/052, FR-050, FR-018, NFR-001/009/011, AC-074–AC-075):** The owner asked for several background and colour-scheme templates to choose in settings, then clarified that programmatically drawn template backgrounds are not wanted, and asked for an owner background upload with a realistic preview. [Completion direction contract §4.5–§4.6](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md) is normative.
+**Chat interface and colour scheme amendment (2026-09-26, ADR-051; FR-047/050/051/052, NFR-009/011, AC-068, AC-072–AC-075):** The owner asked for a simple chat UI instead of bundled illustrated backgrounds, colours that do not follow the character, several colour schemes to choose from, and light/dark mode. [Completion direction contract §4.0 and §4.4–§4.6](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md) is normative.
+- The visitor page is a simple chat interface with flat colours:
+  - a collapsible sidebar with the profile and projects, which becomes a drawer on phones;
+  - a top bar with the NPC status avatar, the language switch and a light/dark toggle;
+  - a centred chat column with a welcome hero, message bubbles and a pinned input bar.
+- Colours come from one versioned, schema-validated registry (`color_schemes.yml`) of fixed schemes with explicit light and dark `#rrggbb` values. A scheme that fails AA contrast as authored stops the registry from loading. Starter set: `neutral` (default), `ocean`, `forest`, `sunset`, `lavender`.
+- `color_mode` is `system` (default), `light` or `dark`. With `visitor_mode_toggle` on (default), visitors can switch light/dark, and the choice stays in their browser's `localStorage`.
+- Only the NPC follows the character. Sheet-palette derivation, pack scene hints and hue-seed templates are retired, and only `stage` may be adjusted to keep the NPC separable.
+- The owner image is optional and appears only in the welcome hero.
+- No code branches on scheme ids.
+- This amendment is not implemented yet.
+
+**Scene template and background image amendment (2026-09-26, ADR-050; FR-051/052, FR-050, FR-018, NFR-001/009/011, AC-074–AC-075; revised by ADR-051 above):** The owner asked for several background and colour-scheme templates to choose in settings, then clarified that programmatically drawn template backgrounds are not wanted, and asked for an owner background upload with a realistic preview. [Completion direction contract §4.5–§4.6](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md) is normative.
 - Templates are **colour schemes only**, as data in one versioned, schema-validated registry (`scene_templates.yml`). Each has a palette mode (`follow_character`, or `fixed` OKLCH hue seeds) with a named tone. The default `auto` is the ADR-049 character-derived scene. No template draws a backdrop.
 - The owner background image is MVP. An upload becomes a private draft, which is previewed in the real visitor components with the active character, a sample dialog, light/dark themes and desktop/phone frames. Focus point, dim and scaling are adjustable, and nothing public changes until 「套用」.
 - Every template, with or without an image, passes the FR-050 contrast solver and NPC-separation check with every character.
 - No code branches on template ids, and no template references a species, `pack_id`, filename or option key.
 
-**Character-driven visitor scene amendment (2026-09-26, ADR-049; FR-047/050, FR-015/018, NFR-001/009/011, AC-072–AC-073):** The owner clarified that the reference mockup's cat is only an example: the visitor NPC and its scene MUST follow whatever character the owner selects or uploads. [Completion direction contract §4.4](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md) is normative.
+**Character-driven visitor scene amendment (2026-09-26, ADR-049; FR-047/050, FR-015/018, NFR-001/009/011, AC-072–AC-073; colour derivation retired by ADR-051 above):** The owner clarified that the reference mockup's cat is only an example: the visitor NPC and its scene MUST follow whatever character the owner selects or uploads. [Completion direction contract §4.4](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md) is normative.
 - The scene is a closed set of token roles in light and dark themes. It is derived deterministically from the canonical sheet's pixels (OKLCH clustering).
 - Tokens resolve in this order: explicit owner override, optional opaque pack scene hints, sheet derivation, and a neutral default only on derivation error.
 - A contrast solver guarantees WCAG 2.2 AA text contrast and NPC/backdrop separation.
@@ -54,15 +66,15 @@
 | Field | Value |
 | --- | --- |
 | Status | **Approved** |
-| Version | 0.4.3 |
+| Version | 0.4.4 |
 | Product | RepoNPC v1 |
 | Audience | Implementation Agents, reviewers, maintainers |
 | Last updated | 2026-09-26 |
-| Approval date | 2026-08-10; Phase 2 closure amendment approved 2026-08-11; first-owner onboarding, personal-deployment convenience, and guided-onboarding amendments approved 2026-08-14; vLLM provider-preset amendment approved 2026-08-15; GitHub identity and connection amendment approved 2026-08-16; OAuth setup-guidance UX and ENGD-001/002/003/006 amendments approved 2026-08-30; passwordless loopback launch and connection-only GitHub amendment approved 2026-09-04; GitHub OAuth/public-read PAT retirement approved 2026-09-08; provider-neutral setup approved 2026-09-09; model-first guided workflow approved 2026-09-10; safe connection-revision rebinding and authenticated session resume approved 2026-09-13; same-service URL retention, actionable connection errors, Chat probe grace, and flexible analysis budgets approved 2026-09-14; controlled analysis recovery approved 2026-09-17; species-neutral character packs, direct legacy-field removal, 64px canonical sprites, bounded material conversion, and novice material discovery approved 2026-09-21; ordinary-owner character workspace and animated preview approved 2026-09-22; local publication approved 2026-09-22; completion direction (segment answers, participation, FAQ review, Pages + Funnel live chat, Windows installer, built-in bge-m3 embedding, owner model guidance) approved 2026-09-26; character-driven visitor scene (ADR-049) added 2026-09-26; scene templates (ADR-050) added 2026-09-26; colour-only templates and owner background preview (ADR-050 revision) added 2026-09-26 |
+| Approval date | 2026-08-10; Phase 2 closure amendment approved 2026-08-11; first-owner onboarding, personal-deployment convenience, and guided-onboarding amendments approved 2026-08-14; vLLM provider-preset amendment approved 2026-08-15; GitHub identity and connection amendment approved 2026-08-16; OAuth setup-guidance UX and ENGD-001/002/003/006 amendments approved 2026-08-30; passwordless loopback launch and connection-only GitHub amendment approved 2026-09-04; GitHub OAuth/public-read PAT retirement approved 2026-09-08; provider-neutral setup approved 2026-09-09; model-first guided workflow approved 2026-09-10; safe connection-revision rebinding and authenticated session resume approved 2026-09-13; same-service URL retention, actionable connection errors, Chat probe grace, and flexible analysis budgets approved 2026-09-14; controlled analysis recovery approved 2026-09-17; species-neutral character packs, direct legacy-field removal, 64px canonical sprites, bounded material conversion, and novice material discovery approved 2026-09-21; ordinary-owner character workspace and animated preview approved 2026-09-22; local publication approved 2026-09-22; completion direction (segment answers, participation, FAQ review, Pages + Funnel live chat, Windows installer, built-in bge-m3 embedding, owner model guidance) approved 2026-09-26; character-driven visitor scene (ADR-049) added 2026-09-26; scene templates (ADR-050) added 2026-09-26; colour-only templates and owner background preview (ADR-050 revision) added 2026-09-26; simple chat interface and fixed colour schemes with light/dark mode (ADR-051) added 2026-09-26 |
 
 Application implementation is authorized under this approved specification. The words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RECOMMENDED, MAY, and OPTIONAL are normative as described by RFC 2119.
 
-Version 0.4.3 / ADR-050 (revised) makes templates colour-only and adds the owner background image with a realistic preview (FR-052, §12.3). Version 0.4.2 / ADR-050 adds owner-selectable scene templates (FR-051, §12.3). Version 0.4.1 / ADR-049 adds the character-driven visitor scene (FR-050, §12.3). Version 0.4.0 / ADR-048 approves the completion direction in §2.10 and the linked contract. Version 0.3.9 / ADR-046 approves the local-first portfolio, activation and guided GitHub card path. External testing is deferred by the owner until a public URL is supplied.
+Version 0.4.4 / ADR-051 replaces the illustrated and character-derived scene with a simple chat interface, owner-selected fixed colour schemes and light/dark mode; only the NPC follows the character (FR-047/050/051/052, §12.3). Version 0.4.3 / ADR-050 (revised) makes templates colour-only and adds the owner background image with a realistic preview (FR-052, §12.3). Version 0.4.2 / ADR-050 adds owner-selectable scene templates (FR-051, §12.3). Version 0.4.1 / ADR-049 adds the character-driven visitor scene (FR-050, §12.3). Version 0.4.0 / ADR-048 approves the completion direction in §2.10 and the linked contract. Version 0.3.9 / ADR-046 approves the local-first portfolio, activation and guided GitHub card path. External testing is deferred by the owner until a public URL is supplied.
 
 Technical Specification 0.3.8 / ADR-045 was approved on 2026-09-22 for validated automatic correction of repeated frame drift and exact per-frame pixel inputs. Version 0.3.7 / ADR-044 remains the approved preview-first structural edge-spill cleanup boundary.
 
@@ -274,14 +286,14 @@ The [completion direction contract](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md)
 | FR-044 | Person-oriented questions without a matching owner assertion MUST be answered from `participation` and `project` segments (whose project it is, when the owner was active, what the project does and how it is built) without any visitor-facing "not explained" or partial-omission note. With no valid segment or `insufficient_evidence=true`, the service MUST return the localized no-match reply with up to three suggested questions and no provider retry. The NPC speaks about the owner in the third person. Citations are grouped into one collapsible Sources row labelled owner statement / GitHub participation / project documents and code, with permalink details on expansion. |
 | FR-045 | The indexer MUST derive `PARTICIPATION` evidence per enabled repository at the pinned SHA from the confirmed `profile.github_login` (required, prefilled from the configuration repository owner; `profile.aliases` optional): `is_repository_owner`, `first_commit` and `last_commit` (month-granular dates with immutable commit permalinks), `has_visible_commits`, and `other_contributors_visible`. It uses GitHub's `author` filter, the commits `Link rel="last"` page and `contributors?per_page=2`. Unlinked commit emails are ignored. Raw counts MUST NOT be displayed. A failed request MUST record the fact as unavailable, never as zero or non-participation. Any host-side read token MUST NOT be exported. |
 | FR-046 | Before publication the admin MUST offer an informational coverage check over a per-locale standard question registry, reporting answered / partially answered with owner-only reason codes / no relevant content, and an optional shortcut to add an owner statement. It MUST NOT block publication. FAQ candidates from `profile.suggested_questions` and the coverage set pass the normal answer pipeline; the owner may approve, reject, regenerate, or rewrite as an owner statement (saved as a claim, then regenerated). Free editing of answer text is not allowed. Approval is bound to the bundle ID; a bundle change marks items as needing reconfirmation. Only approved items are exported or served. |
-| FR-047 | The MVP visitor experience MUST provide the profile card, project cards (name, description, language, stars, forks), the animated NPC with an available/resting indicator, free-form live chat with streamed answers, suggestion chips and collapsible citations. Live answers run on the owner host behind the ADR-047 visitor-only gateway exposed through Tailscale Funnel (route allowlist, rate limits, daily caps, size limits, SSE timeouts, no credentials, no host/model/provider/cost fields in visitor responses). An admin "Export share site" action MUST produce a self-contained static folder (HTML/CSS/JS, public JSON, character assets, `.nojekyll`, hashed manifest) that the owner uploads manually to their own GitHub Pages repository; RepoNPC performs no GitHub write. Gateway CORS MUST admit only the configured Pages origin without credentials. While the gateway is unreachable, the page MUST remain usable, show the resting state, and match typed questions in the browser against approved FAQ entries only, never generating text. Export MUST include only public data, pass a secret scan, respect GitHub Pages size limits, and exclude admin routes and data. The GitHub card links to the owner-entered page URL after a fetch and manifest-hash check. Views/traffic counts and attachments are excluded; microphone input is post-MVP and browser-local only. |
+| FR-047 | The MVP visitor experience MUST provide the profile card, project cards (name, description, language, stars, forks), the animated NPC with an available/resting indicator, free-form live chat with streamed answers, suggestion chips and collapsible citations. Live answers run on the owner host behind the ADR-047 visitor-only gateway exposed through Tailscale Funnel (route allowlist, rate limits, daily caps, size limits, SSE timeouts, no credentials, no host/model/provider/cost fields in visitor responses). An admin "Export share site" action MUST produce a self-contained static folder (HTML/CSS/JS, public JSON, character assets, `.nojekyll`, hashed manifest) that the owner uploads manually to their own GitHub Pages repository; RepoNPC performs no GitHub write. Gateway CORS MUST admit only the configured Pages origin without credentials. While the gateway is unreachable, the page MUST remain usable, show the resting state, and match typed questions in the browser against approved FAQ entries only, never generating text. Export MUST include only public data, pass a secret scan, respect GitHub Pages size limits, and exclude admin routes and data. The GitHub card links to the owner-entered page URL after a fetch and manifest-hash check. Views/traffic counts and attachments are excluded; microphone input is post-MVP and browser-local only. (0.4.4, ADR-051) The page MUST use a simple chat layout: a collapsible sidebar with the profile and project cards (a drawer on phones); a top bar with the NPC status avatar, language switch and light/dark toggle; and a centred chat column with a welcome hero (large animated NPC, greeting, suggestion chips), right-aligned visitor bubbles, left-aligned NPC answers with an avatar and citations, and an input bar pinned to the bottom. |
 | FR-048 | Windows novices MUST be able to install and start RepoNPC without Docker or a separate Python installation, using a PyInstaller onedir bundle wrapped in a per-user Inno Setup installer with shortcuts and an uninstaller. The launcher MUST start the loopback backend, wait for health and open the admin page in the default browser, with an obvious open-admin/quit control. User data lives outside the install folder, survives uninstall unless explicitly removed, and survives installing a newer version. The installer does not bundle the embedding model. Unsigned MVP releases MUST publish SHA-256 checksums and SmartScreen guidance. Docker remains supported for Linux and advanced deployments; macOS is out of first-release scope. |
 | FR-049 | The provider layer MUST include a `builtin_onnx` embedding adapter (ONNX Runtime, CPU, no PyTorch) serving `bge-m3` (1024 dimensions, no prompt prefix, 8192-token context) as the default embedding profile. The first time an index is needed, the owner MUST choose between downloading the built-in model (showing size, license and source, then a cancellable/resumable progress bar), configuring another embedding service, or deferring (building stays blocked with an explanation). Nothing is downloaded without that explicit choice. The download MUST be verified against a pinned source and checksum before use. Changing the embedding model MUST warn that a full re-index is required before confirmation. |
-| FR-050 | (0.4.1, ADR-049) The visitor NPC and its scene MUST follow the active character, whether built-in or uploaded. From the canonical sheet the system MUST derive a deterministic scene of closed token roles (`background`, `surface`, `ink`, `muted_ink`, `accent`, `accent_ink`, `border`, `stage`, `glow`, `focus`) for light and dark themes. Precedence is: owner override, then optional opaque pack scene hints, then sheet derivation, then a neutral default only on derivation error, with the reason reported. A contrast solver MUST enforce WCAG 2.2 AA text contrast, 3:1 non-text contrast, and 3:1 separation between the NPC edge colour and its stage. Owner accent and background-image overrides are validated, and adjustments are shown, never silent. Scene decisions MUST NOT depend on species, `pack_id`, filenames or option names. Tokens are computed server-side, served in the public profile and exported in the hashed static-site manifest (§12.3). |
-| FR-051 | (0.4.2/0.4.3, ADR-050) The owner MUST be able to choose a colour-scheme template in settings. Templates MUST be data in one versioned, schema-validated registry, with a stable id, version, localized labels and a palette mode (`follow_character`, or `fixed` OKLCH hue seeds) with a named tone. Templates carry no backdrop drawing; without an owner image the backdrop is the plain `background` colour plus the NPC stage. The default template `auto` is the FR-050 derived scene. Palette precedence is: owner accent, then fixed template seeds, then the character hue (pack hint, derivation), then the neutral default on error. Backdrop precedence is: owner image, then pack backdrop hint, then plain colour. The FR-050 contrast solver and NPC-separation check MUST pass for every template with every character, with or without an image. An unknown configured id MUST fail closed; retired ids resolve through registry aliases. No code path may branch on a template id, and no template may reference a species, `pack_id`, filename or option key. The export stores resolved tokens plus the template id and version (§12.3). |
-| FR-052 | (0.4.3, ADR-050) The owner MUST be able to upload a background image (PNG/WebP, validated and re-encoded per FR-050) and see, before publishing, a preview of the visitor page rendered by the real visitor components with that image, the active character, the selected template colours and a sample dialog marked as an example, in light and dark themes and desktop and phone frames. Uploads MUST become private, expiring drafts that no public route or export can reach. The owner MUST be able to set a focus point, a dim level (`auto` picks the lowest level that separates the NPC) and scaling, and then apply, cancel or remove. The preview and the published page MUST resolve the scene through the same server function, so equal settings render identically. The preview makes no provider call. Nothing public changes until the owner applies. |
+| FR-050 | (0.4.1, ADR-049; revised 0.4.4, ADR-051) The visitor NPC MUST be the active character, whether built-in or uploaded, in the welcome hero, the answer avatars and the status avatar. Page colours MUST NOT follow the character. They come from the owner-selected colour scheme (FR-051) as closed token roles (`background`, `surface`, `surface_alt`, `ink`, `muted_ink`, `accent`, `accent_ink`, `border`, `stage`, `focus`) for light and dark variants. The only per-character adjustment is NPC separation: when the NPC edge colour vs `stage` is below 3:1, only `stage` lightness is adjusted, or a contrasting plate is drawn if that is not enough. Text colours never change for the NPC. An optional owner accent is validated against WCAG 2.2 AA and adjusted with a visible reason. An optional owner image appears only in the welcome hero (FR-052). Scene decisions MUST NOT depend on species, `pack_id`, filenames or option names, and no page colour is derived from sheet pixels. Tokens are resolved server-side, served in the public profile and exported in the hashed static-site manifest (§12.3). |
+| FR-051 | (0.4.2/0.4.3, ADR-050; revised 0.4.4, ADR-051) The owner MUST be able to choose a colour scheme and a colour mode in settings. Schemes MUST be data in one versioned, schema-validated registry (`color_schemes.yml`) with a stable id, version, localized labels and explicit light and dark `#rrggbb` values for every token role. The registry MUST fail to load, naming the scheme, variant and pair, when any text pair is below 4.5:1 or any non-text pair is below 3:1; scheme values are never corrected at runtime. `color_mode` is `system` (default, following `prefers-color-scheme`), `light` or `dark`, and both variants are always published. When `visitor_mode_toggle` is true (default), visitors MAY switch light/dark. The choice MUST be stored only in the visitor's browser `localStorage`, never sent, exported or set as a cookie, and a same-origin script applies it before first paint. Visitors MUST NOT choose a scheme. An unknown configured id MUST fail closed; retired ids resolve through registry aliases. No code path may branch on a scheme id, no scheme may reference a species, `pack_id`, filename or option key, and no scheme draws a backdrop. The export stores resolved tokens plus the scheme id and version (§12.3). |
+| FR-052 | (0.4.3, ADR-050; placement revised 0.4.4, ADR-051) The owner MUST be able to upload a background image (PNG/WebP, validated and re-encoded per FR-050) and see, before publishing, a preview of the visitor page rendered by the real visitor components with that image in the welcome hero, the active character, the selected colour scheme and a sample dialog in the chat layout marked as an example, in light and dark themes and desktop and phone frames. Uploads MUST become private, expiring drafts that no public route or export can reach. The owner MUST be able to set a focus point, a dim level (`auto` picks the lowest level that separates the NPC) and scaling, and then apply, cancel or remove. The preview and the published page MUST resolve the scene through the same server function, so equal settings render identically. The preview makes no provider call. Nothing public changes until the owner applies. |
 
-These extend FR-005–FR-014, FR-020, FR-038–FR-042 and NFR-001/002/003/008/009/011/013/014. Owner-only model guidance (device check against a RepoNPC-maintained `model_catalog.yml` graded suitable / marginal / not recommended using the public parameters-times-bits estimation method, a canirun.ai link without copying its data or calling its API, an Ollama helper with explicit pull, plain-language probe error mapping, a one-line active-model status, and a cloud data disclosure) extends FR-040 and is never shown to visitors; the readiness test and cost estimate are deferred. AC-062 through AC-071 are additional release gates. FR-050 (0.4.1, ADR-049) extends FR-015/FR-018/FR-047 and NFR-001/009/011; its gates are AC-072 and AC-073. FR-051 (0.4.2, ADR-050) extends FR-050; its gate is AC-074. FR-052 (0.4.3, ADR-050) extends FR-050/FR-018; its gate is AC-075.
+These extend FR-005–FR-014, FR-020, FR-038–FR-042 and NFR-001/002/003/008/009/011/013/014. Owner-only model guidance (device check against a RepoNPC-maintained `model_catalog.yml` graded suitable / marginal / not recommended using the public parameters-times-bits estimation method, a canirun.ai link without copying its data or calling its API, an Ollama helper with explicit pull, plain-language probe error mapping, a one-line active-model status, and a cloud data disclosure) extends FR-040 and is never shown to visitors; the readiness test and cost estimate are deferred. AC-062 through AC-071 are additional release gates. FR-050 (0.4.1, ADR-049) extends FR-015/FR-018/FR-047 and NFR-001/009/011; its gates are AC-072 and AC-073. FR-051 (0.4.2, ADR-050) extends FR-050; its gate is AC-074. FR-052 (0.4.3, ADR-050) extends FR-050/FR-018; its gate is AC-075. ADR-051 (0.4.4) revises FR-047 and FR-050–FR-052 without new FR or AC IDs; AC-068 and AC-072–AC-075 are revised accordingly.
 
 ## 3. Normative repository structure
 
@@ -400,7 +412,17 @@ The normative populated example is `reponpc.example.yml`. Rules:
 - Character configuration contains no universal species field. Adding a built-in species or form means registering a new versioned pack; an unanticipated user-created species uses the canonical custom sheet without taxonomy changes.
 - The legacy top-level built-in fields `body`, `skin`, `hair`, `outfit`, `hair_color`, `primary_color`, `secondary_color`, and `accessory` are invalid. Because no deployment consumed that draft contract, v1 provides no compatibility aliases or migration shim.
 - A custom sprite path MUST be below `assets/character/`, must be a `.png`, and must satisfy section 12.
-- (0.4.1, FR-050; 0.4.2/0.4.3, FR-051/052) Optional `character.scene` contains exactly `template` (a registry id, default `auto`), `accent` (null or `#rrggbb`), `background_path` (null, or a `.png`/`.webp` directly below `assets/scene/`), `background_scaling` (`smooth` or `pixelated`, default `smooth`), `background_focus` (`{x, y}` percentages 0–100, default 50/50) and `background_dim` (`auto | none | low | medium | high`, default `auto`). Omitting it means template `auto` with no overrides. An unknown `template` fails validation with the list of valid ids; a retired id resolves through the registry `aliases`. The block has no species or free-form CSS field, and scene changes are versioned by `character.revision`.
+- (0.4.1, FR-050; 0.4.2–0.4.4, FR-051/052) Optional `character.scene` contains exactly these fields:
+  - `color_scheme`: a registry id, default `neutral`;
+  - `color_mode`: `system | light | dark`, default `system`;
+  - `visitor_mode_toggle`: boolean, default `true`;
+  - `accent`: null or `#rrggbb`;
+  - `background_path`: null, or a `.png`/`.webp` directly below `assets/scene/`, shown only in the welcome hero;
+  - `background_scaling`: `smooth` or `pixelated`, default `smooth`;
+  - `background_focus`: `{x, y}` percentages 0–100, default 50/50;
+  - `background_dim`: `auto | none | low | medium | high`, default `auto`.
+
+  Omitting the block means `neutral`, `system`, the visitor toggle on and no overrides. An unknown `color_scheme` fails validation with the list of valid ids; a retired id resolves through the registry `aliases`. The unreleased 0.4.2 `template` key is rejected. The block has no species or free-form CSS field, and scene changes are versioned by `character.revision`.
 - `card.revision` is a non-negative integer used for cache-busting snippets.
 - Retrieval weights are non-negative finite numbers and at least one source weight must be positive.
 - `embedding.model`, `embedding.dimension`, and `embedding.query_prefix` become part of the bundle compatibility contract. The descriptor is a public compatibility record only; provider endpoints, credentials, and profile registry state remain deployment-local. `embedding.adapter` MUST be one of the external bundle identities (`ollama` or `openai_compatible`); `vllm` is normalized to `openai_compatible` in the bundle. A local adapter value is permitted only in explicitly marked benchmark fixtures.
@@ -718,10 +740,11 @@ Success `200`:
     "frame_duration_ms": 160,
     "movement": "subtle",
     "scene": {
-      "source": "derived",
       "revision": 1,
-      "template": {"id": "auto", "version": 1},
-      "themes": {"light": {"background": "#f4f1ea", "...": "#rrggbb"}, "dark": {"...": "#rrggbb"}},
+      "scheme": {"id": "neutral", "version": 1},
+      "color_mode": "system",
+      "visitor_mode_toggle": true,
+      "themes": {"light": {"background": "#rrggbb", "...": "#rrggbb"}, "dark": {"...": "#rrggbb"}},
       "background_url": null,
       "background_scaling": "smooth",
       "background_focus": {"x": 50, "y": 50},
@@ -804,7 +827,7 @@ data: {"finish_reason":"stop","usage":{"input_tokens":1234,"output_tokens":321},
 - `GET /api/public/card.gif?theme=light|dark&locale=zh-TW|en&rev=N`
 - `GET /api/public/card.png?theme=light|dark&locale=zh-TW|en&rev=N`
 - `GET /api/public/character.png?rev=N`
-- `GET /api/public/scene-background?rev=N` (0.4.1, FR-050): the validated, re-encoded owner background image. It never serves drafts (FR-052). Returns 404 when none is configured. It sends `X-Content-Type-Options: nosniff` and the same ETag rules. Scene tokens are part of the profile payload; no endpoint accepts CSS.
+- `GET /api/public/scene-background?rev=N` (0.4.1, FR-050): the validated, re-encoded owner welcome-hero image (0.4.4). It never serves drafts (FR-052). Returns 404 when none is configured. It sends `X-Content-Type-Options: nosniff` and the same ETag rules. Scene tokens are part of the profile payload; no endpoint accepts CSS.
 
 Unsupported query values return `400 VALIDATION_ERROR`. Outputs use an ETag including bundle version, variant, and revision. SVG response headers include `Content-Type: image/svg+xml`, `X-Content-Type-Options: nosniff`, and a restrictive `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:`. SVG contains no scripts, event handlers, foreign objects, or external URLs.
 
@@ -1135,63 +1158,66 @@ Unknown pack IDs, unsupported versions, unknown or missing option keys, and inva
 - user text is length-bounded and XML-escaped; remote fonts/images are forbidden;
 - card links are provided by Markdown around the image, never embedded executable behavior.
 
-### 12.3 Visitor scene (0.4.1, FR-050, ADR-049)
+### 12.3 Visitor chat interface colours and character NPC (0.4.1 FR-050, revised 0.4.4 ADR-051)
 
-The visitor scene is derived from the same canonical sheet that every built-in pack and custom upload produces. It therefore needs no species, pack or filename knowledge.
+The visitor page is a plain chat interface (FR-047, contract §4.0). Its colours come from an owner-selected colour scheme with light and dark variants, not from the character. Only the NPC changes with the character: it is drawn from the same canonical sheet that every built-in pack and custom upload produces, so no species, pack or filename knowledge is needed.
 
-**Derivation**
-- Use the opaque pixels of all frames.
-- Convert to OKLCH and median-cut into at most 8 clusters weighted by pixel share.
-- Base hue: the dominant chromatic cluster.
-- Accent: the cluster with the highest chroma × √share.
-- If the chromatic share is below a registry threshold, the scene is neutral (achromatic).
-- Per-role, per-theme lightness/chroma targets live in one registry table.
+**Retired before implementation (0.4.4)**
+- The 0.4.1 sheet-palette derivation (OKLCH clustering of sheet pixels into page colours) and its per-role L/C target table.
+- Pack scene providers (hue/accent hints and backdrops). Pack manifests gain no scene field.
+- The 0.4.2/0.4.3 `scene_templates.yml` hue-seed templates (`follow_character`, `fixed`, tones).
 
-**Contrast solver** (adjusts lightness only)
-- `ink` and `muted_ink` on `background`/`surface`: ≥ 4.5:1.
-- `accent_ink` on `accent`: ≥ 4.5:1.
-- `accent`, `border` and `focus` against adjacent colours: ≥ 3:1.
-- The average colour of the NPC's edge pixels vs `stage`: ≥ 3:1. When that conflicts with page constraints, `stage` becomes a contrasting plate behind the NPC.
+**Token roles** (closed set, light and dark, `#rrggbb`)
+- `background`, `surface`, `surface_alt`, `ink`, `muted_ink`, `accent`, `accent_ink`, `border`, `stage`, `focus`. The 0.4.1 `glow` role is removed.
+- The frontend maps each role to a fixed `--scene-<role>` custom property through one mapping.
 
-**Overrides and hints**
-- An owner accent that fails the solver is adjusted, and the adjusted value and reason are shown before saving.
-- A pack MAY declare an opaque, deterministic scene provider of its own options (hue/accent hint and/or backdrop PNG). Its output passes the same validation.
+**Colour-scheme registry (0.4.4, FR-051)**
+- `color_schemes.yml` is packaged data, schema-validated at startup, and the only source of scheme colours. Entries hold `id`, `version`, `label` per locale and explicit `light` and `dark` role maps, plus a top-level `aliases` map.
+- Load-time validation fails, naming scheme, variant and pair, on: a duplicate or malformed id; a missing locale; a missing or unknown role; a value that is not `#rrggbb`; an unknown field (image, backdrop, pack, species, font or CSS); an alias cycle or dangling alias; and any failing contrast pair:
+  - `ink` and `muted_ink` on `background`, `surface` and `surface_alt`: ≥ 4.5:1;
+  - `accent_ink` on `accent`: ≥ 4.5:1;
+  - `accent`, `border` and `focus` against `background`, `surface` and `surface_alt`: ≥ 3:1.
+- Scheme values are never corrected at runtime.
+- The starter set (contract §4.5) is `neutral` (default), `ocean`, `forest`, `sunset` and `lavender`. Bundled illustrated backgrounds are not in scope.
 
-**Background image**
-- Owner background images are PNG or WebP only: no SVG, no animation, ≤ 2 MB, 640×360 to 2560×1600.
-- They are decoded under the existing image guards and re-encoded with metadata stripped.
-- They are decorative only. Text always sits on opaque `surface` panels, and a `background`-derived scrim keeps dark mode legible.
-- Without an image, the backdrop is the plain `background` colour plus the NPC stage (floor shadow, and the plate when needed). No decorative pattern is drawn (0.4.3).
+**Colour mode (0.4.4, FR-051)**
+- `color_mode: system | light | dark` (default `system`) selects the default variant; `system` follows `prefers-color-scheme`.
+- `visitor_mode_toggle` (default `true`) shows a light/dark toggle. The visitor's choice is kept only in that browser's `localStorage` (one key). It is never sent, exported or set as a cookie, and it is ignored when the toggle is disabled.
+- Both variants are always published. A small same-origin `<head>` script (not inline; CSP unchanged) applies a stored choice before first paint.
+
+**Resolution per role**
+1. Owner accent (optional): replaces `accent`; `accent_ink` becomes the scheme's `ink` or `background`, whichever passes. A failing accent is adjusted in lightness, and the adjusted value and reason are shown before saving.
+2. The selected scheme's value for the variant.
+3. NPC separation (per character): the average colour of the NPC's edge pixels vs `stage` must be ≥ 3:1. If not, only `stage` lightness is adjusted (hue kept); if that is impossible, `stage` becomes a contrasting plate (a disc behind the hero NPC, a ring behind avatars). Text colours never change for the NPC.
+
+**NPC placement**
+- The welcome hero (empty conversation) shows the large animated NPC on `stage`, the third-person greeting and suggestion chips.
+- Each NPC answer has a small NPC avatar. Only the newest avatar animates (`talking` while streaming, then `idle`); older avatars show a static frame.
+- The top bar shows a small status avatar with the available/resting state. Reduced motion shows static frames everywhere.
+
+**Welcome-hero image (optional)**
+- Owner images are PNG or WebP only: no SVG, no animation, ≤ 2 MB, 640×360 to 2560×1600. They are decoded under the existing image guards and re-encoded with metadata stripped.
+- The image appears only as the backdrop of the welcome hero card behind the large NPC, never behind the sidebar, messages or input. It is decorative (`alt=""`); hero text sits on an opaque `surface` panel, and a `surface`-derived scrim keeps both variants legible.
+- Without an image (default), the hero is the plain `surface` colour plus the NPC stage. No pattern or illustration is drawn.
 
 **Frontend**
-- The frontend maps each role to a fixed `--scene-<role>` custom property through one mapping.
-- Visitor CSS MUST NOT contain literal colours outside the single neutral-default token block.
+- Visitor CSS MUST NOT contain literal colours or scheme ids. The fallback token block used before data loads is generated at build time from the registry's default scheme; the style guard fails on any other literal colour.
 
 **Computation and output**
-- Tokens are computed at validation/bundle time.
-- They are byte-identical for identical sheets and overrides.
-- They are included, with the backdrop, in the static-site export manifest.
+- Tokens are resolved at validation/bundle time, byte-identical for identical inputs, and included with any hero image in the static-site export manifest.
+- `character.scene` carries `revision`, `scheme {id, version}`, `color_mode`, `visitor_mode_toggle`, `themes {light, dark}`, `background_url`, `background_scaling`, `background_focus` and `background_dim`. The 0.4.1 `source` field is removed; stage and accent adjustment notices are returned only by the admin preview API.
+- The export stores resolved tokens, so a registry change reaches a published site only on the next export.
 
-**Templates (0.4.2/0.4.3, FR-051, ADR-050)**
-- The registry `scene_templates.yml` is packaged data, schema-validated at startup, and the only source of template values. Entries hold `id`, `version`, `label` per locale and `palette {mode, hue, accent_hue, tone}`, plus a top-level `aliases` map. Templates have no backdrop fields.
-- Closed sets:
-  - palette mode: `follow_character | fixed`;
-  - tone: keys of the single per-role L/C target table (`standard`, `soft`, `deep`, `vivid`, `neutral`).
-- Colours in the registry are OKLCH hue degrees only. Hex or CSS values, unknown fields (including backdrop fields) and alias cycles make the registry fail to load.
-- Palette resolution: owner accent (accent roles), then fixed hue seeds, then the character hue (pack hint, then derivation), then the neutral default on error. Backdrop resolution: owner image, then pack backdrop hint, then the plain `background` colour. The contrast solver and NPC-separation check run last; a failing stage becomes a plate, and text contrast is never lowered.
-- The starter set (contract §4.5) is `auto`, `soft`, `warm`, `night`, `forest` and `mono`. Bundled illustrated backgrounds are not in MVP; a future one needs a licence record and owner-image validation.
-- Frontend source contains no template id. The export stores resolved tokens, so a registry change reaches a published site only on the next export.
-
-**Owner background image and preview (0.4.3, FR-052, ADR-050)**
+**Owner background image and preview (0.4.3, FR-052, ADR-050; placement revised 0.4.4)**
 - Upload creates a private draft in runtime data (one per owner session, replaced by a new upload, deleted on cancel or after 24 hours). Drafts are never under `assets/`, never served publicly and never exported.
 - Admin API (authenticated; mutations need CSRF):
   - `POST /api/admin/assets/scene/background-drafts` (multipart) returns `{draft_id, width, height, format, notices[]}` or a plain-language error;
   - `GET` and `DELETE /api/admin/assets/scene/background-drafts/{id}` (`no-store`, `nosniff`);
-  - `POST /api/admin/scene/preview` resolves proposed settings (`template`, `accent`, `background: draft:<id> | current | none`, `focus`, `dim`, `scaling`) and returns the public `character.scene` shape plus notices, persisting nothing;
+  - `POST /api/admin/scene/preview` resolves proposed settings (`color_scheme`, `color_mode`, `visitor_mode_toggle`, `accent`, `background: draft:<id> | current | none`, `focus`, `dim`, `scaling`) and returns the public `character.scene` shape plus notices, persisting nothing;
   - `PUT /api/admin/scene` applies the settings, promotes a referenced draft to `assets/scene/<content-hash>.png|webp` and bumps `character.revision`.
 - Preview and publication use the same server resolver, so equal settings give identical scene objects.
-- Focus maps to `object-position`; dim is a scrim from `--scene-background` at a registry-defined opacity per level. `auto` chooses the lowest level at which NPC separation passes without a plate, else the plate.
-- Non-blocking notices: upscaling beyond the desktop frame, strong cropping in desktop or phone frames, and a busy area behind the NPC.
+- Focus maps to `object-position` inside the hero card; dim is a scrim from `--scene-surface` at a registry-defined opacity per level. `auto` chooses the lowest level at which NPC separation passes without a plate, else the plate.
+- Non-blocking notices: upscaling beyond the hero frame, strong cropping in desktop or phone frames, and a busy area behind the NPC.
 
 ## 13. Provider interfaces
 
@@ -1373,12 +1399,28 @@ Structured logs contain timestamp, severity, event name, request ID, route templ
 
 - The visitor route defaults to `/`; admin routes are below `/admin` and are not advertised publicly.
 - The UI renders profile and chat as semantic DOM. Canvas MAY render decorative scene elements but MUST NOT contain the only accessible content.
-- (0.4.1, FR-050) The visitor page applies the active character's scene tokens for the current colour scheme. The NPC is always the owner's active character; no page element depicts a fixed species. The Character & animation workspace has a 「場景」 step:
-  - a live preview in light and dark themes, available and resting states, and reduced motion;
-  - palette chips labelled by source;
-  - a custom accent, background upload and 「重設為自動」;
-  - (0.4.2, FR-051) a colour-template gallery as a keyboard-operable radio group. Each tile is a live miniature of the visitor page with the active character and the current or draft image, labelled 「跟隨角色配色」 or 「固定配色」. Selection updates the preview, saving is explicit, and any solver adjustment or stage plate for this character is noted in plain language. Visitors cannot choose templates;
-  - (0.4.3, FR-052) background upload by file picker or drag and drop, followed by a visitor-page preview built from the real visitor components: the image, the animated active character, the owner's name, and a sample dialog marked 「範例」 with sample chips and the input bar (no provider call). The preview offers light/dark, desktop/phone frames, NPC state (待機 / 說話 / 休息中), reduced motion and a before/after comparison. Focus point (drag, click or arrow keys, with desktop and phone crop outlines), dim and scaling update it immediately. 「套用」, 「取消」 and 「移除背景圖」 are explicit.
+- (0.4.1, FR-050; revised 0.4.4, ADR-051) The visitor page is a simple chat interface (FR-047):
+  - a collapsible sidebar with the profile and project cards (a drawer on phones);
+  - a top bar with the NPC status avatar, the language switch and the light/dark toggle;
+  - a centred chat column with the welcome hero, message bubbles and a pinned input bar.
+
+  Colours come from the owner's colour scheme and mode. The NPC is always the owner's active character, and no page element depicts a fixed species. Visitors can switch only light/dark, when enabled, and the choice stays in their browser's `localStorage`.
+
+  The Character & animation workspace has an 「外觀」 step (formerly 「場景」):
+  - a large live preview of the chat page with the active character, in light and dark variants, available and resting states, empty and in-conversation, and reduced motion;
+  - (FR-051) a colour-scheme gallery as a keyboard-operable radio group:
+    - each tile is a live half-light / half-dark miniature of the chat page with the active character;
+    - selection updates the preview, and saving is explicit;
+    - a stage adjustment or plate needed for this character is noted in plain language;
+    - visitors cannot choose schemes;
+  - a colour-mode selector 跟隨系統 / 淺色 / 深色, and a switch 「讓訪客切換淺色／深色」;
+  - a custom accent under 「進階」, with any adjustment and its reason shown before saving;
+  - (0.4.3, FR-052) welcome-hero image upload by file picker or drag and drop, followed by a preview built from the real visitor components:
+    - it shows the image in the welcome hero, the animated active character, the owner's name, and a sample dialog marked 「範例」 with sample chips and the input bar, with no provider call;
+    - it offers light/dark, desktop/phone frames, empty/in-conversation, NPC state (待機 / 說話 / 休息中), reduced motion and a before/after comparison;
+    - focus point (drag, click or arrow keys, with desktop and phone crop outlines), dim and scaling update it immediately;
+    - 「套用」, 「取消」 and 「移除背景圖」 are explicit;
+  - 「重設為預設」, which restores `neutral`, `system`, the visitor toggle on and no accent.
 
   The admin guide mascot renders the active character, with the CSS mascot used only when no character exists.
 - Character states map to lifecycle: idle before input, listen while input is active, think during retrieval/provider wait, talk while validated tokens render, success on completion, offline on unavailable/error.
@@ -1462,7 +1504,7 @@ To approve, the project owner should explicitly state that RepoNPC v1 Technical 
 - any owner-requested exceptions before application implementation starts.
 
 **Approved by:** project owner  
-**Latest amendment:** Technical Specification 0.4.3 / ADR-050 revised (2026-09-26): templates are colour schemes only (no drawn backdrops); owner background image with private drafts and a realistic visitor-page preview (FR-051/052, §12.3, AC-074–AC-075); not implemented. Previous: 0.4.2 / ADR-050 (2026-09-26): owner-selectable scene templates as registry data. Earlier: 0.4.1 / ADR-049 (2026-09-26): character-driven visitor scene derived from the canonical sheet, with owner overrides and AA contrast solver (FR-050, §12.3, AC-072–AC-073); not implemented. Previous: 0.4.0 / ADR-048 approved 2026-09-26: envelope v2 segment answers, `PARTICIPATION` evidence, coverage check and reviewed FAQ, MVP live chat through an exported GitHub Pages site plus the Tailscale Funnel visitor gateway, Windows PyInstaller/Inno Setup installer, built-in `bge-m3` embedding default and owner-only model guidance (§2.10 and the completion direction contract). Not implemented yet; no acceptance evidence exists. Earlier: 0.3.9 / ADR-046 local publication (2026-09-22); 0.3.1 / ADR-038 controlled analysis recovery (2026-09-17). Same-round retry now requires remaining persisted attempts and active time; exhausted failed items may create an explicit idempotent successor round pinned to their source commit, policy and frozen pair. Migration 26 adds secret-free lineage/failure-stage diagnostics; migration 27 preserves source consumption and bounded request bindings across cleanup. Terminal clocks and `completed_with_errors` behavior are stable across API, SSE and UI. ADR-037 flexible budgets and all earlier amendments remain in force. This correction does not establish full v1 or live-provider acceptance.
+**Latest amendment:** Technical Specification 0.4.4 / ADR-051 (2026-09-26): simple chat interface, owner-selected fixed colour schemes with light/dark mode and a visitor light/dark toggle; only the NPC follows the character; the owner image is optional and shown in the welcome hero (FR-047/050/051/052, §12.3, AC-068, AC-072–AC-075); not implemented. Previous: 0.4.3 / ADR-050 revised (2026-09-26): templates are colour schemes only (no drawn backdrops); owner background image with private drafts and a realistic visitor-page preview (FR-051/052, §12.3, AC-074–AC-075); not implemented. Previous: 0.4.2 / ADR-050 (2026-09-26): owner-selectable scene templates as registry data. Earlier: 0.4.1 / ADR-049 (2026-09-26): character-driven visitor scene derived from the canonical sheet, with owner overrides and AA contrast solver (FR-050, §12.3, AC-072–AC-073); not implemented. Previous: 0.4.0 / ADR-048 approved 2026-09-26: envelope v2 segment answers, `PARTICIPATION` evidence, coverage check and reviewed FAQ, MVP live chat through an exported GitHub Pages site plus the Tailscale Funnel visitor gateway, Windows PyInstaller/Inno Setup installer, built-in `bge-m3` embedding default and owner-only model guidance (§2.10 and the completion direction contract). Not implemented yet; no acceptance evidence exists. Earlier: 0.3.9 / ADR-046 local publication (2026-09-22); 0.3.1 / ADR-038 controlled analysis recovery (2026-09-17). Same-round retry now requires remaining persisted attempts and active time; exhausted failed items may create an explicit idempotent successor round pinned to their source commit, policy and frozen pair. Migration 26 adds secret-free lineage/failure-stage diagnostics; migration 27 preserves source consumption and bounded request bindings across cleanup. Terminal clocks and `completed_with_errors` behavior are stable across API, SSE and UI. ADR-037 flexible budgets and all earlier amendments remain in force. This correction does not establish full v1 or live-provider acceptance.
 **Approved on:** 2026-08-10; Phase 2 closure amendment approved 2026-08-11; first-owner onboarding, personal-deployment convenience, and guided-onboarding amendments approved 2026-08-14; vLLM provider-preset amendment approved 2026-08-15; GitHub identity/connection and bounded batch-analysis amendments approved 2026-08-16; OAuth setup-guidance UX and ENGD-001/002/003/006 amendments approved 2026-08-30; passwordless loopback launch and connection-only GitHub amendment approved 2026-09-04; GitHub OAuth/public-read PAT retirement approved 2026-09-08; provider-neutral model setup approved 2026-09-09; model-first guided workflow approved 2026-09-10; environment-connection editing/deletion approved 2026-09-12; connection rebinding and authenticated session resume approved 2026-09-13; flexible analysis budgets approved 2026-09-14; controlled successor analysis recovery approved 2026-09-17; local publication approved 2026-09-22; completion direction approved 2026-09-26
 **Approval scope:** Technical Specification 0.1.0 and OR-001 through OR-007, version 0.1.1 Phase 2 closure decisions recorded in ADR-015, version 0.1.2 first-owner onboarding recorded in OR-008/ADR-016, version 0.1.3 loopback local-launcher defaults recorded in OR-009/ADR-017, version 0.1.4 guided onboarding recorded in OR-010/ADR-018, version 0.1.5 vLLM provider preset recorded in OR-011/ADR-019, historical version 0.1.6 GitHub identity/public-read connection recorded in OR-012/ADR-020, version 0.1.7 immutable public-repository resolver and durable batch analysis authorized by the owner on 2026-08-16 and recorded in ADR-021, historical version 0.1.8 OAuth setup-guidance UX recorded in ADR-022, version 0.1.9 external embedding profiles, deployment-aware password/private admin topology, local-first recovery, and bounded operations CLI recorded in ADR-023 through ADR-026, version 0.2.0 passwordless loopback launch plus connection-only GitHub recorded in ENGD-008/ADR-027, and version 0.2.1 OAuth/public-read PAT retirement plus anonymous REST resolution recorded in ENGD-009/ADR-028. The owner requested an MVP delivery phase; this is a sequencing decision and does not reduce the complete v1 scope except for the explicitly retired OAuth/public-read PAT capability.
 

@@ -4,7 +4,7 @@
 **Format version:** 1  
 **Related requirements:** FR-015, FR-016; AC-020–AC-022
 
-> **0.4.1 note (ADR-049, FR-050):** the visitor scene (background, stage and accent colours) is derived from this canonical sheet's pixels, so a sheet needs no extra metadata to get a matching scene. See Technical Specification §12.3. The sheet format itself is unchanged.
+> **0.4.4 note (ADR-051, FR-050):** page colours come from the owner's colour scheme, not from this sheet; the 0.4.1 sheet-derived scene of ADR-049 is retired. Only the sheet's edge pixels are read, to keep the NPC separable from its stage (Technical Specification §12.3). The sheet format itself is unchanged.
 
 ## 1. Canonical sheet
 

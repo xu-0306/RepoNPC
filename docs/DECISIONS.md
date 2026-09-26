@@ -429,7 +429,7 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
 
 ## ADR-049: Derive the visitor scene from the active character, never from a fixed species
 
-- **Status:** Accepted 2026-09-26; implementation pending. No acceptance evidence exists.
+- **Status:** Accepted 2026-09-26; implementation pending. No acceptance evidence exists. Superseded by ADR-051 (2026-09-26) on three points: colour derivation, pack scene hints, and the ban on visitor-selectable themes (visitors may now switch light/dark). The rule that the NPC follows the character stays.
 - **Authorization:** On 2026-09-26 the owner stated that the visitor NPC and background must change with the character the owner uploads or selects, and that the cat in the reference mockup is only an example. The scene contract details (token roles, precedence, contrast solver and override limits) were drafted from that requirement under the anti-hardcode rule. The owner may revise them before implementation.
 - **Context:** `CharacterRenderer` already draws any canonical sheet. The surrounding visitor page, however, uses fixed `--ui-*` tokens and literal colours. `card.themes` covers only the GitHub card, and the admin guide mascot is a CSS-drawn humanoid. A per-species theme table would be a closed list for an open-world input.
 - **Decision:** Adopt [completion direction contract §4.4](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md) as Technical Specification 0.4.1 FR-050 / §12.3 and AC-072–AC-073:
@@ -444,7 +444,7 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
 
 ## ADR-050: Offer colour-scheme templates as registry data, and an owner background image with a realistic preview
 
-- **Status:** Accepted 2026-09-26, revised the same day; implementation pending. No acceptance evidence exists.
+- **Status:** Accepted 2026-09-26, revised the same day; implementation pending. No acceptance evidence exists. ADR-051 supersedes the hue-seed templates and the full-page backdrop placement. The owner image draft and preview flow stays, with the image moved to the welcome hero.
 - **Authorization:** On 2026-09-26 the owner asked for several background and colour-scheme templates to choose in settings. After the first draft (procedural backdrop patterns), the owner said that programmatically drawn template backgrounds are not worth having, and asked for an owner background upload with a preview showing roughly how the interface looks with the image and the character. The registry schema, the starter set, the draft/preview flow and the precedence were drafted from those requests under the anti-hardcode rule. The owner may revise them before implementation.
 - **Context:** ADR-049 derives one automatic scene from the active character. The owner also wants explicit colour choices and their own pictures. Hardcoding named themes in frontend CSS or in resolver branches would scatter literals and invite species- or pack-specific themes. Drawn geometric backdrops add little value, and an image chosen blind risks a published page the owner did not expect.
 - **Decision:** Adopt [completion direction contract §4.5–§4.6](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md) as Technical Specification 0.4.3 FR-051/FR-052 / §12.3 and AC-074–AC-075:
@@ -455,3 +455,44 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
   - **Export:** resolved tokens, template id and version, and the applied image.
 - **Boundaries:** No template references a species, `pack_id`, filename or option key; no code branches on a template id; no hex or CSS in the registry; unknown ids fail closed. No drawn decorative backdrops; no bundled illustrated backgrounds in MVP. Drafts are never public or exported. The preview makes no provider call. Visitors cannot choose templates. `card.themes` stays explicit.
 - **Consequences:** Technical Specification becomes 0.4.3. AC-074 and AC-075 start not-run. The FR-050 fixtures form the character axis of a template × character × theme × image contrast matrix. The security model gains the draft upload path.
+
+## ADR-051: Use a plain chat interface with owner-selected colour schemes and light/dark mode
+
+- **Status:** Accepted 2026-09-26; implementation pending. No acceptance evidence exists. Partly supersedes ADR-049 and ADR-050.
+- **Authorization:** On 2026-09-26 the owner said:
+  - no bundled illustrated backgrounds are needed;
+  - a simple chat UI is enough, like the SnowUI "ChatGPT UI Kit" Figma community file;
+  - colours need not follow the character;
+  - several colour schemes should be offered for the owner to choose, together with light and dark modes.
+
+  The Figma file could not be fetched (it requires a login), so the layout was drafted from the kit's public description and common AI-chat layouts. The starter schemes, defaults and layout details are drafting assumptions that the owner may revise before implementation.
+- **Context:** ADR-049 derived page colours from the sheet, and ADR-050 added hue-seed templates and an owner background behind the whole page. The owner now prefers a familiar, quiet chat interface in which the character is the only personal visual element. Deriving colours from pixels adds complexity and unpredictable results for little owner value, and full-page images compete with the conversation.
+- **Decision:** Adopt contract §4.0 and §4.4–§4.6 as revised. They become Technical Specification 0.4.4 (FR-047/050/051/052, §12.3, §16) and the revised AC-068 and AC-072–AC-075:
+  - **Layout:**
+    - a collapsible sidebar with the profile card and project list, which becomes a drawer on phones;
+    - a top bar with the NPC status avatar, a language switch and a light/dark toggle;
+    - a centred chat column with a welcome hero (large animated NPC, greeting, suggestion chips), right-aligned visitor bubbles, left-aligned NPC answers with an avatar and 「來源」, and a bottom input bar;
+    - flat colours only, with no illustrated or drawn backgrounds.
+  - **Colour schemes:**
+    - one versioned, schema-validated `color_schemes.yml` with explicit light and dark `#rrggbb` values for each closed role (`surface_alt` added, `glow` removed);
+    - every scheme must pass AA contrast as authored, or loading fails;
+    - starter set: `neutral` (default), `ocean`, `forest`, `sunset`, `lavender`.
+  - **Colour mode:** `system` (default), `light` or `dark`. `visitor_mode_toggle` (default on) lets visitors switch light/dark; their choice is stored only in their own browser's `localStorage`.
+  - **Character:**
+    - only the NPC follows the character: the hero, the answer avatars and the status avatar;
+    - stage separation adjusts only the stage or uses a plate;
+    - sheet-palette derivation, pack scene hints and hue-seed templates are retired.
+  - **Owner image:** optional, shown only behind the NPC in the welcome hero. The ADR-050 draft and preview flow stays, and the config key `color_scheme` replaces `template`.
+  - **Admin:** the 「場景」 step becomes 「外觀」. It holds the scheme gallery, the mode selector, the visitor toggle, the optional accent under 「進階」 and 「重設為預設」.
+- **Boundaries:**
+  - No scheme references a species, `pack_id`, filename or option key, and no code branches on a scheme id.
+  - Frontend source holds no literal colours or scheme ids outside a build-generated fallback block.
+  - Visitors may switch light/dark but cannot choose a scheme.
+  - The visitor's mode choice is never sent to the server, exported or stored in a cookie.
+  - No bundled illustrated backgrounds.
+  - `card.themes` stays explicit.
+- **Consequences:**
+  - Technical Specification becomes 0.4.4.
+  - AC-068 and AC-072–AC-075 are revised and remain not-run.
+  - Superseded: ADR-049's derivation and pack-hint parts, and ADR-050's hue-seed template parts and full-page backdrop placement.
+  - Still in force: the NPC follows the character, token mapping, the separation check, image validation and the draft/preview flow.

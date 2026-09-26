@@ -1,5 +1,14 @@
 # RepoNPC v1 Acceptance Criteria
 
+**2026-09-26 chat-interface and colour-scheme amendment (ADR-051, Technical Specification 0.4.4, FR-047/050/051/052):** AC-068 and AC-072–AC-075 are revised:
+- The visitor page is a simple chat interface.
+- Colours come from owner-selected fixed schemes with light and dark variants, validated for contrast when the registry loads.
+- Visitors may switch light/dark only; the choice is stored in their browser.
+- Only the NPC follows the character.
+- The optional owner image appears only in the welcome hero.
+
+All of them remain not-run.
+
 **2026-09-26 scene-template and background amendment (ADR-050, Technical Specification 0.4.2–0.4.3 FR-051/052):** AC-074 and AC-075 are added. Owner-selectable colour-scheme templates are registry data, stay accessible with every character and fail closed on unknown ids. Owner background images go through a private draft and a realistic visitor-page preview before being applied. Both start **not-run**.
 
 **2026-09-26 character-scene amendment (ADR-049, Technical Specification 0.4.1 FR-050):** AC-072 and AC-073 are added. The visitor NPC and scene follow the owner's active character through sheet-derived, contrast-checked tokens, and owner accent/background overrides are validated and reported. Both start **not-run**.
@@ -38,8 +47,8 @@
 
 2026-09-12 owner-approved novice setup regression scope (FR-038/039/040, AC-054/055/057/058; bilingual AC-023): optional embedding dimensions remain unknown until an explicit successful two-sample test; unknown/failed/stale profiles cannot be activated or selected as ready. Existing dimensions, selections, switch intents and foreign keys survive runtime migration 19, including rollback on migration failure. Name-only service edits retain protected endpoint/key and revision; destination changes require explicit credential intent. Newly entered keys clear after submission and form closure. Scoped Ollama listing is explicit and distinguishes failure from empty. Successful operation results survive a failed/stale list refresh. These focused checks do not constitute full v1 or release acceptance.
 
-**Document status:** Approved through 0.4.3 (AC-062–AC-071 added 2026-09-26 for 0.4.0; AC-072–AC-073 for 0.4.1; AC-074 for 0.4.2; AC-075 for 0.4.3)
-**Applies to:** RepoNPC v1 Technical Specification 0.4.3
+**Document status:** Approved through 0.4.4 (AC-062–AC-071 added 2026-09-26 for 0.4.0; AC-072–AC-073 for 0.4.1; AC-074 for 0.4.2; AC-075 for 0.4.3; AC-068 and AC-072–AC-075 revised for 0.4.4)
+**Applies to:** RepoNPC v1 Technical Specification 0.4.4
 **Rule:** Every criterion is required unless its mapped requirement is changed through an approved specification update.
 
 ## 1. How acceptance works
@@ -769,6 +778,12 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **Then** while available, answers stream through the Funnel visitor gateway with the third-person NPC and a collapsible Sources row; visitor responses contain no host, hardware, provider, model or cost information.
 - **And** while the host is off, the page renders the profile, project cards and approved FAQ with a 「休息中」 / resting indicator and matches typed questions to approved FAQ entries in the browser without generating text.
 - **And** the export contains `.nojekyll` and a hashed manifest, passes the secret scan, contains no credential or host detail other than the gateway origin, and stays within GitHub Pages size limits.
+- **And** (0.4.4) the page uses the chat layout:
+  - at 1440 px, a persistent sidebar with the profile and project cards; at 375 px, a drawer;
+  - a top bar with the NPC status avatar, the language switch and, when enabled, the light/dark toggle;
+  - a welcome hero before the first question;
+  - right-aligned visitor bubbles, and left-aligned NPC answers with an avatar;
+  - an input bar pinned to the bottom.
 - **Verification:** browser tests against a static server plus a stopped/started gateway, export inspection tests, keyboard/screen-reader and 375/1440-pixel checks; external reachability is recorded separately.
 
 ### AC-069 - Windows novices install and start RepoNPC without Docker or Python
@@ -799,9 +814,9 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **Then** CORS allows only the configured origin for visitor read/chat APIs without `Access-Control-Allow-Credentials`; other origins receive no CORS grant; admin, model and unknown paths return 404 through the gateway; visitor rate limits and budgets still apply.
 - **Verification:** gateway contract tests and an external Funnel check recorded with date and hostname redacted from public evidence.
 
-### AC-072 - The visitor scene follows any character with accessible contrast
+### AC-072 - The NPC follows any character on every colour scheme with accessible contrast
 
-**Maps to:** FR-050, FR-047, FR-015, NFR-009, NFR-011
+**Maps to:** FR-050, FR-047, FR-051, FR-015, NFR-009, NFR-011
 
 - **Given** programmatically generated canonical sheets with no cat:
   - a non-humanoid object;
@@ -809,83 +824,122 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
   - a near-white and a near-black sprite;
   - a single saturated hue;
   - a multi-hue sprite;
-  - a sprite whose dominant colour equals the former default background;
+  - a sprite whose edge colour matches a registry scheme's `stage` colour;
   - `core/humanoid` rendered with two different colour options.
-- **When** each becomes the active character, and the visitor page renders live and from the static export in light and dark themes, available and resting states, and with reduced motion,
+- **When** each becomes the active character, and the chat page renders live and from the static export with every registry scheme, in light and dark variants, available and resting states, with and without messages, and with reduced motion,
 - **Then**:
-  - the NPC is that character;
-  - distinct palettes produce distinct scene tokens whose base hue follows the dominant hue within tolerance;
-  - an achromatic sheet produces a neutral scene;
-  - every text pair is ≥ 4.5:1, every non-text pair ≥ 3:1, and NPC edge vs stage ≥ 3:1;
-  - identical input yields byte-identical tokens;
-  - live and exported pages render the same tokens.
+  - the welcome-hero NPC, the answer avatars and the status avatar are that character, and only the newest answer avatar animates;
+  - page colour tokens are the selected scheme's values (plus any owner accent) and are identical across all fixtures except `stage`;
+  - NPC edge vs `stage` is ≥ 3:1 in every combination; where the stage cannot be adjusted enough, the plate appears, and no text colour changes;
+  - every text pair is ≥ 4.5:1 and every non-text pair ≥ 3:1;
+  - identical input yields byte-identical tokens, and live and exported pages render the same tokens.
 - **And**:
-  - renaming the sprite file or changing option key names with identical pixels does not change tokens;
-  - no scene code reads species, `pack_id`, filenames or option names;
-  - a style guard finds no literal colour in visitor CSS outside the neutral-default token block;
-  - the neutral default appears only on a derivation error, with an owner-visible reason.
-- **Verification:** backend unit tests for derivation and the solver over the fixture set, a style-guard test, and browser checks (axe plus computed-style contrast) of live and exported pages in both locales.
+  - renaming the sprite file or changing option key names with identical pixels changes nothing;
+  - no scene code reads species, `pack_id`, filenames or option names, and no code derives page colours from sheet pixels;
+  - a style guard finds no literal colour or scheme id in visitor CSS or source outside the build-generated fallback block;
+  - no illustrated or decorative background is drawn.
+- **Verification:**
+  - backend unit tests for token resolution and the stage rule over the fixture × scheme × variant matrix;
+  - a style-guard test;
+  - browser checks (axe plus computed-style contrast) of live and exported pages in both locales.
 
-### AC-073 - Owner scene overrides are validated, visible and exported
+### AC-073 - Owner appearance overrides are validated, visible and exported
 
 **Maps to:** FR-050, FR-018, NFR-001, NFR-009
 
-- **Given** the Character & animation workspace 「場景」 step,
-- **When** the owner previews the scene, sets a custom accent (passing and failing contrast), uploads background images (valid PNG/WebP, SVG, animated, oversized, undersized, polyglot, metadata-bearing), switches characters, and resets to automatic,
+- **Given** the Character & animation workspace 「外觀」 step,
+- **When** the owner:
+  - previews the page;
+  - sets a custom accent (one passing contrast, one failing);
+  - uploads hero images (valid PNG/WebP, SVG, animated, oversized, undersized, polyglot, metadata-bearing);
+  - switches characters;
+  - presses 「重設為預設」;
 - **Then**:
-  - the preview shows the active character in both themes and states;
+  - the preview shows the chat page with the active character in both variants and states;
   - a failing accent is adjusted, and the adjusted value and reason are shown before saving;
   - invalid images are rejected with plain-language errors;
-  - accepted images are re-encoded without metadata and served only through `GET /api/public/scene-background`;
+  - accepted images are re-encoded without metadata, served only through `GET /api/public/scene-background`, and shown only in the welcome hero;
   - text never sits directly on the image;
-  - overrides survive a character change with a visible notice, and 「重設為自動」 restores derived tokens;
-  - the export manifest hashes the tokens and backdrop;
+  - scheme, mode and accent survive a character change; only the NPC and, where needed, the stage change;
+  - 「重設為預設」 restores `neutral`, `system`, the visitor toggle on and no accent;
+  - the export manifest hashes the tokens and any hero image;
   - the admin guide mascot shows the active character.
-- **And** the configuration accepts no free-form CSS, property names or species fields, and visitor payloads stay free of host, model and cost data.
-- **Verification:** config-validation and image-guard tests, admin browser tests in both locales, and an export manifest check.
+- **And**:
+  - the configuration accepts no free-form CSS, property names, species fields or the retired `template` key;
+  - visitor payloads stay free of host, model and cost data.
+- **Verification:**
+  - config-validation and image-guard tests;
+  - admin browser tests in both locales;
+  - an export manifest check.
 
-### AC-074 - Colour templates are registry data and stay accessible with any character
+### AC-074 - Colour schemes are registry data with light/dark variants and a visitor mode toggle
 
-**Maps to:** FR-051, FR-050, FR-018, NFR-009, NFR-011
+**Maps to:** FR-051, FR-050, FR-047, FR-018, NFR-009, NFR-011
 
-- **Given** the packaged template registry, a test-only registry with an invented template id and labels, the AC-072 character fixtures (no cat), and three background states (none, a busy photo, a flat image),
-- **When** the owner opens the 「場景」 step, browses the gallery, selects each template, saves, switches characters, resets to automatic and exports, in light and dark themes and both locales,
+- **Given**:
+  - the packaged scheme registry;
+  - a test-only registry with an invented scheme id and labels;
+  - the AC-072 character fixtures (no cat);
+  - browsers with light and dark `prefers-color-scheme`.
+- **When**, in both locales:
+  - the owner opens the 「外觀」 step, browses the gallery, selects each scheme and each colour mode, turns the visitor toggle on and off, saves, switches characters, resets and exports;
+  - visitors open the live and exported page and use the toggle;
 - **Then**:
-  - every template × fixture × theme × background combination passes ≥ 4.5:1 text contrast, ≥ 3:1 non-text contrast and ≥ 3:1 NPC edge vs stage; when a fixed palette cannot separate from a character, the stage plate appears and text contrast is not lowered;
-  - gallery tiles are live miniatures with the active character and the current or draft image, are keyboard-operable as a radio group, and are labelled 「跟隨角色配色」 or 「固定配色」;
-  - a `follow_character` template gives different tokens for two different sheets, and a `fixed` template keeps its hue seeds across sheets;
-  - without an owner image, no decorative pattern is drawn: only the plain background colour and the NPC stage;
-  - an omitted setting behaves exactly like `auto`, which equals the AC-072 derived scene;
-  - the export holds resolved tokens plus template id and version, with identical manifests for identical inputs.
+  - every packaged scheme passes every text (≥ 4.5:1) and non-text (≥ 3:1) pair in both variants as authored;
+  - with every fixture, the NPC-separation rule holds;
+  - gallery tiles are live half-light/half-dark miniatures of the chat page with the active character, keyboard-operable as a radio group;
+  - `color_mode: system` follows `prefers-color-scheme`, and `light` and `dark` fix the default variant;
+  - both variants are present in the page and the export;
+  - with the toggle on:
+    - a visitor's choice applies immediately;
+    - it persists across reloads in that browser only, through `localStorage`;
+    - it is never sent in any request, and no cookie is set;
+  - with the toggle off, the control is absent and any stored choice is ignored;
+  - a stored choice is applied before first paint without an inline script, and the CSP is unchanged;
+  - an omitted setting behaves as `neutral`, `system` with the toggle on;
+  - the export holds resolved tokens plus the scheme id and version, and identical inputs give identical manifests.
 - **And**:
   - the test-only registry renders end to end with no code change, and removing an entry removes its tile;
   - an unknown configured id is rejected with the valid list, and a retired id resolves through `aliases`;
-  - a registry with a hex or CSS value, an unknown field (including backdrop fields), mode, tone or locale, a hue outside 0–360, or an alias cycle fails to load;
-  - no source file outside the registry holds template values, and frontend source contains no template id;
-  - visitors have no template control, and payloads stay free of host, model and cost data.
-- **Verification:** registry schema and resolver unit tests, the template × character × theme × background contrast matrix, source guards, admin browser tests in both locales, and an export manifest check.
+  - the registry fails to load, naming the scheme, variant and pair, when it has any of:
+    - a failing contrast pair;
+    - a missing or unknown role;
+    - a non-`#rrggbb` value;
+    - an unknown field, including image or backdrop fields;
+    - a missing locale;
+    - an alias cycle;
+  - no source file outside the registry holds scheme colours, and frontend source contains no scheme id;
+  - visitors have no scheme control, and payloads stay free of host, model and cost data.
+- **Verification:**
+  - registry schema and contrast-validation unit tests;
+  - the scheme × character × variant matrix;
+  - source guards;
+  - browser tests, live and exported, of mode, toggle, persistence and first paint;
+  - admin browser tests in both locales;
+  - an export manifest check.
 
 ### AC-075 - Owner background images are previewed realistically before anything is published
 
 **Maps to:** FR-052, FR-050, FR-018, NFR-001, NFR-009
 
-- **Given** the 「場景」 step, two non-cat character fixtures, and images that are valid (large landscape, small pixel art, portrait, busy photo), invalid (SVG, animated, oversized, undersized, polyglot, wrong extension) and metadata-bearing,
-- **When** the owner uploads, previews, adjusts, switches templates, applies, cancels, removes, and lets a draft expire, in light and dark themes, desktop and phone frames, and both locales,
+- **Given** the 「外觀」 step, two non-cat character fixtures, and images that are valid (large landscape, small pixel art, portrait, busy photo), invalid (SVG, animated, oversized, undersized, polyglot, wrong extension) and metadata-bearing,
+- **When** the owner uploads, previews, adjusts, switches colour schemes, applies, cancels, removes, and lets a draft expire, in light and dark themes, desktop and phone frames, and both locales,
 - **Then**:
   - an accepted upload becomes a private draft with metadata stripped; its URL needs the owner session, sends `no-store` and `nosniff`, and is unreachable through public routes, `GET /api/public/scene-background` and the export until 「套用」;
   - invalid files get plain-language reasons and nothing is stored; a second upload replaces the draft; 「取消」 and 24-hour expiry delete it;
-  - the preview is built from the real visitor components and shows the image, the animated active character, the owner's name and a sample dialog marked 「範例」, with no provider call;
+  - the preview is built from the real visitor components and shows the image in the welcome hero, the animated active character, the owner's name and a sample dialog marked 「範例」, with no provider call;
   - light/dark, desktop/phone, NPC state, reduced motion and before/after controls work;
   - focus moves the visible crop in both frames, with crop outlines on the thumbnail; `dim: auto` picks the lowest level that separates the NPC, else the stage plate; scaling applies;
   - notices appear for upscaled, strongly cropped and busy images;
   - text never sits directly on the image, and all contrast checks pass at every dim level;
+  - the image appears only in the welcome hero card, never behind the sidebar, top bar, messages or input;
   - for equal settings, `POST /api/admin/scene/preview` and the published profile return identical scene objects, and computed styles of the preview and the live page match;
-  - 「套用」 promotes the draft to a content-hashed file, bumps `character.revision` and changes the public page; before that the public page is unchanged; 「移除背景圖」 returns to the plain template background;
+  - 「套用」 promotes the draft to a content-hashed file, bumps `character.revision` and changes the public page; before that the public page is unchanged; 「移除背景圖」 returns to the plain hero;
   - the export includes the applied image, focus, dim and scaling.
 - **And** the configuration accepts no free-form CSS, property names or species fields, and visitor payloads stay free of host, model and cost data.
 - **Verification:** image-guard and draft-lifecycle tests, route exposure tests for drafts, a preview/profile parity test, admin browser tests (keyboard-only, screen reader, both locales, both frames) and an export manifest check.
 
-**0.4.0–0.4.3 traceability additions:**
+**0.4.0–0.4.4 traceability additions:**
 
 | Requirement | Acceptance criteria |
 | --- | --- |
@@ -893,7 +947,7 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 | FR-044 | AC-064, AC-065 |
 | FR-045 | AC-066 |
 | FR-046 | AC-067 |
-| FR-047 | AC-068, AC-071, AC-072 |
+| FR-047 | AC-068, AC-071, AC-072, AC-074 |
 | FR-048 | AC-069 |
 | FR-049 | AC-070 |
 | FR-050 | AC-072, AC-073, AC-074, AC-075 |
@@ -923,7 +977,7 @@ The current machine-readable evidence ledger is `release-evidence/acceptance-led
 
 **0.2.2 evidence boundary:** AC-053 through AC-057 are not-run until implemented and observed. The current release-audit code enumerates only AC-001 through AC-052 and must be extended during implementation; a passing old audit is not coverage of this amendment. Preserve historical evidence provenance and add current candidate evidence instead of relabeling old runs.
 
-**0.4.0–0.4.3 evidence boundary (2026-09-26):** AC-062 through AC-075 are not-run. The release audit and `release-evidence/acceptance-ledger.json` must be extended to enumerate them, with missing/duplicate-ID tests, during implementation. Existing ledger entries do not provide a completion percentage for this amendment.
+**0.4.0–0.4.4 evidence boundary (2026-09-26):** AC-062 through AC-075 are not-run. The release audit and `release-evidence/acceptance-ledger.json` must be extended to enumerate them, with missing/duplicate-ID tests, during implementation. Existing ledger entries do not provide a completion percentage for this amendment.
 
 **0.2.3 evidence boundary (2026-09-10):** Release coverage must extend through AC-060, excluding legacy AC-041 through AC-043. The auditor still enumerates only AC-052 at this review. Extend both document coverage and ledger validation, with missing/duplicate-new-ID tests, during the implementation package. Source presence is not full acceptance for AC-053 through AC-057 either.
 
