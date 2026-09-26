@@ -465,7 +465,7 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
   - colours need not follow the character;
   - several colour schemes should be offered for the owner to choose, together with light and dark modes.
 
-  The Figma file could not be fetched (it requires a login), so the layout was drafted from the kit's public description and common AI-chat layouts. The starter schemes, defaults and layout details are drafting assumptions that the owner may revise before implementation.
+  The Figma file could not be fetched (it requires a login), so the layout was drafted from the kit's public description and common AI-chat layouts. The starter schemes, defaults and layout details were drafting assumptions; the owner confirmed all six the same day (「照你的建議，六點都確認」, contract §10 Q12). Exact hex values are set during implementation and reviewed with the generated contrast report.
 - **Context:** ADR-049 derived page colours from the sheet, and ADR-050 added hue-seed templates and an owner background behind the whole page. The owner now prefers a familiar, quiet chat interface in which the character is the only personal visual element. Deriving colours from pixels adds complexity and unpredictable results for little owner value, and full-page images compete with the conversation.
 - **Decision:** Adopt contract §4.0 and §4.4–§4.6 as revised. They become Technical Specification 0.4.4 (FR-047/050/051/052, §12.3, §16) and the revised AC-068 and AC-072–AC-075:
   - **Layout:**

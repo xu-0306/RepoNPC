@@ -368,7 +368,7 @@ aliases: {}                 # retired id -> successor id (compatibility shim)
   - any unknown field, which includes image, backdrop, pack, species, font or CSS fields.
 - A failing scheme is a load error. Scheme values are never silently corrected.
 
-**Starter set (drafted, owner may change):**
+**Starter set (confirmed by the owner 2026-09-26; hex values set during implementation):**
 
 | id | zh-TW label | Character |
 |---|---|---|
@@ -702,11 +702,14 @@ All resolved on 2026-09-26:
   - only the NPC follows the character (§4.4);
   - the owner image is optional and shown in the welcome hero only (§4.6).
 
-  Drafting assumptions, since the Figma file could not be fetched:
+  Drafting assumptions, made because the Figma file could not be fetched, **confirmed by the owner on 2026-09-26 (「照你的建議，六點都確認」)**:
   - the five-scheme starter set (簡約、海洋藍、森林綠、暖陽橘、薰衣草紫);
   - `color_mode: system` by default, with the visitor light/dark toggle on;
-  - the image shown only in the welcome hero;
+  - the image optional and shown only in the welcome hero;
   - the custom accent kept under 「進階」;
-  - the sidebar, top bar and centred chat column layout.
+  - the sidebar (profile and project cards), top bar and centred chat column layout;
+  - schemes chosen by the owner only; visitors switch light/dark only.
+
+  Exact hex values are still set during implementation and reviewed with the generated contrast report.
 
 Deferred by owner: D8 novice/visitor walkthroughs (owner runs them personally); readiness test and cost estimate (§7).
