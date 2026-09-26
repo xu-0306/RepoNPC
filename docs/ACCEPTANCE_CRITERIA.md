@@ -1,6 +1,6 @@
 # RepoNPC v1 Acceptance Criteria
 
-**2026-09-26 scene-template amendment (ADR-050, Technical Specification 0.4.2 FR-051):** AC-074 is added. Owner-selectable background and colour-scheme templates are registry data, stay accessible with every character, and fail closed on unknown ids. It starts **not-run**.
+**2026-09-26 scene-template and background amendment (ADR-050, Technical Specification 0.4.2–0.4.3 FR-051/052):** AC-074 and AC-075 are added. Owner-selectable colour-scheme templates are registry data, stay accessible with every character and fail closed on unknown ids. Owner background images go through a private draft and a realistic visitor-page preview before being applied. Both start **not-run**.
 
 **2026-09-26 character-scene amendment (ADR-049, Technical Specification 0.4.1 FR-050):** AC-072 and AC-073 are added. The visitor NPC and scene follow the owner's active character through sheet-derived, contrast-checked tokens, and owner accent/background overrides are validated and reported. Both start **not-run**.
 
@@ -38,8 +38,8 @@
 
 2026-09-12 owner-approved novice setup regression scope (FR-038/039/040, AC-054/055/057/058; bilingual AC-023): optional embedding dimensions remain unknown until an explicit successful two-sample test; unknown/failed/stale profiles cannot be activated or selected as ready. Existing dimensions, selections, switch intents and foreign keys survive runtime migration 19, including rollback on migration failure. Name-only service edits retain protected endpoint/key and revision; destination changes require explicit credential intent. Newly entered keys clear after submission and form closure. Scoped Ollama listing is explicit and distinguishes failure from empty. Successful operation results survive a failed/stale list refresh. These focused checks do not constitute full v1 or release acceptance.
 
-**Document status:** Approved through 0.4.2 (AC-062–AC-071 added 2026-09-26 for 0.4.0; AC-072–AC-073 added 2026-09-26 for 0.4.1; AC-074 added 2026-09-26 for 0.4.2)
-**Applies to:** RepoNPC v1 Technical Specification 0.4.2
+**Document status:** Approved through 0.4.3 (AC-062–AC-071 added 2026-09-26 for 0.4.0; AC-072–AC-073 for 0.4.1; AC-074 for 0.4.2; AC-075 for 0.4.3)
+**Applies to:** RepoNPC v1 Technical Specification 0.4.3
 **Rule:** Every criterion is required unless its mapped requirement is changed through an approved specification update.
 
 ## 1. How acceptance works
@@ -844,28 +844,48 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **And** the configuration accepts no free-form CSS, property names or species fields, and visitor payloads stay free of host, model and cost data.
 - **Verification:** config-validation and image-guard tests, admin browser tests in both locales, and an export manifest check.
 
-### AC-074 - Scene templates are registry data and stay accessible with any character
+### AC-074 - Colour templates are registry data and stay accessible with any character
 
 **Maps to:** FR-051, FR-050, FR-018, NFR-009, NFR-011
 
-- **Given** the packaged template registry, a test-only registry with an invented template id and labels, and the AC-072 character fixtures (no cat),
+- **Given** the packaged template registry, a test-only registry with an invented template id and labels, the AC-072 character fixtures (no cat), and three background states (none, a busy photo, a flat image),
 - **When** the owner opens the 「場景」 step, browses the gallery, selects each template, saves, switches characters, resets to automatic and exports, in light and dark themes and both locales,
 - **Then**:
-  - every template × fixture × theme combination passes ≥ 4.5:1 text contrast, ≥ 3:1 non-text contrast and ≥ 3:1 NPC edge vs stage; when a fixed palette cannot separate from a character, the stage plate appears and text contrast is not lowered;
-  - gallery tiles render live with the active character, are keyboard-operable as a radio group, and are labelled 「跟隨角色配色」 or 「固定配色」;
+  - every template × fixture × theme × background combination passes ≥ 4.5:1 text contrast, ≥ 3:1 non-text contrast and ≥ 3:1 NPC edge vs stage; when a fixed palette cannot separate from a character, the stage plate appears and text contrast is not lowered;
+  - gallery tiles are live miniatures with the active character and the current or draft image, are keyboard-operable as a radio group, and are labelled 「跟隨角色配色」 or 「固定配色」;
   - a `follow_character` template gives different tokens for two different sheets, and a `fixed` template keeps its hue seeds across sheets;
+  - without an owner image, no decorative pattern is drawn: only the plain background colour and the NPC stage;
   - an omitted setting behaves exactly like `auto`, which equals the AC-072 derived scene;
-  - the owner accent and background image still override on top of any template, with sources shown;
   - the export holds resolved tokens plus template id and version, with identical manifests for identical inputs.
 - **And**:
   - the test-only registry renders end to end with no code change, and removing an entry removes its tile;
   - an unknown configured id is rejected with the valid list, and a retired id resolves through `aliases`;
-  - a registry with a hex or CSS value, an unknown field, pattern, tone or locale, a hue outside 0–360, or an alias cycle fails to load;
+  - a registry with a hex or CSS value, an unknown field (including backdrop fields), mode, tone or locale, a hue outside 0–360, or an alias cycle fails to load;
   - no source file outside the registry holds template values, and frontend source contains no template id;
   - visitors have no template control, and payloads stay free of host, model and cost data.
-- **Verification:** registry schema and resolver unit tests, the template × character × theme contrast matrix, source guards, admin browser tests in both locales, and an export manifest check.
+- **Verification:** registry schema and resolver unit tests, the template × character × theme × background contrast matrix, source guards, admin browser tests in both locales, and an export manifest check.
 
-**0.4.0/0.4.1/0.4.2 traceability additions:**
+### AC-075 - Owner background images are previewed realistically before anything is published
+
+**Maps to:** FR-052, FR-050, FR-018, NFR-001, NFR-009
+
+- **Given** the 「場景」 step, two non-cat character fixtures, and images that are valid (large landscape, small pixel art, portrait, busy photo), invalid (SVG, animated, oversized, undersized, polyglot, wrong extension) and metadata-bearing,
+- **When** the owner uploads, previews, adjusts, switches templates, applies, cancels, removes, and lets a draft expire, in light and dark themes, desktop and phone frames, and both locales,
+- **Then**:
+  - an accepted upload becomes a private draft with metadata stripped; its URL needs the owner session, sends `no-store` and `nosniff`, and is unreachable through public routes, `GET /api/public/scene-background` and the export until 「套用」;
+  - invalid files get plain-language reasons and nothing is stored; a second upload replaces the draft; 「取消」 and 24-hour expiry delete it;
+  - the preview is built from the real visitor components and shows the image, the animated active character, the owner's name and a sample dialog marked 「範例」, with no provider call;
+  - light/dark, desktop/phone, NPC state, reduced motion and before/after controls work;
+  - focus moves the visible crop in both frames, with crop outlines on the thumbnail; `dim: auto` picks the lowest level that separates the NPC, else the stage plate; scaling applies;
+  - notices appear for upscaled, strongly cropped and busy images;
+  - text never sits directly on the image, and all contrast checks pass at every dim level;
+  - for equal settings, `POST /api/admin/scene/preview` and the published profile return identical scene objects, and computed styles of the preview and the live page match;
+  - 「套用」 promotes the draft to a content-hashed file, bumps `character.revision` and changes the public page; before that the public page is unchanged; 「移除背景圖」 returns to the plain template background;
+  - the export includes the applied image, focus, dim and scaling.
+- **And** the configuration accepts no free-form CSS, property names or species fields, and visitor payloads stay free of host, model and cost data.
+- **Verification:** image-guard and draft-lifecycle tests, route exposure tests for drafts, a preview/profile parity test, admin browser tests (keyboard-only, screen reader, both locales, both frames) and an export manifest check.
+
+**0.4.0–0.4.3 traceability additions:**
 
 | Requirement | Acceptance criteria |
 | --- | --- |
@@ -876,10 +896,11 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 | FR-047 | AC-068, AC-071, AC-072 |
 | FR-048 | AC-069 |
 | FR-049 | AC-070 |
-| FR-050 | AC-072, AC-073, AC-074 |
+| FR-050 | AC-072, AC-073, AC-074, AC-075 |
 | FR-051 | AC-074 |
-| NFR-001 | AC-071, AC-073 |
-| NFR-009 | AC-072, AC-073, AC-074 |
+| FR-052 | AC-075 |
+| NFR-001 | AC-071, AC-073, AC-075 |
+| NFR-009 | AC-072, AC-073, AC-074, AC-075 |
 | NFR-011 | AC-072, AC-074 |
 | NFR-014 | AC-071 |
 
@@ -902,7 +923,7 @@ The current machine-readable evidence ledger is `release-evidence/acceptance-led
 
 **0.2.2 evidence boundary:** AC-053 through AC-057 are not-run until implemented and observed. The current release-audit code enumerates only AC-001 through AC-052 and must be extended during implementation; a passing old audit is not coverage of this amendment. Preserve historical evidence provenance and add current candidate evidence instead of relabeling old runs.
 
-**0.4.0/0.4.1/0.4.2 evidence boundary (2026-09-26):** AC-062 through AC-074 are not-run. The release audit and `release-evidence/acceptance-ledger.json` must be extended to enumerate them, with missing/duplicate-ID tests, during implementation. Existing ledger entries do not provide a completion percentage for this amendment.
+**0.4.0–0.4.3 evidence boundary (2026-09-26):** AC-062 through AC-075 are not-run. The release audit and `release-evidence/acceptance-ledger.json` must be extended to enumerate them, with missing/duplicate-ID tests, during implementation. Existing ledger entries do not provide a completion percentage for this amendment.
 
 **0.2.3 evidence boundary (2026-09-10):** Release coverage must extend through AC-060, excluding legacy AC-041 through AC-043. The auditor still enumerates only AC-052 at this review. Extend both document coverage and ledger validation, with missing/duplicate-new-ID tests, during the implementation package. Source presence is not full acceptance for AC-053 through AC-057 either.
 

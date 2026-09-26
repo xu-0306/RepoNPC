@@ -4,6 +4,7 @@
 - It accepts PNG or WebP only (no SVG, no animation, ≤ 2 MB, 640×360 to 2560×1600).
 - It is decoded under the existing image guards, then re-encoded server-side with metadata stripped.
 - It is stored directly below `assets/scene/` and served only through `GET /api/public/scene-background` with `nosniff`.
+- (ADR-050, 0.4.3) An upload first becomes a private draft in runtime data: owner session required, `no-store`, one per session, deleted on cancel or after 24 hours. Drafts are never served by public routes or exported. Only 「套用」 promotes a draft to a content-hashed file under `assets/scene/`. The scene preview endpoint persists nothing and makes no provider call.
 - Scene tokens are validated `#rrggbb` values mapped to fixed CSS custom properties; no configuration or pack can supply CSS text or property names.
 
 **2026-09-26 completion direction (ADR-048, Technical Specification 0.4.0, AC-068/AC-071):** The Funnel visitor-only gateway is MVP scope. It grants credential-free CORS to exactly the configured GitHub Pages origin for visitor APIs; admin, model and unknown paths return 404 through it. The static Pages export carries only the gateway origin, passes a secret scan and contains no credential or host detail. Visitor responses never include host, hardware, provider, model or cost information. The built-in `bge-m3` artifact is downloaded only after owner consent from a pinned source and activated only after checksum verification. The Windows installer is unsigned; SHA-256 checksums are published.

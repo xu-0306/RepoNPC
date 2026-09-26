@@ -5,7 +5,7 @@
 > contract referenced by `TECHNICAL_SPEC.md` 0.4.0 §2.10 (FR-043–FR-049),
 > `DECISIONS.md` ADR-048 and `ACCEPTANCE_CRITERIA.md` AC-062–AC-071. §4.4 was added the same
 > day as ADR-049 / spec 0.4.1 (FR-050, AC-072–AC-073), and §4.5 as ADR-050 / spec 0.4.2
-> (FR-051, AC-074). Where this contract
+> (FR-051, AC-074) and §4.6 (FR-052, AC-075). Where this contract
 > and older spec text disagree, the spec's 0.4.0 amendments and this contract win.
 > Nothing here is implemented yet; no AC here is passed.
 
@@ -265,7 +265,8 @@ Replace the "stay close to confirmed wording / do not infer role" text with the 
   - it is decorative (`alt=""`) and sits only behind the NPC stage and page margins;
   - text always sits on opaque `surface` panels, so contrast never depends on the image;
   - a theme scrim derived from `background` keeps dark mode legible.
-- Without an image, the backdrop is drawn from tokens only (gradient, glow and floor ellipse under the NPC); there is no species imagery.
+- Without an image, the backdrop is the plain `background` colour with only the NPC stage drawn (revised by §4.5); there is no decorative pattern or species imagery.
+- The upload flow, draft handling and preview are specified in §4.6.
 
 **Configuration (additive, backward compatible):**
 
@@ -308,54 +309,59 @@ character:
 
 **Out of scope:** animated backdrops, per-state scene changes, visitor-selectable themes, and automatic restyling of the GitHub card. `card.themes` stays explicit; the workspace MAY offer an explicit 「套用角色配色到卡片」 action.
 
-### 4.5 Scene templates (ADR-050, added 2026-09-26)
+### 4.5 Scene templates (ADR-050, added 2026-09-26, revised the same day)
 
-**Owner requirement (2026-09-26):** 「背景以及配色可以提供幾套模板供使用者在設定時選擇」. The owner picks a background and colour-scheme template in settings. The automatic character-derived scene of §4.4 remains the default template.
+**Owner requirements (2026-09-26):**
+- 「背景以及配色可以提供幾套模板供使用者在設定時選擇」.
+- Revision: 「範本背景如果只是程式畫的簡單圖形那不如不要」. Templates therefore carry **colour schemes only**. Pictures come from the owner's own background image (§4.6), not from programmatically drawn patterns.
 
 **Classification (anti-hardcode):**
-- **Closed set (project configuration):** the shipped templates. They live as data in **one** versioned registry, `scene_templates.yml`, packaged with RepoNPC and schema-validated at startup. They are the only place template values exist.
-- **Closed set (code):** the backdrop drawing primitives and palette modes listed below. A new template is data only; only a new primitive needs code.
-- **Open set:** characters. A template MUST NOT reference a species, `pack_id`, filename or option key, and no code path branches on a template id. Every template must work with every valid character.
+- **Closed set (project configuration):** the shipped templates. They live as data in **one** versioned registry, `scene_templates.yml`, packaged with RepoNPC and schema-validated at startup. It is the only place template values exist.
+- **Closed set (code):** the palette modes and named tones below. A new template is data only.
+- **Open set:** characters and owner images. A template MUST NOT reference a species, `pack_id`, filename or option key, and no code path branches on a template id. Every template must work with every valid character, with or without a background image.
 
-**Invariant:** for every registry template and every valid canonical sheet, the resolved scene passes the §4.4 contrast solver and NPC-separation check in both themes. Template choice changes appearance, never accessibility.
+**Invariant:** for every registry template and every valid canonical sheet, the resolved scene passes the §4.4 contrast solver and NPC-separation check in both themes. Template choice changes colours, never accessibility.
 
 **Registry entry (schema):**
 
 ```yaml
-- id: night                 # stable, [a-z0-9_]+
-  version: 1                # bumped whenever values change
-  label: {zh-TW: 夜空, en: Night sky}
-  palette:
-    mode: fixed             # follow_character | fixed
-    hue: 268                # fixed only: OKLCH base hue in degrees
-    accent_hue: 85          # fixed only: OKLCH accent hue in degrees
-    tone: deep              # key into the single per-role L/C target table
-  backdrop:
-    pattern: stars          # none | dots | grid | stars | tiles | hills
-    glow: true
-    floor: ellipse          # ellipse | tiles | none
-    scaling: smooth         # smooth | pixelated
-    defer_to_pack_backdrop: false
+templates:
+  - id: night               # stable, [a-z0-9_]+
+    version: 1              # bumped whenever values change
+    label: {zh-TW: 夜空藍, en: Night blue}
+    palette:
+      mode: fixed           # follow_character | fixed
+      hue: 268              # fixed only: OKLCH base hue in degrees
+      accent_hue: 85        # fixed only: OKLCH accent hue in degrees
+      tone: deep            # key into the single per-role L/C target table
 aliases: {}                 # retired id -> successor id (compatibility shim)
 ```
 
-- Colours are OKLCH hue seeds plus a `tone` reference, never hex or CSS. The lightness/chroma targets for each role stay in the one §4.4 target table, which gains named tones (`standard`, `soft`, `deep`, `vivid`).
+- Colours are OKLCH hue seeds plus a `tone` reference, never hex or CSS. The lightness/chroma targets for each role stay in the one §4.4 target table, which gains named tones: `standard`, `soft`, `deep`, `vivid` and `neutral` (chroma 0).
 - `follow_character` takes the base and accent hue from the character (pack hint, then derivation, then neutral default, per §4.4). `fixed` uses the template's hue seeds.
 - Both themes (light and dark) are produced for every template.
-- Validation rejects the registry at startup on: a duplicate or malformed id; an unknown mode, tone, pattern or floor; a hue outside 0–360; a missing label locale; an alias cycle or dangling alias; any unknown field (this includes pack, species or CSS fields).
+- Validation rejects the registry at startup on any of:
+  - a duplicate or malformed id;
+  - an unknown mode or tone;
+  - a hue outside 0–360;
+  - a missing label locale;
+  - an alias cycle or dangling alias;
+  - any unknown field, which includes backdrop, pack, species or CSS fields.
 
 **Starter set (drafted, owner may change):**
 
-| id | zh-TW label | Palette | Backdrop |
-|---|---|---|---|
-| `auto` | 自動（跟隨角色） | follow_character, `standard` | gradient, glow, floor ellipse; `defer_to_pack_backdrop: true` (the §4.4 behaviour) |
-| `minimal` | 簡約 | follow_character, `soft` | flat, no glow, no floor |
-| `pixel_room` | 像素房間 | follow_character, `standard` | grid wall, tile floor, pixelated |
-| `warm` | 暖陽 | fixed, warm amber base, coral accent, `soft` | dots, glow, floor ellipse |
-| `night` | 夜空 | fixed, deep indigo base, gold accent, `deep` | stars, glow, floor ellipse |
-| `forest` | 森林 | fixed, green base, amber accent, `standard` | layered hills, floor none |
+| id | zh-TW label | Palette |
+|---|---|---|
+| `auto` | 自動（跟隨角色） | follow_character, `standard` (the §4.4 behaviour) |
+| `soft` | 柔和（跟隨角色） | follow_character, `soft` |
+| `warm` | 暖陽橘 | fixed: warm amber base, coral accent, `soft` |
+| `night` | 夜空藍 | fixed: deep indigo base, gold accent, `deep` |
+| `forest` | 森林綠 | fixed: green base, amber accent, `standard` |
+| `mono` | 黑白簡約 | fixed, `neutral` |
 
-- All six backdrops are procedural and drawn only from scene tokens. MVP ships **no** bundled illustrated background images; that avoids new art-licensing work. A future bundled image needs a license record and the same validation as an owner image. This is a drafting assumption the owner may change.
+**Backdrop without an owner image:** the plain `background` colour plus only the NPC stage (a soft floor shadow, and the plate when the solver needs it). No decorative patterns, drawn shapes or species imagery. A pack backdrop hint (§4.4) is still honoured when present.
+
+**Illustrated template backgrounds:** not in MVP. A future template MAY reference a bundled illustrated image only with a recorded licence, and that image passes the same validation as an owner image (§4.6).
 
 **Resolution order (replaces the §4.4 list; per token, first available wins):**
 - **Palette:**
@@ -364,36 +370,98 @@ aliases: {}                 # retired id -> successor id (compatibility shim)
   3. the character hue: pack scene hint, then sheet derivation;
   4. neutral default, only on derivation error, with the reason shown.
 - **Backdrop:**
-  1. owner background image;
-  2. pack backdrop hint, only when the selected template sets `defer_to_pack_backdrop: true`;
-  3. the selected template's procedural backdrop.
-- The contrast solver and NPC-separation check (§4.4) run last, on the resolved tokens. For a fixed palette whose stage cannot separate from the character, the stage plate appears. The template's text contrast is never lowered.
+  1. owner background image (§4.6);
+  2. pack backdrop hint;
+  3. the plain `background` colour.
+- The contrast solver and NPC-separation check (§4.4) run last, on the resolved tokens. When the stage cannot separate from the character, the stage plate appears. The template's text contrast is never lowered.
 
-**Configuration (additive; omitted = `auto`):**
+**Configuration (additive; omitted = `auto`):** `character.scene.template` holds a registry id; see §4.6 for the full block.
+- An unknown id fails closed: config validation reports it and lists the valid ids, and the last published bundle keeps serving.
+- A retired id resolves through `aliases`, and the workspace shows the successor.
+- The template choice persists across character changes. `follow_character` templates re-derive from the new character automatically.
+
+**Public output:**
+- `character.scene` gains `template: {id, version}`, and `source` also accepts `template`.
+- The export manifest stores the **resolved** tokens, so a later registry change does not alter a published site until the next export.
+- Visitors cannot pick templates. Frontend source contains no template id; the §4.4 style guard also fails on template ids.
+
+**Owner UX (「場景」 step, colour part):**
+- A template gallery as a keyboard-operable radio group, labelled 「跟隨角色配色」 or 「固定配色」.
+- Each tile is a miniature of the visitor page rendered live with the **active character** and the current (or draft) background image, through the same components as the §4.6 preview. Tiles are not static screenshots.
+- Selecting a tile updates the large preview; saving is explicit.
+- If a fixed template needed a stage plate or solver adjustment for this character, a plain notice says so.
+- 「重設為自動」 restores `template: auto` and clears the overrides.
+- Onboarding: the default `auto` needs no choice, and the novice flow can skip this step.
+
+### 4.6 Owner background image with a realistic preview (ADR-050, added 2026-09-26)
+
+**Owner requirement (2026-09-26):** 「可以補上自己上傳背景圖的功能，並要有預覽讓使用者能看到套用上背景圖與角色後大概會是什麼樣的介面」. The owner background image is **MVP scope**; this resolves the Q10 assumption. Before anything is published, the owner sees what the visitor page will look like with that image and the active character.
+
+**Invariant:** the preview and the published page render from the same components and the same server-resolved scene. For equal settings, what the owner approves is what visitors get. Nothing public changes until the owner presses 「套用」.
+
+**File rules:** as in §4.4 "Background image": PNG or WebP only, no SVG or animation, ≤ 2 MB, 640×360 to 2560×1600. Files are decoded under the existing bounded image guards and re-encoded with metadata stripped.
+
+**Flow in the 「場景」 step:**
+1. **Choose:** a file picker plus a drag-and-drop area, with the rules shown in plain language before upload.
+2. **Draft:** the server validates and re-encodes the file into a private **draft**.
+   - The draft is stored in runtime data, not under `assets/`, and is never publicly reachable.
+   - There is at most one draft per owner session; a new upload replaces it. Drafts expire after 24 hours and on 「取消」.
+   - A rejected file gets a plain-language reason (for example 「圖片太大，請小於 2 MB」 or 「不支援 SVG」), and nothing is stored.
+3. **Preview:** a visitor-page preview built from the real visitor components in a preview mode, showing:
+   - the draft image as the backdrop;
+   - the active character, animated, on its stage;
+   - the header with the owner's display name;
+   - a sample dialog: one localized sample question and answer, visibly marked 「範例」, with sample suggestion chips and the input bar. No provider call is made, and the sample text never comes from the model.
+
+   Controls:
+   - 淺色 / 深色;
+   - 桌面 / 手機 frames (a desktop frame and a phone frame, scaled to fit);
+   - NPC state: 待機 / 說話 / 休息中;
+   - reduced motion;
+   - 套用前 / 套用後, to compare with the currently published scene.
+4. **Adjust** (every change updates the preview immediately):
+   - **Focus point:** click or drag on the image thumbnail, or use the arrow keys. It sets which part stays visible when the image is cropped. The thumbnail outlines the desktop and phone crop areas at the same time.
+   - **Dim:** `auto | none | low | medium | high`. This is a scrim derived from `background` that calms busy images. `auto` picks the lowest level at which the NPC-separation check passes without a stage plate, and falls back to the plate when no level passes.
+   - **Scaling:** `smooth | pixelated`; `pixelated` is suggested for pixel art.
+   - The selected template's colours apply on top.
+5. **Notices** (plain language, non-blocking):
+   - the image is smaller than the desktop frame and will be enlarged (blurry), with a suggestion to use `pixelated` for pixel art;
+   - the aspect ratio differs strongly from the desktop or phone frame, so a large part is cropped;
+   - the image is busy behind the NPC, so dimming or the stage plate was applied.
+6. **Decide:**
+   - 「套用」 promotes the draft to `assets/scene/<content-hash>.png|webp`, saves the settings and bumps `character.revision`. The next export includes it.
+   - 「取消」 discards the draft and changes nothing.
+   - 「移除背景圖」 returns to the plain template background, previewed the same way.
+
+**Configuration (additive; omitted fields use the defaults shown):**
 
 ```yaml
 character:
   scene:
-    template: auto            # registry id
-    accent: null
-    background_path: null
-    background_scaling: smooth
+    template: auto              # registry id (§4.5)
+    accent: null                # or "#rrggbb"
+    background_path: null       # or assets/scene/<name>.png|webp
+    background_scaling: smooth  # smooth | pixelated
+    background_focus: {x: 50, y: 50}  # percent, 0–100
+    background_dim: auto        # auto | none | low | medium | high
 ```
 
-- An unknown id fails closed: config validation reports it and lists the valid ids, and the last published bundle keeps serving. A retired id resolves through `aliases`, and the workspace shows the successor.
-- The template choice persists across character changes. `follow_character` templates re-derive from the new character automatically.
+**Admin API (authenticated session; mutations also require CSRF):**
+- `POST /api/admin/assets/scene/background-drafts` (multipart): validates and re-encodes. Returns `{draft_id, width, height, format, notices[]}` or a plain-language error.
+- `GET /api/admin/assets/scene/background-drafts/{id}`: the draft image; owner-only, `Cache-Control: no-store`, `nosniff`.
+- `DELETE /api/admin/assets/scene/background-drafts/{id}`: discards the draft.
+- `POST /api/admin/scene/preview`: takes proposed settings (`template`, `accent`, `background: draft:<id> | current | none`, `focus`, `dim`, `scaling`). Returns the resolved scene in the same shape as the public `character.scene`, plus notices. It persists nothing.
+- `PUT /api/admin/scene`: applies the settings and promotes a referenced draft.
 
-**Public output:** `character.scene` gains `template: {id, version}` and a `backdrop` descriptor `{kind: image|procedural, pattern, glow, floor, scaling}`. `source` also accepts `template`. The export manifest stores the **resolved** tokens, so a later registry change does not alter a published site until the next export. Visitors cannot pick templates.
+**Public output:**
+- `character.scene` gains `background_focus` and `background_dim` next to `background_url` and `background_scaling`.
+- The public image stays at `GET /api/public/scene-background?rev=N`, which never serves drafts.
+- The frontend applies focus as `object-position` and dim as a scrim from the `--scene-background` token. It reads no other image metadata.
 
-**Frontend:** one backdrop renderer implements each primitive (closed set) using only `--scene-*` tokens. It receives the descriptor and never sees or branches on a template id. The §4.4 style guard also fails on template ids in frontend source.
-
-**Owner UX (「場景」 step):**
-- A template gallery as a keyboard-operable radio group. Each tile is rendered live with the **active character** through the same backdrop renderer and `CharacterRenderer`, not from static screenshots. Tiles are labelled 「跟隨角色配色」 or 「固定配色」.
-- Selecting a tile updates the large live preview (light and dark themes, available and resting states, reduced motion). Saving is explicit.
-- Custom accent and background upload stay available on top of any template; the palette chips show each token's source.
-- If a fixed template needed a stage plate or solver adjustment for this character, a plain notice says so.
-- 「重設為自動」 restores `template: auto` and clears the overrides.
-- Onboarding: the default `auto` needs no choice. The novice flow can skip this step.
+**Accessibility:**
+- The image stays decorative (`alt=""`).
+- Text always sits on opaque `surface` panels, so contrast never depends on the image or the dim level.
+- The focus control is keyboard-operable and announces its position.
 
 ---
 
@@ -498,7 +566,8 @@ The owner connects their own model. RepoNPC must never choose or switch provider
 | Participation (§2) | §4 evidence classes, §6 indexing, §9.1 profile API | FR-045 | AC-066 dates, owner flag and other-contributors flag, no counts, unavailable ≠ zero |
 | Coverage and FAQ (§3, §4.3) | §11.x admin flows | FR-046 | AC-067 only approved FAQ exported or served; stale on bundle change; coverage check never blocks publishing |
 | Visitor page and live chat (§4.0–4.2) | new section; §12.2 card target | FR-047 | AC-068 free-form live chat through the visitor gateway; resting state shows no host/cost info; (b) page and FAQ fallback work with host offline |
-| Scene templates (§4.5, ADR-050) | §4 config, §9.2, §12.3, §16 | FR-051 | AC-074 every registry template passes contrast and NPC separation with every fixture character; templates are registry data with no species/pack/id branching; selection, preview, fallback and export behave as specified |
+| Scene templates (§4.5, ADR-050) | §4 config, §9.2, §12.3, §16 | FR-051 | AC-074 every registry colour template passes contrast and NPC separation with every fixture character, with and without an image; templates are registry data with no species/pack/id branching and no drawn backdrops |
+| Owner background image and preview (§4.6, ADR-050) | §4 config, §9.2, admin API, §12.3, §16 | FR-052 | AC-075 upload to private draft, realistic visitor-page preview with the active character, focus/dim/scaling, apply/cancel/remove; nothing public changes before 「套用」 |
 | Character-driven scene (§4.4, ADR-049) | §4 config, §9.2/§9.3, new §12.3, §16 | FR-050 | AC-072 scene follows any character with AA contrast in both themes; AC-073 owner accent/background overrides are validated, reported and exported |
 | ADR-047 back in MVP (§4.1) | Funnel plan, OPERATIONS, SECURITY, §18 | FR-047 | AC-071 gateway CORS limited to the configured Pages origin, no credentials, admin unreachable; existing Funnel/gateway checks stay MVP |
 | Installer (§5) | §15 deployment | FR-048 | AC-069 clean Windows host install without Docker |
@@ -547,12 +616,20 @@ The owner connects their own model. RepoNPC must never choose or switch provider
   - The export contains the same tokens and a hashed backdrop, and renders with the host stopped.
   - A style guard fails if visitor CSS contains literal colours outside the single neutral-default token block.
 - **Scene templates (§4.5):**
-  - Matrix: every registry template × every character fixture above × light/dark passes the contrast and NPC-separation checks. It includes a sprite whose dominant colour equals a fixed template's background, which must trigger the stage plate rather than lower text contrast.
+  - Matrix: every registry template × every character fixture above × light/dark × (no image, a busy photo, a flat image) passes the contrast and NPC-separation checks. It includes a sprite whose dominant colour equals a fixed template's background, which must trigger the stage plate rather than lower text contrast.
   - Registry-driven: a test-only registry with an invented id and labels renders end to end with no code change; removing a template from the test registry removes it from the gallery.
-  - Fail closed: an unknown configured id is rejected with the valid list, and a retired id resolves through `aliases`. A registry with an unknown field, pattern, tone or locale, a hex colour, a hue outside 0–360, or an alias cycle fails to load.
-  - Behaviour: a `follow_character` template gives different tokens for two different sheets; a `fixed` template keeps its hue seeds across sheets.
+  - Fail closed: an unknown configured id is rejected with the valid list, and a retired id resolves through `aliases`. A registry with an unknown field (including any backdrop field), mode, tone or locale, a hex colour, a hue outside 0–360, or an alias cycle fails to load.
+  - Behaviour: a `follow_character` template gives different tokens for two different sheets; a `fixed` template keeps its hue seeds across sheets. Without an owner image no decorative pattern is drawn.
   - Guards: no source file outside the registry contains template values; frontend source contains no template id.
   - The export stores resolved tokens plus template id and version, and identical inputs give identical manifests.
+- **Owner background image and preview (§4.6):**
+  - Upload creates a private draft: the draft URL requires the owner session, sends `no-store`, and is never reachable through public routes, `scene-background` or the export until 「套用」.
+  - Rejections (SVG, animated, oversized, undersized, polyglot, wrong extension/content) give plain-language reasons and store nothing; accepted drafts have metadata stripped.
+  - A second upload replaces the draft; 「取消」 and 24-hour expiry delete it; 「套用」 promotes it to a content-hashed file and bumps `character.revision`.
+  - Preview parity: for the same settings, `POST /api/admin/scene/preview` and the published profile return identical scene objects, and a browser check compares computed styles of the preview frame and the live visitor page.
+  - The preview uses the active character (tested with two non-cat fixtures), shows the sample dialog marked 「範例」 and makes no provider call.
+  - Focus moves the visible crop in both desktop and phone frames; `dim: auto` picks the lowest passing level or the plate; notices appear for small, strongly cropped and busy images.
+  - Keyboard-only and screen-reader checks cover the upload, focus control, frame and theme toggles, and apply/cancel, in both locales.
 - **Static export (topology b):**
   - The site renders with the RepoNPC host stopped.
   - Unapproved FAQ entries are absent.
@@ -573,7 +650,7 @@ All resolved on 2026-09-26:
 
 - **Q8:** topology (b): GitHub Pages static shell uploaded manually by the owner + Funnel live API, with in-browser approved-FAQ fallback while the host is offline (§4.2). (a) rejected.
 - **Q9:** mockup adjustments accepted: drop Views; no attachment button; microphone post-MVP (Web Speech API only); the NPC speaks about the owner in the third person (§4.0).
-- **Q10 (2026-09-26, ADR-049):** the mockup's cat is illustrative. The NPC and the scene follow the owner's character through sheet-derived tokens, with optional pack hints and owner overrides (§4.4). Assumption made while drafting: the optional background image upload is MVP; the owner may remove it without affecting the derived scene.
-- **Q11 (2026-09-26, ADR-050):** the owner asked for several background/colour templates chosen in settings. Drafted as registry data (§4.5), with the automatic character scene as default template `auto`. Drafting assumptions: a starter set of six (自動、簡約、像素房間、暖陽、夜空、森林), all procedural backdrops with no bundled illustrated images in MVP, and templates owner-selected only (never by visitors).
+- **Q10 (2026-09-26, ADR-049):** the mockup's cat is illustrative. The NPC and the scene follow the owner's character through sheet-derived tokens, with optional pack hints and owner overrides (§4.4). Assumption made while drafting: the optional background image upload is MVP; the owner may remove it without affecting the derived scene. **Resolved 2026-09-26:** the owner confirmed the background upload is MVP and asked for a realistic preview (§4.6).
+- **Q11 (2026-09-26, ADR-050):** the owner asked for several background/colour templates chosen in settings, then added that programmatically drawn template backgrounds are not worth having. Templates are therefore colour schemes only, as registry data (§4.5), with the automatic character scene as default `auto`. Pictures come from the owner's own image with a realistic preview (§4.6). Drafting assumptions: the six-scheme starter set (自動、柔和、暖陽橘、夜空藍、森林綠、黑白簡約), no bundled illustrated backgrounds in MVP, and templates owner-selected only.
 
 Deferred by owner: D8 novice/visitor walkthroughs (owner runs them personally); readiness test and cost estimate (§7).
