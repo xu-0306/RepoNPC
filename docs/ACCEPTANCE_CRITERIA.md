@@ -1,6 +1,8 @@
 # RepoNPC v1 Acceptance Criteria
 
-**2026-09-24 planned public-entry gate (ADR-047):** [The Tailscale Funnel deployment plan](TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md) records owner selection and proposed external/security checks. Its future tests do not count as passed AC-022/036/049 or as public-release evidence. Freeze the final ingress contract and add mapped acceptance cases before implementing that transport.
+**2026-09-26 completion-direction amendment (ADR-048, Technical Specification 0.4.0 §2.10):** AC-062 through AC-071 are added for segment answers, participation evidence, coverage/FAQ review, MVP live chat through the GitHub Pages shell and Funnel visitor gateway, the Windows installer and the built-in `bge-m3` embedding default. AC-057 is extended so that the device check and model guidance are owner-only. All new criteria start **not-run**; nothing is implemented yet.
+
+**2026-09-24 planned public-entry gate (ADR-047, updated by ADR-048):** [The Tailscale Funnel deployment plan](TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md) records owner selection and proposed external/security checks. The visitor gateway is MVP scope from 0.4.0, and its ingress/CORS contract is AC-068/AC-071. Its future tests do not count as passed AC-022/036/049 or as public-release evidence.
 
 **2026-09-22 local-publication amendment (ADR-046):** The owner authorized implementation of the local-first NPC and guided GitHub card journey. [Local publication contract](LOCAL_PUBLICATION_CONTRACT_2026-09-22.md) supersedes GitHub-only configuration/build/activation transport; all validation, attribution, privacy and last-known-good requirements remain. Implementation/acceptance evidence must distinguish local tests from actual public deployment.
 
@@ -32,8 +34,8 @@
 
 2026-09-12 owner-approved novice setup regression scope (FR-038/039/040, AC-054/055/057/058; bilingual AC-023): optional embedding dimensions remain unknown until an explicit successful two-sample test; unknown/failed/stale profiles cannot be activated or selected as ready. Existing dimensions, selections, switch intents and foreign keys survive runtime migration 19, including rollback on migration failure. Name-only service edits retain protected endpoint/key and revision; destination changes require explicit credential intent. Newly entered keys clear after submission and form closure. Scoped Ollama listing is explicit and distinguishes failure from empty. Successful operation results survive a failed/stale list refresh. These focused checks do not constitute full v1 or release acceptance.
 
-**Document status:** Approved through 0.3.8
-**Applies to:** RepoNPC v1 Technical Specification 0.3.9
+**Document status:** Approved through 0.4.0 (AC-062–AC-071 added 2026-09-26)
+**Applies to:** RepoNPC v1 Technical Specification 0.4.0
 **Rule:** Every criterion is required unless its mapped requirement is changed through an approved specification update.
 
 ## 1. How acceptance works
@@ -696,6 +698,105 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **And** terminal elapsed time is immutable, `completed_with_errors` is terminal for controls/SSE/ETA, processed and successful counts remain distinct, migration 26 preserves existing batches/events/results while adding only secret-free lineage and failure-stage metadata, and migration 27 preserves source consumption plus bounded reanalysis request bindings across ordinary cleanup.
 - **Verification:** environment/Compose contract tests, migration-25/26/27 preservation and rollback, deterministic semaphore-clock tests, archive skip and zip-bomb regressions, same-provider retry/no-fallback tests, frontend unit/accessibility checks, production build and a controlled slow-provider browser run. Buffered-provider evidence must be labeled as socket-inactivity behavior rather than token-level streaming evidence.
 
+### AC-062 - Owner statements may be paraphrased in person segments
+
+**Maps to:** FR-043, FR-010, FR-011
+
+- **Given** owner assertions in both locales and envelope v2 `person` segments that restate them with different wording, word order, or across locales, citing the matching assertion,
+- **When** the answer is validated,
+- **Then** the paraphrased segments are kept and rendered with `{{owner}}` replaced by the backend; no literal token-subset match is required.
+- **And** a `person` segment citing only repository or participation evidence is dropped.
+- **Verification:** validator unit tests with zh-TW and en paraphrase fixtures, including one variant not present in any lexicon or test literal used by the implementation.
+
+### AC-063 - Inflation and invented numbers drop only the failing segment
+
+**Maps to:** FR-043
+
+- **Given** an answer with valid segments plus one segment that upgrades the owner's statement using an inflation term from `inflation_terms.yml` (for example seniority, sole ownership, leadership) or states a number absent from its cited evidence,
+- **When** it is validated,
+- **Then** only that segment is removed, the remaining segments and their Sources are served, and the owner-only log records a reason code without the removed text reaching visitors.
+- **And** an envelope-level failure (schema error, model-authored URL/HTML, unknown or unselected source ID, inference cycle) rejects the whole answer with the localized no-match reply and no regeneration.
+- **Verification:** validator tests covering lexicon terms in both locales, a number variant (digits and CJK numerals), and the envelope-level rejections.
+
+### AC-064 - Ordinary project wording is not treated as a person claim
+
+**Maps to:** FR-043, FR-044
+
+- **Given** `project` segments such as 「其他功能」, 「開發工具」, 「這個專案實作了…」, "the tool implements…", "built with FastAPI", citing repository evidence and not referring to the owner,
+- **When** validated,
+- **Then** they are kept; only segments that the identity registry or `person_reference.<locale>.yml` recall fallback attributes to the owner are reclassified as `person` and require an owner assertion.
+- **Verification:** negative-case tests in both locales plus positive reclassification tests using the owner's `github_login`, display name and optional aliases.
+
+### AC-065 - Person questions without owner statements are answered from project and participation evidence
+
+**Maps to:** FR-044, FR-045
+
+- **Given** a portfolio with repositories and participation evidence but no owner assertion about role,
+- **When** a visitor asks what the owner did in a project, in either locale,
+- **Then** the NPC answers in the third person with `participation` and `project` segments (whose repository it is, visible activity period, what the project does and how) without a gap or "the owner has not said" message and without any personal role, responsibility or achievement assertion.
+- **And** a question with no retrieved evidence returns the localized no-match reply with suggested questions.
+- **Verification:** end-to-end chat tests with a deterministic provider, bilingual fixtures, and a check that the response contains no abstention wording.
+
+### AC-066 - Participation evidence is accurate, count-free and honest about failure
+
+**Maps to:** FR-045
+
+- **Given** owner-owned, organization-owned and forked repositories; repositories with and without the owner's visible commits and other contributors; and GitHub API failures and rate limits,
+- **When** the index is built at the pinned SHA,
+- **Then** `PARTICIPATION` evidence records `is_repository_owner`, the first and last visible commit month with commit permalinks, `has_visible_commits` and `other_contributors_visible`; no commit, line or contribution count is shown to visitors; a failed lookup is recorded as unavailable and never rendered as zero or "no contribution".
+- **Verification:** GitHub fixture tests for commit `author=` filtering with Link `rel="last"`, `contributors?per_page=2`, an organization repository, and injected 403/5xx responses.
+
+### AC-067 - Only approved FAQ entries are served, and coverage never blocks publication
+
+**Maps to:** FR-046
+
+- **Given** generated FAQ candidates, owner actions (approve, reject, regenerate, convert to owner statement), and a later bundle change,
+- **When** the owner prepares and publishes,
+- **Then** only approved entries bound to the current bundle ID are exported or served; entries from an earlier bundle become stale and are withheld until re-approved; there is no free-text edit of generated answers; converting to an owner statement creates an `OWNER_ASSERTION` draft for review.
+- **And** the coverage check reports answered / partially answered / not answered per standard question and never prevents publication.
+- **Verification:** API and browser tests for each action, bundle-change staleness, and export contents.
+
+### AC-068 - Visitors can chat freely, and the shared page still works when the host is off
+
+**Maps to:** FR-047, FR-044, NFR-008, NFR-009
+
+- **Given** the exported GitHub Pages site configured with the gateway origin, in both locales, with the host running and then stopped,
+- **When** a visitor opens the page, asks free-form questions and clicks suggested questions,
+- **Then** while available, answers stream through the Funnel visitor gateway with the third-person NPC and a collapsible Sources row; visitor responses contain no host, hardware, provider, model or cost information.
+- **And** while the host is off, the page renders the profile, project cards and approved FAQ with a 「休息中」 / resting indicator and matches typed questions to approved FAQ entries in the browser without generating text.
+- **And** the export contains `.nojekyll` and a hashed manifest, passes the secret scan, contains no credential or host detail other than the gateway origin, and stays within GitHub Pages size limits.
+- **Verification:** browser tests against a static server plus a stopped/started gateway, export inspection tests, keyboard/screen-reader and 375/1440-pixel checks; external reachability is recorded separately.
+
+### AC-069 - Windows novices install and start RepoNPC without Docker or Python
+
+**Maps to:** FR-048
+
+- **Given** a clean Windows 11 account without Docker or Python,
+- **When** the owner downloads the installer, verifies the published SHA-256, follows the SmartScreen guidance, installs per-user, launches, upgrades and uninstalls,
+- **Then** the launcher starts the service and opens the loopback admin; upgrade and uninstall preserve the data directory unless the owner explicitly removes it; no administrator rights are required.
+- **Verification:** dated clean-VM walkthrough with installer hash, plus a build pipeline check that the onedir bundle starts its health endpoint.
+
+### AC-070 - Built-in embedding download requires consent and never happens silently
+
+**Maps to:** FR-049, FR-006, FR-012
+
+- **Given** a new portfolio with no active embedding profile,
+- **When** an index is first needed,
+- **Then** the owner sees a choice to download built-in `bge-m3` (size, license and source shown), configure another service, or decide later; choosing later keeps indexing blocked with an explanation; the download shows progress, can be cancelled and resumed, and is activated only after the pinned checksum matches; switching an existing portfolio between embedding profiles shows a re-index warning.
+- **And** no download, adapter selection or provider switch happens without that choice; an interrupted or mismatched download is never used.
+- **Verification:** adapter tests with a fixture artifact, checksum-mismatch and resume tests, browser tests of the first-use dialog in both locales, and a zh-TW/en retrieval-quality run recorded separately.
+
+### AC-071 - The visitor gateway admits only the configured Pages origin and hides admin
+
+**Maps to:** FR-047, NFR-001, NFR-014
+
+- **Given** the gateway exposed through Tailscale Funnel with a configured GitHub Pages origin,
+- **When** requests arrive from that origin, from other origins, with credentials, and to admin, model or unknown paths,
+- **Then** CORS allows only the configured origin for visitor read/chat APIs without `Access-Control-Allow-Credentials`; other origins receive no CORS grant; admin, model and unknown paths return 404 through the gateway; visitor rate limits and budgets still apply.
+- **Verification:** gateway contract tests and an external Funnel check recorded with date and hostname redacted from public evidence.
+
+**AC-057 extension (0.4.0):** the device check, `model_catalog.yml` guidance (適合 / 勉強可用 / 不建議), canirun.ai link, Ollama explicit pull, plain-language error mapping, one-line status and cloud data disclosure are owner-only admin surfaces; none of them appear in visitor pages or responses.
+
 ## 11. Approval result format
 
 Release acceptance MUST report:
@@ -712,6 +813,8 @@ No criterion may be marked passed merely because implementation exists; observab
 The current machine-readable evidence ledger is `release-evidence/acceptance-ledger.json`. It is the authoritative per-criterion status record; local implementation tests and external/manual evidence must be appended there with reproducible commands and artifact hashes.
 
 **0.2.2 evidence boundary:** AC-053 through AC-057 are not-run until implemented and observed. The current release-audit code enumerates only AC-001 through AC-052 and must be extended during implementation; a passing old audit is not coverage of this amendment. Preserve historical evidence provenance and add current candidate evidence instead of relabeling old runs.
+
+**0.4.0 evidence boundary (2026-09-26):** AC-062 through AC-071 are not-run. The release audit and `release-evidence/acceptance-ledger.json` must be extended to enumerate them, with missing/duplicate-ID tests, during implementation. Existing ledger entries do not provide a completion percentage for this amendment.
 
 **0.2.3 evidence boundary (2026-09-10):** Release coverage must extend through AC-060, excluding legacy AC-041 through AC-043. The auditor still enumerates only AC-052 at this review. Extend both document coverage and ledger validation, with missing/duplicate-new-ID tests, during the implementation package. Source presence is not full acceptance for AC-053 through AC-057 either.
 
