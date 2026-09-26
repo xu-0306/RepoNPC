@@ -441,3 +441,18 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
   - **Admin:** a 「場景」 preview step in the Character & animation workspace, and the admin guide mascot replaced by the active character.
 - **Boundaries:** No species, `pack_id`, filename or option-name branching. No free-form CSS or arbitrary property names from configuration or packs. No text placed directly on an image. No animated backdrops, per-state scenes or visitor-selectable themes. `card.themes` stays explicit; an explicit copy-to-card action is optional. Visitor payloads remain free of host, model and cost data.
 - **Consequences:** Technical Specification becomes 0.4.1. AC-072 and AC-073 start not-run. Visitor CSS literal colours must move behind scene tokens with a style guard. Scene fixtures must be species-agnostic and generated programmatically.
+
+## ADR-050: Offer scene templates as registry data on top of the character-derived scene
+
+- **Status:** Accepted 2026-09-26; implementation pending. No acceptance evidence exists.
+- **Authorization:** On 2026-09-26 the owner asked for several background and colour-scheme templates that the user chooses in settings. The registry schema, the starter set of six, the procedural-only backdrops and the precedence were drafted from that request under the anti-hardcode rule. The owner may revise them before implementation.
+- **Context:** ADR-049 derives one automatic scene from the active character. The owner also wants explicit stylistic choices. Hardcoding named themes in frontend CSS or in resolver branches would scatter literals and invite species- or pack-specific themes.
+- **Decision:** Adopt [completion direction contract §4.5](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md) as Technical Specification 0.4.2 FR-051 / §12.3 and AC-074:
+  - **Registry:** templates live in one versioned, schema-validated `scene_templates.yml`. Each entry has an id, version, localized labels, a palette mode (`follow_character` or `fixed` OKLCH hue seeds) with a named tone, and a procedural backdrop descriptor built from a closed set of primitives. Retired ids resolve through `aliases`.
+  - **Default:** `auto` is the ADR-049 derived scene, so omitting the setting changes nothing.
+  - **Precedence:** palette is owner accent, then fixed seeds, then character hue (pack hint, derivation), then neutral default on error. Backdrop is owner image, then a pack backdrop hint only when the template defers to it, then the template backdrop. The ADR-049 contrast solver and NPC-separation check run last.
+  - **Frontend:** one backdrop renderer per primitive, driven only by `--scene-*` tokens and the descriptor; it never sees a template id.
+  - **Admin:** a template gallery in the 「場景」 step, with tiles rendered live with the active character.
+  - **Export:** resolved tokens plus template id and version.
+- **Boundaries:** No template references a species, `pack_id`, filename or option key; no code branches on a template id; no hex or CSS in the registry; unknown ids fail closed. MVP ships no bundled illustrated backdrops, so no new art licensing is needed. Visitors cannot choose templates. `card.themes` stays explicit.
+- **Consequences:** Technical Specification becomes 0.4.2. AC-074 starts not-run. The FR-050 test fixtures are reused as the character axis of a template × character × theme contrast matrix.
