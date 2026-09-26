@@ -496,3 +496,16 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
   - AC-068 and AC-072–AC-075 are revised and remain not-run.
   - Superseded: ADR-049's derivation and pack-hint parts, and ADR-050's hue-seed template parts and full-page backdrop placement.
   - Still in force: the NPC follows the character, token mapping, the separation check, image validation and the draft/preview flow.
+
+## ADR-052: Pin the official bge-m3 source, close R08/R11/R12-B minimally, and add a maintenance page
+
+- **Status:** Accepted 2026-09-27; implementation pending. No acceptance evidence exists.
+- **Authorization:** On 2026-09-26 the owner said 「A10 和 A11 照你的建議，A6 來源也照建議」. On 2026-09-27 the owner added that this is planning only and must not be over-designed, so each item below is the smallest version that closes the gap.
+- **Decision:**
+  - **bge-m3 source (FR-049):** the official `BAAI/bge-m3` Hugging Face repository at revision `5617a9f61b028005a4858fdac845db406aefb181`, folder `onnx/`, with every file checked against the SHA-256 list in contract §6.2. This is the fp32 export, about 2.29 GB. The earlier ~570 MB figure came from a third-party int8 upload, which is not a trusted source. The dialog shows the size from the pinned file list. Local int8 quantization is not part of the MVP.
+  - **R08 (protected previews):** folded into A5. Every admin preview (character candidates, card previews, hero-image drafts) is served only by authenticated same-origin admin routes with `Cache-Control: no-store`, is unreachable from public routes and the export, and the CSP stays unchanged. Gate: AC-079.
+  - **R11 (reload recovery):** `GET /api/admin/onboarding/analysis-batches/active` also returns the newest terminal batch when it still allows retry or reanalyze, finished within the last 7 days and has not been dismissed by the owner. The dismissal is stored on the server. Browser storage is never the source of truth. Gate: AC-077.
+  - **R12-B (reusable derived index):** first measure whether the ADR-046 passage-vector cache already avoids the expensive work after a failure or restart. If it does, R12-B closes as covered. If not, the staged index is kept as a content-addressed file under the data directory with the same protections and cap/TTL mechanics as the passage cache; it is never served and is excluded from backup and export. Gate: AC-078.
+  - **Maintenance page (FR-053):** a 「維護」 admin page that shows local / gateway / external-verified status, the active bundle and the last backup; creates and downloads a backup; restores from a file after confirmation and an automatic backup; pins a previous bundle; stops the visitor gateway; and explains how to update (run the newer installer) and how to turn Funnel off in Tailscale. It reuses the existing `runtime backup` and `bundle pin` primitives. Gate: AC-076.
+- **Not included:** in-app installer download and verification, configurable R11 windows or R12-B cache sizes, and local model quantization. Each is added only if real use shows the need.
+- **Consequences:** Technical Specification becomes 0.4.5, adding FR-053 and AC-076–AC-079. All four start not-run.

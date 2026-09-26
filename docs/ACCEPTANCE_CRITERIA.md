@@ -1,5 +1,7 @@
 # RepoNPC v1 Acceptance Criteria
 
+**2026-09-27 amendment (ADR-052, Technical Specification 0.4.5, FR-049/053):** AC-076 (maintenance page), AC-077 (R11 recovery), AC-078 (R12-B reuse) and AC-079 (R08 protected previews) are added. All start **not-run**.
+
 **2026-09-26 chat-interface and colour-scheme amendment (ADR-051, Technical Specification 0.4.4, FR-047/050/051/052):** AC-068 and AC-072–AC-075 are revised:
 - The visitor page is a simple chat interface.
 - Colours come from owner-selected fixed schemes with light and dark variants, validated for contrast when the registry loads.
@@ -939,7 +941,43 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **And** the configuration accepts no free-form CSS, property names or species fields, and visitor payloads stay free of host, model and cost data.
 - **Verification:** image-guard and draft-lifecycle tests, route exposure tests for drafts, a preview/profile parity test, admin browser tests (keyboard-only, screen reader, both locales, both frames) and an export manifest check.
 
-**0.4.0–0.4.4 traceability additions:**
+### AC-076 - The owner can maintain the installation without a terminal
+
+**Maps to:** FR-053, FR-048, NFR-003
+
+- **Given** an installed deployment with an active bundle and a retained previous bundle,
+- **When** the owner opens 「維護」, creates and downloads a backup, restores it, pins the previous bundle and stops the visitor gateway,
+- **Then** the status shows local / gateway configured / externally verified and the last backup time; the backup passes `runtime check`; restore asks for confirmation and first writes an automatic backup; the pinned bundle becomes active; the gateway stops at once; the update and Funnel-off guidance is shown in both locales; and no Tailscale credential is requested, logged or shown.
+- **Verification:** API tests for each action, one admin browser pass in both locales, and a restore round trip on a temporary data directory.
+
+### AC-077 - A recent actionable batch is found again after a reload
+
+**Maps to:** FR-033, NFR-003
+
+- **Given** a terminal batch with a retryable or reanalysable item,
+- **When** the owner reloads the admin page or opens it in another browser,
+- **Then** `GET /api/admin/onboarding/analysis-batches/active` returns it as recovery and the UI offers the same actions; it is not returned after the owner dismisses it, after 7 days, or when nothing is actionable; an active batch always wins.
+- **Verification:** runtime and API tests for each case, plus one browser reload test.
+
+### AC-078 - Failed or restarted analysis does not redo reusable work
+
+**Maps to:** FR-027, FR-033, NFR-001
+
+- **Given** an analysis whose generation failed after indexing, or whose process restarted,
+- **When** the owner retries,
+- **Then** unchanged passages are not re-embedded, and any persisted index file is verified before reuse, rebuilt on any mismatch, never served, and excluded from backup and export. A measurement records which work was skipped.
+- **Verification:** a work-count test for cold, warm and corrupted cases, and route and export exclusion tests.
+
+### AC-079 - Admin previews are never public
+
+**Maps to:** FR-018, FR-052, NFR-009
+
+- **Given** character candidates, card previews and hero-image drafts,
+- **When** they are requested without an owner session, from public routes, or looked for in the export,
+- **Then** they are unavailable; with a session they return `Cache-Control: no-store`, and the CSP is unchanged.
+- **Verification:** route exposure tests and an export manifest check.
+
+**0.4.0–0.4.5 traceability additions:**
 
 | Requirement | Acceptance criteria |
 | --- | --- |
@@ -952,7 +990,8 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 | FR-049 | AC-070 |
 | FR-050 | AC-072, AC-073, AC-074, AC-075 |
 | FR-051 | AC-074 |
-| FR-052 | AC-075 |
+| FR-052 | AC-075, AC-079 |
+| FR-053 | AC-076 |
 | NFR-001 | AC-071, AC-073, AC-075 |
 | NFR-009 | AC-072, AC-073, AC-074, AC-075 |
 | NFR-011 | AC-072, AC-074 |

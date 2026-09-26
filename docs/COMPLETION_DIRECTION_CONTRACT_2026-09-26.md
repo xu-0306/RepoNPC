@@ -522,13 +522,27 @@ Proposed replacement: a **built-in ONNX embedding adapter** (`builtin_onnx`, CPU
 ### 6.2 Contract
 
 - **First-use choice (confirmed Q1):** the first time an index is needed, a dialog offers three options:
-  - 「下載內建模型（約 570 MB）」: shows the size, the license and the source, then a progress bar with cancel and resume. The download is verified against a pinned checksum.
+  - 「下載內建模型」: shows the size (about 2.29 GB, read from the pinned file list), the license and the source, then a progress bar with cancel and resume. The download is verified against a pinned checksum.
   - 「改用其他 embedding 服務」: opens the existing Ollama or OpenAI-compatible embedding setup.
   - 「稍後再說」: nothing is downloaded. Building stays blocked, with the reason explained, until one of the two options above is completed.
 
   Nothing is downloaded without that click. The model is not bundled in the installer.
 - **Identity:** the model ID, revision hash, dimension and prefixes are recorded in the bundle exactly as today. Changing the embedding model requires a full re-index, and the UI states this before the user confirms.
 - **Source pinning:** prefer an official ONNX export or a RepoNPC-produced conversion with a pinned hash. Third-party quantized uploads are not a trusted default source.
+- **Pinned source (ADR-052, 2026-09-27):** `BAAI/bge-m3`, revision `5617a9f61b028005a4858fdac845db406aefb181`, folder `onnx/` (fp32, MIT). `model.onnx` needs `model.onnx_data` and `Constant_7_attr__value` in the same folder.
+
+  | File | Bytes | SHA-256 |
+  |---|---|---|
+  | `model.onnx` | 724923 | `f84251230831afb359ab26d9fd37d5936d4d9bb5d1d5410e66442f630f24435b` |
+  | `model.onnx_data` | 2266820608 | `1eebfb28493f67bba03ce0ef64bfdc7fc5a3bd9d7493f818bb1d78cd798416b4` |
+  | `Constant_7_attr__value` | 65552 | `cdf16f72c5d07b36484056e601ed9687f78477e5d85cee85a34f2406b7fb5906` |
+  | `sentencepiece.bpe.model` | 5069051 | `cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865` |
+  | `tokenizer.json` | 17082821 | `6710678b12670bc442b99edc952c4d996ae309a7020c1fa0096dd245c2faf790` |
+  | `tokenizer_config.json` | 1173 | `7e4c1cc848840aeccdd763458c18dd525eb0f795c992e00ebe9c28554e7db2d4` |
+  | `special_tokens_map.json` | 964 | `8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835` |
+  | `config.json` | 698 | `f24afd5de914fba8c668426c43d208a1a54022500c63b2c160be20891686fce8` |
+
+  The ~570 MB in the table below is a third-party int8 size and does not apply to the pinned source. Local quantization is not part of the MVP.
 
 ### 6.3 Candidates considered (decided Q1)
 
@@ -554,7 +568,8 @@ Sources:
 - <https://huggingface.co/Qwen/Qwen3-Embedding-0.6B>
 - <https://huggingface.co/intfloat/multilingual-e5-small>
 - <https://huggingface.co/Xenova/multilingual-e5-small/tree/main/onnx>
-- <https://huggingface.co/raludi/bge-m3-onnx-int8>
+- <https://huggingface.co/raludi/bge-m3-onnx-int8> (size reference only, not a trusted source)
+- <https://huggingface.co/BAAI/bge-m3/tree/5617a9f61b028005a4858fdac845db406aefb181/onnx> (pinned source)
 - <https://huggingface.co/electroglyph/Qwen3-Embedding-0.6B-onnx-uint8>
 
 ---

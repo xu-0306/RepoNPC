@@ -16,11 +16,11 @@
 | R01–R04 | 完成實作、自動化測試與 production-stack 瀏覽器驗收 |
 | R05–R06 | 限定修正批次已完成實作、完整 regression、production-stack 驗收與獨立複核 |
 | R07 | 完成 `excerpt` 契約、邊界驗證、UI 與瀏覽器驗收 |
-| R08、R13 | R08 尚未完成；R13 的物種中立 64px 契約、PNG／一般 ZIP／資料夾探索轉換與管理員預覽／下載／寫入流程已完成，final art review 與發布仍未完成 |
+| R08、R13 | R08 尚未完成，2026-09-27 ADR-052 決定併入 A5，以 AC-079 驗收；R13 的物種中立 64px 契約、PNG／一般 ZIP／資料夾探索轉換與管理員預覽／下載／寫入流程已完成，final art review 與發布仍未完成 |
 | R09 | 核心歷史裁切、成功問答隔離及真實 React／完整 API 瀏覽器驗收完成；獨立複核已接受 |
 | R10 | 人物主體與受保護敘述的保守關聯檢查已完成實作、完整 regression、兩個 fresh runtime 瀏覽器驗收與獨立複核 |
-| R11 | 尚未完成；近期可操作終止批次的 reload recovery 需要擁有者決定 server discovery 契約 |
-| R12 | R12-A 已完成 validated-result cache 的完整性、重啟重用、identity/privacy 與工作量封口；真正可重開 derived index 的 R12-B 仍需擁有者決定受保護儲存設計與容量政策 |
+| R11 | 尚未完成；2026-09-27 ADR-052 已決定契約：`active` 端點另回傳 7 天內仍可重試／重新分析且未被擁有者關閉的終止批次，以 AC-077 驗收 |
+| R12 | R12-A 已完成 validated-result cache 的完整性、重啟重用、identity/privacy 與工作量封口；真正可重開 derived index 的 R12-B 已由 2026-09-27 ADR-052 決定：先量測 ADR-046 passage cache 是否已足夠，不足才加受保護檔案快取，以 AC-078 驗收 |
 | R14 | 已實作的訪客聊天／NPC 狀態／傳輸／減少動態部分已通過正式瀏覽器驗收與獨立複核；卡片長文字／靜態版面子批次已完成完整回歸與獨立複核；角色設定引導、發布流程及 AC-022 手動 GitHub proxy 驗證仍待完成 |
 
 ## 已整合基準：R09 與部分 R14
@@ -116,6 +116,8 @@ Identity matrix 明確覆蓋 immutable commit、include/exclude policy、parser�
 
 ### R12-B 需要的擁有者決定
 
+**2026-09-27 決定（ADR-052）：** 先量測 ADR-046 passage-vector cache 是否已讓失敗或重啟後的重試免去主要工作；若是，R12-B 以「已涵蓋」結案。若否，採下方 Option A，容量與 TTL 沿用 passage cache 的機制，不另設可調參數；永不由路由提供，排除在備份與匯出之外。以 AC-078 驗收。
+
 建議優先選擇 **Option A：`REPONPC_DATA_DIR` 下的受保護 content-addressed file cache**。SQLite 只保存不含路徑的 server-generated identifier、hash、size 與 expiry；檔案採 atomic write、完整性驗證、嚴格權限、永不由 API/static route 暴露，並排除 backup/export。替代方案是定義允許持久化哪些 evidence text 的 sanitized derived-corpus 契約（privacy 變更更大），或明確選擇不提供 durable derived-index cache、只保留 validated-result cache。
 
 無論選哪種真正 derived cache，擁有者仍需指定最大總 bytes／entries、是否保留 24 小時 TTL、是否允許跨 process restart，以及部署資料刪除與 backup/export 規則。R12-A 不猜測這些值，也沒有改 schema、migration、API、環境變數或安全邊界。
@@ -127,11 +129,11 @@ Identity matrix 明確覆蓋 immutable commit、include/exclude policy、parser�
 - [x] R01–R04：重試資格、受控新輪次、批次診斷、完成狀態、數量與 ETA；完整證據見下方 2026-09-17～18 後續修復章節。
 - [x] R05–R06 限定修正批次：貢獻潤飾、固定獨立輸出預算、截斷／結構診斷、重新確認與過期回應隔離已完成完整 regression、production-stack 驗收與獨立複核。可設定的更大貢獻預算仍需擁有者另行決策。
 - [x] R07：`excerpt` 契約、API 邊界驗證、UI 顯示與 production-stack 瀏覽器驗收。
-- [ ] R08：受保護預覽與 CSP 契約。
+- [ ] R08：受保護預覽與 CSP 契約。2026-09-27 ADR-052：併入 A5，AC-079。
 - [ ] R13：物種中立版本化 pack schema、64px canonical、grid／manifest／一般 ZIP／資料夾探索 converter、第一級「角色與動畫」管理入口、七狀態播放預覽、下載／寫入與舊人形欄位移除已完成；技術細節採漸進揭露，final art review 及發布仍待完成。
 - [x] R10：非人物技術主體不再被裸關鍵字誤判；明確雙語人物責任、角色、僱傭、成就與影響仍沿用既有安全理由拒絕。完整回歸、production-stack 瀏覽器驗收與獨立複核均已接受。
-- [ ] R11：草稿／近期終止批次恢復的 server discovery 契約仍待擁有者決定。
-- [ ] R12：R12-A validated-result cache 封口已完成；R12-B 真正 reusable derived-index persistence 仍待上述擁有者決定。
+- [ ] R11：草稿／近期終止批次恢復。2026-09-27 ADR-052 已決定契約，待實作（AC-077）。
+- [ ] R12：R12-A validated-result cache 封口已完成；R12-B 已由 ADR-052 決定，待實作（AC-078）。
 - [ ] R14：卡片長文字／靜態版面子批次已完成完整回歸與獨立複核；角色設定引導、發布流程、其餘角色體驗及 AC-022 手動驗證仍待完成。
 
 「生成嘗試耗盡後建立新分析輪次」已由 R01–R04 修復並通過驗收；這不代表其餘修復項目或整體發布驗收完成。
