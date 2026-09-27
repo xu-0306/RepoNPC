@@ -203,6 +203,7 @@ interface BatchItemBody {
 interface BatchSnapshotBody {
   batch_id: string;
   state: string;
+  recovery?: boolean;
   plan_id: string;
   selection_hash: string;
   maximum_generation_attempts: number;
@@ -1219,6 +1220,7 @@ export function AdminPage({
   const [batchSnapshot, setBatchSnapshot] = useState<BatchJobSnapshot | null>(
     null,
   );
+  const [batchRecovery, setBatchRecovery] = useState(false);
   const [batchProgressState, setBatchProgressState] =
     useState<BatchProgressState | null>(null);
   const [batchStream, setBatchStream] = useState<BatchSseState>({
@@ -1362,6 +1364,15 @@ export function AdminPage({
     batchSnapshot !== null && isTerminalBatch(batchSnapshot.status);
   const applyBatchSnapshot = useCallback((snapshot: BatchSnapshotBody) => {
     const job = batchJob(snapshot);
+    if (typeof snapshot.recovery === "boolean") {
+      setBatchRecovery(snapshot.recovery && isTerminalBatch(job.status));
+    } else if (
+      !isTerminalBatch(job.status) ||
+      (activeBatchId.current !== null &&
+        activeBatchId.current !== snapshot.batch_id)
+    ) {
+      setBatchRecovery(false);
+    }
     const terminalItems = terminalCount(snapshot);
     const now = Date.now();
     const previousAnnouncement = batchAnnouncement.current;
@@ -1792,6 +1803,7 @@ export function AdminPage({
       batchSnapshotBody.current = null;
       batchMutationPending.current = false;
       setBatchSnapshot(null);
+      setBatchRecovery(false);
       setBatchProgressState(null);
       setBatchPlan(null);
       batchPlanRef.current = null;
@@ -1827,6 +1839,7 @@ export function AdminPage({
       .catch(() => {
         if (!cancelled && activeBatchId.current === null) {
           setBatchSnapshot(null);
+          setBatchRecovery(false);
           setBatchProgressState(null);
         }
       })
@@ -2375,6 +2388,7 @@ export function AdminPage({
         batchSnapshotBody.current = null;
         batchPlanRef.current = null;
         setBatchSnapshot(null);
+        setBatchRecovery(false);
         setBatchProgressState(null);
         setBatchStream({
           connection: "idle",
@@ -2507,6 +2521,7 @@ export function AdminPage({
       if (generation !== batchSnapshotGeneration.current) return;
       batchSnapshotGeneration.current += 1;
       markBatchAnalysisStarted();
+      setBatchRecovery(false);
       applyBatchSnapshot(result.batch);
     } catch (error) {
       if (generation === batchSnapshotGeneration.current) {
@@ -2569,6 +2584,7 @@ export function AdminPage({
       activeBatchId.current = null;
       batchSnapshotBody.current = null;
       setBatchSnapshot(null);
+      setBatchRecovery(false);
       setBatchProgressState(null);
       setBatchStream({
         connection: "idle",
@@ -2618,6 +2634,7 @@ export function AdminPage({
       );
       if (generation === batchSnapshotGeneration.current) {
         batchSnapshotGeneration.current += 1;
+        setBatchRecovery(false);
         applyBatchSnapshot(snapshot);
       }
     } catch (error) {
@@ -2762,6 +2779,7 @@ export function AdminPage({
       );
       if (generation === batchSnapshotGeneration.current) {
         batchSnapshotGeneration.current += 1;
+        setBatchRecovery(false);
         applyBatchSnapshot(result.batch);
       }
     } catch (error) {
@@ -2783,6 +2801,74 @@ export function AdminPage({
         current.pending === "reanalyze"
           ? { ...current, pending: null }
           : current,
+      );
+    }
+  }
+
+  async function dismissAnalysisRecovery(batchId: string) {
+    if (
+      batchMutationPending.current ||
+      batchMutationResultUnknown(batchActions)
+    )
+      return;
+    batchMutationPending.current = true;
+    const generation = ++batchSnapshotGeneration.current;
+    setBatchActions({ pending: "dismiss", error: null });
+    try {
+      await request<{ dismissed: boolean }>(
+        `/api/admin/onboarding/analysis-batches/${encodeURIComponent(batchId)}/dismiss`,
+        { method: "POST" },
+      );
+      if (generation !== batchSnapshotGeneration.current) return;
+
+      batchEventSource.current?.close();
+      batchEventSource.current = null;
+      batchLastEventId.current = null;
+      batchAnnouncement.current = null;
+      batchIdempotency.current = null;
+      reanalysisIdempotency.current = null;
+      activeBatchId.current = null;
+      batchSnapshotBody.current = null;
+      setBatchSnapshot(null);
+      setBatchRecovery(false);
+      setBatchProgressState(null);
+      setBatchStream({
+        connection: "idle",
+        reconnectAttempts: 0,
+        lastEventId: null,
+      });
+
+      // Reconcile once so a newly active batch in another owner tab still wins.
+      try {
+        const active = await request<BatchSnapshotBody>(
+          "/api/admin/onboarding/analysis-batches/active",
+        );
+        if (generation === batchSnapshotGeneration.current) {
+          applyBatchSnapshot(active);
+        }
+      } catch (error) {
+        if (
+          generation === batchSnapshotGeneration.current &&
+          (!(error instanceof AdminRequestError) ||
+            error.message !== "NOT_FOUND")
+        ) {
+          setBatchActions({
+            pending: null,
+            error: batchOperationError(error, "batch_action"),
+          });
+        }
+      }
+    } catch (error) {
+      if (generation === batchSnapshotGeneration.current) {
+        setBatchActions({
+          pending: null,
+          error: batchOperationError(error, "batch_action"),
+        });
+      }
+    } finally {
+      batchMutationPending.current = false;
+      setBatchActions((current) =>
+        current.pending === "dismiss" ? { ...current, pending: null } : current,
       );
     }
   }
@@ -3176,6 +3262,7 @@ export function AdminPage({
     setBatchPreflight({ status: "idle" });
     setBatchPlan(null);
     setBatchSnapshot(null);
+    setBatchRecovery(false);
     setBatchProgressState(null);
     setBatchStream({
       connection: "idle",
@@ -3521,6 +3608,7 @@ export function AdminPage({
                   actions={batchActions}
                   job={batchSnapshot}
                   locale={locale}
+                  recovery={batchRecovery}
                   onCancel={(batchId) => void actOnBatch(batchId, "cancel")}
                   onPause={(batchId) => void actOnBatch(batchId, "pause")}
                   onResume={(batchId) => void actOnBatch(batchId, "resume")}
@@ -3533,6 +3621,9 @@ export function AdminPage({
                       ? (batchId, itemId) =>
                           void reanalyzeBatchItem(batchId, itemId, "current")
                       : undefined
+                  }
+                  onDismissRecovery={(batchId) =>
+                    void dismissAnalysisRecovery(batchId)
                   }
                   onReconcile={(batchId) =>
                     void reconcileAnalysisBatch(batchId)

@@ -27,6 +27,7 @@ from reponpc.admin.batch_resolver import (
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 
 BATCH_TTL: Final = timedelta(hours=24)
+RECOVERY_BATCH_RETENTION: Final = timedelta(days=7)
 GITHUB_RESOLUTION_TTL: Final = timedelta(hours=2)
 EVENT_REPLAY_LIMIT: Final = 200
 ACTIVE_BATCH_STATES: Final = frozenset({"queued", "running", "paused", "cancelling"})
@@ -780,6 +781,162 @@ class BatchRuntimeStore:
             raise BatchRuntimeError("NOT_FOUND")
         return self.get_batch(str(row["batch_id"]))
 
+    def active_or_recoverable_batch(
+        self,
+        *,
+        execution_budget_seconds: int | None = None,
+        maximum_generation_attempts: int | None = None,
+    ) -> tuple[BatchSnapshot, bool]:
+        """Return the active batch, or the newest actionable recent terminal batch.
+
+        The boolean is ``True`` only for the terminal recovery result.  Actionability
+        stays owned by ``_snapshot`` so this lookup cannot drift from retry/reanalysis
+        admission rules.
+        """
+
+        now = _utc(self._now())
+        now_text = _timestamp(now)
+        cutoff = _timestamp(now - RECOVERY_BATCH_RETENTION)
+        with self._database.connection() as connection:
+            active = connection.execute(
+                """
+                SELECT batch_id FROM analysis_batches
+                WHERE owner_scope = 'singleton'
+                  AND state IN ('queued', 'running', 'paused', 'cancelling')
+                ORDER BY created_at DESC LIMIT 1
+                """
+            ).fetchone()
+            active_id = str(active["batch_id"]) if active is not None else None
+            candidates = (
+                ()
+                if active is not None
+                else connection.execute(
+                    """
+                SELECT batch_id FROM analysis_batches AS batch
+                WHERE batch.owner_scope = 'singleton'
+                  AND batch.state IN (
+                    'cancelled', 'completed', 'completed_with_errors', 'failed'
+                  )
+                  AND batch.completed_at >= ?
+                  AND batch.completed_at <= ?
+                  AND (batch.expires_at IS NULL OR batch.expires_at > ?)
+                  AND NOT EXISTS (
+                    SELECT 1 FROM analysis_batch_recovery_dismissals AS dismissal
+                    WHERE dismissal.owner_scope = 'singleton'
+                      AND dismissal.batch_id = batch.batch_id
+                  )
+                ORDER BY batch.completed_at DESC, batch.batch_id DESC
+                """,
+                    (cutoff, now_text, now_text),
+                ).fetchall()
+            )
+
+        if active_id is not None:
+            return (
+                self.get_batch(
+                    active_id,
+                    execution_budget_seconds=execution_budget_seconds,
+                    maximum_generation_attempts=maximum_generation_attempts,
+                ),
+                False,
+            )
+
+        for candidate in candidates:
+            try:
+                snapshot = self.get_batch(
+                    str(candidate["batch_id"]),
+                    execution_budget_seconds=execution_budget_seconds,
+                    maximum_generation_attempts=maximum_generation_attempts,
+                )
+            except BatchRuntimeError as error:
+                if error.code == "NOT_FOUND":
+                    continue
+                raise
+            if any(item.retryable or item.reanalyzable for item in snapshot.items):
+                return snapshot, True
+        raise BatchRuntimeError("NOT_FOUND")
+
+    def dismiss_batch(
+        self,
+        batch_id: str,
+        *,
+        execution_budget_seconds: int | None = None,
+        maximum_generation_attempts: int | None = None,
+    ) -> None:
+        """Persist an owner's dismissal of one currently recoverable batch."""
+
+        if not 1 <= len(batch_id) <= 64:
+            raise BatchRuntimeError("VALIDATION_ERROR")
+        now = _utc(self._now())
+        now_text = _timestamp(now)
+        try:
+            with self._database.connection() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                batch = connection.execute(
+                    "SELECT * FROM analysis_batches WHERE batch_id = ?",
+                    (batch_id,),
+                ).fetchone()
+                if batch is None or str(batch["owner_scope"]) != "singleton":
+                    connection.execute("ROLLBACK")
+                    raise BatchRuntimeError("NOT_FOUND")
+                existing = connection.execute(
+                    """
+                    SELECT 1 FROM analysis_batch_recovery_dismissals
+                    WHERE owner_scope = 'singleton' AND batch_id = ?
+                    """,
+                    (batch_id,),
+                ).fetchone()
+                if existing is not None:
+                    connection.execute("COMMIT")
+                    return
+                completed_at = _parse_optional_timestamp(batch["completed_at"])
+                expires_at = _parse_optional_timestamp(batch["expires_at"])
+                if (
+                    str(batch["state"]) not in TERMINAL_BATCH_STATES
+                    or completed_at is None
+                    or completed_at < now - RECOVERY_BATCH_RETENTION
+                    or completed_at > now
+                    or (expires_at is not None and expires_at <= now)
+                ):
+                    connection.execute("ROLLBACK")
+                    raise BatchRuntimeError("ANALYSIS_RECOVERY_NOT_AVAILABLE")
+                rows = connection.execute(
+                    """
+                    SELECT item.*,
+                           (item.successor_batch_id IS NOT NULL OR EXISTS(
+                             SELECT 1 FROM analysis_batch_items AS successor
+                             WHERE successor.source_item_id = item.item_id
+                           )) AS has_successor
+                    FROM analysis_batch_items AS item
+                    WHERE item.batch_id = ?
+                    ORDER BY item.position
+                    """,
+                    (batch_id,),
+                ).fetchall()
+                snapshot = _snapshot(
+                    batch,
+                    rows,
+                    now=now_text,
+                    execution_budget_seconds=execution_budget_seconds,
+                    maximum_generation_attempts=maximum_generation_attempts,
+                )
+                if not any(item.retryable or item.reanalyzable for item in snapshot.items):
+                    connection.execute("ROLLBACK")
+                    raise BatchRuntimeError("ANALYSIS_RECOVERY_NOT_AVAILABLE")
+                connection.execute(
+                    """
+                    INSERT INTO analysis_batch_recovery_dismissals(
+                      owner_scope, batch_id, dismissed_at
+                    ) VALUES ('singleton', ?, ?)
+                    """,
+                    (batch_id, now_text),
+                )
+                connection.execute("COMMIT")
+        except BatchRuntimeError:
+            raise
+        except sqlite3.Error as exc:
+            raise RuntimeDatabaseError("runtime_analysis_batch_failed") from exc
+
     def idempotent_create(
         self,
         *,
@@ -1183,6 +1340,13 @@ class BatchRuntimeStore:
                     WHERE batch_id = ?
                     """,
                     (effective_attempts, now, batch_id),
+                )
+                connection.execute(
+                    """
+                    DELETE FROM analysis_batch_recovery_dismissals
+                    WHERE owner_scope = 'singleton' AND batch_id = ?
+                    """,
+                    (batch_id,),
                 )
                 self._event_locked(
                     connection,
@@ -1916,7 +2080,12 @@ class BatchRuntimeStore:
                 next_state = "failed"
         else:
             return
-        expires = _timestamp(_utc(self._now()) + BATCH_TTL)
+        retention = (
+            RECOVERY_BATCH_RETENTION
+            if next_state in {"failed", "completed_with_errors"}
+            else BATCH_TTL
+        )
+        expires = _timestamp(_utc(self._now()) + retention)
         connection.execute(
             """
             UPDATE analysis_batches

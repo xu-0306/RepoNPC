@@ -300,6 +300,19 @@ class AnalysisBatchService:
             maximum_generation_attempts=self._analysis_generation_attempts,
         )
 
+    def active_or_recoverable(self) -> tuple[BatchSnapshot, bool]:
+        return self._store.active_or_recoverable_batch(
+            execution_budget_seconds=self._analysis_timeout_seconds,
+            maximum_generation_attempts=self._analysis_generation_attempts,
+        )
+
+    def dismiss(self, batch_id: str) -> None:
+        self._store.dismiss_batch(
+            batch_id,
+            execution_budget_seconds=self._analysis_timeout_seconds,
+            maximum_generation_attempts=self._analysis_generation_attempts,
+        )
+
     def get(self, batch_id: str) -> BatchSnapshot:
         return self._store.get_batch(
             batch_id,

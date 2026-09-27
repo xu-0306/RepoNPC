@@ -1140,6 +1140,22 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             """,
         ),
     ),
+    Migration(
+        version=28,
+        name="analysis_batch_recovery_dismissals",
+        statements=(
+            """
+            CREATE TABLE analysis_batch_recovery_dismissals (
+                owner_scope TEXT NOT NULL DEFAULT 'singleton'
+                    CHECK(owner_scope = 'singleton'),
+                batch_id TEXT NOT NULL REFERENCES analysis_batches(batch_id)
+                    ON DELETE CASCADE,
+                dismissed_at TEXT NOT NULL,
+                PRIMARY KEY(owner_scope, batch_id)
+            )
+            """,
+        ),
+    ),
 )
 
 

@@ -480,6 +480,12 @@ class AdminOperations:
     def active_analysis_batch(self) -> BatchSnapshot:
         return self._analysis_batches().active()
 
+    def recoverable_analysis_batch(self) -> tuple[BatchSnapshot, bool]:
+        return self._analysis_batches().active_or_recoverable()
+
+    def dismiss_analysis_batch(self, *, batch_id: str) -> None:
+        self._analysis_batches().dismiss(batch_id)
+
     def analysis_batch(self, *, batch_id: str) -> BatchSnapshot:
         return self._analysis_batches().get(batch_id)
 

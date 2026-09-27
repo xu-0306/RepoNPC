@@ -73,6 +73,71 @@ def _store(tmp_path, clock: Clock) -> BatchRuntimeStore:
     return BatchRuntimeStore(database, now=clock)
 
 
+def _failed_batch(store: BatchRuntimeStore, request: BatchCreateRequest):
+    batch, created = store.create_batch(request)
+    assert created is True
+    claimed = store.claim_next_item(batch.batch_id)
+    assert claimed is not None
+    store.fail_item(claimed, code="PROVIDER_ERROR")
+    return store.get_batch(batch.batch_id)
+
+
+def test_active_batch_wins_over_recent_recovery_and_cannot_be_dismissed(tmp_path) -> None:
+    clock = Clock()
+    store = _store(tmp_path, clock)
+    recovered = _failed_batch(store, _request(key="recovery-key"))
+    active, _ = store.create_batch(_request(key="active-key", slug="octocat/other"))
+
+    snapshot, is_recovery = store.active_or_recoverable_batch()
+
+    assert snapshot.batch_id == active.batch_id
+    assert is_recovery is False
+    assert recovered.state == "failed"
+    with pytest.raises(BatchRuntimeError) as error:
+        store.dismiss_batch(active.batch_id)
+    assert error.value.code == "ANALYSIS_RECOVERY_NOT_AVAILABLE"
+
+
+def test_recovery_dismissal_survives_store_restart(tmp_path) -> None:
+    clock = Clock()
+    store = _store(tmp_path, clock)
+    recovered = _failed_batch(store, _request(key="dismiss-key"))
+
+    snapshot, is_recovery = store.active_or_recoverable_batch()
+    assert snapshot.batch_id == recovered.batch_id
+    assert is_recovery is True
+    store.dismiss_batch(recovered.batch_id)
+
+    restarted = BatchRuntimeStore(RuntimeDatabase(tmp_path), now=clock)
+    with pytest.raises(BatchRuntimeError) as missing:
+        restarted.active_or_recoverable_batch()
+    assert missing.value.code == "NOT_FOUND"
+    with pytest.raises(BatchRuntimeError) as invalid:
+        restarted.dismiss_batch("missing-batch")
+    assert invalid.value.code == "NOT_FOUND"
+
+
+def test_recovery_requires_actionable_item_and_expires_after_seven_days(tmp_path) -> None:
+    clock = Clock()
+    store = _store(tmp_path, clock)
+    completed, _ = store.create_batch(_request(key="complete-key"))
+    claimed = store.claim_next_item(completed.batch_id)
+    assert claimed is not None
+    store.complete_item(claimed, result={"ok": True})
+    with pytest.raises(BatchRuntimeError) as no_action:
+        store.active_or_recoverable_batch()
+    assert no_action.value.code == "NOT_FOUND"
+
+    failed = _failed_batch(store, _request(key="expiry-key"))
+    clock.advance(days=7)
+    with pytest.raises(BatchRuntimeError) as expired:
+        store.active_or_recoverable_batch()
+    assert expired.value.code == "NOT_FOUND"
+    with pytest.raises(BatchRuntimeError) as invalid:
+        store.dismiss_batch(failed.batch_id)
+    assert invalid.value.code == "ANALYSIS_RECOVERY_NOT_AVAILABLE"
+
+
 def test_idempotency_active_owner_boundary_and_safe_events(tmp_path) -> None:
     clock = Clock()
     store = _store(tmp_path, clock)

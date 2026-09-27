@@ -63,6 +63,7 @@ function props(
     locale: "en",
     preflight,
     job,
+    recovery: false,
     progress: {
       totalItems: 3,
       processedItems: 1,
@@ -92,6 +93,7 @@ function props(
     onCancel: vi.fn(),
     onRetry: vi.fn(),
     onReanalyze: vi.fn(),
+    onDismissRecovery: vi.fn(),
     onReconcile: vi.fn(),
     onRetryPreflight: vi.fn(),
     ...overrides,
@@ -515,5 +517,29 @@ describe("BatchAnalysisPanel", () => {
     expect(markup).toContain("model attempts are exhausted");
     expect(markup).toContain("Reanalyze this project");
     expect(markup).not.toContain("Live progress disconnected");
+  });
+
+  it.each([
+    ["en", "Recent recoverable batch", "Dismiss this batch"],
+    ["zh-TW", "可恢復的最近批次", "不再顯示這個批次"],
+  ] as const)(
+    "shows the recovery callout and dismissal action in %s",
+    (locale, heading, dismissLabel) => {
+      const view = props({ locale, recovery: true });
+      const markup = renderToStaticMarkup(<BatchAnalysisPanel {...view} />);
+
+      expect(markup).toContain(heading);
+      expect(markup).toContain(dismissLabel);
+      expect(view.onDismissRecovery).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not show a dismissal action for an active batch", () => {
+    const markup = renderToStaticMarkup(
+      <BatchAnalysisPanel {...props({ recovery: false })} />,
+    );
+
+    expect(markup).not.toContain("Recent recoverable batch");
+    expect(markup).not.toContain("Dismiss this batch");
   });
 });

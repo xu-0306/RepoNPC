@@ -1824,10 +1824,30 @@ def create_admin_router(
             return origin_error
         configured, _session_hash = boundary
         try:
-            snapshot = await asyncio.to_thread(configured.active_analysis_batch)
+            snapshot, recovery = await asyncio.to_thread(configured.recoverable_analysis_batch)
         except BatchRuntimeError as exc:
             return _batch_error(request, exc)
-        return _batch_response(_batch_snapshot_payload(snapshot))
+        return _batch_response({**_batch_snapshot_payload(snapshot), "recovery": recovery})
+
+    @router.post("/onboarding/analysis-batches/{batch_id}/dismiss")
+    async def dismiss_analysis_batch(
+        request: Request,
+        batch_id: str = Path(min_length=1, max_length=64),
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            await asyncio.to_thread(configured.dismiss_analysis_batch, batch_id=batch_id)
+        except BatchRuntimeError as exc:
+            return _batch_error(request, exc)
+        return _batch_response({"dismissed": True})
 
     @router.get("/onboarding/analysis-batches/{batch_id}")
     async def get_analysis_batch(
@@ -2267,6 +2287,7 @@ def _batch_error(request: Request, error: Exception) -> JSONResponse:
         "ANALYSIS_BATCH_ACTIVE": 409,
         "ANALYSIS_PLAN_STALE": 409,
         "ANALYSIS_RETRY_NOT_AVAILABLE": 409,
+        "ANALYSIS_RECOVERY_NOT_AVAILABLE": 409,
         "ANALYSIS_REANALYZE_NOT_AVAILABLE": 409,
         "ANALYSIS_SOURCE_BATCH_NOT_TERMINAL": 409,
         "ANALYSIS_REANALYZE_ITEM_INVALID": 409,

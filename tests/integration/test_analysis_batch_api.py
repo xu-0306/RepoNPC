@@ -107,6 +107,66 @@ def _selection(slug: str = "octocat/demo") -> dict[str, object]:
     return {"slug": slug, "confirmed": True, "include": [], "exclude": []}
 
 
+def test_recent_terminal_batch_recovery_requires_owner_and_persists_dismissal(
+    tmp_path: Path,
+) -> None:
+    app, database = _application(tmp_path)
+    store = BatchRuntimeStore(database)
+    batch, _ = store.create_batch(
+        BatchCreateRequest(
+            plan_id="recovery-plan",
+            selection_hash="a" * 64,
+            idempotency_key="recovery-key",
+            maximum_generation_attempts=1,
+            items=(
+                BatchItemInput(
+                    slug="octocat/recovery",
+                    ref="main",
+                    include=(),
+                    exclude=(),
+                    commit_sha=SHA,
+                ),
+            ),
+        )
+    )
+    claimed = store.claim_next_item(batch.batch_id)
+    assert claimed is not None
+    store.fail_item(claimed, code="PROVIDER_ERROR")
+    path = f"/api/admin/onboarding/analysis-batches/{batch.batch_id}/dismiss"
+
+    with TestClient(app, base_url=ORIGIN) as client:
+        assert client.get("/api/admin/onboarding/analysis-batches/active").status_code == 401
+        csrf = _login(client)
+        recovered = client.get(
+            "/api/admin/onboarding/analysis-batches/active", headers={"Origin": ORIGIN}
+        )
+        assert recovered.status_code == 200
+        assert recovered.json()["batch_id"] == batch.batch_id
+        assert recovered.json()["recovery"] is True
+        assert client.post(path, headers={"Origin": ORIGIN}).status_code == 403
+        dismissed = client.post(path, headers={"Origin": ORIGIN, "X-CSRF-Token": csrf})
+        assert dismissed.status_code == 200
+        assert dismissed.json() == {"dismissed": True}
+        assert (
+            client.post(path, headers={"Origin": ORIGIN, "X-CSRF-Token": csrf}).status_code == 200
+        )
+        assert (
+            client.get(
+                "/api/admin/onboarding/analysis-batches/active", headers={"Origin": ORIGIN}
+            ).status_code
+            == 404
+        )
+
+    with TestClient(app, base_url=ORIGIN) as client:
+        _login(client)
+        assert (
+            client.get(
+                "/api/admin/onboarding/analysis-batches/active", headers={"Origin": ORIGIN}
+            ).status_code
+            == 404
+        )
+
+
 def test_running_application_cleans_expired_terminal_batches_without_restart(
     tmp_path: Path,
 ) -> None:

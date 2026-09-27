@@ -160,6 +160,7 @@ export type BatchAction =
   | "cancel"
   | "retry"
   | "reanalyze"
+  | "dismiss"
   | "reconcile";
 
 export interface BatchActionState {
@@ -178,6 +179,7 @@ export interface BatchAnalysisPanelProps {
   locale: Locale;
   preflight: BatchPreflightState;
   job: BatchJobSnapshot | null;
+  recovery: boolean;
   progress: BatchProgressState | null;
   stream: BatchSseState;
   actions: BatchActionState;
@@ -187,6 +189,7 @@ export interface BatchAnalysisPanelProps {
   onRetry: (batchId: string) => void;
   onReanalyze: (batchId: string, itemId: string) => void;
   onReanalyzeCurrent?: (batchId: string, itemId: string) => void;
+  onDismissRecovery: (batchId: string) => void;
   onReconcile: (batchId: string) => void;
   onRetryPreflight: () => void;
 }
@@ -217,6 +220,9 @@ type Copy = {
   providerUnavailable: string;
   batchHeading: string;
   noBatch: string;
+  recoveryHeading: string;
+  recoveryDescription: string;
+  dismissRecovery: string;
   status: string;
   stream: string;
   streamState: (state: BatchSseState) => string;
@@ -306,6 +312,10 @@ const COPY: Record<Locale, Copy> = {
     providerUnavailable: "尚未就緒",
     batchHeading: "批次進度",
     noBatch: "尚未建立分析批次。建立後，這裡會顯示可回復的伺服器端進度。",
+    recoveryHeading: "可恢復的最近批次",
+    recoveryDescription:
+      "這是最近七天內仍有可重試或重新分析項目的批次。你可以繼續處理，或將它從維護清單中移除。",
+    dismissRecovery: "不再顯示這個批次",
     status: "批次狀態",
     stream: "即時進度連線",
     streamState: (state) => {
@@ -361,7 +371,7 @@ const COPY: Record<Locale, Copy> = {
           ? "此專案本輪的模型嘗試次數已用盡；可建立新的受控分析輪次。"
           : "此專案本輪的有效執行時間已用盡；可建立新的受控分析輪次。",
     actionPending: (action) =>
-      `正在${{ pause: "暫停", resume: "繼續", cancel: "取消", retry: "重試", reanalyze: "建立新一輪分析", reconcile: "核對" }[action]}批次。`,
+      `正在${{ pause: "暫停", resume: "繼續", cancel: "取消", retry: "重試", reanalyze: "建立新一輪分析", dismiss: "隱藏恢復提示", reconcile: "核對" }[action]}批次。`,
     actionFailed: "批次操作未完成。請確認目前狀態後再試。",
     resultUnknown: "伺服器可能已接受操作，但目前無法確認結果。",
     checkStatus: "重新檢查批次狀態",
@@ -444,6 +454,10 @@ const COPY: Record<Locale, Copy> = {
     batchHeading: "Batch progress",
     noBatch:
       "No analysis batch has been created. Recoverable server-side progress will appear here after it starts.",
+    recoveryHeading: "Recent recoverable batch",
+    recoveryDescription:
+      "This batch finished within the last seven days and still has items that can be retried or reanalyzed. Continue working on it, or remove it from the recovery list.",
+    dismissRecovery: "Dismiss this batch",
     status: "Batch status",
     stream: "Live progress connection",
     streamState: (state) => {
@@ -503,7 +517,7 @@ const COPY: Record<Locale, Copy> = {
           ? "This project's model attempts are exhausted for the current round. You can start a new bounded round."
           : "This project's active-time budget is exhausted for the current round. You can start a new bounded round.",
     actionPending: (action) =>
-      `Batch ${{ pause: "pause", resume: "resume", cancel: "cancellation", retry: "retry", reanalyze: "successor analysis", reconcile: "status check" }[action]} is in progress.`,
+      `Batch ${{ pause: "pause", resume: "resume", cancel: "cancellation", retry: "retry", reanalyze: "successor analysis", dismiss: "dismissal", reconcile: "status check" }[action]} is in progress.`,
     actionFailed:
       "The batch action did not complete. Check the current status and try again.",
     resultUnknown:
@@ -582,6 +596,7 @@ export function BatchAnalysisPanel({
   locale,
   preflight,
   job,
+  recovery,
   progress,
   stream,
   actions,
@@ -591,6 +606,7 @@ export function BatchAnalysisPanel({
   onRetry,
   onReanalyze,
   onReanalyzeCurrent,
+  onDismissRecovery,
   onReconcile,
   onRetryPreflight,
 }: BatchAnalysisPanelProps) {
@@ -662,6 +678,36 @@ export function BatchAnalysisPanel({
               <p aria-live="polite" role="status">
                 {copy.progress}: {copy.noEstimate}
               </p>
+            )}
+
+            {recovery && (
+              <section
+                aria-labelledby="batch-recovery-heading"
+                className="guided-onboarding__provider-status batch-analysis-panel__recovery"
+              >
+                <div>
+                  <h4 id="batch-recovery-heading">{copy.recoveryHeading}</h4>
+                  <p role="status">{copy.recoveryDescription}</p>
+                </div>
+                <div>
+                  <button
+                    aria-busy={actions.pending === "dismiss" || undefined}
+                    disabled={
+                      actions.pending !== null ||
+                      batchMutationResultUnknown(actions)
+                    }
+                    onClick={() => onDismissRecovery(job.id)}
+                    type="button"
+                  >
+                    {copy.dismissRecovery}
+                  </button>
+                  {actions.pending === "dismiss" && (
+                    <p className="guided-onboarding__busy" role="status">
+                      {copy.actionPending("dismiss")}
+                    </p>
+                  )}
+                </div>
+              </section>
             )}
 
             <BatchControls
