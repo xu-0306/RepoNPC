@@ -304,6 +304,16 @@ class BundleManager:
                 return None
             return self._active.directory / "public"
 
+    def public_directory_for(self, index: ReadOnlyIndex) -> Path | None:
+        """Keep answer identity tied to the leased index during activation."""
+
+        with self._lock:
+            if self._active is not None and self._active.index is index:
+                return self._active.directory / "public"
+            if self._previous is not None and self._previous.index is index:
+                return self._previous.directory / "public"
+            return None
+
     def _activate_retained(self, bundle_id: str) -> None:
         directory = self._bundles / bundle_id
         try:

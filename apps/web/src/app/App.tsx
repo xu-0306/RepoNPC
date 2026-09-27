@@ -270,6 +270,34 @@ export function App() {
               turn.id === assistantId ? { ...turn, citations } : turn,
             ),
           );
+        } else if (
+          event.name === "complete" &&
+          event.data.insufficient_evidence === true
+        ) {
+          const suggestedQuestions = Array.isArray(
+            event.data.suggested_questions,
+          )
+            ? event.data.suggested_questions.filter(
+                (item): item is string => typeof item === "string",
+              )
+            : [];
+          const link = event.data.contact_link;
+          const contactLink =
+            link &&
+            typeof link === "object" &&
+            "label" in link &&
+            "url" in link &&
+            typeof link.label === "string" &&
+            typeof link.url === "string"
+              ? { label: link.label, url: link.url }
+              : undefined;
+          setTurns((current) =>
+            current.map((turn) =>
+              turn.id === assistantId
+                ? { ...turn, suggestedQuestions, contactLink }
+                : turn,
+            ),
+          );
         }
       });
       if (
@@ -459,6 +487,7 @@ export function App() {
         <VisitorConversation
           chatAvailable={chatAvailable}
           locale={locale}
+          ownerName={profile?.profile.display_name}
           onRetry={(retryQuestion) => void submit(retryQuestion)}
           pending={pending}
           turns={turns}

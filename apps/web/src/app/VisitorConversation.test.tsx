@@ -1,7 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { VisitorConversation, type VisitorTurn } from "./VisitorConversation";
+import {
+  VisitorConversation,
+  type Citation,
+  type VisitorTurn,
+} from "./VisitorConversation";
 
 const failedTurn: VisitorTurn = {
   id: "assistant-1",
@@ -25,21 +29,43 @@ const failedTurn: VisitorTurn = {
   ],
 };
 
+function citationWithClass(id: string, evidence_class: string): Citation {
+  return { ...failedTurn.citations![0], evidence_class, id };
+}
+
+const friendlyTurn: VisitorTurn = {
+  ...failedTurn,
+  citations: [
+    citationWithClass("ev-owner", "OWNER_ASSERTION"),
+    citationWithClass("ev-participation", "PARTICIPATION"),
+    citationWithClass("ev-project", "REPOSITORY_FACT"),
+  ],
+};
+
 describe("VisitorConversation", () => {
   it("renders validated citation metadata and a usable English retry", () => {
     const markup = renderToStaticMarkup(
       <VisitorConversation
         chatAvailable
         locale="en"
+        ownerName="Ada Lovelace"
         onRetry={vi.fn()}
         pending={false}
-        turns={[failedTurn]}
+        turns={[friendlyTurn]}
       />,
     );
 
     expect(markup).toContain('aria-live="polite"');
+    expect(markup).toContain('<details class="citations">');
+    expect(markup).toContain("<summary>Sources</summary>");
     expect(markup).toContain("Evidence class");
-    expect(markup).toContain("REPOSITORY_FACT");
+    expect(markup).toContain("Ada Lovelace");
+    expect(markup).toContain("own words");
+    expect(markup).toContain("GitHub participation");
+    expect(markup).toContain("Project documents and code");
+    expect(markup).not.toContain("OWNER_ASSERTION");
+    expect(markup).not.toContain("PARTICIPATION");
+    expect(markup).not.toContain("REPOSITORY_FACT");
     expect(markup).toContain("owner/repo / src/search.py:10-12 @ 0123456789ab");
     expect(markup).toContain("Retry this question");
     expect(markup).not.toMatch(/<button[^>]*disabled/);
@@ -50,6 +76,7 @@ describe("VisitorConversation", () => {
       <VisitorConversation
         chatAvailable
         locale="zh-TW"
+        ownerName="艾達"
         onRetry={vi.fn()}
         pending
         turns={[failedTurn]}
@@ -59,5 +86,32 @@ describe("VisitorConversation", () => {
     expect(markup).toContain("證據類別");
     expect(markup).toContain("來源位置");
     expect(markup).toMatch(/<button[^>]*disabled/);
+  });
+
+  it("offers no-match suggestions and the profile contact link", () => {
+    const markup = renderToStaticMarkup(
+      <VisitorConversation
+        chatAvailable
+        locale="en"
+        onRetry={vi.fn()}
+        pending={false}
+        turns={[
+          {
+            id: "no-match",
+            role: "assistant",
+            content: "Try one of these questions.",
+            suggestedQuestions: ["Which project uses retrieval?"],
+            contactLink: {
+              label: "Portfolio contact",
+              url: "https://example.com/contact",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("Which project uses retrieval?");
+    expect(markup).toContain('href="https://example.com/contact"');
+    expect(markup).toContain("Portfolio contact");
   });
 });

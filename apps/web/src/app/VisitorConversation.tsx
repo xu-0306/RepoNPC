@@ -20,19 +20,46 @@ export interface VisitorTurn {
   citations?: Citation[];
   failed?: boolean;
   retryQuestion?: string;
+  suggestedQuestions?: string[];
+  contactLink?: { label: string; url: string };
 }
 
 interface Props {
   chatAvailable: boolean;
   locale: Locale;
+  ownerName?: string;
   onRetry: (question: string) => void;
   pending: boolean;
   turns: VisitorTurn[];
 }
 
+type MessageCopy = (typeof messages)[Locale];
+
+function citationLabel(
+  evidenceClass: string,
+  ownerName: string | undefined,
+  copy: MessageCopy,
+) {
+  switch (evidenceClass) {
+    case "OWNER_ASSERTION":
+      return copy.citationOwner(
+        ownerName?.trim() || copy.citationOwnerFallback,
+      );
+    case "PARTICIPATION":
+      return copy.citationParticipation;
+    case "REPOSITORY_FACT":
+      return copy.citationProject;
+    case "MODEL_INFERENCE":
+      return copy.citationInference;
+    default:
+      return copy.citationOther;
+  }
+}
+
 export function VisitorConversation({
   chatAvailable,
   locale,
+  ownerName,
   onRetry,
   pending,
   turns,
@@ -50,6 +77,32 @@ export function VisitorConversation({
                 ? copy.streamingAnswer
                 : "")}
           </p>
+          {turn.suggestedQuestions && turn.suggestedQuestions.length > 0 && (
+            <ul className="answer-suggestions">
+              {turn.suggestedQuestions.map((suggestion) => (
+                <li key={suggestion}>
+                  <button
+                    disabled={pending || !chatAvailable}
+                    onClick={() => onRetry(suggestion)}
+                    type="button"
+                  >
+                    {suggestion}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {turn.contactLink && (
+            <p>
+              <a
+                href={turn.contactLink.url}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                {turn.contactLink.label}
+              </a>
+            </p>
+          )}
           {turn.failed && turn.retryQuestion && (
             <button
               disabled={pending || !chatAvailable}
@@ -60,8 +113,8 @@ export function VisitorConversation({
             </button>
           )}
           {turn.citations && turn.citations.length > 0 && (
-            <aside aria-label={copy.citations} className="citations">
-              <h3>{copy.citations}</h3>
+            <details className="citations">
+              <summary>{copy.citations}</summary>
               <ul>
                 {turn.citations.map((citation) => (
                   <li key={citation.id}>
@@ -75,7 +128,13 @@ export function VisitorConversation({
                     <p>{citation.excerpt}</p>
                     <dl>
                       <dt>{copy.citationClass}</dt>
-                      <dd>{citation.evidence_class}</dd>
+                      <dd>
+                        {citationLabel(
+                          citation.evidence_class,
+                          ownerName,
+                          copy,
+                        )}
+                      </dd>
                       <dt>{copy.citationLocation}</dt>
                       <dd>
                         {citation.repository} / {citation.path}:
@@ -86,7 +145,7 @@ export function VisitorConversation({
                   </li>
                 ))}
               </ul>
-            </aside>
+            </details>
           )}
         </li>
       ))}

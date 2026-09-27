@@ -14,9 +14,33 @@ from fastapi.testclient import TestClient
 from reponpc.api.public import SetupState
 from reponpc.chat.answers import Citation
 from reponpc.chat.limits import ChatLimitError
-from reponpc.chat.service import ChatDelivery
+from reponpc.chat.service import ChatDelivery, delivery_events
 from reponpc.main import create_app
 from reponpc.providers import ProviderUsage
+
+
+def test_no_match_complete_event_carries_bounded_profile_choices() -> None:
+    delivery = ChatDelivery(
+        "fixture-index",
+        "en",
+        0,
+        "I couldn't find anything about that in this portfolio.",
+        (),
+        "stop",
+        None,
+        True,
+        ("What does this project do?",),
+        ("Contact", "https://example.com/contact"),
+    )
+
+    events = delivery_events(delivery, "request-id")
+
+    assert [name for name, _payload in events] == ["metadata", "token", "complete"]
+    assert events[-1][1]["suggested_questions"] == ["What does this project do?"]
+    assert events[-1][1]["contact_link"] == {
+        "label": "Contact",
+        "url": "https://example.com/contact",
+    }
 
 
 @dataclass

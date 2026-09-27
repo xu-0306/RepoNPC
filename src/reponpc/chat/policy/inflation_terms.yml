@@ -1,0 +1,100 @@
+version: 1
+groups:
+  role:
+    en:
+      - engineer
+      - developer
+      - maintainer
+      - author
+      - employee
+    zh-TW:
+      - 工程師
+      - 開發者
+      - 維護者
+      - 作者
+      - 員工
+  lead:
+    en:
+      - lead
+      - leads
+      - led
+      - leading
+      - leader
+      - leaders
+      - leadership
+    zh-TW:
+      - 主導
+      - 帶領
+      - 領導
+      - 領導者
+  founder:
+    en:
+      - founder
+      - founded
+      - cofounder
+      - co-founded
+    zh-TW:
+      - 創辦
+      - 創辦人
+      - 共同創辦
+  senior:
+    en:
+      - senior
+      - principal
+      - staff
+    zh-TW:
+      - 資深
+      - 首席
+  sole:
+    en:
+      - sole
+      - solely
+      - single-handedly
+      - independently
+    zh-TW:
+      - 獨立完成
+      - 一手
+      - 唯一
+  architect:
+    en:
+      - architect
+      - architecture lead
+    zh-TW:
+      - 架構師
+      - 架構設計
+  manager:
+    en:
+      - manager
+      - managed
+      - manages
+      - management
+    zh-TW:
+      - 管理
+      - 管理者
+      - 主管
+  responsibility:
+    en:
+      - responsible
+      - responsibility
+      - implemented
+      - implements
+      - built
+      - builds
+      - developed
+      - develops
+      - authored
+      - authors
+      - created
+      - creates
+      - maintained
+      - maintains
+      - wrote
+      - writes
+    zh-TW:
+      - 負責
+      - 實作
+      - 實現
+      - 開發
+      - 建立
+      - 撰寫
+      - 維護

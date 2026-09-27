@@ -214,9 +214,45 @@ button[aria-pressed="true"] {
   font-size: 0.92rem;
   margin-top: 1rem;
 }
+.citations > summary {
+  cursor: pointer;
+  font-weight: 750;
+  min-height: 2.75rem;
+  padding-block: 0.65rem;
+}
+.citations > ul {
+  margin-block: 0.65rem 0;
+  padding-inline-start: 1.25rem;
+}
+.citations li + li {
+  margin-top: 0.85rem;
+}
+.citations p {
+  margin-block: 0.35rem;
+}
+.citations dl {
+  display: grid;
+  gap: 0.25rem 0.75rem;
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin: 0.5rem 0 0;
+}
+.citations dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.citations dt {
+  font-weight: 700;
+}
 .citations a {
   color: var(--ui-primary-dark);
   font-weight: 700;
+}
+.answer-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
 }
 form {
   display: grid;
