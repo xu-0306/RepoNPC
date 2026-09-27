@@ -1,12 +1,12 @@
 # RepoNPC 完整實作待辦與分派計劃（2026-09-26）
 
-狀態：**待實作**。本文件彙整 ADR-046 之後所有尚未實作或尚未驗收的工作，作為交給其他 agent 的單一入口。決策依據以 [完成方向契約](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md)、`TECHNICAL_SPEC.md` 0.4.5、`DECISIONS.md` ADR-046～ADR-052 與 `ACCEPTANCE_CRITERIA.md` 為準；本文件只負責排序、相依與分派，不新增產品決策。
+狀態：**實作中**。本文件彙整 ADR-046 之後所有尚未實作或尚未驗收的工作，作為交給其他 agent 的單一入口。決策依據以 [完成方向契約](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md)、`TECHNICAL_SPEC.md` 0.4.5、`DECISIONS.md` ADR-046～ADR-052 與 `ACCEPTANCE_CRITERIA.md` 為準；本文件只負責排序、相依與分派，不新增產品決策。
 
 ## 0. 目前基準
 
-- 本機 `main` 比 `origin/main` 超前 9 個提交（`0106f96` 起到 ADR-052 提交，全部是文件）。**尚未 push**；push 需擁有者另行授權。
+- 本機 `main` 包含 ADR-052 與後續本機實作工作；**尚未 push**，push 需擁有者另行授權。提交數與工作樹狀態以當次 `git status` 為準。
 - 已完成並有本機證據：ADR-046 本機草稿／索引啟用／本機試聊／三步驟 GitHub 卡片引導；R01–R07、R09、R10、R12-A、R14 訪客聊天與卡片長文字子批次；R13 的 64px canonical、converter 與「角色與動畫」工作區。
-- ADR-048～ADR-052（規格 0.4.0～0.4.5、FR-043～FR-053、AC-062～AC-079）**只有文件，程式尚未開始**。
+- ADR-048～ADR-052（規格 0.4.0～0.4.5、FR-043～FR-053、AC-062～AC-079）已開始實作：A2 回答政策 v2 與擁有者端固定丟棄原因碼、A10/R11 近期批次恢復、A10/R12-B 既有 passage cache 重用量測與公開路由／bundle 匯出／runtime backup 排除測試已取得本機證據。A2 的參與事實端到端回答仍待 A3，coverage 報告待 A4；正式驗收帳本與發布閘門待 A12。
 - 驗收帳本 `release-evidence/acceptance-ledger.json` 只涵蓋 AC-001～AC-061（3 pass、6 blocked、52 not-run），`source_identity` 仍是 2026-09-10 的髒工作樹。不得以它計算完成百分比。
 
 ## 1. 全部待辦總表

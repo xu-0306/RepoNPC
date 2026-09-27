@@ -21,8 +21,11 @@ from reponpc.runtime.database import RuntimeDatabase
 ORIGIN = "https://portfolio.example.com"
 PASSWORD = "correct horse battery staple"
 CONFIG = Path("tests/fixtures/phase2/reponpc.yml").read_bytes()
-CUSTOM_CONFIG = CONFIG.decode().replace(
-    """  mode: builtin
+CUSTOM_CONFIG = (
+    CONFIG.decode()
+    .replace("\r\n", "\n")
+    .replace(
+        """  mode: builtin
   revision: 0
   builtin:
     pack_id: core/humanoid
@@ -36,11 +39,13 @@ CUSTOM_CONFIG = CONFIG.decode().replace(
       secondary_color: '#f2c14e'
       accessory: glasses
 """,
-    """  mode: custom
+        """  mode: custom
   revision: 0
   custom:
     sprite_path: assets/character/hero.png
 """,
+    )
+    .replace("\n", "\r\n")
 )
 
 

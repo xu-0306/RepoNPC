@@ -15,8 +15,7 @@ def test_technical_spec_freezes_phase2_closure_contracts() -> None:
     specification = _read("docs/TECHNICAL_SPEC.md")
 
     assert "| Status | **Approved** |" in specification
-    assert "| Version | 0.3.9 |" in specification
-    assert "ADR-046" in specification
+    assert "Version 0.3.9 / ADR-046 approves the local-first portfolio" in specification
     assert "LOCAL_PUBLICATION_CONTRACT_2026-09-22.md" in specification
     assert "ADR-044" in specification
     assert "Version 0.1.1 records the owner-approved Phase 2 closure boundary" in specification
@@ -33,7 +32,7 @@ def test_acceptance_and_adr_require_derived_formal_evidence() -> None:
     acceptance = _read("docs/ACCEPTANCE_CRITERIA.md")
     decisions = _read("docs/DECISIONS.md")
 
-    assert "Technical Specification 0.3.9" in acceptance
+    assert "2026-09-22 local-publication amendment (ADR-046)" in acceptance
     assert "Docker inspection and an access probe prove" in acceptance
     assert "host controller derives every pass/provenance boolean" in acceptance
     assert "## ADR-015:" in decisions
