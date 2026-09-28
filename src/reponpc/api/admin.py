@@ -9,7 +9,7 @@ import json
 from collections.abc import Callable
 from contextlib import suppress
 from threading import Event
-from typing import Annotated, Literal, cast
+from typing import Annotated, Any, Literal, cast
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Cookie, File, Form, Header, Path, Query, Request, UploadFile
@@ -40,6 +40,7 @@ from reponpc.admin.embedding_profiles import (
     EmbeddingProfileInput,
     embedding_model_catalog,
 )
+from reponpc.admin.faq import FaqError, ReviewedFaq
 from reponpc.admin.github import GitHubAdminError
 from reponpc.admin.local_portfolio import LocalPortfolioError, apply_character
 from reponpc.admin.model_connections import (
@@ -54,6 +55,7 @@ from reponpc.admin.onboarding import (
 )
 from reponpc.admin.operations import AdminOperations
 from reponpc.api.public import error_response
+from reponpc.bundles.manager import BundleActivationError
 from reponpc.cards.assets import CanonicalSprite, SpriteValidationError
 from reponpc.cards.conversion import (
     MAX_PACK_ENTRIES,
@@ -67,7 +69,9 @@ from reponpc.cards.conversion import (
     SpriteSelection,
 )
 from reponpc.cards.render import CardRenderError
+from reponpc.chat.limits import ChatLimitError
 from reponpc.config.models import ConfigValidationError, PublicConfig
+from reponpc.providers import ProviderError
 
 
 class _StrictRequest(BaseModel):
@@ -262,11 +266,37 @@ class OnboardingDraftRequest(_StrictRequest):
     confirmed_assertions: Literal[True]
 
 
+class FaqQueueRequest(_StrictRequest):
+    locale: Literal["zh-TW", "en"]
+
+
+class FaqGenerateRequest(_StrictRequest):
+    revision: Annotated[int, Field(strict=True, ge=1)]
+
+
+class FaqReviewRequest(FaqGenerateRequest):
+    bundle_id: Annotated[str, Field(min_length=1, max_length=128)]
+    action: Literal["approve", "reject"]
+
+
+class FaqStatement(_StrictRequest):
+    zh_tw: Annotated[str, Field(min_length=1, max_length=4000)] = Field(alias="zh-TW")
+    en: Annotated[str, Field(min_length=1, max_length=4000)]
+
+
+class FaqRewriteRequest(FaqGenerateRequest):
+    expected_draft_revision: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
+    repository: Annotated[str, Field(min_length=3, max_length=200)]
+    kind: Literal["role", "responsibility", "achievement", "context"]
+    statement: FaqStatement
+
+
 def create_admin_router(
     *,
     service_supplier: Callable[[], AdminSessionService | None],
     origins_supplier: Callable[[], tuple[str, ...]],
     operations_supplier: Callable[[], AdminOperations | None] = lambda: None,
+    faq_supplier: Callable[[], ReviewedFaq | None] = lambda: None,
 ) -> APIRouter:
     """Create auth routes whose production dependencies may attach after startup."""
 
@@ -1217,6 +1247,143 @@ def create_admin_router(
             else 422,
             code=code,
             message="Local portfolio operation could not be completed.",
+        )
+
+    async def faq_operation(request: Request, operation: Callable[[], Any]) -> Response:
+        try:
+            result = await asyncio.to_thread(operation)
+            return JSONResponse(result, headers={"Cache-Control": "no-store"})
+        except (FaqError, BundleActivationError, LocalPortfolioError) as exc:
+            return error_response(
+                request,
+                status_code=503
+                if exc.code in {"SERVICE_NOT_READY", "FAQ_GENERATION_FAILED"}
+                else 409
+                if exc.code
+                in {
+                    "FAQ_CONFLICT",
+                    "FAQ_STALE",
+                    "FAQ_NOT_READY",
+                    "FAQ_REWRITE_NOT_INDEXED",
+                    "FAQ_CONTEXT_INSUFFICIENT",
+                    "PORTFOLIO_CONFLICT",
+                }
+                else 422,
+                code=exc.code,
+                message="FAQ operation could not be completed.",
+            )
+        except (ProviderError, ChatLimitError):
+            return error_response(
+                request,
+                status_code=503,
+                code="FAQ_GENERATION_FAILED",
+                message="FAQ generation could not be completed.",
+            )
+        except ConfigValidationError as exc:
+            return _config_error(request, exc)
+
+    def faq_boundary(request: Request, session_token: str | None, csrf_token: str | None = None):
+        boundary = protected(request, session_token, csrf_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        denied = same_origin(request)
+        if denied is not None:
+            return denied
+        faq = faq_supplier()
+        return (
+            faq
+            if faq is not None
+            else error_response(
+                request,
+                status_code=503,
+                code="SERVICE_NOT_READY",
+                message="FAQ service is unavailable.",
+            )
+        )
+
+    @router.get("/portfolio/faq")
+    @router.get("/portfolio/faq/export")
+    async def read_faq(
+        request: Request,
+        locale: Literal["zh-TW", "en"] = "zh-TW",
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        faq = faq_boundary(request, session_token)
+        if isinstance(faq, JSONResponse):
+            return faq
+        response = await faq_operation(
+            request,
+            lambda: (
+                faq.public_payload(locale)
+                if request.url.path.endswith("/export")
+                else faq.view(locale)
+            ),
+        )
+        if request.url.path.endswith("/export") and response.status_code == 200:
+            response.headers["Content-Disposition"] = f'attachment; filename="faq-{locale}.json"'
+        return response
+
+    @router.post("/portfolio/faq/check")
+    async def initialize_faq(
+        request: Request,
+        body: FaqQueueRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        faq = faq_boundary(request, session_token, csrf_token or "")
+        if isinstance(faq, JSONResponse):
+            return faq
+        return await faq_operation(request, lambda: faq.initialize_queue(body.locale))
+
+    @router.post("/portfolio/faq/{entry_id}/regenerate")
+    async def generate_faq(
+        entry_id: Annotated[str, Path(pattern=r"^[a-f0-9]{32}$")],
+        request: Request,
+        body: FaqGenerateRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        faq = faq_boundary(request, session_token, csrf_token or "")
+        if isinstance(faq, JSONResponse):
+            return faq
+        return await faq_operation(request, lambda: faq.regenerate(entry_id, body.revision))
+
+    @router.post("/portfolio/faq/{entry_id}/review")
+    async def review_faq(
+        entry_id: Annotated[str, Path(pattern=r"^[a-f0-9]{32}$")],
+        request: Request,
+        body: FaqReviewRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        faq = faq_boundary(request, session_token, csrf_token or "")
+        if isinstance(faq, JSONResponse):
+            return faq
+        return await faq_operation(
+            request, lambda: faq.review(entry_id, body.revision, body.bundle_id, body.action)
+        )
+
+    @router.post("/portfolio/faq/{entry_id}/rewrite")
+    async def rewrite_faq(
+        entry_id: Annotated[str, Path(pattern=r"^[a-f0-9]{32}$")],
+        request: Request,
+        body: FaqRewriteRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        faq = faq_boundary(request, session_token, csrf_token or "")
+        if isinstance(faq, JSONResponse):
+            return faq
+        return await faq_operation(
+            request,
+            lambda: faq.rewrite(
+                entry_id,
+                body.revision,
+                expected_draft_revision=body.expected_draft_revision,
+                repository=body.repository,
+                kind=body.kind,
+                statement=body.statement.model_dump(by_alias=True),
+            ),
         )
 
     @router.get("/portfolio")

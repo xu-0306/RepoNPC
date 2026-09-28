@@ -6,7 +6,7 @@
 
 - 本機 `main` 包含 ADR-052 與後續本機實作工作；**尚未 push**，push 需擁有者另行授權。提交數與工作樹狀態以當次 `git status` 為準。
 - 已完成並有本機證據：ADR-046 本機草稿／索引啟用／本機試聊／三步驟 GitHub 卡片引導；R01–R07、R09、R10、R12-A、R14 訪客聊天與卡片長文字子批次；R13 的 64px canonical、converter 與「角色與動畫」工作區。
-- ADR-048～ADR-052（規格 0.4.0～0.4.5、FR-043～FR-053、AC-062～AC-079）已開始實作：A2 回答政策 v2 與擁有者端固定丟棄原因碼、A10/R11 近期批次恢復、A10/R12-B 既有 passage cache 重用量測與公開路由／bundle 匯出／runtime backup 排除測試已取得本機證據。A2 的參與事實端到端回答仍待 A3，coverage 報告待 A4；正式驗收帳本與發布閘門待 A12。
+- ADR-048～ADR-052（規格 0.4.0～0.4.5、FR-043～FR-053、AC-062～AC-079）已開始實作：A2 回答政策 v2、A3 參與事實與 A4 覆蓋檢查／FAQ 已取得本機證據；A10/R11 近期批次恢復、A10/R12-B passage cache 重用量測與公開路由／bundle 匯出／runtime backup 排除測試亦已完成本機驗證。A3 已保存於 `1e82ee8`，實際 bounded 本機／reindex 建置的參與事實修正為 `cf948f8`（58 項 focused checks）；A4 已完成本機實作與 Main 審核；完成提交為新增 A4 實作文件的 `feat(admin): add coverage checks and reviewed FAQ`，驗證見[本機紀錄](../release-evidence/a4/local-checks.md)。正式驗收帳本與發布閘門待 A12。
 - 驗收帳本 `release-evidence/acceptance-ledger.json` 只涵蓋 AC-001～AC-061（3 pass、6 blocked、52 not-run），`source_identity` 仍是 2026-09-10 的髒工作樹。不得以它計算完成百分比。
 
 ## 1. 全部待辦總表
@@ -82,6 +82,8 @@
 本機狀態（2026-09-27）：實作與 fixture 驗證完成；包含索引、引導欄位、不可變引用、失敗／限流處理及中英文分段答案。正式發布與真實 GitHub 驗收仍由 A12 的驗收帳本追蹤。
 
 ### A4 覆蓋檢查與 FAQ
+
+本機狀態（2026-09-28）：[A4 實作契約與驗證範圍](A4_COVERAGE_FAQ_IMPLEMENTATION.md)記錄標準問題 registry、實際驗證回答的資訊性檢查、四種審核動作、保存 claim 後更新真實索引再生成、精確 bundle 綁定、runtime migration 29，以及核准項 JSON 匯出／訪客即時問題按鈕。完整 Pages 靜態殼與離線比對由 A5 處理；公開部署由 A12 追蹤。
 
 > 依契約 §3、§4.3 實作 FR-046（AC-067）：發布前的資訊性覆蓋檢查（絕不阻擋發布）；FAQ 產生與審核，動作只有核准／拒絕／重產／改寫成自述（不提供自由編輯）；只有核准項會被匯出或提供；綁定 bundle ID，bundle 變更時顯示「需要重新確認」。FAQ 回答必須通過 A2 驗證器。
 

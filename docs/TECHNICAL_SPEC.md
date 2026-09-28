@@ -1,5 +1,7 @@
 # RepoNPC v1 Technical Specification
 
+**Implementation progress (2026-09-28):** A3 participation is implemented locally, including the bounded local/reindex build integration correction. A4 coverage and reviewed FAQ now have local build/API/security/storage and browser evidence; see [A4 contract](A4_COVERAGE_FAQ_IMPLEMENTATION.md) and [local verification](../release-evidence/a4/local-checks.md). Formal A12 release/Pages/Funnel evidence remains pending. The dated checkpoint below records the earlier state.
+
 **Implementation progress (2026-09-27):** A2's v2 answer validator/service integration, owner-only fixed drop-reason logging and collapsible Sources list; R11's owner-scoped recent batch recovery with a synthetic authenticated browser reload check; and R12-B's passage-cache work-count and route/export/backup exclusion tests have local evidence. AC-065's participation-backed answer still depends on A3, and A4 must expose the coverage report. Formal AC-062–AC-065 and AC-077–AC-078 release evidence remains pending in A12. Historical “not implemented” amendment notes below describe the state when each decision was approved.
 
 **Model source, repair closure and maintenance amendment (2026-09-27, ADR-052; FR-049, FR-053, AC-076–AC-079):** The built-in bge-m3 is the official `BAAI/bge-m3` fp32 ONNX export pinned to revision `5617a9f61b02` (about 2.29 GB, per-file SHA-256). Admin previews are served only through authenticated `no-store` admin routes (R08). The active-batch endpoint also returns a recent actionable terminal batch until the owner dismisses it (R11). R12-B first checks whether the passage-vector cache already covers the need. A 「維護」 page covers status, backup, restore, bundle rollback, stopping the gateway and update/Funnel guidance. Not implemented yet.
@@ -281,6 +283,8 @@ These requirements extend FR-006/FR-012/FR-025/FR-035 and NFR-001/002/003/008/00
 These extend FR-025/FR-027/FR-028/FR-033/FR-038/FR-040 and NFR-001/002/003/008/009/011/013/014. AC-058 through AC-060 are additional release gates. Section 11.6 governs order and analysis selection where older sections conflate a selected analysis profile with a publicly active embedding profile.
 
 ### 2.10 Version 0.4.0 completion direction (ADR-048)
+
+**A4 local implementation (2026-09-28):** FR-046 is realized by the [coverage/FAQ implementation contract](A4_COVERAGE_FAQ_IMPLEMENTATION.md), including authenticated routes, runtime migration 29, exact-bundle approval, actual indexed-claim rewrite continuation and public/export allowlists. This local evidence does not establish A5 static export or public deployment acceptance.
 
 The [completion direction contract](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md) is normative for the details of these requirements.
 

@@ -85,13 +85,20 @@ class BundleManager:
     def acquire(self) -> Iterator[ReadOnlyIndex]:
         """Lease the current reader so an activation cannot close it in flight."""
 
+        with self.acquire_snapshot() as (index, _bundle_id, _public_directory):
+            yield index
+
+    @contextmanager
+    def acquire_snapshot(self) -> Iterator[tuple[ReadOnlyIndex, str, Path]]:
+        """Capture immutable identity and public files with the reader lease."""
+
         with self._lock:
             if self._active is None:
                 raise BundleActivationError("bundle_unavailable")
             current = self._active
             current.leases += 1
         try:
-            yield current.index
+            yield current.index, current.manifest.bundle_id, current.directory / "public"
         finally:
             with self._lock:
                 current.leases -= 1

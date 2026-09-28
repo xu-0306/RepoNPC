@@ -20,6 +20,7 @@ import {
 } from "./AdminStatusCards";
 import { OnboardingStepper } from "./OnboardingStepper";
 import { CheckboxField } from "./CheckboxField";
+import type { ClaimKind } from "./ClaimEditor";
 
 const EMPTY_WORKSPACE_STATUS: AdminWorkspaceStatus = {
   chat: {
@@ -1026,18 +1027,21 @@ function RepositoryRow({
 }
 
 function ContributionEditor({
+  locale,
   repository,
   copy,
   busy,
   onAction,
   onSuggestContribution,
 }: {
+  locale: Locale;
   repository: GuidedRepository;
   copy: Copy;
   busy: boolean;
   onAction: GuidedOnboardingViewProps["onAction"];
   onSuggestContribution: GuidedOnboardingViewProps["onSuggestContribution"];
 }) {
+  const [newClaimKind, setNewClaimKind] = useState<ClaimKind>("responsibility");
   const slugId = repository.metadata.slug.replace(/[^a-zA-Z0-9_-]/g, "-");
   const statementMissing = repository.ownerStatement.trim().length === 0;
   const suggestDisabled = busy || statementMissing;
@@ -1075,6 +1079,10 @@ function ContributionEditor({
         proposal.role.en,
         proposal.summary["zh-TW"],
         proposal.summary.en,
+        ...proposal.claims.flatMap((claim) => [
+          claim.statement["zh-TW"],
+          claim.statement.en,
+        ]),
       ].some((value) => value.trim().length === 0)
     : false;
   const proposalDisabledReason = !proposal
@@ -1229,6 +1237,47 @@ function ContributionEditor({
             ))}
             <fieldset disabled={busy || proposalLocked}>
               <legend>{copy.claimsHeading}</legend>
+              <label htmlFor={`guided-new-claim-kind-${slugId}`}>
+                {copy.claimsHeading}
+                <select
+                  id={`guided-new-claim-kind-${slugId}`}
+                  value={newClaimKind}
+                  onChange={(event) =>
+                    setNewClaimKind(event.target.value as ClaimKind)
+                  }
+                >
+                  {(
+                    [
+                      "role",
+                      "responsibility",
+                      "achievement",
+                      "context",
+                    ] as const
+                  ).map((kind) => (
+                    <option key={kind} value={kind}>
+                      {copy.claimLabel(kind)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  proposalChange({
+                    ...proposal,
+                    claims: [
+                      ...proposal.claims,
+                      {
+                        id: `claim_${crypto.randomUUID().replaceAll("-", "")}`,
+                        kind: newClaimKind,
+                        statement: { "zh-TW": "", en: "" },
+                      },
+                    ],
+                  })
+                }
+              >
+                {locale === "en" ? "Add owner statement" : "新增自述"}
+              </button>
               {proposal.claims.flatMap((claim, index) =>
                 (["zh-TW", "en"] as const).map((proposalLocale) => (
                   <label
@@ -1255,6 +1304,23 @@ function ContributionEditor({
                   </label>
                 )),
               )}
+              {proposal.claims.map((claim, index) => (
+                <button
+                  key={claim.id}
+                  type="button"
+                  onClick={() =>
+                    proposalChange({
+                      ...proposal,
+                      claims: proposal.claims.filter(
+                        (_, position) => position !== index,
+                      ),
+                    })
+                  }
+                >
+                  {locale === "en" ? "Remove owner statement" : "移除自述"}{" "}
+                  {index + 1}
+                </button>
+              ))}
             </fieldset>
           </section>
           {!proposalLocked && (
@@ -1782,12 +1848,14 @@ function AnalysisStep({
 }
 
 function ContributionsStep({
+  locale,
   state,
   copy,
   busy,
   onAction,
   onSuggestContribution,
 }: {
+  locale: Locale;
   state: GuidedOnboardingState;
   copy: Copy;
   busy: boolean;
@@ -1830,6 +1898,7 @@ function ContributionsStep({
               : copy.notConfirmed}
           </summary>
           <ContributionEditor
+            locale={locale}
             busy={busy}
             copy={copy}
             key={repository.metadata.slug}
@@ -2470,6 +2539,7 @@ export function GuidedOnboardingView({
           )}
           {state.step === "contributions" && (
             <ContributionsStep
+              locale={locale}
               busy={busy}
               copy={copy}
               onAction={onAction}

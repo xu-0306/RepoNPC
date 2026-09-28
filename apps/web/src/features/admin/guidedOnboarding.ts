@@ -141,6 +141,7 @@ export type GuidedOnboardingAction =
   | { type: "CONTINUE_TO_CONTRIBUTIONS" }
   | { type: "SET_OWNER_STATEMENT"; slug: string; statement: string }
   | { type: "BEGIN_MANUAL_CONTRIBUTION"; slug: string }
+  | { type: "OPEN_CLAIM_EDITOR"; slug: string; kind: SuggestedClaim["kind"] }
   | { type: "EDIT_CONFIRMED_CONTRIBUTION"; slug: string }
   | { type: "RESTORE_PREVIOUS_CONTRIBUTION"; slug: string }
   | {
@@ -560,6 +561,34 @@ export function guidedOnboardingReducer(
           confirmedContribution: null,
         };
       });
+    case "OPEN_CLAIM_EDITOR":
+      return updateSelectedRepository(
+        { ...state, step: "contributions", mode: "guided" },
+        action.slug,
+        (repository) => {
+          const proposal = cloneProposal(
+            repository.proposal ??
+              repository.confirmedContribution ?? {
+                role: { "zh-TW": "", en: "" },
+                summary: { "zh-TW": "", en: "" },
+                claims: [],
+              },
+          );
+          proposal.claims.push({
+            id: `claim_${crypto.randomUUID().replaceAll("-", "")}`,
+            kind: action.kind,
+            statement: { "zh-TW": "", en: "" },
+          });
+          return {
+            ...repository,
+            proposal,
+            confirmedContribution: null,
+            previousContribution:
+              repository.confirmedContribution ??
+              repository.previousContribution,
+          };
+        },
+      );
     case "EDIT_CONFIRMED_CONTRIBUTION":
       requireStep(state, "contributions");
       return updateSelectedRepository(state, action.slug, (repository) => {

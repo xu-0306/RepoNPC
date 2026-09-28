@@ -7,8 +7,9 @@ import math
 import threading
 import time
 from collections.abc import Callable
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Literal
 
 from reponpc.bundles.manager import BundleManager
@@ -40,6 +41,7 @@ class ChatDelivery:
     insufficient_evidence: bool
     suggested_questions: tuple[str, ...] = ()
     contact_link: tuple[str, str] | None = None
+    discarded_segments: tuple[tuple[int, tuple[str, ...]], ...] = ()
 
 
 class ChatCancelledError(RuntimeError):
@@ -77,18 +79,72 @@ class GroundedChatService:
     ) -> ChatDelivery:
         """Admit the request before retrieval; reserve provider only for calls."""
 
+        return self._answer(
+            message=message,
+            locale=locale,
+            history=history,
+            client_ip=client_ip,
+            cancel_requested=cancel_requested,
+            lane=ProviderLane.PUBLIC_CHAT,
+        )
+
+    def answer_for_review(
+        self,
+        *,
+        message: str,
+        locale: Literal["zh-TW", "en"],
+        required_claim: tuple[str, str, dict[str, str]] | None = None,
+        excluded_bundle_id: str | None = None,
+    ) -> ChatDelivery:
+        """Use the normal validator and retrieval under owner provider admission."""
+
+        return self._answer(
+            message=message,
+            locale=locale,
+            history=(),
+            client_ip="",
+            cancel_requested=None,
+            lane=ProviderLane.ADMIN_SINGLE,
+            required_claim=required_claim,
+            excluded_bundle_id=excluded_bundle_id,
+        )
+
+    def _answer(
+        self,
+        *,
+        message: str,
+        locale: Literal["zh-TW", "en"],
+        history: tuple[ChatHistoryMessage, ...],
+        client_ip: str,
+        cancel_requested: threading.Event | None,
+        lane: ProviderLane,
+        required_claim: tuple[str, str, dict[str, str]] | None = None,
+        excluded_bundle_id: str | None = None,
+    ) -> ChatDelivery:
+
         admission = getattr(self._limits, "admit_public_chat", None)
         admission_context: Any
-        if callable(admission):
+        if lane != ProviderLane.PUBLIC_CHAT:
+            admission_context = nullcontext()
+        elif callable(admission):
             admission(client_ip)
             admission_context = nullcontext()
         else:
             admission_context = self._limits.acquire(client_ip)
-        with admission_context, self._bundles.acquire() as index:
+        with admission_context, _bundle_snapshot(self._bundles) as (index, bundle_id, directory):
             _raise_if_cancelled(cancel_requested)
-            owner_name, suggested_questions, contact_link = self._answer_profile(index, locale)
+            required_id = None
+            if required_claim is not None:
+                from reponpc.bundles.manager import BundleActivationError
+
+                required_id = index.owner_claim_evidence(*required_claim)
+                if bundle_id == excluded_bundle_id or required_id is None:
+                    raise BundleActivationError("FAQ_REWRITE_NOT_INDEXED")
+            owner_name, suggested_questions, contact_link = self._answer_profile(
+                index, locale, directory=directory
+            )
             deadline = self._monotonic() + self._timeout_seconds
-            with _public_provider_permit(self._limits):
+            with _provider_permit(self._limits, lane):
                 query_vector = self._providers.embed_query_for(
                     getattr(index, "embedding", self._providers.embedding.identity()),
                     [message],
@@ -96,6 +152,26 @@ class GroundedChatService:
                 )[0]
             _raise_if_cancelled(cancel_requested)
             evidence_ids = index.hybrid_candidates(message, query_vector=query_vector)
+            if required_id is not None:
+                evidence_ids = [
+                    required_id,
+                    *(item for item in evidence_ids if item != required_id),
+                ]
+                policy = index.retrieval_policy["fusion"]
+                counts: dict[str, int] = {}
+                bounded: list[str] = []
+                for evidence_id in evidence_ids:
+                    evidence = index.evidence(evidence_id)
+                    if evidence is None:
+                        continue
+                    slug = evidence.repository_slug
+                    if counts.get(slug, 0) >= policy["max_records_per_repository"]:
+                        continue
+                    counts[slug] = counts.get(slug, 0) + 1
+                    bounded.append(evidence_id)
+                    if len(bounded) >= policy["final_context_records"]:
+                        break
+                evidence_ids = bounded
             capabilities = self._providers.chat.capabilities()
             fixed_messages = _provider_messages(
                 message,
@@ -111,13 +187,16 @@ class GroundedChatService:
                 capabilities.max_context_tokens - self._max_output_tokens - prompt_overhead
             )
             if evidence_budget <= 0:
+                if required_id is not None:
+                    from reponpc.bundles.manager import BundleActivationError
+
+                    raise BundleActivationError("FAQ_CONTEXT_INSUFFICIENT")
                 _raise_if_cancelled(cancel_requested)
-                status = self._bundles.status()
                 validated = validate_v2_answer(
                     {}, {}, locale, suggested_questions=suggested_questions
                 )
                 return ChatDelivery(
-                    index_version=status.active_bundle_id or "unversioned",
+                    index_version=bundle_id,
                     locale=locale,
                     evidence_count=0,
                     answer_markdown=validated.answer_markdown,
@@ -133,6 +212,10 @@ class GroundedChatService:
                 max_context_tokens=evidence_budget,
                 token_counter=_conservative_token_count,
             )
+            if required_id is not None and required_id not in packed.evidence_ids:
+                from reponpc.bundles.manager import BundleActivationError
+
+                raise BundleActivationError("FAQ_CONTEXT_INSUFFICIENT")
             selected = {
                 f"S{ordinal}": evidence
                 for ordinal, evidence_id in enumerate(packed.evidence_ids, start=1)
@@ -145,7 +228,7 @@ class GroundedChatService:
                 packed.text,
                 system_role=capabilities.system_role,
             )
-            with _public_provider_permit(self._limits):
+            with _provider_permit(self._limits, lane):
                 result = self._providers.generate(
                     provider_messages,
                     _ANSWER_SCHEMA,
@@ -162,9 +245,8 @@ class GroundedChatService:
                 suggested_questions=suggested_questions,
             )
             _log_discarded_segments(validated)
-            status = self._bundles.status()
             return ChatDelivery(
-                index_version=status.active_bundle_id or "unversioned",
+                index_version=bundle_id,
                 locale=locale,
                 evidence_count=len(selected),
                 answer_markdown=validated.answer_markdown,
@@ -176,13 +258,15 @@ class GroundedChatService:
                     validated.suggested_questions if validated.insufficient_evidence else ()
                 ),
                 contact_link=contact_link if validated.insufficient_evidence else None,
+                discarded_segments=validated.discarded_segments,
             )
 
     def _answer_profile(
-        self, index: Any, locale: Literal["zh-TW", "en"]
+        self, index: Any, locale: Literal["zh-TW", "en"], *, directory: Path | None = None
     ) -> tuple[str | None, tuple[str, ...], tuple[str, str] | None]:
         directory_for = getattr(self._bundles, "public_directory_for", None)
-        directory = directory_for(index) if callable(directory_for) else None
+        if directory is None:
+            directory = directory_for(index) if callable(directory_for) else None
         if directory is None:
             return None, (), None
         try:
@@ -212,13 +296,25 @@ class GroundedChatService:
         return self._timeout_seconds
 
 
-def _public_provider_permit(limits: ChatLimits):
+@contextmanager
+def _bundle_snapshot(bundles: BundleManager):
+    snapshot = getattr(bundles, "acquire_snapshot", None)
+    if callable(snapshot):
+        with snapshot() as captured:
+            yield captured
+    else:
+        # Existing isolated test readers predate immutable identity leases.
+        with bundles.acquire() as index:
+            yield index, bundles.status().active_bundle_id or "unversioned", None
+
+
+def _provider_permit(limits: ChatLimits, lane: ProviderLane):
     acquire = getattr(limits, "acquire_generation", None)
     if not callable(acquire):
         # Compatibility for deliberately minimal test doubles. Production
         # ChatLimits always provides the fair scheduler permit.
         return nullcontext()
-    return acquire(ProviderLane.PUBLIC_CHAT)
+    return acquire(lane)
 
 
 def _log_discarded_segments(validated: ValidatedAnswer) -> None:

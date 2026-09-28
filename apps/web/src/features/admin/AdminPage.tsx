@@ -1212,6 +1212,9 @@ export function AdminPage({
   const [guidedResumeReady, setGuidedResumeReady] = useState(false);
   const guidedResumeFound = useRef(false);
   const draftHydrated = useRef(false);
+  const currentDraft = useRef(draft);
+  currentDraft.current = draft;
+  const localHydrationGeneration = useRef(0);
   const [batchPreflight, setBatchPreflight] = useState<BatchPreflightState>({
     status: "idle",
   });
@@ -3014,6 +3017,10 @@ export function AdminPage({
   }
 
   async function createGuidedDraft() {
+    if (guidedState.rawYamlHasUnmappedChanges) {
+      dispatchAdminError({ type: "SET_GUIDED_ERROR", code: "CONFIG_INVALID" });
+      return;
+    }
     const repositories = selectedRepositories(guidedState);
     await performGuided(async () => {
       let result = await request<OnboardingDraftBody>(
@@ -3561,10 +3568,79 @@ export function AdminPage({
             selection={analysisSelection}
             request={request}
             onCreateDraft={() => void createGuidedDraft()}
+            repositories={selectedRepositories(guidedState).map(
+              (repository) => repository.metadata.slug,
+            )}
+            onAddClaim={(slug, kind) => {
+              if (
+                !guidedState.rawYamlHasUnmappedChanges &&
+                guidedState.selectionConfirmed &&
+                selectedRepositories(guidedState).some(
+                  (repository) => repository.metadata.slug === slug,
+                )
+              ) {
+                setPublicationOpen(false);
+                setGuidedState((current) =>
+                  guidedOnboardingReducer(current, {
+                    type: "OPEN_CLAIM_EDITOR",
+                    slug,
+                    kind,
+                  }),
+                );
+                return;
+              }
+              void performGuided(async () => {
+                const validated = await request<AdminValidation>(
+                  "/api/admin/config/validate",
+                  {
+                    method: "POST",
+                    body: JSON.stringify({ content: draft }),
+                  },
+                );
+                const mapped = guidedOnboardingFromConfig(validated.parsed);
+                if (!mapped) throw new Error("CONFIG_INVALID");
+                if (currentDraft.current !== draft) return;
+                setBaseConfig(validated.parsed ?? null);
+                setPublicationOpen(false);
+                setGuidedState(
+                  guidedOnboardingReducer(mapped, {
+                    type: "OPEN_CLAIM_EDITOR",
+                    slug,
+                    kind,
+                  }),
+                );
+                setTimeout(() => {
+                  const fields = document.querySelectorAll<HTMLTextAreaElement>(
+                    `[data-slug="${slug}"] textarea[id^="guided-claim-"]`,
+                  );
+                  fields.item(fields.length - 2)?.focus();
+                }, 0);
+              });
+            }}
             onStored={(body) => {
+              const contentChanged = currentDraft.current !== body.content;
+              const hydrationGeneration = ++localHydrationGeneration.current;
               setLocalRevision(body.revision);
               setDraft(body.content);
               setCharacterSprite(body.sprite_base64);
+              if (contentChanged)
+                setGuidedState((current) => ({
+                  ...current,
+                  rawYamlHasUnmappedChanges: true,
+                }));
+              void request<AdminValidation>("/api/admin/config/validate", {
+                method: "POST",
+                body: JSON.stringify({ content: body.content }),
+              })
+                .then((validated) => {
+                  if (
+                    localHydrationGeneration.current !== hydrationGeneration ||
+                    currentDraft.current !== body.content
+                  )
+                    return;
+                  setBaseConfig(validated.parsed ?? null);
+                })
+                .catch(() => undefined);
             }}
           />
         }

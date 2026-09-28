@@ -763,6 +763,8 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 
 ### AC-067 - Only approved FAQ entries are served, and coverage never blocks publication
 
+**Local evidence (2026-09-28):** [A4 implementation](A4_COVERAGE_FAQ_IMPLEMENTATION.md) provides actual local build/index/validator tests, all four owner API actions, bilingual registry/claim controls, activation/staleness/failure/security/export checks and a real browser feature harness. Full release/Pages/Funnel evidence remains separate under AC-068/071 and A12.
+
 **Maps to:** FR-046
 
 - **Given** generated FAQ candidates, owner actions (approve, reject, regenerate, convert to owner statement), and a later bundle change,

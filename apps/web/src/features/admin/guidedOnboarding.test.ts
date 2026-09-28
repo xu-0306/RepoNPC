@@ -8,6 +8,7 @@ import {
   parseGuidedOnboarding,
   serializeGuidedOnboarding,
   type ContributionProposal,
+  type GuidedOnboardingState,
   type RepositoryAnalysis,
   type RepositoryMetadata,
 } from "./guidedOnboarding";
@@ -33,6 +34,52 @@ describe("guided onboarding errors", () => {
 });
 
 describe("guided onboarding config hydration", () => {
+  it("opens a gap statement without discarding saved claims or unrelated edits", () => {
+    const selected = guidedOnboardingReducer(selectedState(), {
+      type: "CONFIRM_SELECTION",
+    });
+    const original: GuidedOnboardingState = {
+      ...selected,
+      profile: { ...profile, displayName: "Unsaved owner edit" },
+      repositories: selected.repositories.map((repository) => ({
+        ...repository,
+        proposal: {
+          ...proposal,
+          claims: [
+            {
+              id: "faq_saved",
+              kind: "context" as const,
+              statement: {
+                "zh-TW": "已保存的新自述",
+                en: "Saved rewritten statement",
+              },
+            },
+          ],
+        },
+      })),
+    };
+    original.repositories.push({
+      ...original.repositories[0],
+      metadata: { ...metadata, slug: "octocat/other" },
+      proposal: {
+        ...proposal,
+        summary: { "zh-TW": "未儲存編輯", en: "Unrelated unsaved edit" },
+      },
+    });
+    const next = guidedOnboardingReducer(original, {
+      type: "OPEN_CLAIM_EDITOR",
+      slug: metadata.slug,
+      kind: "achievement",
+    });
+    expect(next.step).toBe("contributions");
+    expect(next.profile).toBe(original.profile);
+    expect(next.repositories[1]).toBe(original.repositories[1]);
+    expect(next.repositories[0].proposal?.claims[0]).toEqual(
+      original.repositories[0].proposal?.claims[0],
+    );
+    expect(next.repositories[0].proposal?.claims[1].kind).toBe("achievement");
+    expect(next.repositories[0].confirmedContribution).toBeNull();
+  });
   it("maps an existing validated config into editable profile and contributions", () => {
     const state = guidedOnboardingFromConfig({
       profile: {

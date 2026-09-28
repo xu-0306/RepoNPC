@@ -156,6 +156,8 @@ Replace the "stay close to confirmed wording / do not infer role" text with the 
 
 ## 3. Pre-publish coverage check (supports D1 and D3)
 
+Implementation detail and local evidence: [A4 coverage/FAQ contract](A4_COVERAGE_FAQ_IMPLEMENTATION.md) (2026-09-28). Coverage uses the actual prepared active local bundle and validated answer results; changed drafts are identified separately. Checking is explicit and never a publication gate.
+
 - A standard question set lives in a registry file, per locale. It covers responsibility, what was built, duration, team or context, outcome and technologies.
 - The check runs against the local build and reports, per question:
   - answered;
@@ -201,6 +203,8 @@ Replace the "stay close to confirmed wording / do not infer role" text with the 
 - The **GitHub card** links to the page URL entered by the owner, verified by fetching it and checking the export manifest hash.
 
 ### 4.3 FAQ review (D3)
+
+The concrete owner/public/export routes, migration 29, exact-bundle approval and saved-claim/new-index regeneration continuation are documented in [A4 implementation](A4_COVERAGE_FAQ_IMPLEMENTATION.md). Full static Pages export and offline matching remain A5 work.
 
 - **Generation:** FAQ candidates come from `profile.suggested_questions` plus the coverage question set. They go through the same validated pipeline (§1).
 - **Owner actions per item:**

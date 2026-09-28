@@ -1,5 +1,7 @@
 # RepoNPC Security Model
 
+**A4 FAQ boundary (2026-09-28, FR-046 / AC-067 / ADR-048):** Owner queue/review/rewrite/export routes use existing authenticated same-origin authorization and CSRF for writes, with `no-store`. Runtime migration 29 holds mutable review/rewrite associations outside immutable bundles. Regeneration immediately withdraws previous approval and visible candidate bytes; failed/unchecked/stale/rewrite-pending items cannot be publicly delivered. Rewrite generation requires the saved claim ID, repository and exact bilingual text in a new leased immutable index within existing context bounds. Public FAQ and JSON export share explicit top-level/entry/citation allowlists and never expose owner diagnostics, drafts, associations, prompts, usage or provider metadata. Visitor chip selection rechecks current approval with cancellation/request-identity guards. See [A4 contract](A4_COVERAGE_FAQ_IMPLEMENTATION.md).
+
 **2026-09-26 character scene (ADR-049, Technical Specification 0.4.1, AC-073):** The optional owner scene background is a new untrusted upload path.
 - It accepts PNG or WebP only (no SVG, no animation, ≤ 2 MB, 640×360 to 2560×1600).
 - It is decoded under the existing image guards, then re-encoded server-side with metadata stripped.

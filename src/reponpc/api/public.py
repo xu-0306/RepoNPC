@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -17,6 +18,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from reponpc.admin.faq import ReviewedFaq
 from reponpc.bundles.manager import BundleActivationError
 from reponpc.chat.limits import ChatLimitError
 from reponpc.chat.service import (
@@ -256,6 +258,7 @@ def create_public_router(
     max_history_messages: int = 6,
     max_history_characters: int = 6000,
     chat_request_limits_supplier: Callable[[], tuple[int, int, int]] | None = None,
+    faq_supplier: Callable[[], ReviewedFaq | None] = lambda: None,
 ) -> APIRouter:
     """Create routes bound to one immutable setup/readiness snapshot."""
 
@@ -281,6 +284,19 @@ def create_public_router(
     @router.get("/healthz")
     async def healthz() -> dict[str, str]:
         return {"status": "alive"}
+
+    @router.get("/api/public/faq")
+    async def approved_faq(request: Request, locale: Literal["zh-TW", "en"] = "zh-TW") -> Response:
+        faq = faq_supplier()
+        if faq is None:
+            return unavailable(request, locale)
+        try:
+            return JSONResponse(
+                await asyncio.to_thread(faq.public_payload, locale),
+                headers={"Cache-Control": "no-store"},
+            )
+        except BundleActivationError:
+            return unavailable(request, locale)
 
     @router.get("/readyz")
     async def readyz(request: Request) -> JSONResponse:

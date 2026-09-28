@@ -1156,6 +1156,35 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             """,
         ),
     ),
+    Migration(
+        version=29,
+        name="bundle_bound_reviewed_faq",
+        statements=(
+            """
+            CREATE TABLE faq_entries (
+                entry_id TEXT PRIMARY KEY,
+                question_key TEXT NOT NULL,
+                bundle_id TEXT NOT NULL,
+                locale TEXT NOT NULL CHECK(locale IN ('zh-TW', 'en')),
+                question TEXT NOT NULL,
+                topic TEXT,
+                claim_kind TEXT NOT NULL CHECK(claim_kind IN
+                    ('role', 'responsibility', 'achievement', 'context')),
+                answer_markdown TEXT,
+                citations_json TEXT NOT NULL DEFAULT '[]',
+                diagnostics_json TEXT NOT NULL DEFAULT '[]',
+                coverage_status TEXT NOT NULL DEFAULT 'unchecked' CHECK(coverage_status IN
+                    ('unchecked', 'answered', 'partially_answered', 'no_relevant_content')),
+                review_state TEXT NOT NULL DEFAULT 'pending' CHECK(review_state IN
+                    ('pending', 'approved', 'rejected')),
+                rewrite_json TEXT,
+                error_code TEXT,
+                revision INTEGER NOT NULL DEFAULT 1 CHECK(revision > 0),
+                UNIQUE(locale, question_key)
+            )
+            """,
+        ),
+    ),
 )
 
 

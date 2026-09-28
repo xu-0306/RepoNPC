@@ -42,6 +42,7 @@ interface PublicStatus {
 }
 
 interface PublicProfile {
+  index: { version: string };
   profile: {
     display_name: string;
     headline: string;
@@ -80,12 +81,23 @@ export function App() {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [profileError, setProfileError] = useState(false);
   const [profileReload, setProfileReload] = useState(0);
+  const [faq, setFaq] = useState<{
+    bundle_id: string;
+    locale: Locale;
+    entries: {
+      question: string;
+      answer_markdown: string;
+      citations: Citation[];
+    }[];
+  } | null>(null);
   const [characterState, setCharacterState] = useState<CharacterState>("idle");
   const questionInput = useRef<HTMLTextAreaElement>(null);
   const profileErrorAlert = useRef<HTMLParagraphElement>(null);
   const chatStatus = useRef<HTMLParagraphElement>(null);
   const statusController = useRef<AbortController | null>(null);
   const requestController = useRef<AbortController | null>(null);
+  const faqSelectionController = useRef<AbortController | null>(null);
+  const [faqSelectionPending, setFaqSelectionPending] = useState(false);
   const focusQuestionWhenIdle = useRef(false);
   const characterTimer = useRef<number | null>(null);
   const copy = messages[locale];
@@ -106,6 +118,8 @@ export function App() {
     return () => {
       requestController.current?.abort();
       requestController.current = null;
+      faqSelectionController.current?.abort();
+      faqSelectionController.current = null;
       statusController.current?.abort();
       if (characterTimer.current !== null) {
         window.clearTimeout(characterTimer.current);
@@ -175,7 +189,11 @@ export function App() {
 
   useEffect(() => {
     const controller = new AbortController();
+    faqSelectionController.current?.abort();
+    faqSelectionController.current = null;
+    setFaqSelectionPending(false);
     setProfile(null);
+    setFaq(null);
     setProfileError(false);
     void fetch(`/api/public/profile?locale=${encodeURIComponent(locale)}`, {
       signal: controller.signal,
@@ -184,13 +202,28 @@ export function App() {
         if (!response.ok) throw new Error("profile unavailable");
         return response.json() as Promise<PublicProfile>;
       })
-      .then(setProfile)
+      .then((value) => {
+        if (!controller.signal.aborted) setProfile(value);
+      })
       .catch((error: unknown) => {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
           setProfileError(true);
           window.setTimeout(() => profileErrorAlert.current?.focus(), 0);
         }
       });
+    void fetch(`/api/public/faq?locale=${encodeURIComponent(locale)}`, {
+      signal: controller.signal,
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((value) => {
+        if (
+          !controller.signal.aborted &&
+          value?.locale === locale &&
+          Array.isArray(value.entries)
+        )
+          setFaq(value);
+      })
+      .catch(() => undefined);
     return () => controller.abort();
   }, [locale, profileReload]);
 
@@ -496,21 +529,120 @@ export function App() {
         <div className="suggestions">
           <h3>{copy.suggested}</h3>
           <div className="suggestion-list">
-            {(profile?.suggested_questions ?? copy.suggestionItems).map(
-              (suggestion) => (
-                <button
-                  disabled={!chatAvailable || pending}
-                  key={suggestion}
-                  onClick={() => {
-                    setQuestion(suggestion);
-                    questionInput.current?.focus();
-                  }}
-                  type="button"
-                >
-                  {suggestion}
-                </button>
-              ),
-            )}
+            {[
+              ...new Set([
+                ...(faq?.bundle_id === profile?.index?.version
+                  ? (faq?.entries.map((entry) => entry.question) ?? [])
+                  : []),
+                ...(profile?.suggested_questions ?? copy.suggestionItems),
+              ]),
+            ].map((suggestion) => (
+              <button
+                disabled={
+                  pending ||
+                  faqSelectionPending ||
+                  (!chatAvailable &&
+                    !faq?.entries.some(
+                      (entry) =>
+                        entry.question === suggestion &&
+                        faq.bundle_id === profile?.index?.version,
+                    ))
+                }
+                key={suggestion}
+                onClick={() => {
+                  const approved =
+                    faq?.bundle_id === profile?.index?.version
+                      ? faq?.entries.find(
+                          (entry) => entry.question === suggestion,
+                        )
+                      : undefined;
+                  if (approved) {
+                    if (faqSelectionController.current) return;
+                    const controller = new AbortController();
+                    faqSelectionController.current = controller;
+                    setFaqSelectionPending(true);
+                    // Recheck approval on selection; owner decisions may change while this page is open.
+                    void fetch(
+                      `/api/public/faq?locale=${encodeURIComponent(locale)}`,
+                      { signal: controller.signal },
+                    )
+                      .then((response) =>
+                        response.ok ? response.json() : null,
+                      )
+                      .then((currentFaq) => {
+                        if (
+                          faqSelectionController.current !== controller ||
+                          controller.signal.aborted
+                        )
+                          return;
+                        if (
+                          currentFaq?.locale !== locale ||
+                          !Array.isArray(currentFaq?.entries)
+                        )
+                          return;
+                        if (
+                          !currentFaq ||
+                          currentFaq.bundle_id !== profile?.index?.version
+                        ) {
+                          setFaq(null);
+                          setProfileReload((current) => current + 1);
+                          return;
+                        }
+                        setFaq(currentFaq);
+                        const current = currentFaq.entries.find(
+                          (entry: { question: string }) =>
+                            entry.question === suggestion,
+                        );
+                        if (!current) return;
+                        const id = window.crypto.randomUUID();
+                        setTurns((turns) => [
+                          ...turns,
+                          {
+                            id: `${id}-user`,
+                            role: "user",
+                            content: suggestion,
+                          },
+                          {
+                            id: `${id}-assistant`,
+                            role: "assistant",
+                            content: current.answer_markdown,
+                            citations: current.citations,
+                          },
+                        ]);
+                        setExchanges((exchanges) =>
+                          retainSuccessfulExchanges([
+                            ...exchanges,
+                            {
+                              question: suggestion,
+                              answer: current.answer_markdown,
+                            },
+                          ]),
+                        );
+                        transitionCharacter("success");
+                      })
+                      .catch(() => {
+                        if (
+                          faqSelectionController.current === controller &&
+                          !controller.signal.aborted
+                        )
+                          setFaq(null);
+                      })
+                      .finally(() => {
+                        if (faqSelectionController.current === controller) {
+                          faqSelectionController.current = null;
+                          setFaqSelectionPending(false);
+                        }
+                      });
+                    return;
+                  }
+                  setQuestion(suggestion);
+                  questionInput.current?.focus();
+                }}
+                type="button"
+              >
+                {suggestion}
+              </button>
+            ))}
           </div>
         </div>
 

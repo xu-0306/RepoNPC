@@ -14,7 +14,7 @@ from urllib.parse import quote
 
 import numpy as np
 
-from reponpc.domain.evidence import COMMIT_RE
+from reponpc.domain.evidence import COMMIT_RE, normalize_content
 from reponpc.indexing.index_database import INDEX_SCHEMA_VERSION
 from reponpc.indexing.sources import EmbeddingIdentity
 from reponpc.retrieval.fts_query import FtsQueryMode, compile_fts_query
@@ -154,6 +154,26 @@ class ReadOnlyIndex:
         """Close the immutable reader after its bundle handle is released."""
 
         self._connection.close()
+
+    def owner_claim_evidence(
+        self, claim_id: str, repository_slug: str, statement: dict[str, str]
+    ) -> str | None:
+        """Confirm the saved rewrite is present in this immutable index."""
+
+        content = normalize_content(
+            "\n".join(f"{locale}: {statement[locale]}" for locale in sorted(statement))
+        )
+        row = self._connection.execute(
+            "SELECT evidence_id, content, metadata_json FROM evidence "
+            "WHERE evidence_class = 'OWNER_ASSERTION' AND owner_claim_id = ?",
+            (claim_id,),
+        ).fetchone()
+        if row is None or str(row["content"]) != content:
+            return None
+        metadata = json.loads(str(row["metadata_json"]))
+        if metadata.get("repository_slug") != repository_slug:
+            return None
+        return str(row["evidence_id"])
 
     def evidence(self, evidence_id: str) -> IndexedEvidence | None:
         """Load one evidence record without accepting caller-controlled SQL."""

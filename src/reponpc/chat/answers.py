@@ -177,6 +177,7 @@ class ValidatedAnswer:
     suggested_questions: tuple[str, ...] = ()
     # Owner-only diagnostics; never serialize this field into public delivery.
     discarded_reason_codes: tuple[str, ...] = ()
+    discarded_segments: tuple[tuple[int, tuple[str, ...]], ...] = ()
 
 
 def validate_answer(
@@ -307,7 +308,8 @@ def _validate_v2_envelope(
     identity_terms = _identity_terms(owner_name, owner_aliases)
     retained: list[tuple[str, str, tuple[str, ...]]] = []
     discarded_reason_codes: list[str] = []
-    for segment in envelope.segments:
+    discarded_segments: list[tuple[int, tuple[str, ...]]] = []
+    for segment_index, segment in enumerate(envelope.segments):
         source_ids = segment.source_ids
         evidence = tuple(selected[source_id] for source_id in source_ids)
         person_reference = _contains_person_reference(segment.text, locale, identity_terms)
@@ -316,6 +318,8 @@ def _validate_v2_envelope(
             kind = "person"
         text = _normalize_owner_references(segment.text, locale, identity_terms)
         reasons = _segment_drop_reasons(kind, text, evidence, safe_owner=safe_owner)
+        if reasons:
+            discarded_segments.append((segment_index, reasons))
         for reason in reasons:
             if reason not in discarded_reason_codes:
                 discarded_reason_codes.append(reason)
@@ -327,6 +331,7 @@ def _validate_v2_envelope(
             locale,
             suggested_questions,
             discarded_reason_codes=tuple(discarded_reason_codes),
+            discarded_segments=tuple(discarded_segments),
         )
 
     rendered: list[str] = []
@@ -343,6 +348,7 @@ def _validate_v2_envelope(
         False,
         suggested_questions,
         tuple(discarded_reason_codes),
+        tuple(discarded_segments),
     )
 
 
@@ -629,8 +635,11 @@ def _no_match(
     suggestions: tuple[str, ...] = (),
     *,
     discarded_reason_codes: tuple[str, ...] = (),
+    discarded_segments: tuple[tuple[int, tuple[str, ...]], ...] = (),
 ) -> ValidatedAnswer:
-    return ValidatedAnswer(_NO_MATCH[locale], (), True, suggestions, discarded_reason_codes)
+    return ValidatedAnswer(
+        _NO_MATCH[locale], (), True, suggestions, discarded_reason_codes, discarded_segments
+    )
 
 
 def _safe_owner_name(owner_name: str | None) -> str | None:

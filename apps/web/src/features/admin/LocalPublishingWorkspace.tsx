@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { CoverageFaqPanel } from "./CoverageFaqPanel";
+import type { ClaimKind } from "./ClaimEditor";
 import type {
   AdminLocale,
   AdminPreview,
@@ -30,6 +32,7 @@ interface PublicationStatus {
   draft_changed: boolean;
   error_code: string | null;
   revision: string | null;
+  active_bundle_id: string | null;
 }
 interface ShareMetadata {
   account: string;
@@ -52,6 +55,8 @@ export function LocalPublishingWorkspace({
   request,
   onStored,
   onCreateDraft,
+  repositories,
+  onAddClaim,
 }: {
   locale: AdminLocale;
   content: string;
@@ -62,6 +67,8 @@ export function LocalPublishingWorkspace({
   request: Request;
   onStored: (body: LocalDraftBody) => void;
   onCreateDraft: () => void;
+  repositories: string[];
+  onAddClaim: (repository: string, kind: ClaimKind) => void;
 }) {
   const zh = locale === "zh-TW";
   const [preview, setPreview] = useState<AdminPreview | null>(null);
@@ -442,6 +449,17 @@ export function LocalPublishingWorkspace({
           </p>
         )}
       </section>
+      <CoverageFaqPanel
+        locale={locale}
+        request={request}
+        revision={revision}
+        repositories={repositories}
+        selection={selection}
+        bundleId={status?.active_bundle_id ?? null}
+        draftChanged={status?.draft_changed ?? false}
+        onStored={onStored}
+        onAddClaim={onAddClaim}
+      />
       <GitHubShareGuide
         locale={locale}
         account={account}

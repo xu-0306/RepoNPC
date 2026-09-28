@@ -412,7 +412,9 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
 
 ## ADR-048: Adopt the completion direction — segment answers, participation, reviewed FAQ, Pages + Funnel live chat, Windows installer, built-in bge-m3
 
-- **Status:** Accepted 2026-09-26; implementation pending. No acceptance evidence exists.
+- **Local implementation checkpoint (2026-09-28):** A4 FR-046 is covered by [the concrete coverage/FAQ contract](A4_COVERAGE_FAQ_IMPLEMENTATION.md). Runtime migration 29 preserves immutable bundles, and public delivery/export share an approved-current allowlist. This does not mark the remaining completion-direction milestones or public release accepted.
+
+- **Status:** Accepted 2026-09-26; A2–A4 have partial/local implementation evidence through 2026-09-28. Remaining completion-direction work and formal A12 release evidence are pending.
 - **Authorization:** The owner approved decisions D1–D9 (2026-09-25/26) and resolved Q1–Q9 on 2026-09-26, the final confirmation being Q8 = (b) and Q9 as recommended, and asked for the specification, acceptance criteria and project memory to be updated and committed on `main` without push.
 - **Decision:** Adopt [the completion direction contract](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md) as Technical Specification 0.4.0 §2.10 (FR-043–FR-049) and AC-062–AC-071:
   - envelope v2 typed segments (`person` / `participation` / `project` / `inference`) with backend-rendered `{{owner}}`, a centralized inflation lexicon, a numeric-fact check and silent per-segment drop;

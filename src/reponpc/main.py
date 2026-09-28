@@ -48,6 +48,7 @@ from reponpc.admin.embedding_reindex import (
     EmbeddingReindexCoordinator,
     ProductionFrozenProfileBuilder,
 )
+from reponpc.admin.faq import ReviewedFaq
 from reponpc.admin.github import GitHubAdminClient, UrllibGitHubAdminTransport
 from reponpc.admin.local_portfolio import LocalPortfolioError, LocalPortfolioStore
 from reponpc.admin.local_publication import LocalArchiveResolver, LocalPublication
@@ -400,12 +401,27 @@ def create_app(
     application.state.ollama_model_operations = (
         admin_operations.ollama_model_operations if admin_operations is not None else None
     )
+
+    def faq_service() -> ReviewedFaq | None:
+        operations = application.state.admin_operations
+        manager = application.state.bundle_manager
+        database = application.state.runtime_database
+        if manager is None or database is None:
+            return None
+        return ReviewedFaq(
+            database=database,
+            bundles=manager,
+            chat_supplier=lambda: application.state.chat_service,
+            store=operations.local_portfolio if operations else None,
+        )
+
     application.include_router(
         create_public_router(
             state,
             state_supplier=lambda: application.state.reponpc,
             bundle_manager_supplier=lambda: application.state.bundle_manager,
             chat_service_supplier=lambda: application.state.chat_service,
+            faq_supplier=faq_service,
             max_message_characters=max_message_characters,
             max_history_messages=max_history_messages,
             max_history_characters=max_history_characters,
@@ -421,6 +437,7 @@ def create_app(
             service_supplier=lambda: application.state.admin_session_service,
             origins_supplier=lambda: application.state.admin_origins,
             operations_supplier=lambda: application.state.admin_operations,
+            faq_supplier=faq_service,
         )
     )
     build_dir = web_dist or _default_web_dist()
