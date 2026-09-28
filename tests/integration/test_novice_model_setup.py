@@ -248,7 +248,7 @@ def test_installed_model_lookup_is_explicit_scoped_and_authenticated(tmp_path, m
     )
     with TestClient(app, base_url=ORIGIN) as client:
         route = "/api/admin/embedding-models/installed?connection_id=fixture-selected"
-        assert client.get(route).status_code == 401
+        assert client.get(route, headers={"Origin": ORIGIN}).status_code == 401
         assert looked_up == []
         headers = login(client)
         client.get("/api/admin/embedding-profiles", headers=headers)

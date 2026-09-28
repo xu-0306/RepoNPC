@@ -2027,3 +2027,67 @@ form button {
   cursor: pointer;
   padding-block: 0.75rem;
 }
+
+.visitor-gateway {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.visitor-gateway__facts,
+.visitor-gateway__origins {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  min-width: 0;
+}
+.visitor-gateway__facts > div {
+  background: var(--ui-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: 0.65rem;
+  display: block;
+  min-width: 0;
+  padding: 0.75rem;
+}
+.visitor-gateway__facts dd {
+  font-weight: 650;
+  margin: 0.3rem 0 0;
+}
+.visitor-gateway__origins,
+.visitor-gateway__checklist {
+  border: 1px solid var(--admin-border);
+  border-radius: 0.65rem;
+  margin-block: 1rem;
+  padding: 0.9rem;
+}
+.visitor-gateway__origins label {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.visitor-gateway__origins input {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+.visitor-gateway__checklist label {
+  align-items: start;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-block: 0.65rem;
+  min-width: 0;
+}
+.visitor-gateway__commands pre {
+  background: var(--ui-surface);
+  border-radius: 0.5rem;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.75rem;
+  white-space: pre;
+}
+.visitor-gateway__commands code {
+  overflow-wrap: normal;
+}
+.visitor-gateway__actions {
+  justify-content: flex-start;
+}

@@ -1,5 +1,7 @@
 # Completion Direction Contract (2026-09-26)
 
+**2026-09-29 A1/F0 local checkpoint:** OR-027 / ADR-053 adopts [the concrete gateway contract](A1_FUNNEL_GATEWAY_CONTRACT.md) under Specification 0.4.6 for the live-transport portion of FR-047 / AC-068/071. Implementation and local review are complete; A5 export/offline/layout and A12 external acceptance remain required. Older pending F0 wording is superseded by this freeze.
+
 > **Status: Owner-approved 2026-09-26 (ADR-048); implementation pending.** Drafted
 > 2026-09-25, final confirmation of Q8/Q9 on 2026-09-26. This document is the frozen
 > contract referenced by `TECHNICAL_SPEC.md` 0.4.0 §2.10 (FR-043–FR-049),

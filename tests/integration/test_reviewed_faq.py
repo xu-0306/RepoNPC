@@ -399,10 +399,12 @@ def test_rewrite_save_and_runtime_association_serialize_concurrent_review(tmp_pa
 
 def test_migration_29_backup_reopen_and_failed_upgrade_preserve_prior_state(tmp_path):
     database = RuntimeDatabase(tmp_path / "runtime")
-    database.initialize(migrations=MIGRATIONS[:-1])
-    broken = Migration(29, "bad-faq", (MIGRATIONS[-1].statements[0], "INVALID SQL"))
+    prior = tuple(migration for migration in MIGRATIONS if migration.version < 29)
+    faq_migration = next(migration for migration in MIGRATIONS if migration.version == 29)
+    broken = Migration(29, "bad-faq", (faq_migration.statements[0], "INVALID SQL"))
+    database.initialize(migrations=prior)
     with pytest.raises(RuntimeDatabaseError):
-        database.initialize(migrations=(*MIGRATIONS[:-1], broken))
+        database.initialize(migrations=(*prior, broken))
     assert database.schema_version() == 28
     database.initialize()
     database.initialize()
@@ -438,7 +440,7 @@ def test_migration_29_backup_reopen_and_failed_upgrade_preserve_prior_state(tmp_
             == "approved"
         )
     RuntimeDatabase(tmp_path / "runtime").initialize()
-    assert database.schema_version() == 29
+    assert database.schema_version() == MIGRATIONS[-1].version
     with database.connection() as connection:
         assert (
             connection.execute(

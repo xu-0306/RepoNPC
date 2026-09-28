@@ -188,6 +188,7 @@ def _login(client: TestClient) -> str:
         json={"username": "admin", "password": PASSWORD},
     )
     assert response.status_code == 200
+    client.headers["Referer"] = ORIGIN + "/admin"
     return str(response.json()["csrf_token"])
 
 

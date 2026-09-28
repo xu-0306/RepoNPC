@@ -1,5 +1,14 @@
 # RepoNPC Architecture Decision Log
 
+## ADR-053: Freeze A1 visitor gateway and private administration contracts
+
+- **Status:** Accepted 2026-09-28 (OR-027); implementation in progress.
+- **Authorization:** After reading the reviewed A1 design explanation, the owner approved continuing with gpt-6-luna max implementation and Main review/takeover. No public activation, provider spending or GitHub write is authorized.
+- **Decision:** Adopt [A1/F0](A1_FUNNEL_GATEWAY_CONTRACT.md) as Technical Specification 0.4.6: production-only same-process loopback visitor listener; exact API/build-asset allowlist; one github.io Pages origin without credentials; separate private admin Origin/Host/hostname; explicit independent proxy trust; aggregate or verified per-IP protection; bounded buffered-answer SSE with heartbeats and no usage disclosure; three distinct owner facts; migration 30/private controls; opt-in Linux host-network Compose.
+- **Lifecycle:** Owner intent may resume the local listener on restart, but dated external verification cannot resume from persisted state. Local stop never claims Funnel off. Official Tailscale ownership/credentials remain outside RepoNPC.
+- **Compatibility:** Supersedes ADR-047's pending F0 decisions and PUBLIC_BASE_URL-only private-admin binding. The gateway has its own public projection; existing local public contracts remain compatible. No provider/model fallback, hosted service or implicit network publication is added. A5/A8/A12 retain their assigned scope.
+- **Verification:** Normal/failure/security/lifecycle/ASGI SSE/runtime/browser/Compose checks are required. No local result establishes external Funnel or v1 release acceptance.
+
 **Document status:** ADR-001 through ADR-045 accepted; ADR-045 approved 2026-09-22. Historical supersession is stated in each record.
 **Approval rule:** These records were accepted together when the project owner approved `TECHNICAL_SPEC.md` 0.1.0. A later incompatible change requires a new ADR; do not silently rewrite an accepted decision.
 

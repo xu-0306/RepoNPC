@@ -20,6 +20,7 @@ import {
   publicVisitorUrl,
   safeShareFields,
 } from "./sharing";
+import { VisitorGatewayPanel } from "./VisitorGatewayPanel";
 
 export interface LocalDraftBody {
   content: string;
@@ -460,6 +461,7 @@ export function LocalPublishingWorkspace({
         onStored={onStored}
         onAddClaim={onAddClaim}
       />
+      <VisitorGatewayPanel locale={locale} request={request} />
       <GitHubShareGuide
         locale={locale}
         account={account}

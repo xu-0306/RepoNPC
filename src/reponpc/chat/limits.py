@@ -148,7 +148,7 @@ class ChatLimits:
             weights=_provider_lane_weights(provider_lane_weights),
         )
 
-    def acquire(self, client_ip: str, *, now: datetime | None = None) -> ChatPermit:
+    def acquire(self, client_ip: str | None, *, now: datetime | None = None) -> ChatPermit:
         """Legacy public-chat admission plus one provider permit.
 
         New callers that perform retrieval before a provider call should use
@@ -168,10 +168,10 @@ class ChatLimits:
             raise
         return permit
 
-    def admit_public_chat(self, client_ip: str, *, now: datetime | None = None) -> None:
+    def admit_public_chat(self, client_ip: str | None, *, now: datetime | None = None) -> None:
         """Atomically charge public request limits without reserving provider capacity."""
 
-        if not client_ip:
+        if client_ip is not None and not client_ip:
             raise ChatLimitError("RATE_LIMITED", 60)
         instant = (now or datetime.now(UTC)).astimezone(UTC)
         self._consume_persistent_limits(client_ip, instant)
@@ -203,19 +203,27 @@ class ChatLimits:
             timeout_seconds=float(timeout_seconds),
         )
 
-    def _consume_persistent_limits(self, client_ip: str, instant: datetime) -> None:
-        ip_hmac = hmac.new(self._key, client_ip.encode(), hashlib.sha256).hexdigest()
+    def _consume_persistent_limits(self, client_ip: str | None, instant: datetime) -> None:
+        ip_hmac = (
+            hmac.new(self._key, client_ip.encode(), hashlib.sha256).hexdigest()
+            if client_ip is not None
+            else None
+        )
         bucket_start = instant.replace(second=0, microsecond=0)
         bucket_end = bucket_start + timedelta(minutes=1)
         usage_date = instant.date().isoformat()
         with self._database.connection() as connection:
             try:
                 connection.execute("BEGIN IMMEDIATE")
-                rate_row = connection.execute(
-                    "SELECT remaining_tokens FROM rate_buckets "
-                    "WHERE ip_hmac = ? AND bucket_started_at = ?",
-                    (ip_hmac, _timestamp(bucket_start)),
-                ).fetchone()
+                rate_row = (
+                    connection.execute(
+                        "SELECT remaining_tokens FROM rate_buckets "
+                        "WHERE ip_hmac = ? AND bucket_started_at = ?",
+                        (ip_hmac, _timestamp(bucket_start)),
+                    ).fetchone()
+                    if ip_hmac is not None
+                    else None
+                )
                 remaining = self._rate if rate_row is None else int(rate_row[0])
                 if remaining <= 0:
                     raise ChatLimitError(
@@ -234,23 +242,24 @@ class ChatLimits:
                         "DAILY_BUDGET_EXHAUSTED",
                         max(1, int((tomorrow - instant).total_seconds())),
                     )
-                connection.execute(
-                    """
-                    INSERT INTO rate_buckets(
-                      ip_hmac, bucket_started_at, capacity, remaining_tokens, expires_at
-                    ) VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT(ip_hmac, bucket_started_at) DO UPDATE SET
-                      remaining_tokens = excluded.remaining_tokens,
-                      expires_at = excluded.expires_at
-                    """,
-                    (
-                        ip_hmac,
-                        _timestamp(bucket_start),
-                        self._rate,
-                        remaining - 1,
-                        _timestamp(bucket_end),
-                    ),
-                )
+                if ip_hmac is not None:
+                    connection.execute(
+                        """
+                        INSERT INTO rate_buckets(
+                          ip_hmac, bucket_started_at, capacity, remaining_tokens, expires_at
+                        ) VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(ip_hmac, bucket_started_at) DO UPDATE SET
+                          remaining_tokens = excluded.remaining_tokens,
+                          expires_at = excluded.expires_at
+                        """,
+                        (
+                            ip_hmac,
+                            _timestamp(bucket_start),
+                            self._rate,
+                            remaining - 1,
+                            _timestamp(bucket_end),
+                        ),
+                    )
                 connection.execute(
                     """
                     INSERT INTO daily_usage(

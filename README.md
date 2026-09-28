@@ -1,5 +1,7 @@
 # RepoNPC
 
+**訪客專用公開入口（A1，本機完成）：**規格 0.4.6 / ADR-053 的第二個 loopback listener、封閉公共 API、私人管理入口與雙語管理控制已完成本機實作及審核。預設關閉，擁有者可設定、啟動並記錄外網檢查；尚未啟用 Funnel 或取得外網驗收。完整契約、驗證結果與後續 A5／A12 範圍見 [A1 gateway 契約](docs/A1_FUNNEL_GATEWAY_CONTRACT.md)。
+
 **涵蓋檢查與 FAQ（A4，本機已實作）：**「預覽、試聊與分享」可明確使用模型檢查六個標準問題；缺口不會阻擋發布。FAQ 可核准、拒絕、重產或改寫成作者自述；自述保存後會先更新索引再生成，仍需審核。只有目前版本已核准的回答會提供給訪客或下載為 JSON。換版本須重新生成與確認；訪客問題按鈕直接顯示已核准回答，不呼叫模型。完整 Pages 靜態匯出與離線比對仍屬 A5。詳見 [A4 契約與驗證範圍](docs/A4_COVERAGE_FAQ_IMPLEMENTATION.md)。
 
 > Meet the NPC who knows your code.<br>
@@ -113,7 +115,7 @@ RepoNPC 的 Compose 檔只啟動應用程式，不會順便啟動 Ollama 或 vLL
 
 沒有公開網址也能完成前四步。分享需要可對外連線的 HTTPS **訪客頁**網址；localhost 只供本機試用。公開入口只開放訪客頁與 API，管理頁及模型服務保持私人連線。GitHub 卡片不會執行模型，也不會替你啟動主機。
 
-免購買網域的公開入口已選定規劃使用 Tailscale Funnel 的 `*.ts.net` HTTPS 網址；[部署計劃](docs/TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md)仍待實作與外網驗收。目前的本機啟動器與 Compose 不會自動建立 Funnel，也不可把完整管理服務直接公開。下方正式部署條件仍是目前已文件化的自行管理 HTTPS 參考路徑。
+免購買網域的公開入口使用 Tailscale Funnel 的 `*.ts.net` HTTPS 網址；[部署計劃](docs/TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md)的 A1 訪客 gateway 已完成本機實作，真實外網驗收另屬 A12。本機啟動器與 Compose 不會自動建立 Funnel。擁有者依官方流程自行啟用 Funnel，目標必須是訪客 gateway。下方正式部署條件仍是既有自行管理 HTTPS 參考路徑。
 
 YAML 只供備份或搬移，不需上傳到 GitHub 才能使用 NPC。自訂角色要連同角色 PNG 備份；完整恢復請在停止服務後備份資料目錄（包含本機草稿、模型加密設定與已驗證 bundle），不要公開該目錄。詳見 [本機發布契約](docs/LOCAL_PUBLICATION_CONTRACT_2026-09-22.md)。
 
@@ -226,6 +228,26 @@ docker compose exec app reponpc admin setup-code
 > 不要把 `/admin` 或 `/api/admin/*` 直接公開到 Internet。特殊或高編號 port 不是安全控制；正式環境應由 reverse proxy 只公開訪客路由，並把管理路由限制在私人網路。
 
 完整的 HTTPS、GitHub 寫回權限、匿名讀取額度、備份、更新、rollback 與故障排除方式請參閱 [操作手冊](docs/OPERATIONS.md)。
+
+### Linux：訪客 gateway 與主機 Tailscale
+
+A1 使用 `production` 部署模式。私人管理主機名稱須和 Funnel、Pages 的主機名稱不同，並明確設定 `REPONPC_ADMIN_ORIGINS`；訪客 gateway 固定綁定 `127.0.0.1`，`REPONPC_VISITOR_GATEWAY_PORT` 預設為 `8001`。`REPONPC_VISITOR_TRUSTED_PROXY_CIDRS` 預設留空，保留共用每日額度與同時工作上限；要使用個別 IP 限制，必須另行確認實際 Funnel 的來源位址覆寫行為與外網測試。
+
+主機 Tailscale 需要能連到容器的 loopback listener。Linux 可使用 opt-in `compose.funnel.yml`（Compose **2.24.4 以上**），以 host network 啟動；先設定私人管理入口與模型連線，再在管理頁儲存 Funnel／Pages 網址並明確啟動 gateway：
+
+```bash
+python scripts/funnel_compose_preflight.py
+docker compose -f compose.yml -f compose.funnel.yml up -d --build
+```
+
+擁有者另外安裝、登入並授權官方 Tailscale，將下方 `<visitor-port>` 換成 gateway port：
+
+```bash
+tailscale funnel --bg --https=443 http://127.0.0.1:<visitor-port>
+tailscale funnel --https=443 off
+```
+
+RepoNPC 只顯示操作說明；關閉 gateway 不代表 Funnel 已停用。管理頁分開顯示本機就緒、入口已設定與擁有者確認過的外網檢查；重啟、停止、版本或設定改變後須重新確認。真實 Tailscale／Pages／模型與乾淨主機驗收尚未執行，Windows 安裝版與 Pages 靜態匯出分屬 A8、A5。
 
 ## 常見疑問
 

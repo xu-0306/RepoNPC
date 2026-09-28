@@ -283,7 +283,7 @@ def test_admin_index_status_prefills_config_repository_owner(tmp_path: Path) -> 
     app, _onboarding = _application(tmp_path)
     with TestClient(app, base_url=ORIGIN) as client:
         _login(client)
-        status = client.get("/api/admin/index/status")
+        status = client.get("/api/admin/index/status", headers={"Origin": ORIGIN})
     assert status.status_code == 200
     assert status.json()["configuration_repository_owner"] == "octocat"
 

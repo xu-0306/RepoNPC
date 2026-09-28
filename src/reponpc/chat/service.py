@@ -74,8 +74,10 @@ class GroundedChatService:
         message: str,
         locale: Literal["zh-TW", "en"],
         history: tuple[ChatHistoryMessage, ...],
-        client_ip: str,
+        client_ip: str | None,
         cancel_requested: threading.Event | None = None,
+        timeout_seconds: float | None = None,
+        allow_retry: bool = True,
     ) -> ChatDelivery:
         """Admit the request before retrieval; reserve provider only for calls."""
 
@@ -86,6 +88,8 @@ class GroundedChatService:
             client_ip=client_ip,
             cancel_requested=cancel_requested,
             lane=ProviderLane.PUBLIC_CHAT,
+            timeout_seconds=timeout_seconds,
+            allow_retry=allow_retry,
         )
 
     def answer_for_review(
@@ -115,13 +119,21 @@ class GroundedChatService:
         message: str,
         locale: Literal["zh-TW", "en"],
         history: tuple[ChatHistoryMessage, ...],
-        client_ip: str,
+        client_ip: str | None,
         cancel_requested: threading.Event | None,
         lane: ProviderLane,
         required_claim: tuple[str, str, dict[str, str]] | None = None,
         excluded_bundle_id: str | None = None,
+        timeout_seconds: float | None = None,
+        allow_retry: bool = True,
     ) -> ChatDelivery:
+        duration = self._timeout_seconds if timeout_seconds is None else timeout_seconds
+        if isinstance(duration, bool) or not math.isfinite(duration) or duration <= 0:
+            from reponpc.providers import ProviderError, ProviderFailureCode
 
+            raise ProviderError(ProviderFailureCode.TIMEOUT)
+        deadline = self._monotonic() + min(duration, self._timeout_seconds)
+        _raise_if_cancelled(cancel_requested)
         admission = getattr(self._limits, "admit_public_chat", None)
         admission_context: Any
         if lane != ProviderLane.PUBLIC_CHAT:
@@ -143,12 +155,12 @@ class GroundedChatService:
             owner_name, suggested_questions, contact_link = self._answer_profile(
                 index, locale, directory=directory
             )
-            deadline = self._monotonic() + self._timeout_seconds
             with _provider_permit(self._limits, lane):
                 query_vector = self._providers.embed_query_for(
                     getattr(index, "embedding", self._providers.embedding.identity()),
                     [message],
                     timeout=self._remaining(deadline),
+                    allow_retry=allow_retry,
                 )[0]
             _raise_if_cancelled(cancel_requested)
             evidence_ids = index.hybrid_candidates(message, query_vector=query_vector)
@@ -229,7 +241,10 @@ class GroundedChatService:
                 system_role=capabilities.system_role,
             )
             with _provider_permit(self._limits, lane):
-                result = self._providers.generate(
+                generate = (
+                    self._providers.generate if allow_retry else self._providers.generate_once
+                )
+                result = generate(
                     provider_messages,
                     _ANSWER_SCHEMA,
                     self._max_output_tokens,

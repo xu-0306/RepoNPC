@@ -193,6 +193,7 @@ class ProviderRuntime:
         texts: list[str],
         *,
         timeout: float,
+        allow_retry: bool = True,
     ) -> NDArray[np.float32]:
         """Embed with the adapter matching one already-leased immutable index."""
 
@@ -200,6 +201,10 @@ class ProviderRuntime:
             embedding = self._embeddings.get(identity)
         if embedding is None:
             raise ProviderError(ProviderFailureCode.UNAVAILABLE)
+        if not allow_retry:
+            if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+                raise ProviderError(ProviderFailureCode.TIMEOUT)
+            return embedding.embed_query(texts)
         return self._within_deadline(timeout, lambda _remaining: embedding.embed_query(texts))
 
     def embed_query_once(self, texts: list[str], *, timeout: float) -> NDArray[np.float32]:

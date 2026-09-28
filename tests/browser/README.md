@@ -41,6 +41,23 @@ pnpm run web:check
 
 The separate UI fixtures are useful for discovering presentation failures; they do not establish backend correctness, live-provider availability, full browser zoom/accessibility compliance, or a completed novice walkthrough.
 
+## A1 visitor gateway
+
+`a1-gateway-review.tsx` mounts the production `VisitorGatewayPanel` with synthetic
+private snapshots. Copy it to `apps/web/.a1-gateway-review.tsx`, replace the script
+path in `ui-system-review.html` with `/.a1-gateway-review.tsx`, save the copied HTML
+as `apps/web/a1-gateway-review.html`, and open that page on the fixture Vite server.
+It performs no provider, Tailscale, GitHub or real admin request.
+
+Check both languages: start leaves the owner-report fact false; all four checks
+are required before recording it; stop, bundle changes and observed local failure
+clear it and reset the checklist. Exercise dirty-origin preservation after a
+revision conflict, mutation controls while Hold/Release is active, recovery and
+display-only scoped Funnel commands. Inspect labels and keyboard focus and repeat
+at 375px. Clean up the two exact copied files after the run. Native ASGI, persisted
+settings and real listener tests live in the Python suite; this fixture does not
+establish external reachability or A12 release acceptance.
+
 - `chat-response-review.tsx`: synthetic failed ChatProfilePanel with an application-owned HTTP-200 output-limit diagnostic. At 375px, switch Chinese/English and check the alert retains its source label, wraps without horizontal overflow, and contains text only. This fixture performs no provider calls.
 
 ## Service save confirmation

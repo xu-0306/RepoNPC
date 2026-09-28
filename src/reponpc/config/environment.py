@@ -43,6 +43,9 @@ _ENVIRONMENT_NAMES: Final = frozenset(
         "REPONPC_TRUSTED_HOSTS",
         "REPONPC_ALLOWED_ORIGINS",
         "REPONPC_TRUSTED_PROXY_CIDRS",
+        "REPONPC_ADMIN_ORIGINS",
+        "REPONPC_VISITOR_GATEWAY_PORT",
+        "REPONPC_VISITOR_TRUSTED_PROXY_CIDRS",
         "REPONPC_CONFIG_REPOSITORY",
         "REPONPC_CONFIG_BRANCH",
         "REPONPC_CONFIG_PATH",
@@ -184,6 +187,10 @@ class EnvironmentSettings:
     trusted_hosts: tuple[str, ...]
     allowed_origins: tuple[str, ...]
     trusted_proxy_cidrs: tuple[str, ...]
+    admin_origins: tuple[str, ...]
+    admin_origins_explicit: bool
+    visitor_gateway_port: int
+    visitor_trusted_proxy_cidrs: tuple[str, ...]
     config_repository: str
     config_branch: str
     config_path: str
@@ -262,6 +269,102 @@ def _url_has_loopback_host(value: str) -> bool:
     except ValueError:
         return False
     return hostname is not None and _is_loopback_host(hostname)
+
+
+def _canonical_origin(value: str) -> str | None:
+    """Return one strict normalized origin, rejecting URL components and ambiguity."""
+
+    if (
+        not value
+        or any(ord(character) < 0x21 or ord(character) == 0x7F for character in value)
+        or "\\" in value
+        or "?" in value
+        or "#" in value
+    ):
+        return None
+    try:
+        parsed = urlsplit(value)
+        scheme = parsed.scheme.casefold()
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+        or "@" in parsed.netloc
+        or parsed.netloc.endswith(":")
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+        or hostname is None
+        or "%" in hostname
+        or hostname.endswith(".")
+    ):
+        return None
+    if port is not None and not 1 <= port <= 65535:
+        return None
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        labels = hostname.split(".")
+        if (
+            len(hostname) > 253
+            or all(label.isdigit() for label in labels)
+            or any(
+                not label
+                or len(label) > 63
+                or re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?", label) is None
+                for label in labels
+            )
+        ):
+            return None
+        canonical_host = hostname.casefold()
+        loopback = canonical_host == "localhost"
+    else:
+        canonical_host = f"[{address.compressed}]" if address.version == 6 else str(address)
+        loopback = address.is_loopback
+    if scheme == "http" and not loopback:
+        return None
+    default_port = 80 if scheme == "http" else 443
+    authority = canonical_host if port in {None, default_port} else f"{canonical_host}:{port}"
+    return f"{scheme}://{authority}"
+
+
+def _visitor_proxy_cidrs(
+    values: tuple[str, ...], issues: list[EnvironmentIssue]
+) -> tuple[str, ...]:
+    canonical: list[str] = []
+    for value in values:
+        try:
+            network = ipaddress.ip_network(value, strict=True)
+        except ValueError:
+            network = None
+        if isinstance(network, ipaddress.IPv4Network):
+            loopback_only = network.subnet_of(ipaddress.IPv4Network("127.0.0.0/8"))
+        elif isinstance(network, ipaddress.IPv6Network):
+            loopback_only = network.subnet_of(ipaddress.IPv6Network("::1/128"))
+        else:
+            loopback_only = False
+        if network is None or str(network) != value or not loopback_only:
+            _issue(
+                issues,
+                "REPONPC_VISITOR_TRUSTED_PROXY_CIDRS",
+                "invalid_loopback_cidr",
+                "canonical loopback-only CIDRs are required",
+            )
+            continue
+        canonical.append(str(network))
+    if len(set(canonical)) != len(canonical):
+        _issue(
+            issues,
+            "REPONPC_VISITOR_TRUSTED_PROXY_CIDRS",
+            "duplicate_cidr",
+            "CIDRs must be unique",
+        )
+    return tuple(canonical)
 
 
 def _text(
@@ -566,7 +669,69 @@ def load_environment(
         )
     host = _text(source, "REPONPC_HOST", "127.0.0.1", issues)
     public_base_url = _text(source, "REPONPC_PUBLIC_BASE_URL", "", issues)
+    port = _integer(source, "REPONPC_PORT", 8000, issues, maximum=65535)
     trusted_proxy_cidrs = _csv(source, "REPONPC_TRUSTED_PROXY_CIDRS", "")
+    gateway_port = _integer(source, "REPONPC_VISITOR_GATEWAY_PORT", 8001, issues, maximum=65535)
+    if gateway_port == port:
+        _issue(
+            issues,
+            "REPONPC_VISITOR_GATEWAY_PORT",
+            "port_conflict",
+            "the visitor gateway port must differ from the application port",
+        )
+    configured_admin_origins = _present(source.get("REPONPC_ADMIN_ORIGINS"))
+    admin_origins_explicit = configured_admin_origins is not None
+    raw_admin_origins: tuple[str, ...]
+    if configured_admin_origins is None:
+        raw_admin_origins = (public_base_url,)
+    else:
+        raw_admin_origins = tuple(item.strip() for item in configured_admin_origins.split(","))
+        if any(not item for item in raw_admin_origins):
+            _issue(
+                issues,
+                "REPONPC_ADMIN_ORIGINS",
+                "invalid_origin",
+                "a comma-separated list of exact origins is required",
+            )
+    admin_origins_list: list[str] = []
+    for raw_origin in raw_admin_origins:
+        origin = _canonical_origin(raw_origin)
+        if origin is None:
+            _issue(
+                issues,
+                "REPONPC_ADMIN_ORIGINS",
+                "invalid_origin",
+                "HTTPS origins or direct loopback HTTP origins are required",
+            )
+        elif origin in admin_origins_list:
+            _issue(
+                issues,
+                "REPONPC_ADMIN_ORIGINS",
+                "duplicate_origin",
+                "origins must be unique after normalization",
+            )
+        else:
+            admin_origins_list.append(origin)
+    admin_origins = tuple(admin_origins_list)
+    visitor_trusted_proxy_cidrs = _visitor_proxy_cidrs(
+        _csv(source, "REPONPC_VISITOR_TRUSTED_PROXY_CIDRS", ""), issues
+    )
+    if visitor_trusted_proxy_cidrs and deployment_profile != "production":
+        _issue(
+            issues,
+            "REPONPC_VISITOR_TRUSTED_PROXY_CIDRS",
+            "production_only",
+            "visitor proxy trust is available only in production",
+        )
+    if deployment_profile == "loopback_evaluation" and any(
+        not _is_loopback_host(urlsplit(origin).hostname or "") for origin in admin_origins
+    ):
+        _issue(
+            issues,
+            "REPONPC_ADMIN_ORIGINS",
+            "loopback_profile_exposed",
+            "loopback_evaluation requires loopback administration origins",
+        )
     if deployment_profile == "loopback_evaluation" and not (
         _is_loopback_host(host)
         and _url_has_loopback_host(public_base_url)
@@ -641,12 +806,16 @@ def load_environment(
         deployment_profile=deployment_profile,
         public_base_url=public_base_url,
         host=host,
-        port=_integer(source, "REPONPC_PORT", 8000, issues, maximum=65535),
+        port=port,
         data_dir=Path(_text(source, "REPONPC_DATA_DIR", "/var/lib/reponpc", issues)),
         log_level=log_level,
         trusted_hosts=_csv(source, "REPONPC_TRUSTED_HOSTS", ""),
         allowed_origins=_csv(source, "REPONPC_ALLOWED_ORIGINS", ""),
         trusted_proxy_cidrs=trusted_proxy_cidrs,
+        admin_origins=admin_origins,
+        admin_origins_explicit=admin_origins_explicit,
+        visitor_gateway_port=gateway_port,
+        visitor_trusted_proxy_cidrs=visitor_trusted_proxy_cidrs,
         config_repository=config_repository,
         config_branch=_text(source, "REPONPC_CONFIG_BRANCH", "main", issues),
         config_path=_text(source, "REPONPC_CONFIG_PATH", "reponpc.yml", issues),

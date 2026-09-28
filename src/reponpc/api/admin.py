@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import inspect
 import ipaddress
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from contextlib import suppress
 from threading import Event
 from typing import Annotated, Any, Literal, cast
@@ -14,6 +15,7 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Cookie, File, Form, Header, Path, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from reponpc.admin.analysis_selection import AnalysisSelectionError
@@ -55,6 +57,7 @@ from reponpc.admin.onboarding import (
 )
 from reponpc.admin.operations import AdminOperations
 from reponpc.api.public import error_response
+from reponpc.api.visitor_gateway import VisitorGateway, VisitorGatewayError
 from reponpc.bundles.manager import BundleActivationError
 from reponpc.cards.assets import CanonicalSprite, SpriteValidationError
 from reponpc.cards.conversion import (
@@ -291,16 +294,47 @@ class FaqRewriteRequest(FaqGenerateRequest):
     statement: FaqStatement
 
 
+class GatewayRevisionRequest(_StrictRequest):
+    revision: int = Field(gt=0, strict=True)
+
+
+class GatewayConfigurationRequest(GatewayRevisionRequest):
+    gateway_origin: Annotated[str | None, Field(max_length=2048)]
+    pages_origin: Annotated[str | None, Field(max_length=2048)]
+
+
+class GatewayVerificationRequest(GatewayRevisionRequest):
+    gateway_origin: str = Field(min_length=1, max_length=2048)
+    pages_origin: str = Field(min_length=1, max_length=2048)
+    bundle_id: str = Field(min_length=1, max_length=128)
+    external_checks_confirmed: bool = Field(strict=True)
+
+
+class GatewaySnapshot(_StrictRequest):
+    revision: int
+    gateway_origin: str | None
+    pages_origin: str | None
+    enabled: bool
+    listener_ready: bool
+    error_code: Literal["GATEWAY_CONFIGURATION_INVALID", "GATEWAY_UNAVAILABLE"] | None
+    local_ready: bool
+    entry_configured: bool
+    external_verified: bool
+    verified_at: str | None
+    verification_method: Literal["owner_reported"] | None
+    active_bundle_id: str | None
+    client_identity_mode: Literal["aggregate", "trusted_proxy"]
+
+
 def create_admin_router(
     *,
     service_supplier: Callable[[], AdminSessionService | None],
     origins_supplier: Callable[[], tuple[str, ...]],
     operations_supplier: Callable[[], AdminOperations | None] = lambda: None,
     faq_supplier: Callable[[], ReviewedFaq | None] = lambda: None,
+    gateway_supplier: Callable[[], VisitorGateway | None] = lambda: None,
 ) -> APIRouter:
     """Create auth routes whose production dependencies may attach after startup."""
-
-    router = APIRouter(prefix="/api/admin")
 
     def service(request: Request) -> AdminSessionService | JSONResponse:
         configured = service_supplier()
@@ -325,12 +359,24 @@ def create_admin_router(
         )
 
     def same_origin(request: Request) -> JSONResponse | None:
-        allowed = frozenset(_normalized_origin(value) for value in origins_supplier())
-        candidate = request.headers.get("origin")
-        if candidate is None:
-            referer = request.headers.get("referer")
-            candidate = _origin_from_referer(referer) if referer is not None else None
-        if candidate is None or _normalized_origin(candidate) not in allowed:
+        allowed = frozenset(filter(None, map(_normalized_origin, origins_supplier())))
+        hosts = request.headers.getlist("host")
+        origins = request.headers.getlist("origin")
+        referers = request.headers.getlist("referer")
+        candidate = origins[0] if len(origins) == 1 else None
+        if not origins and len(referers) == 1:
+            candidate = _origin_from_referer(referers[0])
+        authority = (
+            _normalized_origin(f"{request.scope['scheme']}://{hosts[0]}") if len(hosts) == 1 else ""
+        )
+        origin = _normalized_origin(candidate) if candidate is not None else ""
+        if (
+            len(origins) > 1
+            or len(referers) > 1
+            or not origin
+            or origin != authority
+            or authority not in allowed
+        ):
             return error_response(
                 request,
                 status_code=403,
@@ -338,6 +384,25 @@ def create_admin_router(
                 message="The request origin could not be verified.",
             )
         return None
+
+    class PrivateOriginRoute(APIRoute):
+        def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+            handler = super().get_route_handler()
+
+            async def guarded(request: Request) -> Response:
+                configured = service_supplier()
+                profile = getattr(request.app.state, "deployment_profile", None)
+                if profile is None and configured is not None:
+                    profile = configured.deployment_profile
+                if profile == "production":
+                    rejected = same_origin(request)
+                    if rejected is not None:
+                        return rejected
+                return await handler(request)
+
+            return guarded
+
+    router = APIRouter(prefix="/api/admin", route_class=PrivateOriginRoute)
 
     def local_launch_boundary(request: Request, configured: AdminSessionService) -> bool:
         if configured.deployment_profile != "loopback_evaluation":
@@ -1221,6 +1286,117 @@ def create_admin_router(
         except AdminAuthError as exc:
             return _auth_error(request, exc)
         return configured_service, authority.session_hash
+
+    async def gateway_operation(
+        request: Request,
+        session_token: str | None,
+        csrf_token: str | None,
+        action: Callable[[VisitorGateway], Any],
+    ) -> Response:
+        boundary = authenticated_session(request, session_token, csrf_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        rejected = same_origin(request)
+        if rejected is not None:
+            return rejected
+        gateway = gateway_supplier()
+        code = "GATEWAY_UNAVAILABLE"
+        if gateway is not None:
+            try:
+                result = action(gateway)
+                if inspect.isawaitable(result):
+                    result = await result
+                payload = GatewaySnapshot.model_validate(result).model_dump(mode="json")
+                return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+            except VisitorGatewayError as exc:
+                code = (
+                    exc.code
+                    if exc.code
+                    in {
+                        "GATEWAY_CONFLICT",
+                        "GATEWAY_CONFIGURATION_INVALID",
+                        "GATEWAY_UNAVAILABLE",
+                        "GATEWAY_VERIFICATION_STALE",
+                    }
+                    else "GATEWAY_UNAVAILABLE"
+                )
+            except Exception:
+                pass
+        return error_response(
+            request,
+            status_code=409
+            if code in {"GATEWAY_CONFLICT", "GATEWAY_VERIFICATION_STALE"}
+            else 422
+            if code == "GATEWAY_CONFIGURATION_INVALID"
+            else 503,
+            code=code,
+            message="The visitor gateway operation could not be completed.",
+        )
+
+    @router.get("/visitor-gateway")
+    async def visitor_gateway_status(
+        request: Request,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        return await gateway_operation(
+            request, session_token, None, lambda gateway: gateway.snapshot()
+        )
+
+    @router.put("/visitor-gateway")
+    async def configure_visitor_gateway(
+        request: Request,
+        body: GatewayConfigurationRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        return await gateway_operation(
+            request,
+            session_token,
+            csrf_token or "",
+            lambda gateway: gateway.configure(**body.model_dump()),
+        )
+
+    @router.post("/visitor-gateway/start")
+    async def start_visitor_gateway(
+        request: Request,
+        body: GatewayRevisionRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        return await gateway_operation(
+            request,
+            session_token,
+            csrf_token or "",
+            lambda gateway: gateway.start(revision=body.revision),
+        )
+
+    @router.post("/visitor-gateway/stop")
+    async def stop_visitor_gateway(
+        request: Request,
+        body: GatewayRevisionRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        return await gateway_operation(
+            request,
+            session_token,
+            csrf_token or "",
+            lambda gateway: gateway.stop(revision=body.revision),
+        )
+
+    @router.post("/visitor-gateway/verify")
+    async def verify_visitor_gateway(
+        request: Request,
+        body: GatewayVerificationRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        return await gateway_operation(
+            request,
+            session_token,
+            csrf_token or "",
+            lambda gateway: gateway.verify(**body.model_dump()),
+        )
 
     @router.get("/github/connections")
     async def github_connections(request: Request) -> Response:
@@ -2727,15 +2903,27 @@ def _set_session_cookie(response: Response, token: str) -> None:
 
 
 def _normalized_origin(value: str) -> str:
+    if any(ord(character) <= 32 or ord(character) == 127 for character in value):
+        return ""
+    if any(character in value for character in "\\?#"):
+        return ""
     try:
         parsed = urlsplit(value)
+        port = parsed.port
     except ValueError:
         return ""
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         return ""
-    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+    if parsed.username is not None or parsed.password is not None or parsed.path:
         return ""
-    return f"{parsed.scheme.casefold()}://{parsed.netloc.casefold()}"
+    if parsed.netloc.endswith(":") or (port is not None and port == 0):
+        return ""
+    host = parsed.hostname.casefold()
+    if ":" in host:
+        host = f"[{host}]"
+    default_port = 443 if parsed.scheme == "https" else 80
+    authority = host if port in {None, default_port} else f"{host}:{port}"
+    return f"{parsed.scheme}://{authority}"
 
 
 def _is_loopback_host(value: str) -> bool:
@@ -2768,9 +2956,15 @@ def _host_is_allowed_loopback(host: str, allowed_origins: frozenset[str]) -> boo
 
 
 def _origin_from_referer(value: str) -> str | None:
+    if any(ord(character) <= 32 or ord(character) == 127 for character in value):
+        return None
+    if "\\" in value:
+        return None
     try:
         parsed = urlsplit(value)
     except ValueError:
+        return None
+    if parsed.username is not None or parsed.password is not None:
         return None
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return None

@@ -1185,6 +1185,59 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             """,
         ),
     ),
+    Migration(
+        version=30,
+        name="visitor_gateway_settings",
+        statements=(
+            """
+            CREATE TABLE visitor_gateway_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+                enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+                gateway_origin TEXT CHECK (
+                    gateway_origin IS NULL OR length(gateway_origin) BETWEEN 1 AND 2048
+                ),
+                pages_origin TEXT CHECK (
+                    pages_origin IS NULL OR length(pages_origin) BETWEEN 1 AND 2048
+                ),
+                verification_gateway_origin TEXT CHECK (
+                    verification_gateway_origin IS NULL OR
+                    length(verification_gateway_origin) BETWEEN 1 AND 2048
+                ),
+                verification_pages_origin TEXT CHECK (
+                    verification_pages_origin IS NULL OR
+                    length(verification_pages_origin) BETWEEN 1 AND 2048
+                ),
+                verification_bundle_id TEXT CHECK (
+                    verification_bundle_id IS NULL OR
+                    length(verification_bundle_id) BETWEEN 1 AND 128
+                ),
+                verified_at TEXT CHECK (
+                    verified_at IS NULL OR length(verified_at) BETWEEN 1 AND 32
+                ),
+                verification_method TEXT CHECK (
+                    verification_method IS NULL OR verification_method = 'owner_reported'
+                ),
+                CHECK ((gateway_origin IS NULL) = (pages_origin IS NULL)),
+                CHECK (
+                    (verification_gateway_origin IS NULL AND
+                     verification_pages_origin IS NULL AND
+                     verification_bundle_id IS NULL AND verified_at IS NULL AND
+                     verification_method IS NULL)
+                    OR
+                    (verification_gateway_origin IS NOT NULL AND
+                     verification_pages_origin IS NOT NULL AND
+                     verification_bundle_id IS NOT NULL AND verified_at IS NOT NULL AND
+                     verification_method IS NOT NULL)
+                )
+            )
+            """,
+            """
+            INSERT INTO visitor_gateway_settings(id, revision, enabled)
+            VALUES (1, 1, 0)
+            """,
+        ),
+    ),
 )
 
 

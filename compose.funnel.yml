@@ -1,0 +1,8 @@
+services:
+  app:
+    network_mode: host
+    ports: !reset []
+    environment:
+      REPONPC_HOST: 127.0.0.1
+      REPONPC_PORT: "8000"
+      REPONPC_ADMIN_ORIGINS: ${REPONPC_ADMIN_ORIGINS:?Set an explicit private HTTPS admin origin before using the Funnel override}

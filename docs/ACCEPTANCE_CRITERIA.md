@@ -817,6 +817,7 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **When** requests arrive from that origin, from other origins, with credentials, and to admin, model or unknown paths,
 - **Then** CORS allows only the configured origin for visitor read/chat APIs without `Access-Control-Allow-Credentials`; other origins receive no CORS grant; admin, model and unknown paths return 404 through the gateway; visitor rate limits and budgets still apply.
 - **Verification:** gateway contract tests and an external Funnel check recorded with date and hostname redacted from public evidence.
+- **Approved F0 realization (2026-09-28, OR-027 / ADR-053):** [A1/F0](A1_FUNNEL_GATEWAY_CONTRACT.md) defines exact manifest-selected visitor assets/API routes, credential rejection, configured github.io CORS, private admin scheme/Host/Origin and hostname isolation, aggregate budgets/in-flight protection or verified per-IP proxy identity, bounded intake/SSE/cancellation, runtime migration 30 and independent state facts. Check encoded/case/slash/unknown-method variants, forged/duplicate identity, stale revisions, bind/start/stop/restart/backup failures and public diagnostic canaries. Local contract/transport/Compose/browser checks and real external Funnel acceptance must remain separately reported; external acceptance is still not-run.
 
 ### AC-072 - The NPC follows any character on every colour scheme with accessible contrast
 

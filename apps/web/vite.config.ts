@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     sourcemap: false,
+    manifest: true,
   },
   test: {
     environment: "node",

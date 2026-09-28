@@ -1,6 +1,8 @@
 # RepoNPC 完整實作待辦與分派計劃（2026-09-26）
 
-狀態：**實作中**。本文件彙整 ADR-046 之後所有尚未實作或尚未驗收的工作，作為交給其他 agent 的單一入口。決策依據以 [完成方向契約](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md)、`TECHNICAL_SPEC.md` 0.4.5、`DECISIONS.md` ADR-046～ADR-052 與 `ACCEPTANCE_CRITERIA.md` 為準；本文件只負責排序、相依與分派，不新增產品決策。
+**2026-09-29 A1 本機完成：** [A1/F0 契約](A1_FUNNEL_GATEWAY_CONTRACT.md)（OR-027／ADR-053，規格 0.4.6）由 gpt-6-luna max 實作，Main 審核並修正共用安全邊界與競態。Python 1,260 passed／2 skipped、Web 230 passed、Docker 2 項與原生瀏覽器 8 組檢查通過；詳見契約 §10 與[本機紀錄](../release-evidence/a1/local-checks.md)。未啟用 Funnel，外網驗收仍屬 A12；下一主線是 A5。
+
+狀態：**實作中**。本文件彙整 ADR-046 之後所有尚未實作或尚未驗收的工作，作為交給其他 agent 的單一入口。決策依據以 [完成方向契約](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md)、`TECHNICAL_SPEC.md` 0.4.6、`DECISIONS.md` ADR-046～ADR-053 與 `ACCEPTANCE_CRITERIA.md` 為準；本文件只負責排序、相依與分派，不新增產品決策。
 
 ## 0. 目前基準
 
@@ -13,7 +15,7 @@
 
 | # | 階段 | 範圍 | FR／AC | 相依 | 需擁有者決定 |
 |---|---|---|---|---|---|
-| A1 | Funnel 訪客閘道 F0／F2 | 預設拒絕的訪客專用閘道、Pages origin CORS、代理後限流身分、真實 SSE、私人管理 Host／Origin、公開狀態三分（本機可用／入口已設定／外網已驗證）、啟用／停用引導 | FR-047、AC-071（AC-068 一部分）；沿用 AC-022／036／049 的入口安全要求 | 無 | Windows 安裝版主機上閘道與 Funnel 的責任邊界需在 F0 寫成契約（見 §3） |
+| A1（本機完成） | Funnel 訪客閘道 F0／F2 | 預設拒絕的訪客專用閘道、Pages origin CORS、代理後限流身分、真實 SSE、私人管理 Host／Origin、公開狀態三分（本機可用／入口已設定／外網已驗證）、啟用／停用引導；提交為本次 `feat(gateway): add isolated visitor listener and private controls` | FR-047、AC-071（AC-068 一部分）；沿用 AC-022／036／049 的入口安全要求 | 無 | 無；F0 契約已由 OR-027／ADR-053 核准 |
 | A2 | 回答政策 v2 | envelope v2 分段、`{{owner}}` 後端渲染、`inflation_terms.yml`、數字事實檢查、逐段丟棄、無匹配回覆、第三人稱、「來源」列、prompt 修改 | FR-043／044、AC-062～065 | 無（`participation` 段在 A3 前只接受「無此類證據」） | 無 |
 | A3 | 參與事實 | `github_login` 必填並預填、`aliases`、owner flag、首次／最後 commit 月份與 permalink、`has_visible_commits`、`other_contributors_visible`；無次數；API 失敗記為 unavailable | FR-045、AC-066 | A2（驗證器需認得 `PARTICIPATION`） | 無 |
 | A4 | 覆蓋檢查與 FAQ 審核 | 資訊性覆蓋檢查（不阻擋發布）、FAQ 核准／拒絕／重產／改寫成自述、只匯出核准項、綁定 bundle ID 並在變更時標「需要重新確認」 | FR-046、AC-067 | A2、A3 | 無 |
@@ -29,7 +31,7 @@
 
 ## 2. 建議順序與並行
 
-主線（依序）：**A1 → A2 → A3 → A4 → A5 → A8 → A12**。
+剩餘主線（依序）：**A5 → A8 → A12**。A1～A4 已取得本機實作證據；A8 仍相依 A6，其他發布必需工作不因此移出範圍。
 
 可與主線並行（各用獨立 worktree，互不改同一檔案群）：
 
@@ -40,13 +42,11 @@
 
 每一階段合併前都須跑完整 Python 與 Web 測試、Ruff／mypy／Prettier／TypeScript、production build 與 `git diff --check`，並在本文件對應列標註完成提交與證據位置。
 
-## 3. A1 的 F0 待定契約（實作前先寫入 Funnel 計劃與 SECURITY）
+## 3. A1 的已核准 F0 契約
 
-- 閘道形式：同一程序內的訪客專用 ASGI app 綁定獨立 loopback 埠，或獨立反向代理；Funnel 只能指向閘道埠，不能指向完整應用埠或 8090 評估啟動器。
-- 路由白名單由目前前端資源與 `/api/public/*` 清單產生，測試路徑編碼、大小寫、尾斜線、未知路由與重導向；`/admin`、`/api/admin/*`、模型埠一律 404。
-- CORS 只允許設定的 Pages origin，不帶憑證；無 Pages origin 時不送任何 CORS header。
-- 限流身分：查明 Funnel 實際轉送的來源資訊，不信任可偽造的 forwarded header；無法取得可信身分時以總並行與每日上限保護。
-- Windows 安裝版：閘道隨應用啟動，Funnel 啟用／停用由擁有者在 Tailscale 官方流程操作；Tailscale 憑證不進入 RepoNPC 表單、日誌或匯出。
+[A1/F0 契約](A1_FUNNEL_GATEWAY_CONTRACT.md)（OR-027／ADR-053、規格 0.4.6）已定稿：同一程序內的第二個 loopback listener、明確封閉路由與 Vite 靜態 import 資源清單、唯一 Pages origin 的無憑證 CORS、私人管理 Host／Origin、預設共用額度與實際工作上限、選用且嚴格的 loopback proxy 身分、每次啟動重新確認的擁有者外網回報，以及選用 Linux host-network Compose。設定保存不代表 Pages 託管、GitHub 卡片或外網驗收通過。
+
+Windows 安裝版由 A8 處理。Funnel 的安裝、登入、授權與啟用／停用仍由擁有者操作；RepoNPC 只顯示官方指令，憑證不進入表單、日誌或匯出。
 
 ## 4. 所有 agent 共同遵守的規則
 
@@ -68,6 +68,8 @@
 以下每段可直接交給一個 agent，前面附上 §4 共同規則。
 
 ### A1 閘道
+
+本機狀態（2026-09-29）：[契約 §10](A1_FUNNEL_GATEWAY_CONTRACT.md#10-local-implementation-checkpoint-2026-09-29)記錄完整實作與 Main 審核。設定／啟動／停止／擁有者回報可由私人管理頁操作；重啟、版本與就緒失效會撤銷目前回報。外網、真實 provider、乾淨主機與正式帳本由 A12 驗收；完整 Pages 匯出／離線比對由 A5 實作。
 
 > 實作 RepoNPC 的 Tailscale Funnel 訪客專用閘道（ADR-047 F0／F2，ADR-048 §4.1–4.2，FR-047，AC-071）。先把 `docs/IMPLEMENTATION_BACKLOG_2026-09-26.md` §3 的待定項寫成契約並更新 `TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md`、`SECURITY.md`、`OPERATIONS.md`，再實作：預設拒絕的路由白名單、Pages origin 限定且不帶憑證的 CORS、管理與模型路徑 404、代理後限流與每日上限、真實 SSE 逾時、訪客回應無主機／模型／費用欄位，以及管理端「本機可用／入口已設定／外網已驗證」三種狀態。不要實際啟用 Funnel。測試需涵蓋路徑編碼與大小寫變體、未知路由、非白名單 origin、帶憑證請求。
 

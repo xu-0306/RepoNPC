@@ -64,8 +64,9 @@ from reponpc.admin.onboarding import (
     analysis_generation_policy_identity,
 )
 from reponpc.admin.operations import AdminOperations
-from reponpc.api.admin import create_admin_router
+from reponpc.api.admin import _normalized_origin, create_admin_router
 from reponpc.api.public import SetupState, create_public_router, error_response
+from reponpc.api.visitor_gateway import VisitorGateway
 from reponpc.bundles.manager import BundleManager
 from reponpc.bundles.updater import BundleUpdater, UrllibBundleTransport
 from reponpc.chat.limits import ChatLimits
@@ -137,6 +138,14 @@ class _BuiltWebFiles(StaticFiles):
     """Serve only bundled files and use index.html for extensionless SPA routes."""
 
     async def get_response(self, path: str, scope: Scope) -> Response:
+        state = scope["app"].state
+        if getattr(state, "deployment_profile", None) == "production":
+            hosts = Headers(scope=scope).getlist("host")
+            authority = (
+                _normalized_origin(f"{scope['scheme']}://{hosts[0]}") if len(hosts) == 1 else ""
+            )
+            if not authority or authority not in state.admin_origins:
+                return Response(status_code=404)
         request_path = str(scope.get("path", path))
         if request_path == "/api" or request_path.startswith("/api/"):
             return await super().get_response(path, scope)
@@ -240,6 +249,7 @@ def create_app(
                 model_provider=application.state.provider_adapter,
                 model_last_checked_at=provider_status.checked_at,
             )
+            _observe_visitor_gateway(application)
 
         async def provider_lifecycle() -> None:
             while not stopped.is_set():
@@ -308,6 +318,7 @@ def create_app(
                 ),
                 public_directory=getattr(manager, "active_public_directory", lambda: None)(),
             )
+            _observe_visitor_gateway(application)
 
         async def polling_lifecycle() -> None:
             while not stopped.is_set():
@@ -325,9 +336,16 @@ def create_app(
             await asyncio.to_thread(poll_and_publish_state)
             if updater is not None:
                 polling_tasks.append(asyncio.create_task(polling_lifecycle()))
+        gateway = getattr(application.state, "visitor_gateway", None)
         try:
+            if gateway is not None and runtime_storage_usable:
+                with suppress(Exception):
+                    await gateway.resume()
             yield
         finally:
+            if gateway is not None:
+                with suppress(Exception):
+                    await gateway.shutdown()
             stopped.set()
             for polling_task in polling_tasks:
                 polling_task.cancel()
@@ -390,6 +408,8 @@ def create_app(
     application.state.max_history_characters = max_history_characters
     application.state.admin_session_service = admin_session_service
     application.state.admin_origins = admin_origins
+    application.state.deployment_profile = None
+    application.state.visitor_gateway = None
     application.state.admin_operations = admin_operations
     application.state.analysis_batch_service = analysis_batch_service
     application.state.analysis_cleanup_seconds = analysis_cleanup_seconds
@@ -415,6 +435,8 @@ def create_app(
             store=operations.local_portfolio if operations else None,
         )
 
+    application.state.faq_supplier = faq_service
+
     application.include_router(
         create_public_router(
             state,
@@ -438,6 +460,7 @@ def create_app(
             origins_supplier=lambda: application.state.admin_origins,
             operations_supplier=lambda: application.state.admin_operations,
             faq_supplier=faq_service,
+            gateway_supplier=lambda: application.state.visitor_gateway,
         )
     )
     build_dir = web_dist or _default_web_dist()
@@ -456,6 +479,8 @@ def run() -> None:
         settings = load_environment()
     except EnvironmentValidationError as exc:
         raise SystemExit("deployment environment is invalid") from exc
+    app.state.deployment_profile = settings.deployment_profile
+    app.state.admin_origins = getattr(settings, "admin_origins", ())
     try:
         runtime_database = RuntimeDatabase(
             settings.data_dir,
@@ -473,6 +498,16 @@ def run() -> None:
         batch_service = getattr(app.state, "analysis_batch_service", None)
         if batch_service is not None:
             batch_service.recover()
+        if isinstance(settings, EnvironmentSettings):
+            app.state.visitor_gateway = VisitorGateway(
+                database=runtime_database,
+                environment=settings,
+                state_supplier=lambda: app.state.reponpc,
+                bundle_manager_supplier=lambda: app.state.bundle_manager,
+                chat_service_supplier=lambda: app.state.chat_service,
+                faq_supplier=app.state.faq_supplier,
+                web_dist=_default_web_dist(),
+            )
     except RuntimeDatabaseError:
         app.state.runtime_database = None
         app.state.runtime_storage_usable = False
@@ -482,6 +517,7 @@ def run() -> None:
         port=settings.port,
         factory=False,
         proxy_headers=settings.deployment_profile != "loopback_evaluation",
+        forwarded_allow_ips=",".join(getattr(settings, "trusted_proxy_cidrs", ())),
     )
 
 
@@ -492,7 +528,9 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
     github_token = secrets.get("github_token")
     if identity_key is None:
         app.state.admin_session_service = None
-        app.state.admin_origins = ()
+        app.state.admin_origins = getattr(
+            settings, "admin_origins", (getattr(settings, "public_base_url", ""),)
+        )
         app.state.admin_operations = None
         app.state.github_rate_limiter = None
         return
@@ -505,7 +543,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         absolute_hours=settings.admin_absolute_hours,
         deployment_profile=settings.deployment_profile,
     )
-    app.state.admin_origins = (settings.public_base_url,)
+    app.state.admin_origins = getattr(settings, "admin_origins", (settings.public_base_url,))
     app.state.chat_limits = ChatLimits(
         runtime_database,
         ip_hash_key=hashlib.sha256(identity_key.reveal().encode()).digest(),
@@ -1108,6 +1146,7 @@ def _configure_embedding_reindex(settings: EnvironmentSettings) -> None:
             model_ready=(provider_status.ready and registry.active_matches(profile.identity)),
             model_last_checked_at=provider_status.checked_at,
         )
+        _observe_visitor_gateway(app)
 
     coordinator = EmbeddingReindexCoordinator(
         registry=registry,
@@ -1415,6 +1454,12 @@ def _provider_contract_adapter(provider: str) -> str:
     """Map a named transport preset to the stable public/bundle adapter contract."""
 
     return "openai_compatible" if provider == "vllm" else provider
+
+
+def _observe_visitor_gateway(application: FastAPI) -> None:
+    gateway = getattr(application.state, "visitor_gateway", None)
+    if gateway is not None:
+        gateway.observe_state()
 
 
 def _replace_runtime_chat(provider: ChatProvider) -> Callable[[], None] | None:

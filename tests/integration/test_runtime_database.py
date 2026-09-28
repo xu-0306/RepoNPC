@@ -63,7 +63,7 @@ def test_runtime_database_is_idempotent_and_separate_from_index_data(tmp_path: P
 
     assert database.database_path == tmp_path / "runtime-data" / "runtime.sqlite"
     assert database.database_path.exists()
-    assert database.schema_version() == 29
+    assert database.schema_version() == 30
     assert {
         "runtime_schema_migrations",
         "admin_sessions",
@@ -130,7 +130,7 @@ def test_provider_message_migration_is_atomic(tmp_path: Path) -> None:
                 row[1] for row in connection.execute(f"PRAGMA table_info({table})")
             }
     database.initialize()
-    assert database.schema_version() == 29
+    assert database.schema_version() == 30
 
 
 def test_host_connection_override_migration_is_atomic(tmp_path: Path) -> None:
@@ -150,7 +150,7 @@ def test_host_connection_override_migration_is_atomic(tmp_path: Path) -> None:
     assert database.schema_version() == 20
     assert "host_managed_connection_overrides" not in table_names(database)
     database.initialize()
-    assert database.schema_version() == 29
+    assert database.schema_version() == 30
 
 
 def test_connection_revision_rebinding_migration_repairs_safe_candidates(
@@ -246,7 +246,7 @@ def test_connection_revision_rebinding_migration_repairs_safe_candidates(
 
     database.initialize()
 
-    assert database.schema_version() == 29
+    assert database.schema_version() == 30
     with database.connection() as connection:
         revisions = connection.execute(
             "SELECT revision, provider FROM model_connection_secrets ORDER BY revision"
@@ -312,7 +312,7 @@ def test_connection_revision_rebinding_migration_is_atomic(tmp_path: Path) -> No
         }
     assert "provider" not in columns
     database.initialize()
-    assert database.schema_version() == 29
+    assert database.schema_version() == 30
 
 
 def test_analysis_batch_error_reason_migration_is_atomic(tmp_path: Path) -> None:
@@ -334,7 +334,7 @@ def test_analysis_batch_error_reason_migration_is_atomic(tmp_path: Path) -> None
         columns = {row[1] for row in connection.execute("PRAGMA table_info(analysis_batch_items)")}
     assert "error_reason" not in columns
     database.initialize()
-    assert database.schema_version() == 29
+    assert database.schema_version() == 30
 
 
 def test_analysis_output_limit_reason_migration_preserves_results_events_and_foreign_keys(
@@ -355,7 +355,7 @@ def test_analysis_output_limit_reason_migration_preserves_results_events_and_for
 
     database.initialize()
 
-    assert database.schema_version() == 29
+    assert database.schema_version() == 30
     with database.connection() as connection:
         item = connection.execute(
             "SELECT * FROM analysis_batch_items WHERE item_id = 'item-migration'"
@@ -471,7 +471,7 @@ def test_analysis_output_limit_reason_migration_rolls_back_without_losing_old_sc
             )
 
     database.initialize()
-    assert database.schema_version() == 29
+    assert database.schema_version() == 30
 
 
 def test_flexible_analysis_budget_migration_preserves_existing_value(tmp_path: Path) -> None:
@@ -487,7 +487,7 @@ def test_flexible_analysis_budget_migration_preserves_existing_value(tmp_path: P
 
     database.initialize()
 
-    assert database.schema_version() == 29
+    assert database.schema_version() == 30
     with database.connection() as connection:
         row = connection.execute(
             "SELECT legacy_execution_budget_seconds, execution_budget_seconds "
@@ -510,7 +510,7 @@ def test_analysis_recovery_lineage_migration_preserves_existing_batches(tmp_path
 
     database.initialize()
 
-    assert database.schema_version() == 29
+    assert database.schema_version() == 30
     with database.connection() as connection:
         batch = connection.execute(
             "SELECT source_batch_id, analysis_round FROM analysis_batches "
@@ -571,7 +571,7 @@ def test_analysis_recovery_receipt_migration_backfills_durable_successor_marker(
 
     database.initialize()
 
-    assert database.schema_version() == 29
+    assert database.schema_version() == 30
     with database.connection() as connection:
         marker = connection.execute(
             "SELECT successor_batch_id FROM analysis_batch_items WHERE item_id = 'item-migration'"
@@ -609,7 +609,7 @@ def test_analysis_recovery_receipt_migration_is_atomic(tmp_path: Path) -> None:
     assert receipt_table is None
 
     database.initialize()
-    assert database.schema_version() == 29
+    assert database.schema_version() == 30
 
 
 def test_analysis_recovery_lineage_migration_is_atomic(tmp_path: Path) -> None:
@@ -646,11 +646,11 @@ def test_concurrent_initialization_creates_one_versioned_schema(tmp_path: Path) 
     with ThreadPoolExecutor(max_workers=2) as executor:
         list(executor.map(lambda _unused: database.initialize(), range(2)))
 
-    assert database.schema_version() == 29
+    assert database.schema_version() == 30
     with database.connection() as connection:
         versions = connection.execute("SELECT version FROM runtime_schema_migrations").fetchall()
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()
-        assert [row[0] for row in versions] == list(range(1, 30))
+        assert [row[0] for row in versions] == list(range(1, 31))
     assert foreign_keys is not None and foreign_keys[0] == 1
 
 
@@ -701,13 +701,13 @@ def test_concurrent_initialization_across_database_owners_is_safe(tmp_path: Path
 
         database = RuntimeDatabase(data_dir)
         database.initialize()
-        assert database.schema_version() == 29
+        assert database.schema_version() == 30
         with database.connection() as connection:
             versions = connection.execute(
                 "SELECT version FROM runtime_schema_migrations"
             ).fetchall()
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()
-            assert [row[0] for row in versions] == list(range(1, 30))
+            assert [row[0] for row in versions] == list(range(1, 31))
         assert journal_mode is not None and journal_mode[0] == "wal"
 
 

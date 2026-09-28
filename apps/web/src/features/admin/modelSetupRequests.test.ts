@@ -74,6 +74,38 @@ describe("model setting response ordering", () => {
     expect(rendered).toEqual([]);
   });
 
+  it("keeps a held mutation snapshot when a poll started during it returns late", async () => {
+    const requests = new ModelSetupRequests();
+    let rendered = { revision: 1 };
+    let finishSave!: (value: { revision: number }) => void;
+    let finishPoll!: (value: { revision: number }) => void;
+    const save = requests.mutate(
+      () =>
+        new Promise<{ revision: number }>((resolve) => {
+          finishSave = resolve;
+        }),
+      (value) => {
+        rendered = value;
+      },
+    );
+    const poll = requests.read(
+      () =>
+        new Promise<{ revision: number }>((resolve) => {
+          finishPoll = resolve;
+        }),
+      (value) => {
+        rendered = value;
+      },
+    );
+
+    finishSave({ revision: 2 });
+    await save;
+    finishPoll({ revision: 1 });
+    await poll;
+
+    expect(rendered).toEqual({ revision: 2 });
+  });
+
   it("does not apply a failed mutation or retry it automatically", async () => {
     const requests = new ModelSetupRequests();
     let calls = 0;

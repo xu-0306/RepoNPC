@@ -135,7 +135,12 @@ def test_recent_terminal_batch_recovery_requires_owner_and_persists_dismissal(
     path = f"/api/admin/onboarding/analysis-batches/{batch.batch_id}/dismiss"
 
     with TestClient(app, base_url=ORIGIN) as client:
-        assert client.get("/api/admin/onboarding/analysis-batches/active").status_code == 401
+        assert (
+            client.get(
+                "/api/admin/onboarding/analysis-batches/active", headers={"Origin": ORIGIN}
+            ).status_code
+            == 401
+        )
         csrf = _login(client)
         recovered = client.get(
             "/api/admin/onboarding/analysis-batches/active", headers={"Origin": ORIGIN}

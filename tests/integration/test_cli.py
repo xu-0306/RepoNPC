@@ -311,6 +311,7 @@ def test_server_proxy_header_trust_tracks_deployment_profile(
         host="127.0.0.1",
         port=8090,
         deployment_profile=profile,
+        trusted_proxy_cidrs=("127.0.0.1/32",) if proxy_headers else (),
     )
     database = SimpleNamespace(initialize=lambda: None)
     calls: list[dict[str, object]] = []
@@ -329,6 +330,7 @@ def test_server_proxy_header_trust_tracks_deployment_profile(
             "port": 8090,
             "factory": False,
             "proxy_headers": proxy_headers,
+            "forwarded_allow_ips": "127.0.0.1/32" if proxy_headers else "",
         }
     ]
 

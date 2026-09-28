@@ -100,7 +100,7 @@ def test_setup_status_exposes_only_safe_booleans(tmp_path: Path) -> None:
     setup_code = issue_admin_setup_code(database, now=datetime(2026, 8, 13, tzinfo=UTC))
 
     with TestClient(app, base_url=ORIGIN) as client:
-        response = client.get("/api/admin/setup")
+        response = client.get("/api/admin/setup", headers={"Referer": ORIGIN + "/admin"})
 
     assert response.status_code == 200
     assert response.json() == {
@@ -137,7 +137,7 @@ def test_github_oauth_setup_guide_is_removed_without_auth_or_secret_material(
 ) -> None:
     app, _database = _app(tmp_path)
     with TestClient(app, base_url=ORIGIN) as client:
-        response = client.get("/api/admin/github/oauth/setup-guide")
+        response = client.get("/api/admin/github/oauth/setup-guide", headers={"Origin": ORIGIN})
     assert response.status_code == 410
     assert response.json()["error"]["code"] == "GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED"
     assert "REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE" not in response.text
@@ -149,7 +149,7 @@ def test_github_oauth_setup_guide_rejects_cross_origin_callback_configuration(
 ) -> None:
     app, _database = _app(tmp_path)
     with TestClient(app, base_url=ORIGIN) as client:
-        response = client.get("/api/admin/github/oauth/setup-guide")
+        response = client.get("/api/admin/github/oauth/setup-guide", headers={"Origin": ORIGIN})
     assert response.status_code == 410
     assert response.json()["error"]["code"] == "GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED"
 
@@ -208,7 +208,7 @@ def test_setup_validation_and_one_time_owner_session_contract(tmp_path: Path) ->
                 "password_confirmation": PASSWORD,
             },
         )
-        completed_status = client.get("/api/admin/setup")
+        completed_status = client.get("/api/admin/setup", headers={"Origin": ORIGIN})
         repeated = client.post(
             "/api/admin/setup",
             headers={"Origin": ORIGIN},

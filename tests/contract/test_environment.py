@@ -650,6 +650,7 @@ def test_production_entrypoint_uses_validated_host_and_port(
             deployment_profile="production",
             data_dir=tmp_path / "runtime-data",
             sqlite_busy_timeout_ms=5_000,
+            trusted_proxy_cidrs=("127.0.0.1/32",),
         ),
     )
     monkeypatch.setattr(main.uvicorn, "run", lambda *args, **kwargs: calls.append(kwargs))
@@ -662,6 +663,7 @@ def test_production_entrypoint_uses_validated_host_and_port(
             "port": 8123,
             "factory": False,
             "proxy_headers": True,
+            "forwarded_allow_ips": "127.0.0.1/32",
         }
     ]
 
