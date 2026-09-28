@@ -88,6 +88,7 @@ class AdminOperations:
     connection_model_lister: Callable[[str], tuple[str, ...]] | None = None
     local_portfolio: LocalPortfolioStore | None = None
     local_publication: LocalPublication | None = None
+    config_repository: str = ""
 
     def read_config(self) -> GitFile:
         return self._github().read_config()
@@ -266,6 +267,7 @@ class AdminOperations:
             "pinned_bundle_id": state.pinned_bundle_id,
             "last_checked_at": state.last_checked_at,
             "update_error": state.safe_update_error,
+            "configuration_repository_owner": self.config_repository.split("/", 1)[0] or None,
         }
 
     def list_embedding_profiles(self) -> tuple[EmbeddingProfile, ...]:

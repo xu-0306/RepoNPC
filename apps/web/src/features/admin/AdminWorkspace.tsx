@@ -69,6 +69,7 @@ export interface AdminStatus {
   pinned_bundle_id?: string | null;
   last_checked_at?: string | null;
   update_error?: string | null;
+  configuration_repository_owner?: string | null;
 }
 
 export interface AdminSnippet {

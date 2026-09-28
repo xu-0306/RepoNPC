@@ -980,6 +980,7 @@ def test_draft_requires_confirmation_and_round_trips_schema_v1(tmp_path: Path) -
     profile = GuidedProfileDraft.model_validate(
         {
             "display_name": "Example Developer",
+            "github_login": "octocat",
             "headline": {"zh-TW": "可靠系統", "en": "Reliable systems"},
             "bio": {"zh-TW": "開發者工具", "en": "Developer tooling"},
             "greeting": {"zh-TW": "你好", "en": "Hello"},
@@ -1029,6 +1030,7 @@ def test_draft_without_provider_or_github_uses_safe_documented_defaults(
     profile = GuidedProfileDraft.model_validate(
         {
             "display_name": "Example Developer",
+            "github_login": "octocat",
             "headline": {"zh-TW": "可靠系統", "en": "Reliable systems"},
             "bio": {"zh-TW": "開發者工具", "en": "Developer tooling"},
             "greeting": {"zh-TW": "你好", "en": "Hello"},

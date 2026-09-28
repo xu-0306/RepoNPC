@@ -873,6 +873,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         analysis_selection=analysis_selection,
         ollama_model_operations=model_operations,
         connection_model_lister=list_connection_models,
+        config_repository=settings.config_repository,
     )
 
 

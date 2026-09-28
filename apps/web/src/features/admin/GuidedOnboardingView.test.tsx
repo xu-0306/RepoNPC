@@ -27,6 +27,8 @@ const metadata: RepositoryMetadata = {
 
 const profile: GuidedProfile = {
   displayName: "Ada Lovelace",
+  githubLogin: "octocat",
+  aliasesText: "",
   headline: { "zh-TW": "證據導向的建造者", en: "Evidence-led builder" },
   bio: {
     "zh-TW": "用清楚的證據分享作品。",
@@ -407,6 +409,8 @@ describe("GuidedOnboardingView", () => {
       />,
     );
     expect(empty).toContain('id="guided-profile-display-name"');
+    expect(empty).toContain('id="guided-profile-github-login"');
+    expect(empty).toContain('id="guided-profile-aliases"');
     expect(empty).toContain('id="guided-profile-headline-zh-TW"');
     expect(empty).toContain('id="guided-profile-headline-en"');
     expect(empty).toContain('id="guided-profile-bio-zh-TW"');

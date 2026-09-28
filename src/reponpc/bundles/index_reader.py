@@ -14,6 +14,7 @@ from urllib.parse import quote
 
 import numpy as np
 
+from reponpc.domain.evidence import COMMIT_RE
 from reponpc.indexing.index_database import INDEX_SCHEMA_VERSION
 from reponpc.indexing.sources import EmbeddingIdentity
 from reponpc.retrieval.fts_query import FtsQueryMode, compile_fts_query
@@ -50,6 +51,15 @@ class IndexedEvidence:
     def github_permalink(self) -> str:
         """Build an immutable GitHub link only from validated index columns."""
 
+        if self.evidence_class == "PARTICIPATION":
+            commit = self.metadata.get("citation_commit_sha")
+            if commit is not None:
+                if not isinstance(commit, str) or not COMMIT_RE.fullmatch(commit):
+                    raise IndexReadError("participation_citation_invalid")
+                return f"https://github.com/{self.repository_slug}/commit/{commit}"
+            if not COMMIT_RE.fullmatch(self.commit_sha):
+                raise IndexReadError("participation_citation_invalid")
+            return f"https://github.com/{self.repository_slug}/tree/{self.commit_sha}"
         if (
             self.evidence_class == "OWNER_ASSERTION"
             and self.repository_slug == "local/portfolio"
@@ -94,6 +104,20 @@ class ReadOnlyIndex:
         self.embedding = embedding
         self.vectors = vectors
         self.retrieval_policy = self._retrieval_policy(connection)
+        row = connection.execute(
+            "SELECT value FROM bundle_meta WHERE key = 'owner_identity'"
+        ).fetchone()
+        self.owner_aliases: tuple[str, ...] = ()
+        if row is not None:
+            identity = json.loads(str(row[0]))
+            if (
+                not isinstance(identity, dict)
+                or not isinstance(identity.get("github_login"), str)
+                or not isinstance(identity.get("aliases"), list)
+                or any(not isinstance(alias, str) for alias in identity["aliases"])
+            ):
+                raise IndexReadError("owner_identity_invalid")
+            self.owner_aliases = (identity["github_login"], *identity["aliases"])
 
     @classmethod
     def open(cls, path: Path, *, expected_embedding: EmbeddingIdentity) -> ReadOnlyIndex:

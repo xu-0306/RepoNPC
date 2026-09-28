@@ -20,6 +20,7 @@ CLAIM_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
 HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 CHARACTER_PACK_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:[._/-][a-z0-9]+)*$")
 CHARACTER_OPTION_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+GITHUB_LOGIN_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
 MAX_CONFIG_BYTES = 1024 * 1024
 SECRET_KEY_PARTS = (
     "api_key",
@@ -129,6 +130,10 @@ class LocalizedLink(StrictModel):
 
 class ProfileConfig(StrictModel):
     display_name: Annotated[str, Field(min_length=1, max_length=80)]
+    github_login: str
+    aliases: Annotated[
+        tuple[Annotated[str, Field(min_length=1, max_length=80)], ...], Field(max_length=12)
+    ] = ()
     headline: LocalizedText
     bio: LocalizedText
     location: Annotated[str | None, Field(max_length=120)] = None
@@ -138,6 +143,20 @@ class ProfileConfig(StrictModel):
     suggested_questions: dict[str, tuple[str, ...]]
 
     _validate_avatar = field_validator("avatar_url")(_https_url)
+
+    @field_validator("github_login")
+    @classmethod
+    def validate_github_login(cls, value: str) -> str:
+        if not GITHUB_LOGIN_RE.fullmatch(value):
+            raise ValueError("GitHub login is invalid")
+        return value
+
+    @field_validator("aliases")
+    @classmethod
+    def validate_aliases(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if len({value.casefold() for value in values}) != len(values):
+            raise ValueError("profile aliases must be unique")
+        return values
 
 
 class ClaimConfig(StrictModel):

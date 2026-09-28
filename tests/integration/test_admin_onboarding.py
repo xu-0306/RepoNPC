@@ -120,6 +120,7 @@ def _application(tmp_path: Path) -> tuple[Any, RecordingOnboarding]:
         database,
         ORIGIN,
         onboarding=cast(GuidedOnboardingService, onboarding),
+        config_repository="octocat/config",
     )
     return (
         create_app(
@@ -252,6 +253,7 @@ def test_draft_is_local_model_free_and_available_without_github_writeback(
             json={
                 "profile": {
                     "display_name": "Example Developer",
+                    "github_login": "octocat",
                     "headline": {"zh-TW": "可靠系統", "en": "Reliable systems"},
                     "bio": {"zh-TW": "開發者工具", "en": "Developer tooling"},
                     "greeting": {"zh-TW": "你好", "en": "Hello"},
@@ -275,6 +277,15 @@ def test_draft_is_local_model_free_and_available_without_github_writeback(
     assert draft.status_code == 200
     assert draft.json()["content"].startswith("schema_version: 1")
     assert [name for name, _values in onboarding.calls] == ["draft"]
+
+
+def test_admin_index_status_prefills_config_repository_owner(tmp_path: Path) -> None:
+    app, _onboarding = _application(tmp_path)
+    with TestClient(app, base_url=ORIGIN) as client:
+        _login(client)
+        status = client.get("/api/admin/index/status")
+    assert status.status_code == 200
+    assert status.json()["configuration_repository_owner"] == "octocat"
 
 
 def test_guided_error_codes_map_to_bounded_http_statuses(tmp_path: Path) -> None:

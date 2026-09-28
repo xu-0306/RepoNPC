@@ -94,6 +94,35 @@ class RepositoryBlob:
 
 
 @dataclass(frozen=True, slots=True)
+class ParticipationCommit:
+    sha: str
+    month: str
+
+    def __post_init__(self) -> None:
+        if not COMMIT_RE.fullmatch(self.sha) or not re.fullmatch(
+            r"\d{4}-(0[1-9]|1[0-2])", self.month
+        ):
+            raise ValueError("participation commit is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryParticipation:
+    is_repository_owner: bool
+    has_visible_commits: bool | None
+    first_commit: ParticipationCommit | None
+    last_commit: ParticipationCommit | None
+    other_contributors_visible: bool | None
+
+    def __post_init__(self) -> None:
+        if self.has_visible_commits is True and (
+            self.first_commit is None or self.last_commit is None
+        ):
+            raise ValueError("visible commits require both endpoints")
+        if self.has_visible_commits is not True and (self.first_commit or self.last_commit):
+            raise ValueError("unknown or empty commits cannot have endpoints")
+
+
+@dataclass(frozen=True, slots=True)
 class ResolvedRepository:
     """A configured repository pinned to a validated immutable commit."""
 
@@ -102,6 +131,7 @@ class ResolvedRepository:
     default_branch: str | None
     github_html_url: str
     blobs: tuple[RepositoryBlob, ...]
+    participation: RepositoryParticipation | None = None
 
     def __post_init__(self) -> None:
         if not _REPOSITORY_SLUG_RE.fullmatch(self.slug):

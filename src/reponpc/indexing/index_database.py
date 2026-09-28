@@ -31,6 +31,7 @@ from reponpc.indexing.sources import (
     EmbeddingIdentity,
     PassageEmbeddingProvider,
     RepositoryBlob,
+    RepositoryParticipation,
     ResolvedConfiguration,
     ResolvedRepository,
 )
@@ -143,7 +144,7 @@ def create_schema(connection: sqlite3.Connection) -> None:
         CREATE TABLE evidence (
           evidence_id TEXT PRIMARY KEY,
           evidence_class TEXT NOT NULL CHECK(evidence_class IN
-            ('OWNER_ASSERTION','REPOSITORY_FACT','MODEL_INFERENCE')),
+            ('OWNER_ASSERTION','REPOSITORY_FACT','PARTICIPATION','MODEL_INFERENCE')),
           source_id INTEGER NOT NULL REFERENCES sources(source_id),
           owner_claim_id TEXT,
           title TEXT,
@@ -260,6 +261,8 @@ class IndexDatabaseBuilder:
                 source_count=source_count,
             )
             all_evidence_rows = tuple(evidence_rows) + tuple(assertion_rows)
+            if len(all_evidence_rows) > config.retrieval.limits.max_evidence_records:
+                raise IndexBuildError("index_evidence_limit_exceeded")
             self._insert_embeddings(connection, all_evidence_rows)
             connection.execute("COMMIT")
             self._quick_check(connection)
@@ -288,6 +291,9 @@ class IndexDatabaseBuilder:
             "application_compatibility": _canonical_json(APPLICATION_COMPATIBILITY),
             "embedding": _canonical_json(_embedding_payload(self._identity)),
             "config_schema_version": str(config.schema_version),
+            "owner_identity": _canonical_json(
+                {"github_login": config.profile.github_login, "aliases": config.profile.aliases}
+            ),
             "retrieval_policy": _canonical_json(
                 {
                     "enabled_sources": list(config.retrieval.enabled_sources),
@@ -343,6 +349,37 @@ class IndexDatabaseBuilder:
                 )
                 source_count += 1
                 for evidence in source.evidence:
+                    self._insert_evidence(connection, source_id, evidence)
+                    evidence_rows.append(evidence)
+            participation = snapshot.participation or RepositoryParticipation(
+                is_repository_owner=(
+                    snapshot.slug.split("/", 1)[0].casefold()
+                    == config.profile.github_login.casefold()
+                ),
+                has_visible_commits=None,
+                first_commit=None,
+                last_commit=None,
+                other_contributors_visible=None,
+            )
+            facts = _participation_evidence(snapshot, config.profile.github_login, participation)
+            connection.execute(
+                "INSERT INTO bundle_meta(key, value) VALUES (?, ?)",
+                (
+                    f"participation:{snapshot.slug}",
+                    _canonical_json(_participation_metadata(participation)),
+                ),
+            )
+            if facts:
+                source_id = self._insert_source(
+                    connection,
+                    repo_id=repo_id,
+                    path=".reponpc/github-participation.json",
+                    content=_canonical_json(_participation_metadata(participation)),
+                    language="en",
+                    source_type="repository_metadata",
+                )
+                source_count += 1
+                for evidence in facts:
                     self._insert_evidence(connection, source_id, evidence)
                     evidence_rows.append(evidence)
         return source_count, tuple(evidence_rows), skipped
@@ -710,6 +747,81 @@ def collect_repository_evidence(
         skipped_sources=tuple(skipped),
         included_text_bytes=repository_bytes,
     )
+
+
+def _participation_metadata(value: RepositoryParticipation) -> dict[str, object]:
+    return {
+        "is_repository_owner": value.is_repository_owner,
+        "has_visible_commits": value.has_visible_commits,
+        "first_commit": (
+            {"sha": value.first_commit.sha, "month": value.first_commit.month}
+            if value.first_commit
+            else None
+        ),
+        "last_commit": (
+            {"sha": value.last_commit.sha, "month": value.last_commit.month}
+            if value.last_commit
+            else None
+        ),
+        "other_contributors_visible": value.other_contributors_visible,
+    }
+
+
+def _participation_evidence(
+    snapshot: ResolvedRepository, login: str, value: RepositoryParticipation
+) -> tuple[EvidenceRecord, ...]:
+    owner = snapshot.slug.split("/", 1)[0]
+    facts = [
+        f"GitHub repository {snapshot.slug} is owned by {owner}.",
+        f"The confirmed portfolio GitHub login is {login}.",
+    ]
+    if value.is_repository_owner:
+        facts.append(f"{login} is the GitHub repository owner.")
+    if value.has_visible_commits is False:
+        facts.append(f"No linked commits by {login} are visible at the pinned commit on GitHub.")
+    if value.other_contributors_visible is True:
+        facts.append("Other linked GitHub contributors are visible.")
+    elif value.other_contributors_visible is False:
+        facts.append("No other linked GitHub contributors are visible in the API result.")
+    metadata = {"source_type": "repository_metadata", **_participation_metadata(value)}
+    records = [
+        EvidenceRecord(
+            evidence_class=EvidenceClass.PARTICIPATION,
+            repository_slug=snapshot.slug,
+            commit_sha=snapshot.commit_sha,
+            path=".reponpc/github-participation.json",
+            start_line=1,
+            end_line=1,
+            content=" ".join(facts),
+            title="GitHub repository participation",
+            language="en",
+            metadata=metadata,
+        )
+    ]
+    for line, label, commit in (
+        (2, "first", value.first_commit),
+        (3, "last", value.last_commit),
+    ):
+        if commit is None or (label == "last" and commit == value.first_commit):
+            continue
+        records.append(
+            EvidenceRecord(
+                evidence_class=EvidenceClass.PARTICIPATION,
+                repository_slug=snapshot.slug,
+                commit_sha=snapshot.commit_sha,
+                path=".reponpc/github-participation.json",
+                start_line=line,
+                end_line=line,
+                content=(
+                    f"{login} has a {label} visible linked GitHub commit in "
+                    f"{snapshot.slug} in {commit.month}, reachable from the pinned commit."
+                ),
+                title=f"{label} visible GitHub commit",
+                language="en",
+                metadata={**metadata, "citation_commit_sha": commit.sha},
+            )
+        )
+    return tuple(records)
 
 
 def _candidate_evidence(

@@ -33,6 +33,20 @@ def test_normative_example_is_sufficient() -> None:
     assert config.retrieval.embedding.dimension == 1024
 
 
+def test_participation_identity_requires_a_valid_confirmed_login_and_unique_aliases() -> None:
+    data = example_data()
+    del data["profile"]["github_login"]
+    assert_invalid(data, "profile.github_login")
+
+    data = example_data()
+    data["profile"]["github_login"] = "https://github.com/octocat"
+    assert_invalid(data, "profile.github_login")
+
+    data = example_data()
+    data["profile"]["aliases"] = ["Ada", "ada"]
+    assert_invalid(data, "profile.aliases")
+
+
 def test_builtin_character_uses_versioned_pack_contract() -> None:
     config = load_public_config(ROOT / "reponpc.example.yml")
     assert config.character.builtin is not None

@@ -79,6 +79,8 @@
 
 > 依契約 §2 實作 FR-045（AC-066）：新增 `PARTICIPATION` 證據類型與索引步驟、`github_login`（必填、預填）與選填 `aliases` 設定、owner flag、首次與最後 commit 月份及 permalink、`has_visible_commits`、`other_contributors_visible`；不記錄任何次數；API 失敗記為 unavailable 而非零；匿名 REST 需處理限流。讓 A2 的 `participation` 段能以此驗證。
 
+本機狀態（2026-09-27）：實作與 fixture 驗證完成；包含索引、引導欄位、不可變引用、失敗／限流處理及中英文分段答案。正式發布與真實 GitHub 驗收仍由 A12 的驗收帳本追蹤。
+
 ### A4 覆蓋檢查與 FAQ
 
 > 依契約 §3、§4.3 實作 FR-046（AC-067）：發布前的資訊性覆蓋檢查（絕不阻擋發布）；FAQ 產生與審核，動作只有核准／拒絕／重產／改寫成自述（不提供自由編輯）；只有核准項會被匯出或提供；綁定 bundle ID，bundle 變更時顯示「需要重新確認」。FAQ 回答必須通過 A2 驗證器。

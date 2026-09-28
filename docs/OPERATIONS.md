@@ -50,18 +50,20 @@ No PostgreSQL, Redis, vector database, or indexer process is required in the pub
 ## 3. Prepare public configuration
 
 1. Copy `reponpc.example.yml` to `reponpc.yml` in the configured repository.
-2. Replace placeholder profile, repository slugs, owner claims, links, and character/card values.
+2. Replace placeholder profile, including the required confirmed `github_login` and optional `aliases`, repository slugs, owner claims, links, and character/card values.
 3. Keep only public information. Never add tokens, password hashes, API keys, internal URLs, or private-repository names.
 4. Validate the same file through the index workflow/CLI before publication.
 5. Review every owner claim as a public statement that may be cited verbatim by visitors.
 
 The default configuration repository may be the GitHub Profile repository (`owner/owner`) or a separate public deployment repository.
 
+Existing `reponpc.yml` files created before FR-045 need a confirmed `profile.github_login` before the next validation or index build. An old active bundle remains in place if the updated configuration fails validation.
+
 ### Guided setup (0.1.4)
 
 An authenticated new owner normally uses the guided flow instead of authoring YAML first:
 
-1. Enter a GitHub username/profile URL or manually add a public repository slug/URL.
+1. Enter a GitHub username/profile URL or manually add a public repository slug/URL. The profile step prefills `github_login` from the configured repository owner when available, otherwise from the entered account; confirm or correct it before generating the draft.
 2. Select from public metadata. Discovery uses unauthenticated GitHub API capacity, does not use the fine-grained writeback token, and may ask the owner to retry after GitHub rate limiting.
 3. Confirm the exact selected repositories before any source is downloaded or model capacity is consumed.
 4. Choose either `Analyze for suggestions` or `Continue manually`. Analysis is optional and consumes GitHub/provider capacity; the manual action is available before preflight and on every blocker/failure, without requiring a failed request. The current 0.1.7 implementation may analyze the confirmed set as one durable bounded batch.

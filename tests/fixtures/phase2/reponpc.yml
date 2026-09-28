@@ -7,6 +7,8 @@ locales:
 
 profile:
   display_name: Fixture Developer
+  github_login: fixture-owner
+  aliases: []
   headline:
     zh-TW: 以可驗證證據設計檢索系統的工程師
     en: Engineer building retrieval systems with verifiable evidence

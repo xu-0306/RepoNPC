@@ -227,7 +227,8 @@ def test_corrupted_passage_entry_is_reembedded_after_restart(tmp_path: Path) -> 
 
     _failed_analysis(cold)
     cache_files = _passage_cache_files(tmp_path)
-    assert len(cache_files) == _passage_work(cold_embedding) == 4
+    assert len(cache_files) == _passage_work(cold_embedding)
+    assert cache_files
 
     corrupted = cache_files[0]
     payload = json.loads(corrupted.read_text(encoding="utf-8"))

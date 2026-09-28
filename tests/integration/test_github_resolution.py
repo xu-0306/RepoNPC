@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import base64
+import io
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
+from urllib.error import HTTPError
 
 import pytest
 
@@ -14,6 +16,142 @@ from reponpc.indexing.github import GitHubSourceResolver, SourceResolutionError
 
 SHA = "b" * 40
 BLOB_SHA = "c" * 40
+
+
+def _linked_commit(sha: str, month: str, login: str = "octocat") -> dict[str, object]:
+    return {
+        "sha": sha,
+        "author": {"login": login},
+        "commit": {"author": {"date": f"{month}-02T12:00:00Z"}},
+    }
+
+
+@pytest.mark.parametrize("slug", ["team/demo", "fork-owner/demo-fork"])
+def test_participation_uses_pinned_sha_and_last_page_without_counts(monkeypatch, slug: str) -> None:
+    paths: list[str] = []
+    latest = _linked_commit("c" * 40, "2026-08")
+    earliest = _linked_commit("d" * 40, "2024-02")
+
+    def fetch_latest(_self, path: str):
+        paths.append(path)
+        return [latest], {
+            "Link": (
+                f"<https://api.github.com/repos/{slug}/commits?"
+                f'author=octocat&sha={SHA}&per_page=1&page=12>; rel="last"'
+            )
+        }
+
+    def fetch_other(_self, path: str):
+        paths.append(path)
+        if path.endswith("&page=12"):
+            return [earliest]
+        return [{"login": "octocat"}, {"login": "teammate"}]
+
+    monkeypatch.setattr(GitHubSourceResolver, "_request_json_with_headers", fetch_latest)
+    monkeypatch.setattr(GitHubSourceResolver, "_request_json", fetch_other)
+    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", fetch_other)
+    fact = GitHubSourceResolver().participation(slug=slug, pinned_sha=SHA, github_login="octocat")
+
+    assert fact.is_repository_owner is False
+    assert fact.has_visible_commits is True
+    assert fact.first_commit is not None and fact.first_commit.month == "2024-02"
+    assert fact.last_commit is not None and fact.last_commit.month == "2026-08"
+    assert fact.other_contributors_visible is True
+    assert paths == [
+        f"/repos/{slug}/commits?author=octocat&sha={SHA}&per_page=1",
+        f"/repos/{slug}/commits?author=octocat&sha={SHA}&per_page=1&page=12",
+        f"/repos/{slug}/contributors?per_page=2",
+    ]
+
+
+def test_participation_empty_commits_and_unlinked_email_stay_distinct(monkeypatch) -> None:
+    monkeypatch.setattr(GitHubSourceResolver, "_request_json_with_headers", lambda *_args: ([], {}))
+    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", lambda *_args: [])
+    resolver = GitHubSourceResolver()
+    empty = resolver.participation(slug="octocat/demo", pinned_sha=SHA, github_login="octocat")
+    assert empty.is_repository_owner is True
+    assert empty.has_visible_commits is False
+    assert empty.first_commit is empty.last_commit is None
+    assert empty.other_contributors_visible is False
+
+    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", lambda *_args: [{"login": None}])
+    malformed = resolver.participation(slug="octocat/demo", pinned_sha=SHA, github_login="octocat")
+    assert malformed.other_contributors_visible is None
+
+    monkeypatch.setattr(
+        GitHubSourceResolver,
+        "_request_json_with_headers",
+        lambda *_args: (
+            [{"sha": SHA, "author": None, "commit": {"author": {"date": "2025-01-01T00:00:00Z"}}}],
+            {},
+        ),
+    )
+    unlinked = resolver.participation(slug="octocat/demo", pinned_sha=SHA, github_login="octocat")
+    assert unlinked.has_visible_commits is None
+    assert unlinked.first_commit is unlinked.last_commit is None
+
+
+def test_participation_rejects_untrusted_pagination_link(monkeypatch) -> None:
+    monkeypatch.setattr(
+        GitHubSourceResolver,
+        "_request_json_with_headers",
+        lambda *_args: (
+            [_linked_commit("c" * 40, "2026-08")],
+            {"Link": '<https://untrusted.example/commits?page=2>; rel="last"'},
+        ),
+    )
+    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", lambda *_args: [])
+    fact = GitHubSourceResolver().participation(
+        slug="octocat/demo", pinned_sha=SHA, github_login="octocat"
+    )
+    assert fact.has_visible_commits is None
+    assert fact.first_commit is fact.last_commit is None
+
+
+def test_participation_without_calculable_last_page_is_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(
+        GitHubSourceResolver,
+        "_request_json_with_headers",
+        lambda *_args: (
+            [_linked_commit("c" * 40, "2026-08")],
+            {"Link": '<https://api.github.com/repos/octocat/demo/commits?page=2>; rel="next"'},
+        ),
+    )
+    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", lambda *_args: [])
+    fact = GitHubSourceResolver().participation(
+        slug="octocat/demo", pinned_sha=SHA, github_login="octocat"
+    )
+    assert fact.has_visible_commits is None
+    assert fact.first_commit is fact.last_commit is None
+
+
+@pytest.mark.parametrize("code", ["github_rate_limited", "github_request_failed"])
+def test_participation_failed_requests_are_unavailable(monkeypatch, code: str) -> None:
+    def unavailable(*_args):
+        raise SourceResolutionError(code)
+
+    monkeypatch.setattr(GitHubSourceResolver, "_request_json_with_headers", unavailable)
+    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", unavailable)
+    fact = GitHubSourceResolver().participation(
+        slug="octocat/demo", pinned_sha=SHA, github_login="octocat"
+    )
+    assert fact.has_visible_commits is None
+    assert fact.other_contributors_visible is None
+    assert fact.first_commit is fact.last_commit is None
+
+
+@pytest.mark.parametrize("status", [403, 429, 500])
+def test_participation_http_failures_do_not_become_zero(monkeypatch, status: int) -> None:
+    class Opener:
+        def open(self, request, **_kwargs):
+            raise HTTPError(request.full_url, status, "failure", {}, io.BytesIO(b"{}"))
+
+    monkeypatch.setattr("reponpc.indexing.github.build_opener", lambda *_args: Opener())
+    fact = GitHubSourceResolver().participation(
+        slug="octocat/demo", pinned_sha=SHA, github_login="octocat"
+    )
+    assert fact.has_visible_commits is None
+    assert fact.other_contributors_visible is None
 
 
 def test_resolver_pins_default_branch_and_preserves_non_regular_tree_entries(monkeypatch) -> None:

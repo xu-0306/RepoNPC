@@ -8,7 +8,7 @@ import os
 import re
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
@@ -142,25 +142,36 @@ def build_index_bundle(
             }
         )
     source_resolver = resolver or GitHubSourceResolver()
-    snapshots = tuple(
-        source_resolver.resolve(slug=repository.slug, ref=repository.ref)
-        for repository in config.repositories
-        if repository.enabled
-    )
+    snapshots: list[ResolvedRepository] = []
+    for repository in config.repositories:
+        if not repository.enabled:
+            continue
+        snapshot = source_resolver.resolve(slug=repository.slug, ref=repository.ref)
+        if isinstance(source_resolver, GitHubSourceResolver):
+            snapshot = replace(
+                snapshot,
+                participation=source_resolver.participation(
+                    slug=snapshot.slug,
+                    pinned_sha=snapshot.commit_sha,
+                    github_login=config.profile.github_login,
+                ),
+            )
+        snapshots.append(snapshot)
+    resolved_snapshots = tuple(snapshots)
     instant = built_at or datetime.now(UTC)
     if instant.tzinfo is None:
         raise IndexPipelineError("build_timestamp_invalid")
     bundle_id = bundle_id_for(
         built_at=instant,
         configuration_bytes=content.encode("utf-8"),
-        repositories=tuple((snapshot.slug, snapshot.commit_sha) for snapshot in snapshots),
+        repositories=tuple((snapshot.slug, snapshot.commit_sha) for snapshot in resolved_snapshots),
         embedding=provider.identity(),
         parser_chunker_version=PARSER_CHUNKER_VERSION,
     )
     index_result = IndexDatabaseBuilder(provider, passage_cache=passage_cache).build(
         config=config,
         configuration_source=source,
-        repositories=snapshots,
+        repositories=resolved_snapshots,
         output_path=output / "index.sqlite",
     )
     assets = (
@@ -177,7 +188,7 @@ def build_index_bundle(
     bundle = build_bundle(
         index_result=index_result,
         configuration_source=source,
-        repositories=snapshots,
+        repositories=resolved_snapshots,
         bundle_id=bundle_id,
         built_at=instant,
         public_files=assets,

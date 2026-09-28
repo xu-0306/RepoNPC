@@ -314,6 +314,8 @@ class SuggestedClaim(_StrictModel):
 
 class GuidedProfileDraft(_StrictModel):
     display_name: str = Field(min_length=1, max_length=80)
+    github_login: str = Field(min_length=1, max_length=39)
+    aliases: tuple[str, ...] = Field(default=(), max_length=12)
     headline: LocalizedSuggestion
     bio: LocalizedSuggestion
     greeting: LocalizedSuggestion
@@ -873,6 +875,8 @@ class GuidedOnboardingService:
         values["profile"] = {
             **values["profile"],
             "display_name": profile.display_name,
+            "github_login": profile.github_login,
+            "aliases": list(profile.aliases),
             "headline": profile.headline.public(),
             "bio": profile.bio.public(),
             "greeting": profile.greeting.public(),
@@ -1032,6 +1036,7 @@ def _analysis_config(
         "locales": {"default": "zh-TW", "supported": ["zh-TW", "en"]},
         "profile": {
             "display_name": "RepoNPC onboarding",
+            "github_login": "reponpc-onboarding",
             "headline": {"zh-TW": "引導設定", "en": "Guided setup"},
             "bio": {"zh-TW": "暫存分析設定", "en": "Ephemeral analysis configuration"},
             "location": None,

@@ -2028,7 +2028,20 @@ export function AdminPage({
           message: adminDataErrorMessage(locale, configResult.reason),
         });
       }
-      if (statusResult.status === "fulfilled") setStatus(statusResult.value);
+      if (statusResult.status === "fulfilled") {
+        setStatus(statusResult.value);
+        const owner = statusResult.value.configuration_repository_owner;
+        if (owner) {
+          setGuidedState((current) =>
+            current.profile.githubLogin
+              ? current
+              : {
+                  ...current,
+                  profile: { ...current.profile, githubLogin: owner },
+                },
+          );
+        }
+      }
       setBusy(false);
     })();
   }, [authenticated, locale, request]);
@@ -3010,6 +3023,11 @@ export function AdminPage({
           body: JSON.stringify({
             profile: {
               display_name: guidedState.profile.displayName,
+              github_login: guidedState.profile.githubLogin.trim(),
+              aliases: guidedState.profile.aliasesText
+                .split(/\r?\n/)
+                .map((alias) => alias.trim())
+                .filter(Boolean),
               headline: guidedState.profile.headline,
               bio: guidedState.profile.bio,
               greeting: guidedState.profile.greeting,

@@ -5,12 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from reponpc.bundles.index_reader import ReadOnlyIndex
+from reponpc.chat.answers import validate_v2_answer
 from reponpc.config.models import load_public_config
 from reponpc.indexing.exclusions import SourceEntryKind
 from reponpc.indexing.index_database import (
@@ -21,7 +23,9 @@ from reponpc.indexing.index_database import (
 )
 from reponpc.indexing.sources import (
     EmbeddingIdentity,
+    ParticipationCommit,
     RepositoryBlob,
+    RepositoryParticipation,
     ResolvedConfiguration,
     ResolvedRepository,
 )
@@ -149,6 +153,89 @@ def test_fixture_sources_flow_through_exclusion_chunking_evidence_and_schema(
         assert assertion[1] == "fixture_retrieval_design"
         assert assertion[2] <= assertion[3]
         assert connection.execute("PRAGMA quick_check").fetchone() == ("ok",)
+        unavailable = connection.execute(
+            "SELECT content FROM evidence WHERE evidence_class = 'PARTICIPATION'"
+        ).fetchone()[0]
+        assert "No linked commits" not in unavailable
+
+
+def test_participation_facts_keep_unavailable_distinct_and_link_to_immutable_commits(
+    tmp_path: Path,
+) -> None:
+    provider = DeterministicEmbeddingProvider()
+    participation = RepositoryParticipation(
+        is_repository_owner=True,
+        has_visible_commits=True,
+        first_commit=ParticipationCommit("b" * 40, "2024-02"),
+        last_commit=ParticipationCommit("c" * 40, "2026-08"),
+        other_contributors_visible=None,
+    )
+    result = IndexDatabaseBuilder(provider).build(
+        config=load_public_config(FIXTURE_CONFIG),
+        configuration_source=_configuration_source(),
+        repositories=(replace(_fixture_snapshot(), participation=participation),),
+        output_path=tmp_path / "index.sqlite",
+    )
+    with sqlite3.connect(result.database_path) as connection:
+        stored = json.loads(
+            connection.execute(
+                "SELECT value FROM bundle_meta WHERE key = ?",
+                ("participation:fixture-owner/reponpc-demo",),
+            ).fetchone()[0]
+        )
+        assert stored["other_contributors_visible"] is None
+        rows = connection.execute(
+            "SELECT evidence_id, content FROM evidence WHERE evidence_class = 'PARTICIPATION' "
+            "ORDER BY start_line"
+        ).fetchall()
+    assert len(rows) == 3
+    assert all("count" not in content.lower() for _, content in rows)
+    assert all("role" not in content.lower() for _, content in rows)
+    reader = ReadOnlyIndex.open(result.database_path, expected_embedding=provider.identity())
+    try:
+        assert reader.owner_aliases == ("fixture-owner",)
+        assert [reader.evidence(evidence_id).github_permalink for evidence_id, _ in rows] == [
+            "https://github.com/fixture-owner/reponpc-demo/tree/" + FIXTURE_SHA,
+            "https://github.com/fixture-owner/reponpc-demo/commit/" + "b" * 40,
+            "https://github.com/fixture-owner/reponpc-demo/commit/" + "c" * 40,
+        ]
+        with sqlite3.connect(result.database_path) as connection:
+            project_id = connection.execute(
+                "SELECT evidence_id FROM evidence JOIN sources USING(source_id) "
+                "WHERE sources.path = 'pyproject.toml' LIMIT 1"
+            ).fetchone()[0]
+        first = reader.evidence(rows[1][0])
+        project = reader.evidence(project_id)
+        assert first is not None and project is not None
+        for locale, activity, project_text in (
+            (
+                "en",
+                "{{owner}} had a visible GitHub commit in 2024-02.",
+                "The repository includes project configuration.",
+            ),
+            ("zh-TW", "{{owner}} 在 2024-02 有可見的 GitHub 提交。", "這個專案包含設定檔。"),
+        ):
+            answer = validate_v2_answer(
+                {
+                    "segments": [
+                        {"kind": "participation", "text": activity, "source_ids": ["S1"]},
+                        {"kind": "project", "text": project_text, "source_ids": ["S2"]},
+                    ],
+                    "insufficient_evidence": False,
+                },
+                {"S1": first, "S2": project},
+                locale,
+                owner_name="Fixture Developer",
+                owner_aliases=reader.owner_aliases,
+            )
+            assert answer.insufficient_evidence is False
+            assert "2024-02" in answer.answer_markdown
+            assert {citation.evidence_class for citation in answer.citations} == {
+                "PARTICIPATION",
+                "REPOSITORY_FACT",
+            }
+    finally:
+        reader.close()
 
 
 def test_root_manifest_is_line_addressable_repository_metadata_and_provider_adds_prefix(

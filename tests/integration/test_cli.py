@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 import secrets
+import sqlite3
 import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,6 +17,7 @@ import pytest
 import reponpc.main as runtime_main
 from reponpc import cli
 from reponpc.admin.auth import AdminSessionService
+from reponpc.indexing.github import GitHubSourceResolver
 from reponpc.indexing.pipeline import (
     PENDING_MANIFEST_NAME,
     IndexPipelineError,
@@ -23,7 +25,11 @@ from reponpc.indexing.pipeline import (
     publish_index_bundle,
     publish_pending_manifest,
 )
-from reponpc.indexing.sources import ResolvedConfiguration
+from reponpc.indexing.sources import (
+    ParticipationCommit,
+    RepositoryParticipation,
+    ResolvedConfiguration,
+)
 from tests.integration.test_index_build import (
     FIXTURE_CONFIG,
     DeterministicEmbeddingProvider,
@@ -122,6 +128,44 @@ def test_real_pipeline_builds_verifies_then_splits_pending_pointer_publication(
 
     assert publisher.events == ["release", "upload", "verify", "verify", "stable"]
     assert publisher.stable_content == pending_path.read_bytes()
+
+
+def test_production_resolver_adds_participation_at_the_pinned_sha(tmp_path: Path) -> None:
+    class FixtureGitHubResolver(GitHubSourceResolver):
+        def resolve(self, *, slug: str, ref: str | None):
+            return _fixture_snapshot()
+
+        def participation(self, *, slug: str, pinned_sha: str, github_login: str):
+            assert (slug, pinned_sha, github_login) == (
+                "fixture-owner/reponpc-demo",
+                "a" * 40,
+                "fixture-owner",
+            )
+            commit = ParticipationCommit("b" * 40, "2025-03")
+            return RepositoryParticipation(True, True, commit, commit, False)
+
+    config_path = tmp_path / "reponpc.yml"
+    content = FIXTURE_CONFIG.read_text(encoding="utf-8")
+    config_path.write_text(content, encoding="utf-8")
+    bundle = build_index_bundle(
+        config_path,
+        tmp_path / "dist",
+        resolver=FixtureGitHubResolver(),
+        embedding_provider=DeterministicEmbeddingProvider(),
+        configuration_source=ResolvedConfiguration(
+            repository_slug="fixture-owner/reponpc-demo",
+            commit_sha="a" * 40,
+            path="reponpc.yml",
+            content=content,
+            github_html_url="https://github.com/fixture-owner/reponpc-demo",
+        ),
+        public_directory=_write_public_assets(tmp_path),
+    )
+    assert bundle.archive_path.is_file()
+    with sqlite3.connect(tmp_path / "dist" / "index.sqlite") as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM evidence WHERE evidence_class = 'PARTICIPATION'"
+        ).fetchone() == (2,)
 
 
 def test_entrypoint_mapping_and_no_argument_serve_dispatch(monkeypatch) -> None:

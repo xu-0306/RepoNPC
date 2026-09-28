@@ -9,15 +9,21 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from reponpc.admin.batch_resolver import GitHubRateLimiter, GitHubRateResource
 from reponpc.domain.evidence import COMMIT_RE
 from reponpc.indexing.exclusions import SourceEntryKind
-from reponpc.indexing.sources import RepositoryBlob, ResolvedRepository
+from reponpc.indexing.sources import (
+    ParticipationCommit,
+    RepositoryBlob,
+    RepositoryParticipation,
+    ResolvedRepository,
+)
 
 
 class SourceResolutionError(RuntimeError):
@@ -220,6 +226,63 @@ class GitHubSourceResolver:
             blobs=blobs,
         )
 
+    def participation(
+        self, *, slug: str, pinned_sha: str, github_login: str
+    ) -> RepositoryParticipation:
+        """Read only linked GitHub activity reachable from the pinned commit."""
+
+        owner, repository = _split_slug(slug)
+        login = normalize_github_account(github_login)
+        if not COMMIT_RE.fullmatch(pinned_sha):
+            raise SourceResolutionError("github_commit_invalid")
+        base = f"/repos/{quote(owner, safe='')}/{quote(repository, safe='')}"
+        commit_path = f"{base}/commits?author={quote(login, safe='')}&sha={pinned_sha}&per_page=1"
+        has_visible: bool | None = None
+        first: ParticipationCommit | None = None
+        last: ParticipationCommit | None = None
+        try:
+            latest_payload, headers = self._request_json_with_headers(commit_path)
+            if not isinstance(latest_payload, list) or len(latest_payload) > 1:
+                raise SourceResolutionError("github_response_invalid")
+            if not latest_payload:
+                has_visible = False
+            else:
+                last = _participation_commit(latest_payload[0], login)
+                link = next(
+                    (value for key, value in headers.items() if key.casefold() == "link"), None
+                )
+                page = _last_page(link, self.api_base_url, commit_path)
+                if page == 1:
+                    first = last
+                else:
+                    earliest = self._request_json(f"{commit_path}&page={page}")
+                    if not isinstance(earliest, list) or len(earliest) != 1:
+                        raise SourceResolutionError("github_response_invalid")
+                    first = _participation_commit(earliest[0], login)
+                has_visible = True
+        except SourceResolutionError:
+            first = last = None
+
+        other_contributors: bool | None = None
+        try:
+            contributors = self._get_json_list(f"{base}/contributors?per_page=2")
+            if len(contributors) > 2 or any(
+                not isinstance(item.get("login"), str) for item in contributors
+            ):
+                raise SourceResolutionError("github_response_invalid")
+            other_contributors = any(
+                item["login"].casefold() != login.casefold() for item in contributors
+            )
+        except SourceResolutionError:
+            pass
+        return RepositoryParticipation(
+            is_repository_owner=owner.casefold() == login.casefold(),
+            has_visible_commits=has_visible,
+            first_commit=first,
+            last_commit=last,
+            other_contributors_visible=other_contributors,
+        )
+
     def _tree_entry_to_blob(
         self,
         owner: str,
@@ -293,6 +356,18 @@ class GitHubSourceResolver:
         cancel_requested: Callable[[], bool] | None = None,
         deadline: float | None = None,
     ) -> object:
+        payload, _headers = self._request_json_with_headers(
+            api_path, cancel_requested=cancel_requested, deadline=deadline
+        )
+        return payload
+
+    def _request_json_with_headers(
+        self,
+        api_path: str,
+        *,
+        cancel_requested: Callable[[], bool] | None = None,
+        deadline: float | None = None,
+    ) -> tuple[object, dict[str, str]]:
         base = self.api_base_url.rstrip("/")
         url = base + api_path
         _validate_allowed_url(url, self.allowed_hosts)
@@ -324,11 +399,14 @@ class GitHubSourceResolver:
             opener = build_opener(_NoRedirect())
             with opener.open(request, timeout=timeout) as response:
                 _validate_allowed_url(response.geturl(), self.allowed_hosts)
+                response_headers = {
+                    key: value for key, value in getattr(response, "headers", {}).items()
+                }
                 if self.rate_limiter is not None:
                     self.rate_limiter.observe(
                         resource=GitHubRateResource.CORE,
                         status=int(response.status),
-                        headers={key: value for key, value in response.headers.items()},
+                        headers=response_headers,
                     )
                 payload = response.read(self.max_response_bytes + 1)
                 if response.status != 200:
@@ -383,7 +461,7 @@ class GitHubSourceResolver:
             decoded = json.loads(payload.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise SourceResolutionError("github_response_invalid") from exc
-        return decoded
+        return decoded, response_headers
 
 
 _ACCOUNT_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
@@ -495,6 +573,59 @@ def _retry_after_seconds(headers: Any) -> int | None:
     if isinstance(reset, str) and reset.isdigit():
         return max(1, min(int(reset) - int(time.time()), 3600))
     return None
+
+
+def _participation_commit(value: object, login: str) -> ParticipationCommit:
+    if not isinstance(value, dict) or not isinstance(value.get("author"), dict):
+        raise SourceResolutionError("github_response_invalid")
+    linked_login = value["author"].get("login")
+    if not isinstance(linked_login, str) or linked_login.casefold() != login.casefold():
+        # The author filter does not prove that an unlinked email belongs to this login.
+        raise SourceResolutionError("github_response_invalid")
+    commit = value.get("commit")
+    author = commit.get("author") if isinstance(commit, dict) else None
+    date = author.get("date") if isinstance(author, dict) else None
+    sha = value.get("sha")
+    if not isinstance(sha, str) or not COMMIT_RE.fullmatch(sha) or not isinstance(date, str):
+        raise SourceResolutionError("github_response_invalid")
+    try:
+        parsed = datetime.fromisoformat(date.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            raise ValueError
+        return ParticipationCommit(sha=sha, month=parsed.strftime("%Y-%m"))
+    except ValueError as exc:
+        raise SourceResolutionError("github_response_invalid") from exc
+
+
+def _last_page(link: str | None, api_base_url: str, request_path: str) -> int:
+    if not link:
+        return 1
+    expected = urlsplit(api_base_url.rstrip("/") + request_path)
+    expected_query = parse_qs(expected.query, strict_parsing=True)
+    for part in link.split(","):
+        match = re.fullmatch(r'<([^<>]+)>;\s*rel="last"', part.strip())
+        if match is None:
+            continue
+        candidate = urlsplit(match.group(1))
+        try:
+            query = parse_qs(candidate.query, strict_parsing=True)
+            page_values = query.pop("page")
+            if (
+                candidate.scheme != expected.scheme
+                or candidate.netloc != expected.netloc
+                or candidate.path != expected.path
+                or candidate.fragment
+                or query != expected_query
+                or len(page_values) != 1
+                or not page_values[0].isdigit()
+                or not 1 <= int(page_values[0]) <= 1_000_000
+            ):
+                raise ValueError
+            return int(page_values[0])
+        except (KeyError, ValueError) as exc:
+            raise SourceResolutionError("github_response_invalid") from exc
+    # A Link header without "last" can mean GitHub cannot calculate the final page.
+    raise SourceResolutionError("github_response_invalid")
 
 
 def _is_secondary_limit_body(body: bytes) -> bool:

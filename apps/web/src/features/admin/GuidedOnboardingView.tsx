@@ -150,6 +150,9 @@ type Copy = {
   profileHeading: string;
   profileDescription: string;
   displayNameLabel: string;
+  githubLoginLabel: string;
+  githubLoginHelp: string;
+  aliasesLabel: string;
   headlineLabel: string;
   bioLabel: string;
   greetingLabel: string;
@@ -330,6 +333,10 @@ const COPY: Record<Locale, Copy> = {
     profileDescription:
       "這些公開文字會成為完整設定草稿的一部分；請提供中英文內容，不要讓模型替你猜測個人資料。",
     displayNameLabel: "顯示名稱",
+    githubLoginLabel: "你的 GitHub 帳號",
+    githubLoginHelp:
+      "請確認這是你的帳號。只會比對 GitHub 可見且連結到此帳號的提交。",
+    aliasesLabel: "其他稱呼（選填，每行一個）",
     headlineLabel: "一句話介紹自己",
     bioLabel: "簡介",
     greetingLabel: "問候語",
@@ -526,6 +533,10 @@ const COPY: Record<Locale, Copy> = {
     profileDescription:
       "These public fields become part of the complete YAML draft. Supply both languages; do not ask a model to guess personal profile details.",
     displayNameLabel: "Display name",
+    githubLoginLabel: "Your GitHub login",
+    githubLoginHelp:
+      "Confirm this is your account. Only visible commits linked to it are matched.",
+    aliasesLabel: "Other names (optional, one per line)",
     headlineLabel: "One-line introduction",
     bioLabel: "Bio",
     greetingLabel: "Greeting",
@@ -664,6 +675,7 @@ function profileWithDisplayName(
 function profileIsComplete(profile: GuidedProfile): boolean {
   return [
     profile.displayName,
+    profile.githubLogin,
     profile.headline["zh-TW"],
     profile.headline.en,
     profile.bio["zh-TW"],
@@ -1862,6 +1874,11 @@ function ProfileStep({
       label: copy.displayNameLabel,
       value: profile.displayName,
     },
+    {
+      id: "guided-profile-github-login",
+      label: copy.githubLoginLabel,
+      value: profile.githubLogin,
+    },
     ...(["headline", "bio", "greeting"] as const).flatMap((field) =>
       (["zh-TW", "en"] as const).map((language) => ({
         id: `guided-profile-${field}-${language}`,
@@ -1917,6 +1934,32 @@ function ProfileStep({
             setProfile(profileWithDisplayName(profile, event.target.value))
           }
           value={profile.displayName}
+        />
+      </label>
+      <label htmlFor="guided-profile-github-login">
+        {copy.githubLoginLabel}
+        <input
+          disabled={busy}
+          id="guided-profile-github-login"
+          required
+          pattern="[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?"
+          onChange={(event) =>
+            setProfile({ ...profile, githubLogin: event.target.value })
+          }
+          value={profile.githubLogin}
+        />
+      </label>
+      <p>{copy.githubLoginHelp}</p>
+      <label htmlFor="guided-profile-aliases">
+        {copy.aliasesLabel}
+        <textarea
+          disabled={busy}
+          id="guided-profile-aliases"
+          onChange={(event) =>
+            setProfile({ ...profile, aliasesText: event.target.value })
+          }
+          rows={2}
+          value={profile.aliasesText}
         />
       </label>
       <fieldset disabled={busy}>
@@ -2041,6 +2084,8 @@ function ReviewStep({
         <dl>
           <dt>{copy.displayNameLabel}</dt>
           <dd>{state.profile.displayName}</dd>
+          <dt>{copy.githubLoginLabel}</dt>
+          <dd>{state.profile.githubLogin}</dd>
           {(["zh-TW", "en"] as const).map((profileLocale) => (
             <div key={profileLocale}>
               <dt>

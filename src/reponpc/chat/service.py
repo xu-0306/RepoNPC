@@ -158,6 +158,7 @@ class GroundedChatService:
                 selected,
                 locale,
                 owner_name=owner_name,
+                owner_aliases=getattr(index, "owner_aliases", ()),
                 suggested_questions=suggested_questions,
             )
             _log_discarded_segments(validated)

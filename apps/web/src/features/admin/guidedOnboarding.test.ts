@@ -37,6 +37,8 @@ describe("guided onboarding config hydration", () => {
     const state = guidedOnboardingFromConfig({
       profile: {
         display_name: "Existing owner",
+        github_login: "octocat",
+        aliases: ["Ada"],
         headline: { "zh-TW": "既有標題", en: "Existing headline" },
         bio: { "zh-TW": "既有簡介", en: "Existing bio" },
         greeting: { "zh-TW": "你好", en: "Hello" },
@@ -56,12 +58,33 @@ describe("guided onboarding config hydration", () => {
     });
     expect(state?.step).toBe("profile");
     expect(state?.profile.greeting.en).toBe("Hello");
+    expect(state?.profile.githubLogin).toBe("octocat");
+    expect(state?.profile.aliasesText).toBe("Ada");
     expect(state?.repositories[0].confirmedContribution?.role.en).toBe(
       "Maintainer",
     );
     expect(state?.repositories[0].proposal?.role.en).toBe("Maintainer");
     expect(state?.repositories[0].include).toEqual(["src/**"]);
   });
+});
+
+it("prefills the confirmed login from the discovered account without replacing an edit", () => {
+  const initial = guidedOnboardingReducer(initialGuidedOnboardingState(), {
+    type: "START_MANUAL",
+  });
+  const discovered = guidedOnboardingReducer(initial, {
+    type: "SET_ACCOUNT",
+    account: "octocat",
+  });
+  expect(discovered.profile.githubLogin).toBe("octocat");
+  const edited = guidedOnboardingReducer(
+    {
+      ...discovered,
+      profile: { ...discovered.profile, githubLogin: "real-owner" },
+    },
+    { type: "SET_ACCOUNT", account: "someone-else" },
+  );
+  expect(edited.profile.githubLogin).toBe("real-owner");
 });
 
 const metadata: RepositoryMetadata = {
@@ -133,6 +156,8 @@ const analysis: RepositoryAnalysis = {
 
 const profile = {
   displayName: "Example Developer",
+  githubLogin: "octocat",
+  aliasesText: "",
   headline: { "zh-TW": "打造可靠系統", en: "Building reliable systems" },
   bio: { "zh-TW": "專注於開發者工具。", en: "Focused on developer tooling." },
   greeting: {

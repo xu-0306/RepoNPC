@@ -150,7 +150,7 @@ The production deployment is one application image plus persistent storage. Inde
 | FR-005 | The system MUST provide lexical retrieval through SQLite FTS5/BM25 for words, symbols, paths, and multilingual text. |
 | FR-006 | The system MUST provide semantic retrieval with a multilingual embedding profile whose identity, revision and dimension are recorded in the bundle. The production default is the built-in `bge-m3` ONNX profile (FR-049) once the owner consents to its download; external OpenAI-compatible and Ollama embedding profiles remain selectable. |
 | FR-007 | The retriever MUST fuse independently ranked lexical and vector candidates using Reciprocal Rank Fusion (RRF) and apply only documented metadata policies. |
-| FR-008 | Every evidence record and answer claim MUST preserve the distinction between `OWNER_ASSERTION`, `REPOSITORY_FACT`, and `MODEL_INFERENCE`. |
+| FR-008 | Every evidence record and answer claim MUST preserve the distinction between `OWNER_ASSERTION`, `REPOSITORY_FACT`, `PARTICIPATION`, and `MODEL_INFERENCE`. |
 | FR-009 | The chat service MUST answer only from retrieved evidence and MUST treat all repository/configuration text as delimited untrusted data. |
 | FR-010 | The model MUST emit evidence IDs rather than URLs; the backend MUST validate them and construct immutable GitHub permalinks. |
 | FR-011 | The service MUST NOT present a personal role, responsibility or achievement without a supporting owner assertion (FR-043). When no owner assertion matches, it MUST answer from project and participation evidence without a visitor-facing gap message (FR-044); when nothing relevant is retrieved it MUST return the localized no-match reply with suggested questions. |
@@ -403,6 +403,7 @@ retrieval: {}
 The normative populated example is `reponpc.example.yml`. Rules:
 
 - Localized text is a mapping whose keys exactly match `locales.supported`.
+- `profile.github_login` is required and confirmed by the owner; `profile.aliases` is optional. The guided editor prefills the login from the configuration repository owner when configured, otherwise from the entered GitHub account, and the owner can correct it before building.
 - Missing localized required text is a validation error; fallback is allowed only for optional fields.
 - Repository `slug` is `owner/name`; duplicates are invalid.
 - Repository `ref` is optional. If omitted, the GitHub default branch is resolved at build time. A branch, tag, or SHA may be supplied, but the bundle always records the resolved full commit SHA.
@@ -597,7 +598,7 @@ CREATE TABLE sources (
 CREATE TABLE evidence (
   evidence_id TEXT PRIMARY KEY,
   evidence_class TEXT NOT NULL CHECK(evidence_class IN
-    ('OWNER_ASSERTION','REPOSITORY_FACT','MODEL_INFERENCE')),
+    ('OWNER_ASSERTION','REPOSITORY_FACT','PARTICIPATION','MODEL_INFERENCE')),
   source_id INTEGER NOT NULL REFERENCES sources(source_id),
   owner_claim_id TEXT,
   title TEXT,

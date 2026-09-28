@@ -129,7 +129,7 @@ cp reponpc.example.yml reponpc.yml
 
 編輯 `reponpc.yml` 中最重要的四個部分：
 
-- `profile`：你的名稱、簡介、連結、招呼語與建議問題。
+- `profile`：你的名稱、必填且需確認的 `github_login`、選填的 `aliases`、簡介、連結、招呼語與建議問題。
 - `repositories`：只加入你明確選擇的公開 repository。
 - `role`、`summary`、`claims`：寫下你願意公開並親自確認的貢獻。
 - `character` 與 `card`：以 `pack_id`／`pack_version` 選擇內建角色包，或提供標準 `256x448` 自訂 sprite sheet；自訂角色不必宣告物種。管理工作區提供獨立的「角色與動畫」入口，無須進入 raw YAML：可直接拖放 PNG／ZIP 或選擇整個素材資料夾，系統依 4×7 結構找出可轉換圖片，單一候選自動預覽，多個候選讓使用者看圖選擇，並可切換七種動畫狀態後再下載或寫入。一般 ZIP 不必改檔名、宣告物種或手寫 manifest；若提供嚴格 manifest，仍會依其明確映射處理。
@@ -175,7 +175,7 @@ uv run reponpc config validate reponpc.yml
 uv run reponpc index build --config reponpc.yml --output dist
 ```
 
-索引建立器會把選定的 branch、tag 或 ref 解析成 exact commit，套用檔案與大小限制，產生證據、公開 profile、角色資產與 README 卡片，再建立不可變 bundle。
+索引建立器會把選定的 branch、tag 或 ref 解析成 exact commit，套用檔案與大小限制，產生證據、公開 profile、角色資產與 README 卡片，再建立不可變 bundle。每個啟用的 repository 會依 `github_login` 讀取 GitHub 可見的提交期間與其他貢獻者資訊；查詢失敗會標記為無法取得，不會當作零次參與，也不會顯示提交次數。
 
 索引所使用的 embedding provider、模型、維度與前綴必須和 runtime 完全一致，否則 bundle 不會啟用。
 

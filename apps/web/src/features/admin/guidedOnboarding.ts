@@ -49,6 +49,8 @@ export interface ConfirmedContribution extends ContributionProposal {
 
 export interface GuidedProfile {
   displayName: string;
+  githubLogin: string;
+  aliasesText: string;
   headline: LocalizedText;
   bio: LocalizedText;
   greeting: LocalizedText;
@@ -259,7 +261,11 @@ export function guidedOnboardingFromConfig(
     return null;
   }
   const profileValue = value.profile;
-  if (typeof profileValue.display_name !== "string") return null;
+  if (
+    typeof profileValue.display_name !== "string" ||
+    typeof profileValue.github_login !== "string"
+  )
+    return null;
   const headline = localizedText(profileValue.headline);
   const bio = localizedText(profileValue.bio);
   const greeting = localizedText(profileValue.greeting);
@@ -306,13 +312,17 @@ export function guidedOnboardingFromConfig(
   return {
     step: "profile",
     mode: "guided",
-    githubAccount: "",
+    githubAccount: profileValue.github_login,
     discoveryPage: 0,
     discoveryHasMore: false,
     repositories,
     selectionConfirmed: true,
     profile: {
       displayName: profileValue.display_name,
+      githubLogin: profileValue.github_login,
+      aliasesText: Array.isArray(profileValue.aliases)
+        ? profileValue.aliases.join("\n")
+        : "",
       headline,
       bio,
       greeting,
@@ -364,6 +374,14 @@ export function guidedOnboardingReducer(
       return {
         ...state,
         githubAccount: action.account,
+        profile: {
+          ...state.profile,
+          githubLogin:
+            !state.profile.githubLogin ||
+            state.profile.githubLogin === state.githubAccount
+              ? action.account
+              : state.profile.githubLogin,
+        },
         discoveryPage: 0,
         discoveryHasMore: true,
       };
@@ -949,6 +967,8 @@ function cloneProposal(proposal: ContributionProposal): ContributionProposal {
 function emptyGuidedProfile(): GuidedProfile {
   return {
     displayName: "",
+    githubLogin: "",
+    aliasesText: "",
     headline: { "zh-TW": "", en: "" },
     bio: { "zh-TW": "", en: "" },
     greeting: {
@@ -961,6 +981,8 @@ function emptyGuidedProfile(): GuidedProfile {
 function cloneProfile(profile: GuidedProfile): GuidedProfile {
   return {
     displayName: profile.displayName,
+    githubLogin: profile.githubLogin,
+    aliasesText: profile.aliasesText,
     headline: { ...profile.headline },
     bio: { ...profile.bio },
     greeting: { ...profile.greeting },
@@ -970,6 +992,7 @@ function cloneProfile(profile: GuidedProfile): GuidedProfile {
 function profileIsComplete(profile: GuidedProfile): boolean {
   return [
     profile.displayName,
+    profile.githubLogin,
     profile.headline["zh-TW"],
     profile.headline.en,
     profile.bio["zh-TW"],
@@ -1019,7 +1042,14 @@ function parseProfile(value: unknown): GuidedProfile | null {
   const bio = localizedText(value.bio);
   const greeting = localizedText(value.greeting);
   if (!headline || !bio || !greeting) return null;
-  return { displayName: value.displayName, headline, bio, greeting };
+  return {
+    displayName: value.displayName,
+    githubLogin: typeof value.githubLogin === "string" ? value.githubLogin : "",
+    aliasesText: typeof value.aliasesText === "string" ? value.aliasesText : "",
+    headline,
+    bio,
+    greeting,
+  };
 }
 
 function metadataFromConfig(slug: string): RepositoryMetadata {

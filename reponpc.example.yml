@@ -20,6 +20,10 @@ locales:
 
 profile:
   display_name: Example Developer
+  github_login: your-github-name # Confirm the account whose linked commits may be cited.
+  aliases: [] # Optional names used to recognize references to the owner.
+  github_login: your-github-name # Confirm the account whose linked commits may be cited.
+  aliases: [] # Optional names used to recognize references to the owner.
   headline:
     zh-TW: 用程式與 AI 解決實際問題的軟體工程師
     en: Software engineer building practical systems with code and AI
