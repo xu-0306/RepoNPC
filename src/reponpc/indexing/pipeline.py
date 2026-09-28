@@ -142,20 +142,20 @@ def build_index_bundle(
             }
         )
     source_resolver = resolver or GitHubSourceResolver()
+    participation = getattr(source_resolver, "participation", None)
     snapshots: list[ResolvedRepository] = []
     for repository in config.repositories:
         if not repository.enabled:
             continue
         snapshot = source_resolver.resolve(slug=repository.slug, ref=repository.ref)
-        if isinstance(source_resolver, GitHubSourceResolver):
-            snapshot = replace(
-                snapshot,
-                participation=source_resolver.participation(
-                    slug=snapshot.slug,
-                    pinned_sha=snapshot.commit_sha,
-                    github_login=config.profile.github_login,
-                ),
+        if callable(participation):
+            collected = participation(
+                slug=snapshot.slug,
+                pinned_sha=snapshot.commit_sha,
+                github_login=config.profile.github_login,
             )
+            if collected is not None:
+                snapshot = replace(snapshot, participation=collected)
         snapshots.append(snapshot)
     resolved_snapshots = tuple(snapshots)
     instant = built_at or datetime.now(UTC)

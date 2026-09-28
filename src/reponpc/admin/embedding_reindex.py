@@ -32,6 +32,7 @@ from reponpc.indexing.github import GitHubSourceResolver, SourceResolutionError
 from reponpc.indexing.pipeline import IndexPipelineError, build_index_bundle
 from reponpc.indexing.sources import (
     EmbeddingProvider,
+    RepositoryParticipation,
     ResolvedConfiguration,
     ResolvedRepository,
 )
@@ -448,6 +449,7 @@ class _BoundedResolver:
     cancel_requested: Callable[[], bool]
     deadline: float
     monotonic: Callable[[], float]
+    participation_resolver: GitHubSourceResolver | None = None
 
     def resolve(self, *, slug: str, ref: str | None) -> ResolvedRepository:
         _raise_if_stopped(self.cancel_requested, self.deadline, self.monotonic)
@@ -457,6 +459,25 @@ class _BoundedResolver:
             cancel_requested=self.cancel_requested,
             deadline=self.deadline,
         )
+
+    def participation(
+        self, *, slug: str, pinned_sha: str, github_login: str
+    ) -> RepositoryParticipation | None:
+        _raise_if_stopped(self.cancel_requested, self.deadline, self.monotonic)
+        collect = getattr(self.participation_resolver or self.delegate, "participation", None)
+        if not callable(collect):
+            return None
+        result = collect(
+            slug=slug,
+            pinned_sha=pinned_sha,
+            github_login=github_login,
+            cancel_requested=self.cancel_requested,
+            deadline=self.deadline,
+        )
+        _raise_if_stopped(self.cancel_requested, self.deadline, self.monotonic)
+        if result is not None and not isinstance(result, RepositoryParticipation):
+            raise IndexPipelineError("participation_invalid")
+        return result
 
 
 def _raise_if_stopped(

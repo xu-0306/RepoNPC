@@ -227,7 +227,13 @@ class GitHubSourceResolver:
         )
 
     def participation(
-        self, *, slug: str, pinned_sha: str, github_login: str
+        self,
+        *,
+        slug: str,
+        pinned_sha: str,
+        github_login: str,
+        cancel_requested: Callable[[], bool] | None = None,
+        deadline: float | None = None,
     ) -> RepositoryParticipation:
         """Read only linked GitHub activity reachable from the pinned commit."""
 
@@ -241,7 +247,9 @@ class GitHubSourceResolver:
         first: ParticipationCommit | None = None
         last: ParticipationCommit | None = None
         try:
-            latest_payload, headers = self._request_json_with_headers(commit_path)
+            latest_payload, headers = self._request_json_with_headers(
+                commit_path, cancel_requested=cancel_requested, deadline=deadline
+            )
             if not isinstance(latest_payload, list) or len(latest_payload) > 1:
                 raise SourceResolutionError("github_response_invalid")
             if not latest_payload:
@@ -255,17 +263,27 @@ class GitHubSourceResolver:
                 if page == 1:
                     first = last
                 else:
-                    earliest = self._request_json(f"{commit_path}&page={page}")
+                    earliest = self._request_json(
+                        f"{commit_path}&page={page}",
+                        cancel_requested=cancel_requested,
+                        deadline=deadline,
+                    )
                     if not isinstance(earliest, list) or len(earliest) != 1:
                         raise SourceResolutionError("github_response_invalid")
                     first = _participation_commit(earliest[0], login)
                 has_visible = True
-        except SourceResolutionError:
+        except SourceResolutionError as exc:
+            if exc.code == "github_cancelled":
+                raise
             first = last = None
 
         other_contributors: bool | None = None
         try:
-            contributors = self._get_json_list(f"{base}/contributors?per_page=2")
+            contributors = self._get_json_list(
+                f"{base}/contributors?per_page=2",
+                cancel_requested=cancel_requested,
+                deadline=deadline,
+            )
             if len(contributors) > 2 or any(
                 not isinstance(item.get("login"), str) for item in contributors
             ):
@@ -273,7 +291,9 @@ class GitHubSourceResolver:
             other_contributors = any(
                 item["login"].casefold() != login.casefold() for item in contributors
             )
-        except SourceResolutionError:
+        except SourceResolutionError as exc:
+            if exc.code == "github_cancelled":
+                raise
             pass
         return RepositoryParticipation(
             is_repository_owner=owner.casefold() == login.casefold(),
@@ -327,8 +347,14 @@ class GitHubSourceResolver:
             raise SourceResolutionError("github_response_invalid")
         return payload
 
-    def _get_json_list(self, api_path: str) -> list[dict[str, Any]]:
-        payload = self._request_json(api_path)
+    def _get_json_list(
+        self,
+        api_path: str,
+        *,
+        cancel_requested: Callable[[], bool] | None = None,
+        deadline: float | None = None,
+    ) -> list[dict[str, Any]]:
+        payload = self._request_json(api_path, cancel_requested=cancel_requested, deadline=deadline)
         if not isinstance(payload, list) or any(not isinstance(item, dict) for item in payload):
             raise SourceResolutionError("github_response_invalid")
         return payload

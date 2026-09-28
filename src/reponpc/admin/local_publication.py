@@ -114,10 +114,12 @@ class LocalPortfolioBuilder:
         data_directory: Path,
         resolver: CancellableSourceResolver,
         max_bundle_bytes: int,
+        participation_resolver: GitHubSourceResolver | None = None,
     ) -> None:
         self.draft = draft
         self.root = data_directory / "local-builds"
         self.resolver = resolver
+        self.participation_resolver = participation_resolver
         self.max_bundle_bytes = max_bundle_bytes
         self.cache = PassageVectorCache(data_directory / "passage-cache")
 
@@ -156,7 +158,11 @@ class LocalPortfolioBuilder:
                 config_path,
                 workspace / "build",
                 resolver=_BoundedResolver(
-                    self.resolver, cancel_requested, deadline, time.monotonic
+                    self.resolver,
+                    cancel_requested,
+                    deadline,
+                    time.monotonic,
+                    participation_resolver=self.participation_resolver,
                 ),
                 embedding_provider=_BoundedEmbeddingProvider(provider, cancel_requested, deadline),
                 configuration_source=source,
@@ -294,6 +300,7 @@ class LocalPublication:
                         data_directory=self.root,
                         resolver=self.source_resolver,
                         max_bundle_bytes=self.max_bundle_bytes,
+                        participation_resolver=self.resolver,
                     ),
                     transition=transition,
                     on_finished=self._finished,

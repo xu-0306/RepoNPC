@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import io
+import time
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from urllib.error import HTTPError
@@ -32,7 +33,7 @@ def test_participation_uses_pinned_sha_and_last_page_without_counts(monkeypatch,
     latest = _linked_commit("c" * 40, "2026-08")
     earliest = _linked_commit("d" * 40, "2024-02")
 
-    def fetch_latest(_self, path: str):
+    def fetch_latest(_self, path: str, **_kwargs):
         paths.append(path)
         return [latest], {
             "Link": (
@@ -41,7 +42,7 @@ def test_participation_uses_pinned_sha_and_last_page_without_counts(monkeypatch,
             )
         }
 
-    def fetch_other(_self, path: str):
+    def fetch_other(_self, path: str, **_kwargs):
         paths.append(path)
         if path.endswith("&page=12"):
             return [earliest]
@@ -65,8 +66,10 @@ def test_participation_uses_pinned_sha_and_last_page_without_counts(monkeypatch,
 
 
 def test_participation_empty_commits_and_unlinked_email_stay_distinct(monkeypatch) -> None:
-    monkeypatch.setattr(GitHubSourceResolver, "_request_json_with_headers", lambda *_args: ([], {}))
-    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", lambda *_args: [])
+    monkeypatch.setattr(
+        GitHubSourceResolver, "_request_json_with_headers", lambda *_args, **_kwargs: ([], {})
+    )
+    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", lambda *_args, **_kwargs: [])
     resolver = GitHubSourceResolver()
     empty = resolver.participation(slug="octocat/demo", pinned_sha=SHA, github_login="octocat")
     assert empty.is_repository_owner is True
@@ -74,14 +77,16 @@ def test_participation_empty_commits_and_unlinked_email_stay_distinct(monkeypatc
     assert empty.first_commit is empty.last_commit is None
     assert empty.other_contributors_visible is False
 
-    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", lambda *_args: [{"login": None}])
+    monkeypatch.setattr(
+        GitHubSourceResolver, "_get_json_list", lambda *_args, **_kwargs: [{"login": None}]
+    )
     malformed = resolver.participation(slug="octocat/demo", pinned_sha=SHA, github_login="octocat")
     assert malformed.other_contributors_visible is None
 
     monkeypatch.setattr(
         GitHubSourceResolver,
         "_request_json_with_headers",
-        lambda *_args: (
+        lambda *_args, **_kwargs: (
             [{"sha": SHA, "author": None, "commit": {"author": {"date": "2025-01-01T00:00:00Z"}}}],
             {},
         ),
@@ -95,12 +100,12 @@ def test_participation_rejects_untrusted_pagination_link(monkeypatch) -> None:
     monkeypatch.setattr(
         GitHubSourceResolver,
         "_request_json_with_headers",
-        lambda *_args: (
+        lambda *_args, **_kwargs: (
             [_linked_commit("c" * 40, "2026-08")],
             {"Link": '<https://untrusted.example/commits?page=2>; rel="last"'},
         ),
     )
-    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", lambda *_args: [])
+    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", lambda *_args, **_kwargs: [])
     fact = GitHubSourceResolver().participation(
         slug="octocat/demo", pinned_sha=SHA, github_login="octocat"
     )
@@ -112,12 +117,12 @@ def test_participation_without_calculable_last_page_is_unavailable(monkeypatch) 
     monkeypatch.setattr(
         GitHubSourceResolver,
         "_request_json_with_headers",
-        lambda *_args: (
+        lambda *_args, **_kwargs: (
             [_linked_commit("c" * 40, "2026-08")],
             {"Link": '<https://api.github.com/repos/octocat/demo/commits?page=2>; rel="next"'},
         ),
     )
-    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", lambda *_args: [])
+    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", lambda *_args, **_kwargs: [])
     fact = GitHubSourceResolver().participation(
         slug="octocat/demo", pinned_sha=SHA, github_login="octocat"
     )
@@ -127,7 +132,7 @@ def test_participation_without_calculable_last_page_is_unavailable(monkeypatch) 
 
 @pytest.mark.parametrize("code", ["github_rate_limited", "github_request_failed"])
 def test_participation_failed_requests_are_unavailable(monkeypatch, code: str) -> None:
-    def unavailable(*_args):
+    def unavailable(*_args, **_kwargs):
         raise SourceResolutionError(code)
 
     monkeypatch.setattr(GitHubSourceResolver, "_request_json_with_headers", unavailable)
@@ -152,6 +157,31 @@ def test_participation_http_failures_do_not_become_zero(monkeypatch, status: int
     )
     assert fact.has_visible_commits is None
     assert fact.other_contributors_visible is None
+
+
+def test_participation_bounds_each_request_and_does_not_swallow_cancellation(monkeypatch):
+    calls = []
+    cancelled = [False]
+    deadline = time.monotonic() + 10
+
+    def bounded(_self, path, **kwargs):
+        assert kwargs["deadline"] == deadline
+        assert kwargs["cancel_requested"]() is False
+        calls.append(path)
+        cancelled[0] = True
+        raise SourceResolutionError("github_cancelled")
+
+    monkeypatch.setattr(GitHubSourceResolver, "_request_json_with_headers", bounded)
+    with pytest.raises(SourceResolutionError) as error:
+        GitHubSourceResolver().participation(
+            slug="octocat/demo",
+            pinned_sha=SHA,
+            github_login="octocat",
+            cancel_requested=lambda: cancelled[0],
+            deadline=deadline,
+        )
+    assert error.value.code == "github_cancelled"
+    assert len(calls) == 1
 
 
 def test_resolver_pins_default_branch_and_preserves_non_regular_tree_entries(monkeypatch) -> None:

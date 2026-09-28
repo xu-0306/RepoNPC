@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from fastapi.testclient import TestClient
 from reponpc.admin.embedding_reindex import EmbeddingReindexCoordinator
 from reponpc.admin.local_portfolio import LocalPortfolioStore
 from reponpc.admin.local_publication import LocalPortfolioBuilder, LocalPublication
+from reponpc.indexing.sources import ParticipationCommit, RepositoryParticipation
 from reponpc.main import create_app
 from tests.integration.test_bundle_producer_consumer import _fixture_snapshot
 from tests.integration.test_embedding_reindex import _profile, _system
@@ -20,6 +22,20 @@ class FixtureResolver:
     def resolve(self, **kwargs):
         assert kwargs["slug"] == _fixture_snapshot().slug
         return _fixture_snapshot()
+
+
+class FixtureParticipation:
+    def participation(self, **kwargs):
+        snapshot = _fixture_snapshot()
+        assert (kwargs["slug"], kwargs["pinned_sha"], kwargs["github_login"]) == (
+            snapshot.slug,
+            snapshot.commit_sha,
+            "fixture-owner",
+        )
+        assert not kwargs["cancel_requested"]()
+        assert kwargs["deadline"] > time.monotonic()
+        commit = ParticipationCommit("b" * 40, "2025-03")
+        return RepositoryParticipation(True, True, commit, commit, False)
 
 
 def test_local_build_reuses_vectors_and_serves_truthful_assertion_citations(tmp_path: Path):
@@ -46,6 +62,7 @@ def test_local_build_reuses_vectors_and_serves_truthful_assertion_citations(tmp_
         data_directory=tmp_path / "data",
         resolver=FixtureResolver(),
         max_bundle_bytes=10 * 1024 * 1024,
+        participation_resolver=FixtureParticipation(),
     )
     coordinator = EmbeddingReindexCoordinator(
         registry=registry, manager=manager, builder=builder, provider_transition=transition
@@ -70,6 +87,7 @@ def test_local_build_reuses_vectors_and_serves_truthful_assertion_citations(tmp_
             data_directory=tmp_path / "data",
             resolver=FixtureResolver(),
             max_bundle_bytes=10 * 1024 * 1024,
+            participation_resolver=FixtureParticipation(),
         )
         coordinator.queue(
             profile.profile_id,
@@ -85,6 +103,11 @@ def test_local_build_reuses_vectors_and_serves_truthful_assertion_citations(tmp_
             rows = [index.evidence(eid) for eid in index.vectors.evidence_ids]
             assertion = next(row for row in rows if row.evidence_class == "OWNER_ASSERTION")
             fact = next(row for row in rows if row.evidence_class == "REPOSITORY_FACT")
+            participation = [row for row in rows if row.evidence_class == "PARTICIPATION"]
+            assert len(participation) == 2
+            assert any(
+                row.github_permalink.endswith("/commit/" + "b" * 40) for row in participation
+            )
         assert assertion.github_permalink.startswith("/api/public/owner-statements/")
         assert fact.github_permalink.startswith("https://github.com/")
         app = create_app(bundle_manager=manager)
@@ -116,6 +139,42 @@ def test_local_build_reuses_vectors_and_serves_truthful_assertion_citations(tmp_
         assert registry.get(profile.profile_id).active
     finally:
         coordinator.shutdown()
+
+
+def test_bounded_reindex_resolver_forwards_participation_and_preserves_cancellation():
+    import pytest
+
+    from reponpc.admin.embedding_reindex import ReindexCancelled, _BoundedResolver
+
+    stopped = [False]
+
+    class Resolver(FixtureParticipation):
+        def participation(self, **kwargs):
+            result = super().participation(**kwargs)
+            stopped[0] = True
+            return result
+
+    bounded = _BoundedResolver(
+        Resolver(), lambda: stopped[0], time.monotonic() + 20, time.monotonic
+    )
+    with pytest.raises(ReindexCancelled):
+        bounded.participation(
+            slug=_fixture_snapshot().slug,
+            pinned_sha=_fixture_snapshot().commit_sha,
+            github_login="fixture-owner",
+        )
+    # An archive/fixture without the optional capability keeps its supplied snapshot.
+    plain = _BoundedResolver(
+        FixtureResolver(), lambda: False, time.monotonic() + 20, time.monotonic
+    )
+    assert (
+        plain.participation(
+            slug=_fixture_snapshot().slug,
+            pinned_sha=_fixture_snapshot().commit_sha,
+            github_login="fixture-owner",
+        )
+        is None
+    )
 
 
 def test_local_publication_receipt_recovers_interruption(tmp_path: Path):
