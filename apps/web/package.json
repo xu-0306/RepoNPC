@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "format": "prettier --check .",
-    "format:write": "prettier --write .",
+    "format": "prettier --check . --end-of-line auto",
+    "format:write": "prettier --write . --end-of-line auto",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
