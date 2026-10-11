@@ -93,6 +93,7 @@ function repository(
     analysis,
     ownerStatement: "I maintained the parser with another contributor.",
     proposal,
+    proposalSource: "model",
     previousContribution: null,
     confirmedContribution: null,
     ...overrides,
@@ -219,10 +220,109 @@ describe("GuidedOnboardingView", () => {
 
     expect(markup).toContain('data-evidence-class="REPOSITORY_FACT"');
     expect(markup).toContain('data-evidence-class="MODEL_INFERENCE"');
-    expect(markup).toContain("Project information you can verify");
+    expect(markup).toContain("View project evidence (1 source)");
     expect(markup).toContain("AI inferences");
     expect(markup).toContain("E_fact_1");
     expect(markup).toContain("The repository may provide a reusable parser.");
+  });
+
+  it.each(["en", "zh-TW"] as const)(
+    "pairs each interpretation with its own collapsed sources in %s",
+    (locale) => {
+      const extraFact = {
+        ...analysis.facts[0],
+        evidence_id: "unreferenced",
+        path: "docs/notes.md",
+        start_line: null,
+        end_line: null,
+        excerpt: "<script>untrusted()</script>",
+      };
+      const secondInference = {
+        ...analysis.inferences[0],
+        statement: {
+          en: "Second interpretation. ".repeat(30),
+          "zh-TW": "另一份完整的解讀內容。".repeat(40),
+        },
+        supporting_evidence_ids: ["missing"],
+      };
+      const markup = renderToStaticMarkup(
+        <GuidedOnboardingView
+          {...props({
+            locale,
+            state: state({
+              step: "analysis",
+              repositories: [
+                repository({
+                  analysis: {
+                    ...analysis,
+                    facts: [...analysis.facts, extraFact],
+                    inferences: [...analysis.inferences, secondInference],
+                  },
+                }),
+              ],
+            }),
+          })}
+        />,
+      );
+      const cards = markup
+        .split('class="guided-onboarding__interpretation"')
+        .slice(1);
+      expect(cards).toHaveLength(2);
+      expect(cards[0]).toContain("src/parser.ts:4-12");
+      expect(cards[0]).not.toContain("docs/notes.md");
+      expect(cards[1]).not.toContain("src/parser.ts");
+      expect(markup).toContain(
+        locale === "en"
+          ? "AI interpretation · unconfirmed"
+          : "AI 整理・尚未確認",
+      );
+      expect(markup).toContain(
+        locale === "en" ? "Read the full interpretation" : "閱讀完整解讀",
+      );
+      expect(markup).toContain(
+        locale === "en"
+          ? "Some supporting evidence is missing"
+          : "部分參考依據未包含",
+      );
+      expect(markup).toContain(
+        locale === "en"
+          ? "Other verifiable project content"
+          : "其他可核對的專案內容",
+      );
+      expect(markup).toContain("&lt;script&gt;untrusted()&lt;/script&gt;");
+      expect(markup).not.toContain("<script>");
+      expect(markup).not.toMatch(/<details[^>]*open/);
+      expect(markup).toContain(analysis.repository.commit_sha);
+      expect(markup).not.toContain('data-evidence-class="OWNER_ASSERTION"');
+    },
+  );
+
+  it("preserves facts without inferences and allows an empty completed result to continue", () => {
+    for (const facts of [analysis.facts, []]) {
+      const markup = renderToStaticMarkup(
+        <GuidedOnboardingView
+          {...props({
+            state: state({
+              step: "analysis",
+              repositories: [
+                repository({
+                  analysis: { ...analysis, facts, inferences: [] },
+                }),
+              ],
+            }),
+          })}
+        />,
+      );
+      expect(markup).toContain("No AI inferences.");
+      expect(markup).toMatch(
+        /<button[^>]*>Next: describe my contribution<\/button>/,
+      );
+      expect(markup).toContain(
+        facts.length
+          ? "Other verifiable project content"
+          : "No verifiable project information to display.",
+      );
+    }
   });
 
   it("shows a server-owned provider preflight without exposing connection details", () => {
@@ -264,9 +364,7 @@ describe("GuidedOnboardingView", () => {
       />,
     );
 
-    expect(markup).toContain(
-      "Review information you can verify and describe contribution",
-    );
+    expect(markup).toContain("Next: describe my contribution");
     expect(markup).not.toContain(
       "Complete analysis for every selected project before continuing.",
     );
@@ -292,7 +390,7 @@ describe("GuidedOnboardingView", () => {
     expect(activeMarkup).toContain("Start batch analysis");
     expect(activeMarkup).not.toContain("Model connection");
     expect(activeMarkup).toMatch(
-      /<button[^>]*disabled[^>]*>Review information you can verify and describe contribution<\/button>/,
+      /<button[^>]*disabled[^>]*>Next: describe my contribution<\/button>/,
     );
     expect(activeMarkup).toMatch(/<button[^>]*disabled[^>]*>Back<\/button>/);
     expect(activeMarkup).toMatch(
@@ -315,10 +413,10 @@ describe("GuidedOnboardingView", () => {
       />,
     );
     expect(terminalMarkup).toMatch(
-      /<button[^>]*>Review information you can verify and describe contribution<\/button>/,
+      /<button[^>]*>Next: describe my contribution<\/button>/,
     );
     expect(terminalMarkup).not.toMatch(
-      /<button[^>]*disabled[^>]*>Review information you can verify and describe contribution<\/button>/,
+      /<button[^>]*disabled[^>]*>Next: describe my contribution<\/button>/,
     );
     expect(terminalMarkup).toMatch(/<button[^>]*>Back<\/button>/);
     expect(terminalMarkup).toContain('data-analysis-result="octocat/demo"');
@@ -349,6 +447,43 @@ describe("GuidedOnboardingView", () => {
       "Only explicit confirmation makes this your confirmed contribution",
     );
   });
+
+  it.each(["zh-TW", "en"] as const)(
+    "does not describe confirmed contribution as awaiting confirmation in %s",
+    (locale) => {
+      const markup = renderToStaticMarkup(
+        <GuidedOnboardingView
+          {...props({
+            locale,
+            state: state({
+              step: "contributions",
+              repositories: [
+                repository({
+                  confirmedContribution: {
+                    ...proposal,
+                    evidence_class: "OWNER_ASSERTION",
+                  },
+                }),
+              ],
+            }),
+          })}
+        />,
+      );
+      expect(markup).not.toContain(
+        locale === "en"
+          ? "Personal contribution awaiting your confirmation"
+          : "待你確認的個人貢獻",
+      );
+      expect(markup).not.toContain(
+        locale === "en"
+          ? "These are proposals only and are not in YAML yet."
+          : "這些內容仍是草稿，尚未進入 YAML。",
+      );
+      expect(markup).toContain(
+        locale === "en" ? "Edit confirmed content" : "編輯已確認內容",
+      );
+    },
+  );
 
   it("keeps contribution entry usable after unavailable analysis", () => {
     const markup = renderToStaticMarkup(
@@ -490,3 +625,108 @@ describe("GuidedOnboardingView", () => {
     expect(markup).toContain("引導設定錯誤");
   });
 });
+
+it.each(["zh-TW", "en"] as const)(
+  "labels manual contributions and selection in %s",
+  (locale) => {
+    const copy =
+      locale === "zh-TW"
+        ? ["手動填寫的貢獻", "確認專案並填寫貢獻"]
+        : [
+            "Manually entered contribution",
+            "Confirm projects and enter contributions",
+          ];
+    const markup = renderToStaticMarkup(
+      <GuidedOnboardingView
+        {...props({
+          locale,
+          state: state({
+            step: "contributions",
+            route: "manual",
+            repositories: [repository({ proposalSource: "manual" })],
+          }),
+        })}
+      />,
+    );
+    expect(markup).toContain(copy[0]);
+    expect(markup).not.toContain(
+      locale === "zh-TW"
+        ? "AI 建議（尚未確認）"
+        : "AI suggestion (unconfirmed)",
+    );
+    const selection = renderToStaticMarkup(
+      <GuidedOnboardingView
+        {...props({
+          locale,
+          state: state({ step: "repositories", route: "manual" }),
+        })}
+      />,
+    );
+    expect(selection).toContain(copy[1]);
+  },
+);
+
+it.each(["zh-TW", "en"] as const)(
+  "explains both welcome routes beside their accessible controls in %s",
+  (locale) => {
+    const input = props({ locale });
+    const markup = renderToStaticMarkup(<GuidedOnboardingView {...input} />);
+    expect(markup).toContain('aria-describedby="guided-start-ai-help"');
+    expect(markup).toContain('aria-describedby="guided-start-manual-help"');
+    const ai = markup.match(/<p id="guided-start-ai-help">([^<]+)<\/p>/)?.[1];
+    const manual = markup.match(
+      /<p id="guided-start-manual-help">([^<]+)<\/p>/,
+    )?.[1];
+    expect(ai).toContain(
+      locale === "zh-TW" ? "測試並確認選用" : "test and explicitly select",
+    );
+    expect(manual).toContain(
+      locale === "zh-TW" ? "不需模型" : "No model is needed",
+    );
+    expect(manual).toContain(
+      locale === "zh-TW" ? "即時聊天仍需模型" : "live chat still need models",
+    );
+    expect(manual).toContain(
+      locale === "zh-TW" ? "不等於公開分享" : "does not publish it",
+    );
+    expect(markup).not.toMatch(
+      /<details[^>]*>[\s\S]*id="guided-start-manual-help"/,
+    );
+    expect(input.onAction).not.toHaveBeenCalled();
+    expect(input.onAnalyze).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["zh-TW", "en"] as const)(
+  "renders draft recovery in the focused error summary without replacing content in %s",
+  (locale) => {
+    const current = state({ step: "review", profile, profileConfirmed: true });
+    for (const errorCode of [
+      "SERVICE_NOT_READY",
+      "VALIDATION_ERROR",
+      "REQUEST_FAILED",
+      "untrusted-error-canary",
+    ]) {
+      const markup = renderToStaticMarkup(
+        <GuidedOnboardingView
+          {...props({ locale, state: current, errorCode })}
+        />,
+      );
+      expect(markup).toContain('role="alert" tabindex="-1"');
+      expect(markup).toContain(profile.displayName);
+      expect(markup).toContain(
+        locale === "zh-TW" ? "輸入仍保留" : "input is kept",
+      );
+      expect(markup).not.toContain("untrusted-error-canary");
+      if (
+        errorCode === "SERVICE_NOT_READY" ||
+        errorCode === "untrusted-error-canary"
+      ) {
+        expect(markup).toContain(locale === "zh-TW" ? "維護" : "Maintenance");
+        expect(markup).not.toContain(locale === "zh-TW" ? "回報" : "report");
+      }
+      expect(markup).not.toContain("https://github.com/username");
+    }
+    expect(current.step).toBe("review");
+  },
+);

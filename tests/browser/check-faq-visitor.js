@@ -9,7 +9,7 @@ export async function checkApprovedFaqVisitor(tab) {
     counts: JSON.parse(document.querySelector('[aria-label="Public request counts"]').textContent),
     answers: document.querySelectorAll(".turn--assistant").length,
     text: document.body.textContent,
-    questions: Array.from(document.querySelectorAll(".suggestion-list button")).map(node => ({ text: node.textContent, disabled: node.disabled })),
+    questions: Array.from(document.querySelectorAll(".visitor-suggestion-list button")).map(node => ({ text: node.textContent.trim().replace(/\s*↗$/, ""), disabled: node.disabled })),
   }));
   const wait = async predicate => {
     const deadline = Date.now() + 10000;
@@ -23,34 +23,37 @@ export async function checkApprovedFaqVisitor(tab) {
   await wait(state => state.questions.some(item => item.text === "已核准的問題" && !item.disabled));
   await button("已核准的問題").click();
   let state = await wait(state => state.answers === 1);
-  verify(state.text.includes("APPROVED_ZH_ANSWER") && state.counts.faq === 2 && state.counts.chat === 0, "approved chip shows instant validated answer while chat is unavailable");
+  verify(state.text.includes("APPROVED_ZH_ANSWER") && state.counts.faq === 1 && state.counts.chat === 0, "approved chip shows instant validated answer while chat is unavailable");
   await tab.playwright.getByText("來源", { exact: true }).click();
   verify((await tab.playwright.domSnapshot()).includes("S1: Synthetic evidence"), "instant answer keeps collapsible verified citations");
-  await button("Delay next FAQ fixture").click();
+  await button("Toggle approval fixture").click();
   await button("已核准的問題").click();
-  state = await wait(state => state.counts.held);
-  verify(state.questions.every(item => item.disabled) && state.counts.faq === 3, "pending approval lookup prevents duplicate selection");
+  state = await wait(state => state.answers === 2);
+  verify(state.counts.faq === 1 && state.counts.chat === 0, "mid-session withdrawal remains cached until FAQ/profile reload");
+  await button("English").click();
+  state = await wait(state => state.questions.length === 0 && state.counts.faq === 2);
+  verify(state.answers === 2, "refreshed withdrawn FAQ removes chips without appending an answer");
+  await button("Toggle approval fixture").click();
+  await button("Delay next FAQ fixture").click();
+  await button("繁體中文").click();
+  await wait(state => state.counts.held);
   await button("English").click();
   await wait(state => state.questions.some(item => item.text === "Approved question" && !item.disabled));
-  await button("繁體中文").click();
-  await wait(state => state.questions.some(item => item.text === "已核准的問題" && !item.disabled));
   await button("Release FAQ fixture").click();
   state = await wait(state => !state.counts.held);
-  verify(state.answers === 1 && state.questions.some(item => !item.disabled), "late reply after zh-en-zh cannot append an outdated answer or strand controls");
-  await button("Toggle approval fixture").click();
-  await button("已核准的問題").click();
-  state = await wait(state => state.questions.length === 0);
-  verify(state.answers === 1 && state.counts.chat === 0, "fresh rejection removes cached chip without serving it or calling a model");
-  await button("Toggle approval fixture").click();
-  await button("English").click();
-  await wait(state => state.questions.some(item => item.text === "Approved question"));
+  verify(state.answers === 2 && state.questions.every(item => item.text === "Approved question"), "late initial FAQ response cannot replace the new locale");
   await button("Switch visitor bundle fixture").click();
+  await button("繁體中文").click();
+  await wait(state => state.questions.some(item => item.text === "已核准的問題" && !item.disabled));
+  await button("English").click();
+  await wait(state => state.questions.some(item => item.text === "Approved question" && !item.disabled));
   const before = (await read()).counts.faq;
   await button("Approved question").click();
-  state = await wait(state => state.counts.faq >= before + 2 && state.questions.some(item => item.text === "Approved question" && !item.disabled));
-  verify(state.answers === 1, "bundle mismatch reloads profile and withholds the previous approval");
-  await button("Approved question").click();
-  state = await wait(state => state.answers === 2);
-  verify(state.text.includes("APPROVED_EN_ANSWER") && state.counts.chat === 0, "current English approval serves after profile reload without generation");
+  state = await wait(state => state.answers === 3);
+  verify(state.text.includes("APPROVED_EN_ANSWER") && state.counts.faq === before && state.counts.chat === 0, "current English cached approval serves without another request");
+  await tab.playwright.getByRole("textbox", { name: "Your question", exact: true }).fill("Approved question");
+  await button("Ask question").click();
+  state = await wait(state => state.answers === 4);
+  verify(state.counts.faq === before && state.counts.chat === 0, "offline typed questions match the cached FAQ without a request");
   return { passed: checks.length, checks };
 }

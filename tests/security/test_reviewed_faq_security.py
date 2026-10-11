@@ -77,17 +77,7 @@ def test_faq_routes_protect_mutations_and_share_only_approved_current_rows(tmp_p
         (f"/api/admin/portfolio/faq/{approved}/regenerate", {"revision": 1}),
         (
             f"/api/admin/portfolio/faq/{approved}/review",
-            {"revision": 1, "bundle_id": "bundle-current", "action": "approve"},
-        ),
-        (
-            f"/api/admin/portfolio/faq/{approved}/rewrite",
-            {
-                "revision": 1,
-                "expected_draft_revision": "a" * 64,
-                "repository": "owner/project",
-                "kind": "context",
-                "statement": {"zh-TW": "測試自述", "en": "Fixture statement"},
-            },
+            {"revision": 1, "action": "approve"},
         ),
     ]
     with TestClient(app, base_url=ORIGIN) as client:
@@ -115,7 +105,6 @@ def test_faq_routes_protect_mutations_and_share_only_approved_current_rows(tmp_p
             headers=headers,
             json={
                 "revision": 1,
-                "bundle_id": "bundle-current",
                 "action": "approve",
                 "answer_markdown": "UNVALIDATED_ANSWER_CANARY",
             },
@@ -129,10 +118,37 @@ def test_faq_routes_protect_mutations_and_share_only_approved_current_rows(tmp_p
         assert served.headers["cache-control"] == exported.headers["cache-control"] == "no-store"
         assert "attachment" in exported.headers["content-disposition"]
         assert set(served.json()) == {"bundle_id", "locale", "entries"}
-        assert len(served.json()["entries"]) == 1
-        assert set(served.json()["entries"][0]) == {"question", "answer_markdown", "citations"}
+        assert len(served.json()["entries"]) == 2
+        assert set(served.json()["entries"][0]) == {
+            "question",
+            "variants",
+            "answer_markdown",
+            "citations",
+        }
         for forbidden in ("CANARY", "review_state", "entry_id", "revision", "provider"):
             assert forbidden not in served.text
+
+
+@pytest.mark.parametrize(
+    "stored_bundle,requested_bundle,revision,code",
+    [
+        ("bundle-current", "bundle-old", 1, "FAQ_STALE"),
+        ("bundle-old", "bundle-current", 1, "FAQ_STALE"),
+        ("bundle-current", "bundle-current", 2, "FAQ_CONFLICT"),
+    ],
+)
+def test_variant_update_preserves_rows_on_stale_bundle_or_revision(
+    tmp_path, stored_bundle, requested_bundle, revision, code
+):
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    entry_id = _seed(database, 1, "approved", bundle=stored_bundle)
+    faq = ReviewedFaq(database=database, bundles=SyntheticBundles(), chat_supplier=lambda: None)
+    before = faq.view("en")
+    with pytest.raises(FaqError) as error:
+        faq.replace_variants(entry_id, revision, requested_bundle, ["Alternative question"])
+    assert error.value.code == code
+    assert faq.view("en") == before
 
 
 def test_regeneration_withholds_old_answer_until_new_validation_completes(tmp_path):
@@ -166,7 +182,7 @@ def test_regeneration_withholds_old_answer_until_new_validation_completes(tmp_pa
             current = faq.view("en")["entries"][0]
             assert faq.public_payload("en")["entries"] == []
             with pytest.raises(FaqError) as blocked:
-                faq.review(entry_id, current["revision"], "bundle-current", "approve")
+                faq.review(entry_id, current["revision"], "approve")
             assert blocked.value.code == "FAQ_NOT_READY"
             with pytest.raises(FaqError) as duplicate:
                 faq.regenerate(entry_id, 1)
@@ -176,8 +192,41 @@ def test_regeneration_withholds_old_answer_until_new_validation_completes(tmp_pa
             release.set()
         completed = generated.result(timeout=5)
     assert completed["coverage_status"] == "no_relevant_content"
-    faq.review(entry_id, completed["revision"], "bundle-current", "approve")
+    faq.review(entry_id, completed["revision"], "approve")
     assert (
         faq.public_payload("en")["entries"][0]["answer_markdown"]
         == "No supported content was found."
     )
+
+
+@pytest.mark.parametrize("operation", ["review", "variants", "regenerate"])
+def test_unused_legacy_rewrite_values_are_ignored_and_cleared(tmp_path, operation):
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    entry_id = _seed(database, 1, "approved", rewrite="invalid legacy JSON")
+
+    class Chat:
+        def answer_for_review(self, **kwargs):
+            assert set(kwargs) == {"message", "locale"}
+            return ChatDelivery(
+                index_version="bundle-current",
+                locale="en",
+                evidence_count=0,
+                answer_markdown="No supported content.",
+                citations=(),
+                finish_reason="stop",
+                usage=None,
+                insufficient_evidence=True,
+            )
+
+    faq = ReviewedFaq(database=database, bundles=SyntheticBundles(), chat_supplier=lambda: Chat())
+    assert "rewrite" not in faq.view("en")["entries"][0]
+    assert len(faq.public_payload("en")["entries"]) == 1
+    if operation == "review":
+        faq.review(entry_id, 1, "approve")
+    elif operation == "variants":
+        faq.replace_variants(entry_id, 1, "bundle-current", ["Alternative question"])
+    else:
+        faq.regenerate(entry_id, 1)
+    with database.connection() as connection:
+        assert connection.execute("SELECT rewrite_json FROM faq_entries").fetchone()[0] is None

@@ -11,6 +11,8 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from reponpc.config.models import Locale, PublicConfig
+from reponpc.indexing.sources import ResolvedRepository
+from reponpc.scene.resolve import PublicScene, resolve_scene
 
 MAX_PUBLIC_PROFILE_BYTES = 1024 * 1024
 LOCALE_ORDER: tuple[Locale, Locale] = ("zh-TW", "en")
@@ -64,6 +66,16 @@ class PublicRepository(_StrictProfileModel):
     role: Annotated[str, Field(min_length=1, max_length=10_000)]
     tags: Annotated[list[Annotated[str, Field(min_length=1, max_length=64)]], Field(max_length=100)]
     demo_url: Annotated[str | None, Field(max_length=2048)] = None
+    language: Annotated[str | None, Field(max_length=100)] = None
+    stars: Annotated[int | None, Field(ge=0, le=2_147_483_647)] = None
+    forks: Annotated[int | None, Field(ge=0, le=2_147_483_647)] = None
+
+    @field_validator("language")
+    @classmethod
+    def validate_language(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("repository language must be non-empty")
+        return value
 
     @field_validator("slug")
     @classmethod
@@ -96,6 +108,13 @@ class CharacterMetadata(_StrictProfileModel):
     revision: Annotated[int, Field(ge=0)]
     frame_duration_ms: Annotated[int, Field(ge=80, le=1000)]
     movement: Literal["none", "subtle"]
+    scene: PublicScene | None = None
+
+    @model_validator(mode="after")
+    def validate_scene_revision(self) -> CharacterMetadata:
+        if self.scene is not None and self.scene.revision != self.revision:
+            raise ValueError("scene revision must match character revision")
+        return self
 
 
 class IndexMetadata(_StrictProfileModel):
@@ -151,8 +170,14 @@ class BilingualPublicProfile(_StrictProfileModel):
             [link.url for link in english.profile.links],
         ):
             raise ValueError("non-localized profile fields differ")
-        zh_repositories = [(item.slug, item.tags, item.demo_url) for item in zh_tw.repositories]
-        en_repositories = [(item.slug, item.tags, item.demo_url) for item in english.repositories]
+        zh_repositories = [
+            (item.slug, item.tags, item.demo_url, item.language, item.stars, item.forks)
+            for item in zh_tw.repositories
+        ]
+        en_repositories = [
+            (item.slug, item.tags, item.demo_url, item.language, item.stars, item.forks)
+            for item in english.repositories
+        ]
         if zh_repositories != en_repositories:
             raise ValueError("non-localized repository fields differ")
         return self
@@ -164,12 +189,20 @@ def build_public_profile_bytes(
     index_version: str,
     built_at: datetime,
     repository_count: int,
+    sprite_content: bytes | None = None,
+    background_content: bytes | None = None,
+    repository_snapshots: tuple[ResolvedRepository, ...] = (),
 ) -> bytes:
-    """Build deterministic internal schema-v1 bytes from validated inputs."""
+    """Build profile bytes, resolving scene only from an explicit canonical sheet."""
 
     repositories = tuple(repository for repository in config.repositories if repository.enabled)
     if repository_count != len(repositories):
         raise PublicProfileError("public_profile_metadata_invalid")
+    if (config.character.scene.background_path is None) != (background_content is None):
+        raise PublicProfileError("public_profile_generation_failed")
+    if config.character.scene.background_path is not None and sprite_content is None:
+        raise PublicProfileError("public_profile_generation_failed")
+    snapshots = {snapshot.slug: snapshot for snapshot in repository_snapshots}
     try:
         locales = {
             locale: LocalizedPublicProfile(
@@ -192,6 +225,13 @@ def build_public_profile_bytes(
                         role=repository.role[locale],
                         tags=list(repository.tags),
                         demo_url=repository.demo_url,
+                        language=(
+                            snapshot.language
+                            if (snapshot := snapshots.get(repository.slug))
+                            else None
+                        ),
+                        stars=snapshot.stars if snapshot else None,
+                        forks=snapshot.forks if snapshot else None,
                     )
                     for repository in repositories
                 ],
@@ -208,6 +248,16 @@ def build_public_profile_bytes(
                 revision=config.character.revision,
                 frame_duration_ms=config.character.animation.frame_duration_ms,
                 movement=config.character.animation.movement,
+                scene=(
+                    resolve_scene(
+                        config.character.scene,
+                        sprite_content=sprite_content,
+                        revision=config.character.revision,
+                        background_content=background_content,
+                    ).public
+                    if sprite_content is not None
+                    else None
+                ),
             ),
             index=IndexMetadata(
                 version=index_version,
@@ -217,7 +267,10 @@ def build_public_profile_bytes(
         )
     except (KeyError, ValidationError, ValueError) as exc:
         raise PublicProfileError("public_profile_generation_failed") from exc
-    return _canonical_json(document.model_dump(mode="json"))
+    serialized = document.model_dump(mode="json")
+    if document.character.scene is None:
+        serialized["character"].pop("scene", None)
+    return _canonical_json(serialized)
 
 
 def parse_public_profile_bytes(payload: bytes) -> BilingualPublicProfile:
@@ -248,6 +301,30 @@ def validate_public_profile_metadata(
         raise PublicProfileError("public_profile_metadata_invalid")
 
 
+def normalize_public_profile_scene(
+    document: BilingualPublicProfile,
+    *,
+    sprite_content: bytes,
+    background_content: bytes | None = None,
+) -> BilingualPublicProfile:
+    """Resolve only legacy profiles missing scene, using their active canonical sheet."""
+
+    if document.character.scene is not None:
+        return document
+    try:
+        scene = resolve_scene(
+            {},
+            sprite_content=sprite_content,
+            revision=document.character.revision,
+            background_content=background_content,
+        ).public
+    except ValueError as exc:
+        raise PublicProfileError("public_profile_invalid") from exc
+    return document.model_copy(
+        update={"character": document.character.model_copy(update={"scene": scene})}
+    )
+
+
 def localized_public_profile_bytes(document: BilingualPublicProfile, locale: str) -> bytes:
     """Return the unchanged public response contract for one exact locale."""
 
@@ -262,6 +339,8 @@ def localized_public_profile_bytes(document: BilingualPublicProfile, locale: str
         "character": document.character.model_dump(mode="json"),
         "index": document.index.model_dump(mode="json"),
     }
+    if document.character.scene is None:
+        response["character"].pop("scene", None)
     return _canonical_json(response)
 
 

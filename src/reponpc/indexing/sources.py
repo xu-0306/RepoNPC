@@ -21,6 +21,18 @@ from reponpc.indexing.exclusions import SourceEntryKind
 _REPOSITORY_SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 
+def optional_repository_language(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return value.strip()[:100] or None
+
+
+def optional_repository_count(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 2_147_483_647:
+        return None
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class EmbeddingIdentity:
     """The immutable embedding contract shared by an index and its reader."""
@@ -132,6 +144,9 @@ class ResolvedRepository:
     github_html_url: str
     blobs: tuple[RepositoryBlob, ...]
     participation: RepositoryParticipation | None = None
+    language: str | None = None
+    stars: int | None = None
+    forks: int | None = None
 
     def __post_init__(self) -> None:
         if not _REPOSITORY_SLUG_RE.fullmatch(self.slug):
@@ -142,6 +157,22 @@ class ResolvedRepository:
             )
         if not self.github_html_url.startswith("https://"):
             raise ValueError("repository HTML URL must use HTTPS")
+        if self.language is not None and (
+            not isinstance(self.language, str)
+            or not self.language.strip()
+            or len(self.language) > 100
+        ):
+            raise ValueError("repository language metadata is invalid")
+        if any(
+            value is not None
+            and (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or not 0 <= value <= 2_147_483_647
+            )
+            for value in (self.stars, self.forks)
+        ):
+            raise ValueError("repository count metadata is invalid")
         paths = [blob.path for blob in self.blobs]
         if len(paths) != len(set(paths)):
             raise ValueError("repository source paths must be unique")

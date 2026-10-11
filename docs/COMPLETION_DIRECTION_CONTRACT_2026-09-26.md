@@ -72,7 +72,7 @@ The provider returns this envelope instead of a free `answer_markdown`:
 - `kind` is a closed enum: `person | participation | project | inference`.
 - `{{owner}}` is the **only** way for the model to refer to the portfolio owner. The backend renders it as `profile.display_name`. This anchor is structural and language-agnostic.
 - Source markers move from inline text into `source_ids`. The backend renders the citation markers.
-- `answer_markdown` from envelope v1 is accepted only through a legacy adapter for tests and migration. That adapter treats every line as `project` and applies the recall fallback in §1.5.
+- Only envelope v2 is accepted, including the quality evaluation fixtures. Answers are not stored, so no data migration is needed.
 
 ### 1.4 Per-segment validation rules
 
@@ -90,6 +90,8 @@ Envelope-level failures still reject the whole answer and produce the no-match r
 - **Identity registry:** built from `profile.display_name`, `profile.github_login` (new, §2) and optional `profile.aliases` (new, bounded list). It is derived from configuration, not code.
 - **Per-locale person-reference lexicon:** a data file such as `src/reponpc/chat/policy/person_reference.<locale>.yml`. It holds pronouns and a CJK **exclusion-compound list** (for example 其他, 其它, 他人?). The ? marks an entry still to be decided by tests.
 - The fallback can only **reclassify or drop a segment**. It never rejects the whole answer, and no rule depends on it alone.
+- It detects singular first/third-person references and identity terms. Collective project wording (we/our/us/they/them/their/我們/他們) alone is preserved as project text. The CJK compound exclusions mask 我們/他們 so the singular 我/他 does not match inside them.
+- Model text is not rewritten or normalized for rendering. A reclassified `person` segment missing `{{owner}}` is dropped with `OWNER_REFERENCE_MISSING`; only the explicit anchor is replaced by the backend.
 
 ### 1.6 Inflation lexicon
 
@@ -150,6 +152,7 @@ Replace the "stay close to confirmed wording / do not infer role" text with the 
   - Anonymous access is limited to 60 requests per hour.
   - An optional read-only token kept on the host may raise the limit; it is never exported.
   - If a request fails, the fact is recorded as **unavailable**, never as zero or "no participation".
+- Participation collection is an explicit build input. Without a collector, no participation evidence is created; API failures from a configured collector retain nullable unavailable facts. The onboarding analysis placeholder is not a confirmed identity and creates no participation facts. New bundles store these facts in evidence/source metadata only, without the unused `participation:{slug}` bundle-meta copy. Existing bundles carrying that unused key remain readable.
 - **Citations** point at the first and last commit permalinks, so they are immutable.
 - **Display:** month granularity, for example 「2024-03 – 2025-01 有提交紀錄」 and 「專案擁有者」.
 - Language breakdown remains a repository fact; it is not attributed to the person.
@@ -198,7 +201,7 @@ Implementation detail and local evidence: [A4 coverage/FAQ contract](A4_COVERAGE
 - **(b) Selected — static shell on GitHub Pages plus Funnel live API.**
   - 「匯出分享網站」 writes a self-contained folder (HTML/CSS/JS, JSON data, character assets, card images, `.nojekyll`, export manifest with hashes). The owner uploads it manually to their own repository (for example `<login>.github.io`). RepoNPC performs **no GitHub write**; the guide shows the steps with screenshots.
   - The page calls the Funnel visitor gateway for live chat. CORS on the gateway allows only the configured Pages origin, without credentials.
-  - When the gateway is unreachable, the page stays up: the indicator shows 「休息中」, and typed questions are matched **in the browser** against the approved FAQ entries (question text plus owner-approved variants, lexical and fuzzy matching shipped as data; above a threshold the approved answer and its sources are shown, otherwise the nearest suggestions). Nothing is generated in the browser.
+  - When the gateway is unreachable, the page stays up: the indicator shows 「休息中」, and typed questions are matched **in the browser** against the approved FAQ entries (question text plus owner-approved variants; since owner decision B on 2026-09-30 the approved answer and its sources are shown only on an exact normalized match of one approved question or variant, otherwise the nearest suggestions; see the A5 visitor appearance and export contract §4). The export manifest identifies the static format; no separate matcher configuration is shipped. Nothing is generated in the browser.
   - Export guards: public data only; secret scan; size check against GitHub Pages limits (1 GB published site, 100 GB per month soft bandwidth); no admin routes or data.
   - The export records the configured gateway origin; the page never embeds credentials, admin origins or host details. The existing same-origin visitor page served by the host remains available for local preview and for owners who choose an operator-managed gateway.
 - **(a) Rejected** — whole visitor page served only through Funnel. Rejected because the shared link would show nothing while the host is off.

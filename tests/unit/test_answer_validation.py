@@ -5,11 +5,7 @@ from __future__ import annotations
 import pytest
 
 from reponpc.bundles.index_reader import IndexedEvidence
-from reponpc.chat.answers import (
-    validate_answer,
-    validate_legacy_answer,
-    validate_v2_answer,
-)
+from reponpc.chat.answers import validate_v2_answer
 
 
 def evidence(
@@ -39,11 +35,15 @@ def evidence(
 
 def test_validated_answer_builds_server_owned_immutable_citation() -> None:
     selected = dict([evidence("S1")])
-    result = validate_answer(
+    result = validate_v2_answer(
         {
-            "answer_markdown": "The repository implements retrieval. [S1]",
-            "used_source_ids": ["S1"],
-            "inferences": [],
+            "segments": [
+                {
+                    "kind": "project",
+                    "text": "The repository implements retrieval.",
+                    "source_ids": ["S1"],
+                }
+            ],
             "insufficient_evidence": False,
         },
         selected,
@@ -66,11 +66,9 @@ def test_validated_answer_builds_server_owned_immutable_citation() -> None:
     ],
 )
 def test_unknown_uncited_or_active_content_becomes_abstention(answer: str, used: list[str]) -> None:
-    result = validate_answer(
+    result = validate_v2_answer(
         {
-            "answer_markdown": answer,
-            "used_source_ids": used,
-            "inferences": [],
+            "segments": [{"kind": "project", "text": answer, "source_ids": used}],
             "insufficient_evidence": False,
         },
         dict([evidence("S1")]),
@@ -79,86 +77,6 @@ def test_unknown_uncited_or_active_content_becomes_abstention(answer: str, used:
 
     assert result.insufficient_evidence is True
     assert result.citations == ()
-
-
-def test_person_claim_requires_matching_owner_assertion() -> None:
-    raw = {
-        "answer_markdown": "She implemented the system. [S1]",
-        "used_source_ids": ["S1"],
-        "inferences": [],
-        "insufficient_evidence": False,
-    }
-
-    rejected = validate_answer(raw, dict([evidence("S1")]), "en")
-    accepted = validate_answer(
-        raw,
-        dict(
-            [
-                evidence(
-                    "S1",
-                    evidence_class="OWNER_ASSERTION",
-                    content="She implemented the system.",
-                )
-            ]
-        ),
-        "en",
-    )
-
-    assert rejected.insufficient_evidence is True
-    assert accepted.insufficient_evidence is False
-
-
-def test_person_claim_requires_semantically_matching_owner_assertion() -> None:
-    raw = {
-        "answer_markdown": "Alice founded the company. [S1]",
-        "used_source_ids": ["S1"],
-        "inferences": [],
-        "insufficient_evidence": False,
-    }
-
-    mismatched = validate_answer(
-        raw,
-        dict(
-            [
-                evidence(
-                    "S1",
-                    evidence_class="OWNER_ASSERTION",
-                    content="Alice maintains the documentation.",
-                )
-            ]
-        ),
-        "en",
-    )
-    matched = validate_answer(
-        raw,
-        dict(
-            [
-                evidence(
-                    "S1",
-                    evidence_class="OWNER_ASSERTION",
-                    content="Alice founded the company.",
-                )
-            ]
-        ),
-        "en",
-    )
-
-    assert mismatched.insufficient_evidence is True
-    assert matched.insufficient_evidence is False
-
-
-def test_inference_cannot_depend_on_model_inference_or_unknown_source() -> None:
-    raw = {
-        "answer_markdown": "A bounded inference is shown. [S1]",
-        "used_source_ids": ["S1"],
-        "inferences": [{"statement": "derived", "source_ids": ["S1"]}],
-        "insufficient_evidence": False,
-    }
-
-    result = validate_answer(raw, dict([evidence("S1", evidence_class="MODEL_INFERENCE")]), "zh-TW")
-
-    assert result.insufficient_evidence is True
-    assert result.answer_markdown == "目前可用的作品集證據不足以確認這個問題。"
 
 
 def test_v2_person_paraphrase_is_backend_rendered_in_both_locales() -> None:
@@ -171,7 +89,7 @@ def test_v2_person_paraphrase_is_backend_rendered_in_both_locales() -> None:
             )
         ]
     )
-    result = validate_answer(
+    result = validate_v2_answer(
         {
             "segments": [
                 {
@@ -195,7 +113,7 @@ def test_v2_person_paraphrase_is_backend_rendered_in_both_locales() -> None:
 
 
 def test_v2_cjk_person_paraphrase_keeps_matching_owner_assertion() -> None:
-    result = validate_answer(
+    result = validate_v2_answer(
         {
             "segments": [
                 {
@@ -224,7 +142,7 @@ def test_v2_cjk_person_paraphrase_keeps_matching_owner_assertion() -> None:
 
 
 def test_v2_inflation_or_invented_number_drops_only_that_segment() -> None:
-    result = validate_answer(
+    result = validate_v2_answer(
         {
             "segments": [
                 {
@@ -267,7 +185,7 @@ def test_v2_inflation_or_invented_number_drops_only_that_segment() -> None:
 
 
 def test_v2_participation_accepts_dates_but_drops_role_claims() -> None:
-    result = validate_answer(
+    result = validate_v2_answer(
         {
             "segments": [
                 {
@@ -350,7 +268,7 @@ def test_v2_participation_and_inference_cannot_assign_personal_roles() -> None:
     ["其他功能", "開發工具", "這個專案實作了 API"],
 )
 def test_v2_cjk_project_phrases_are_not_person_claims(text: str) -> None:
-    result = validate_answer(
+    result = validate_v2_answer(
         {
             "segments": [{"kind": "project", "text": text, "source_ids": ["S1"]}],
             "insufficient_evidence": False,
@@ -365,7 +283,7 @@ def test_v2_cjk_project_phrases_are_not_person_claims(text: str) -> None:
 
 
 def test_v2_identity_recall_reclassifies_project_as_person() -> None:
-    result = validate_answer(
+    result = validate_v2_answer(
         {
             "segments": [{"kind": "project", "text": "Alice built the API.", "source_ids": ["S1"]}],
             "insufficient_evidence": False,
@@ -383,9 +301,9 @@ def test_v2_identity_recall_reclassifies_project_as_person() -> None:
         owner_name="Alice",
     )
 
-    assert result.insufficient_evidence is False
-    assert "In Alice's own words" in result.answer_markdown
-    assert "Alice built" in result.answer_markdown
+    assert result.insufficient_evidence is True
+    assert "OWNER_REFERENCE_MISSING" in result.discarded_reason_codes
+    assert "PROJECT_OWNER_REFERENCE" not in result.discarded_reason_codes
 
 
 @pytest.mark.parametrize(
@@ -394,10 +312,12 @@ def test_v2_identity_recall_reclassifies_project_as_person() -> None:
         {"kind": "project", "text": "See https://evil.test", "source_ids": ["S1"]},
         {"kind": "project", "text": "<b>unsafe</b>", "source_ids": ["S1"]},
         {"kind": "project", "text": "unknown source", "source_ids": ["S9"]},
+        {"kind": "project", "text": "No source", "source_ids": []},
+        {"kind": "unknown", "text": "Unknown kind", "source_ids": ["S1"]},
     ],
 )
 def test_v2_integrity_failures_reject_the_complete_answer(segment: dict[str, object]) -> None:
-    result = validate_answer(
+    result = validate_v2_answer(
         {"segments": [segment], "insufficient_evidence": False},
         dict([evidence("S1")]),
         "en",
@@ -412,7 +332,7 @@ def test_v2_integrity_failures_reject_the_complete_answer(segment: dict[str, obj
 
 
 def test_v2_no_valid_source_returns_localized_no_match_and_suggestions() -> None:
-    result = validate_answer(
+    result = validate_v2_answer(
         {"segments": [], "insufficient_evidence": False},
         {},
         "zh-TW",
@@ -425,7 +345,7 @@ def test_v2_no_valid_source_returns_localized_no_match_and_suggestions() -> None
 
 
 def test_v2_inference_cycle_rejects_the_complete_answer() -> None:
-    result = validate_answer(
+    result = validate_v2_answer(
         {
             "segments": [{"kind": "inference", "text": "Derived claim", "source_ids": ["S1"]}],
             "insufficient_evidence": False,
@@ -456,86 +376,6 @@ def test_v2_entrypoint_rejects_legacy_or_missing_v2_fields() -> None:
     )
 
 
-def test_legacy_adapter_drops_person_line_but_keeps_project_sibling() -> None:
-    result = validate_legacy_answer(
-        {
-            "answer_markdown": "Alice led the project. [S1]\nThe repository uses SQLite. [S2]",
-            "used_source_ids": ["S1", "S2"],
-            "inferences": [],
-            "insufficient_evidence": False,
-        },
-        dict(
-            [
-                evidence(
-                    "S1",
-                    evidence_class="OWNER_ASSERTION",
-                    content="Alice maintains the documentation.",
-                ),
-                evidence("S2", content="The repository uses SQLite."),
-            ]
-        ),
-        "en",
-        owner_name="Alice",
-    )
-
-    assert result.insufficient_evidence is False
-    assert "led the project" not in result.answer_markdown
-    assert "The repository uses SQLite." in result.answer_markdown
-    assert tuple(citation.id for citation in result.citations) == ("S2",)
-
-
-@pytest.mark.parametrize("text", ["其他功能", "開發工具", "這個專案實作了 API"])
-def test_legacy_adapter_keeps_cjk_project_recall_exclusions(text: str) -> None:
-    result = validate_legacy_answer(
-        {
-            "answer_markdown": f"{text} [S1]",
-            "used_source_ids": ["S1"],
-            "inferences": [],
-            "insufficient_evidence": False,
-        },
-        dict([evidence("S1")]),
-        "zh-TW",
-    )
-
-    assert result.insufficient_evidence is False
-    assert text in result.answer_markdown
-
-
-@pytest.mark.parametrize(
-    "raw",
-    [
-        {
-            "answer_markdown": "Known claim. [S9]",
-            "used_source_ids": ["S9"],
-            "inferences": [],
-            "insufficient_evidence": False,
-        },
-        {
-            "answer_markdown": "Unsafe https://evil.test [S1]",
-            "used_source_ids": ["S1"],
-            "inferences": [],
-            "insufficient_evidence": False,
-        },
-        {
-            "answer_markdown": "<script>alert(1)</script> [S1]",
-            "used_source_ids": ["S1"],
-            "inferences": [],
-            "insufficient_evidence": False,
-        },
-    ],
-)
-def test_legacy_adapter_envelope_integrity_failure_returns_no_match(
-    raw: dict[str, object],
-) -> None:
-    result = validate_legacy_answer(raw, dict([evidence("S1")]), "en")
-
-    assert result.insufficient_evidence is True
-    assert result.answer_markdown == (
-        "I couldn't find anything about that in this portfolio. Try one of these questions."
-    )
-    assert result.citations == ()
-
-
 @pytest.mark.parametrize(
     ("claim", "source", "accepted"),
     [
@@ -559,3 +399,54 @@ def test_v2_numeric_facts_keep_date_and_percent_units(
     )
 
     assert result.insufficient_evidence is not accepted
+
+
+@pytest.mark.parametrize(
+    "locale,text",
+    [
+        ("en", "We use SQLite; they document our API and share their tools with us."),
+        ("zh-TW", "我們使用 SQLite，他們在文件裡介紹 API。"),  # noqa: RUF001
+        ("en", "The API keeps \uff21\uff30\uff29 casing."),
+    ],
+)
+def test_collective_project_text_is_preserved(locale, text) -> None:
+    result = validate_v2_answer(
+        {
+            "segments": [{"kind": "project", "text": text, "source_ids": ["S1"]}],
+            "insufficient_evidence": False,
+        },
+        dict([evidence("S1")]),
+        locale,
+        owner_name="Alice",
+    )
+    assert result.answer_markdown == text + " [S1]"
+    assert not result.insufficient_evidence
+
+
+@pytest.mark.parametrize("kind", ["project", "inference"])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "His work uses SQLite.",
+        "He built the API.",
+        "I built the API.",
+        "他建立 API。",
+        "我的工作使用 SQLite。",
+    ],
+)
+def test_singular_reference_is_dropped_without_rewriting_valid_sibling(kind, text) -> None:
+    result = validate_v2_answer(
+        {
+            "segments": [
+                {"kind": kind, "text": text, "source_ids": ["S1"]},
+                {"kind": "project", "text": "SQLite stores records.", "source_ids": ["S2"]},
+            ],
+            "insufficient_evidence": False,
+        },
+        dict([evidence("S1", evidence_class="OWNER_ASSERTION", content=text), evidence("S2")]),
+        "en",
+        owner_name="Alice",
+    )
+    assert result.answer_markdown == "SQLite stores records. [S2]"
+    assert result.discarded_segments == ((0, ("OWNER_REFERENCE_MISSING",)),)
+    assert "Alice work" not in result.answer_markdown

@@ -7,6 +7,7 @@ import { ModelEditor } from "./ModelEditor";
 import { modelProbeError } from "./modelProbeError";
 import { DeleteSettingButton } from "./DeleteSettingButton";
 import type { ModelConnectionView } from "./ModelConnectionPanel";
+import type { ModelGuidanceEntry } from "./ModelGuidancePanel";
 
 export interface ChatProfileView {
   profile_id: string;
@@ -41,6 +42,7 @@ interface Props {
   onActivate: (profileId: string) => void;
   onDelete: (profileId: string) => void;
   managementActions?: boolean;
+  catalogChoice?: ModelGuidanceEntry | null;
 }
 
 const COPY = {
@@ -135,12 +137,29 @@ export function ChatProfilePanel({
   onActivate,
   onDelete,
   managementActions = true,
+  catalogChoice,
 }: Props) {
   const copy = COPY[locale];
   const editorRef = useRef<HTMLDetailsElement>(null);
   const [connectionId, setConnectionId] = useState("");
   const [modelId, setModelId] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!catalogChoice) return;
+    if (editorRef.current) {
+      editorRef.current.open = true;
+      const fill = editorRef.current.querySelector<HTMLButtonElement>(
+        "[data-catalog-fill]",
+      );
+      if (fill && !fill.disabled) fill.focus();
+      else editorRef.current.querySelector("summary")?.focus();
+      editorRef.current.scrollIntoView({ block: "start" });
+    } else {
+      const heading = document.getElementById("chat-profile-heading");
+      heading?.scrollIntoView({ block: "start" });
+      heading?.focus();
+    }
+  }, [catalogChoice, connections.length]);
   useEffect(() => {
     if (editingId && !profiles.some((item) => item.profile_id === editingId)) {
       cancelEdit();
@@ -181,7 +200,7 @@ export function ChatProfilePanel({
       aria-labelledby="chat-profile-heading"
       className="model-panel model-panel--chat"
     >
-      <Heading id="chat-profile-heading">
+      <Heading id="chat-profile-heading" tabIndex={-1}>
         {managementActions ? copy.heading : copy.guidedHeading}
       </Heading>
       <p>{managementActions ? copy.description : copy.guidedDescription}</p>
@@ -191,6 +210,16 @@ export function ChatProfilePanel({
       {pending && <p role="status">{copy.pending}</p>}
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
+      {catalogChoice && (
+        <p role="status">
+          {locale === "zh-TW" ? "清單選擇" : "Catalog choice"}:{" "}
+          {catalogChoice.model_id} · {catalogChoice.envelope_evidence.provider}{" "}
+          · {catalogChoice.quantization_id}.{" "}
+          {locale === "zh-TW"
+            ? "請確認服務提供相同模型與版本。現有設定與尚未儲存的輸入會保留；仍需新增、測試及選用。"
+            : "Confirm that your service provides the same model and revision. Existing settings and unsaved input are preserved; adding, testing and selection are still required."}
+        </p>
+      )}
       {profiles.length === 0 ? (
         <p>{copy.empty}</p>
       ) : (
@@ -328,6 +357,33 @@ export function ChatProfilePanel({
         >
           <form onSubmit={submit}>
             <h3>{editingId ? copy.update : copy.add}</h3>
+            {catalogChoice && (
+              <>
+                <button
+                  type="button"
+                  data-catalog-fill
+                  disabled={pending || editingId !== null}
+                  onClick={() => {
+                    setModelId(catalogChoice.model_id);
+                    editorRef.current
+                      ?.querySelector<HTMLInputElement>("#chat-profile-model")
+                      ?.focus();
+                  }}
+                >
+                  {locale === "zh-TW"
+                    ? "填入所選模型名稱"
+                    : "Fill selected model name"}
+                  : {catalogChoice.model_id}
+                </button>
+                {editingId && (
+                  <p>
+                    {locale === "zh-TW"
+                      ? "請先完成或取消目前的編輯，再新增清單模型。"
+                      : "Finish or cancel the current edit before adding a catalog model."}
+                  </p>
+                )}
+              </>
+            )}
             <label htmlFor="chat-profile-connection">
               {copy.connection}
               <select

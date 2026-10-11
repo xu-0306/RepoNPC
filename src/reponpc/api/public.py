@@ -4,41 +4,48 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
-import logging
 import re
-import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from reponpc.admin.faq import ReviewedFaq
-from reponpc.bundles.manager import BundleActivationError
-from reponpc.chat.limits import ChatLimitError
+from reponpc.admin.faq import FaqError, ReviewedFaq
+from reponpc.admin.scene import AdminSceneService, SceneServiceError
+from reponpc.bundles.archive import BundleError
+from reponpc.bundles.manager import BundleActivationError, BundleManager
+from reponpc.bundles.manifest import ManifestError, parse_bundle_manifest
+from reponpc.cards.assets import SpriteValidationError, validate_sprite
 from reponpc.chat.service import (
-    ChatHistoryMessage,
     GroundedChatService,
     delivery_events,
 )
 from reponpc.i18n.catalog import SUPPORTED_LOCALES, translate
 from reponpc.indexing.public_profile import (
+    BilingualPublicProfile,
     PublicProfileError,
     localized_public_profile_bytes,
+    normalize_public_profile_scene,
     parse_public_profile_bytes,
     validate_public_profile_metadata,
 )
 from reponpc.observability import get_safe_logger
-from reponpc.providers import ProviderError, ProviderFailureCode
+from reponpc.scene.images import SceneImageError, validate_scene_image
+from reponpc.scene.resolve import SceneResolutionError
+
+if TYPE_CHECKING:
+    from reponpc.api.visitor_ingress import VisitorChatWorkers
 
 DEFAULT_LOCALE = "zh-TW"
 _PUBLIC_INDEX_VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
 _PUBLIC_MODEL_PROVIDERS = frozenset({"ollama", "openai_compatible"})
+SVG_ASSET_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
 _LOGGER = get_safe_logger(__name__)
 
 
@@ -232,7 +239,7 @@ def _validated_query(request: Request, allowed: set[str]) -> dict[str, str] | JS
     locale = validated_locale(request)
     if isinstance(locale, JSONResponse):
         return locale
-    if "rev" in values and (not re.fullmatch(r"[1-9][0-9]{0,8}", values["rev"])):
+    if "rev" in values and (not re.fullmatch(r"(?:0|[1-9][0-9]{0,8})", values["rev"])):
         return _validation_error(request, error_locale)
     return values
 
@@ -258,13 +265,20 @@ def create_public_router(
     max_history_messages: int = 6,
     max_history_characters: int = 6000,
     chat_request_limits_supplier: Callable[[], tuple[int, int, int]] | None = None,
+    chat_workers: VisitorChatWorkers | None = None,
+    keepalive_seconds_supplier: Callable[[], float] = lambda: 15,
     faq_supplier: Callable[[], ReviewedFaq | None] = lambda: None,
+    scene_supplier: Callable[[], object | None] = lambda: None,
 ) -> APIRouter:
     """Create routes bound to one immutable setup/readiness snapshot."""
 
     router = APIRouter()
     current_state = state_supplier or (lambda: state)
     current_chat_service = chat_service_supplier or (lambda: chat_service)
+
+    def current_bundle_manager() -> BundleManager | None:
+        candidate = bundle_manager_supplier() if bundle_manager_supplier is not None else None
+        return candidate if isinstance(candidate, BundleManager) else None
 
     def public_directory() -> Path | None:
         directory = current_state().public_directory
@@ -295,7 +309,7 @@ def create_public_router(
                 await asyncio.to_thread(faq.public_payload, locale),
                 headers={"Cache-Control": "no-store"},
             )
-        except BundleActivationError:
+        except (BundleActivationError, FaqError):
             return unavailable(request, locale)
 
     @router.get("/readyz")
@@ -341,140 +355,30 @@ def create_public_router(
                     "max_history_characters": history_character_limit,
                 },
             )
-        current = current_state()
+        import time
+
+        from reponpc.api.visitor_ingress import _chat_response, _message, _stream_error
+
         service = current_chat_service()
-        if not current.index_ready:
+        if not current_state().ready or service is None:
             return error_response(
                 request,
                 status_code=503,
-                code="INDEX_UNAVAILABLE",
-                message=translate(body.locale, "index_unavailable"),
+                code="SERVICE_NOT_READY",
+                message=_message(body.locale, "SERVICE_NOT_READY"),
             )
-        if not current.model_ready or service is None:
-            return error_response(
-                request,
-                status_code=503,
-                code="MODEL_UNAVAILABLE",
-                message=_public_chat_message(body.locale, "model_unavailable"),
-            )
-        client_ip = request.client.host if request.client is not None else "unknown"
-        cancel_requested = threading.Event()
-        try:
-            import asyncio
-
-            answer_task = asyncio.create_task(
-                asyncio.to_thread(
-                    service.answer,
-                    message=body.message,
-                    locale=body.locale,
-                    history=tuple(
-                        ChatHistoryMessage(item.role, item.content) for item in body.history
-                    ),
-                    client_ip=client_ip,
-                    cancel_requested=cancel_requested,
-                )
-            )
-            disconnect_task = asyncio.create_task(_wait_for_disconnect(request))
-            done, _pending = await asyncio.wait(
-                {answer_task, disconnect_task},
-                timeout=getattr(service, "timeout_seconds", 45.0),
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            if disconnect_task in done and disconnect_task.result():
-                cancel_requested.set()
-                answer_task.cancel()
-                return _DisconnectedResponse()
-            disconnect_task.cancel()
-            if answer_task not in done:
-                cancel_requested.set()
-                answer_task.cancel()
-                raise TimeoutError
-            delivery = answer_task.result()
-        except TimeoutError:
-            return error_response(
-                request,
-                status_code=504,
-                code="PROVIDER_TIMEOUT",
-                message=_public_chat_message(body.locale, "provider_timeout"),
-            )
-        except ChatLimitError as exc:
-            return error_response(
-                request,
-                status_code=429,
-                code=exc.code,
-                message=_public_chat_message(body.locale, exc.code.casefold()),
-                retry_after_seconds=exc.retry_after_seconds,
-            )
-        except BundleActivationError:
-            return error_response(
-                request,
-                status_code=503,
-                code="INDEX_UNAVAILABLE",
-                message=translate(body.locale, "index_unavailable"),
-            )
-        except ProviderError as exc:
-            status_code, code = _provider_public_error(exc.code)
-            return error_response(
-                request,
-                status_code=status_code,
-                code=code,
-                message=_public_chat_message(body.locale, code.casefold()),
-            )
-        except Exception:
-            return error_response(
-                request,
-                status_code=502,
-                code="PROVIDER_ERROR",
-                message=_public_chat_message(body.locale, "provider_error"),
-            )
-
-        async def stream() -> Any:
-            correlation_id = request_id(request)
-            terminal_emitted = False
-            try:
-                for event, payload in delivery_events(delivery, correlation_id):
-                    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-                    yield f"event: {event}\ndata: {serialized}\n\n"
-                    if event == "complete":
-                        terminal_emitted = True
-                        _LOGGER.emit(
-                            logging.INFO,
-                            "chat.stream.complete",
-                            request_id=correlation_id,
-                            route_template="/api/public/chat/stream",
-                            status=200,
-                            retrieval_count=delivery.evidence_count,
-                        )
-                        return
-            except Exception:
-                if not terminal_emitted:
-                    error = ErrorEnvelope(
-                        error=ErrorDetail(
-                            code="PROVIDER_ERROR",
-                            message=_public_chat_message(body.locale, "provider_error"),
-                            request_id=correlation_id,
-                            details={},
-                        )
-                    ).model_dump(mode="json")
-                    serialized = json.dumps(error, ensure_ascii=False, separators=(",", ":"))
-                    yield f"event: error\ndata: {serialized}\n\n"
-                    _LOGGER.emit(
-                        logging.ERROR,
-                        "chat.stream.error",
-                        request_id=correlation_id,
-                        route_template="/api/public/chat/stream",
-                        status=502,
-                        error_category="internal",
-                    )
-
-        return StreamingResponse(
-            stream(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-store",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
+        return await _chat_response(
+            request,
+            body,
+            service,
+            identity=request.client.host if request.client is not None else "unknown",
+            active_workers=chat_workers,
+            deadline=time.monotonic() + getattr(service, "timeout_seconds", 180.0),
+            keepalive_seconds=keepalive_seconds_supplier(),
+            project_event=lambda _event, payload: payload,
+            stream_error=_stream_error,
+            events=delivery_events,
+            allow_retry=True,
         )
 
     @router.get("/api/public/owner-statements/{revision}/{evidence_id}")
@@ -514,14 +418,50 @@ def create_public_router(
         if isinstance(query, JSONResponse):
             return query
         locale = query.get("locale", DEFAULT_LOCALE)
+        scene_service = scene_supplier()
+        if scene_service is not None:
+            try:
+                with scene_service.published_profile() as snapshot:  # type: ignore[attr-defined]
+                    body = localized_public_profile_bytes(snapshot.document, locale)
+                    selected_version = snapshot.bundle_id
+            except (SceneServiceError, BundleActivationError):
+                return unavailable(request, locale)
+            return Response(
+                content=body,
+                media_type="application/json",
+                headers={"ETag": _etag(selected_version, f"profile:{locale}", body)},
+            )
+        manager = current_bundle_manager()
+        if manager is not None:
+            try:
+                with _leased_public_profile(manager) as snapshot:
+                    body = localized_public_profile_bytes(snapshot["document"], locale)
+                    selected_version = snapshot["bundle_id"]
+            except (
+                OSError,
+                BundleActivationError,
+                BundleError,
+                ManifestError,
+                PublicProfileError,
+                SpriteValidationError,
+                SceneResolutionError,
+                ValueError,
+            ):
+                return unavailable(request, locale)
+            return Response(
+                content=body,
+                media_type="application/json",
+                headers={"ETag": _etag(selected_version, f"profile:{locale}", body)},
+            )
         directory = public_directory()
         if directory is None:
             return unavailable(request, locale)
         try:
-            payload = parse_public_profile_bytes((directory / "profile.json").read_bytes())
-            validate_public_profile_metadata(payload, index_version=version())
+            payload = _public_profile_from_directory(
+                directory, index_version=version(), built_at=None, repository_count=None
+            )
             body = localized_public_profile_bytes(payload, locale)
-        except (OSError, PublicProfileError):
+        except (OSError, PublicProfileError, SpriteValidationError, SceneResolutionError):
             return unavailable(request, locale)
         return Response(
             content=body,
@@ -534,12 +474,115 @@ def create_public_router(
         query = _validated_query(request, {"rev"})
         if isinstance(query, JSONResponse):
             return query
+        requested_revision = int(query["rev"]) if "rev" in query else None
+        scene_service = scene_supplier()
+        if scene_service is not None:
+            try:
+                with scene_service.published_profile() as snapshot:  # type: ignore[attr-defined]
+                    if (
+                        requested_revision is not None
+                        and requested_revision != snapshot.character_revision
+                    ):
+                        return Response(status_code=404)
+                    payload = snapshot.sprite_content
+                    selected_version = snapshot.bundle_id
+            except (SceneServiceError, BundleActivationError):
+                return unavailable(request, DEFAULT_LOCALE)
+            return Response(
+                payload,
+                media_type="image/png",
+                headers={
+                    "ETag": _etag(
+                        selected_version, f"character:{snapshot.character_revision}", payload
+                    )
+                },
+            )
+        manager = current_bundle_manager()
+        if manager is not None:
+            try:
+                with _leased_public_profile(manager) as snapshot:
+                    document = snapshot["document"]
+                    revision = document.character.revision
+                    if requested_revision is not None and requested_revision != revision:
+                        return Response(status_code=404)
+                    payload = snapshot["sprite_content"]
+                    selected_version = snapshot["bundle_id"]
+            except (
+                OSError,
+                BundleActivationError,
+                BundleError,
+                ManifestError,
+                PublicProfileError,
+                SpriteValidationError,
+                SceneResolutionError,
+                ValueError,
+            ):
+                return unavailable(request, DEFAULT_LOCALE)
+            return Response(
+                payload,
+                media_type="image/png",
+                headers={"ETag": _etag(selected_version, f"character:{revision}", payload)},
+            )
         directory = public_directory()
         if directory is None:
             return unavailable(request, DEFAULT_LOCALE)
-        return _asset_response(
-            directory / "character.png", "image/png", version(), f"character:{query.get('rev', '')}"
-        ) or unavailable(request, DEFAULT_LOCALE)
+        try:
+            profile = _public_profile_from_directory(
+                directory, index_version=version(), built_at=None, repository_count=None
+            )
+            revision = profile.character.revision
+            if requested_revision is not None and requested_revision != revision:
+                return Response(status_code=404)
+            payload = (directory / "character.png").read_bytes()
+            canonical = validate_sprite(payload)
+            if canonical.content != payload:
+                return Response(status_code=404)
+            return Response(
+                payload,
+                media_type="image/png",
+                headers={"ETag": _etag(version(), f"character:{revision}", payload)},
+            )
+        except (OSError, PublicProfileError, SpriteValidationError, SceneResolutionError):
+            return unavailable(request, DEFAULT_LOCALE)
+
+    @router.api_route("/api/public/scene-background", methods=["GET", "HEAD", "OPTIONS"])
+    async def scene_background(request: Request) -> Response:
+        if request.method == "OPTIONS":
+            return Response(status_code=204, headers={"Allow": "GET, HEAD, OPTIONS"})
+        query = _validated_query(request, {"rev"})
+        if isinstance(query, JSONResponse) or "rev" not in query:
+            return query if isinstance(query, JSONResponse) else Response(status_code=404)
+        revision = int(query["rev"])
+        scene_service = scene_supplier()
+        manager = current_bundle_manager()
+        if scene_service is None and manager is not None:
+            scene_service = AdminSceneService(
+                manager=manager,
+                database=None,
+                data_directory=manager.data_directory,
+            )
+        if scene_service is not None:
+            try:
+                result = scene_service.background_for_revision(revision)  # type: ignore[attr-defined]
+            except (SceneServiceError, BundleActivationError):
+                return Response(status_code=404)
+            if result is None:
+                return Response(status_code=404)
+            payload, extension, bundle_id = result
+            media_type = "image/webp" if extension == "webp" else "image/png"
+            return Response(
+                b"" if request.method == "HEAD" else payload,
+                media_type=media_type,
+                headers={
+                    "ETag": _etag(bundle_id, f"scene-background:{revision}", payload),
+                    "Cache-Control": "no-store",
+                    "X-Content-Type-Options": "nosniff",
+                    "Content-Length": str(len(payload)),
+                },
+            )
+        if manager is None:
+            return Response(status_code=404)
+        return Response(status_code=404)
 
     @router.get("/api/public/card.{extension}")
     async def card(request: Request, extension: str) -> Response:
@@ -566,20 +609,92 @@ def create_public_router(
     return router
 
 
-async def _wait_for_disconnect(request: Request) -> bool:
-    import asyncio
+@contextmanager
+def _leased_public_profile(manager: BundleManager) -> Iterator[dict[str, Any]]:
+    """Read a validated public profile and its canonical sheet under one lease."""
 
-    while not await request.is_disconnected():
-        await asyncio.sleep(0.01)
-    return True
+    with manager.acquire_snapshot() as (_index, bundle_id, public_directory):
+        yield _bundle_profile_snapshot(bundle_id, public_directory)
 
 
-def _provider_public_error(code: ProviderFailureCode) -> tuple[int, str]:
-    if code is ProviderFailureCode.TIMEOUT:
-        return 504, "PROVIDER_TIMEOUT"
-    if code is ProviderFailureCode.UNAVAILABLE:
-        return 503, "MODEL_UNAVAILABLE"
-    return 502, "PROVIDER_ERROR"
+def _bundle_profile_snapshot(bundle_id: str, public_directory: Path) -> dict[str, Any]:
+    manifest = parse_bundle_manifest((public_directory.parent / "manifest.json").read_bytes())
+    if manifest.bundle_id != bundle_id:
+        raise ManifestError("bundle identity does not match its active lease")
+    sprite_content = (public_directory / "character.png").read_bytes()
+    canonical = validate_sprite(sprite_content)
+    if canonical.content != sprite_content:
+        raise SpriteValidationError("SPRITE_NOT_CANONICAL")
+    document = parse_public_profile_bytes((public_directory / "profile.json").read_bytes())
+    validate_public_profile_metadata(
+        document,
+        index_version=bundle_id,
+        built_at=manifest.built_at,
+        repository_count=dict(manifest.statistics)["repositories"],
+    )
+    background_content = _bundle_scene_background(public_directory, manifest, document)
+    document = normalize_public_profile_scene(
+        document,
+        sprite_content=sprite_content,
+        background_content=background_content,
+    )
+    return {
+        "bundle_id": bundle_id,
+        "document": document,
+        "sprite_content": sprite_content,
+        "background_content": background_content,
+    }
+
+
+def _public_profile_from_directory(
+    public_directory: Path,
+    *,
+    index_version: str,
+    built_at: str | None,
+    repository_count: int | None,
+) -> BilingualPublicProfile:
+    sprite_content = (public_directory / "character.png").read_bytes()
+    canonical = validate_sprite(sprite_content)
+    if canonical.content != sprite_content:
+        raise SpriteValidationError("SPRITE_NOT_CANONICAL")
+    document = parse_public_profile_bytes((public_directory / "profile.json").read_bytes())
+    validate_public_profile_metadata(
+        document,
+        index_version=index_version,
+        built_at=built_at,
+        repository_count=repository_count,
+    )
+    background_content: bytes | None = None
+    manifest_path = public_directory.parent / "manifest.json"
+    if manifest_path.is_file():
+        manifest = parse_bundle_manifest(manifest_path.read_bytes())
+        if manifest.bundle_id != index_version:
+            raise ManifestError("bundle identity does not match its profile")
+        background_content = _bundle_scene_background(public_directory, manifest, document)
+    return normalize_public_profile_scene(
+        document, sprite_content=sprite_content, background_content=background_content
+    )
+
+
+def _bundle_scene_background(
+    public_directory: Path, manifest: Any, document: BilingualPublicProfile
+) -> bytes | None:
+    scene = document.character.scene
+    paths = [item.path for item in manifest.files if item.path.startswith("public/scene/")]
+    if scene is None or scene.background_url is None:
+        if paths:
+            raise ManifestError("scene background is not declared by the public profile")
+        return None
+    if len(paths) != 1:
+        raise ManifestError("scene background manifest entry is missing")
+    match = re.fullmatch(r"public/scene/([0-9a-f]{64})\.(png|webp)", paths[0])
+    if match is None:
+        raise ManifestError("scene background manifest entry is invalid")
+    content = (public_directory / paths[0].removeprefix("public/")).read_bytes()
+    image = validate_scene_image(content, filename=f"background.{match.group(2)}")
+    if image.content != content or image.sha256 != match.group(1):
+        raise SceneImageError("SCENE_IMAGE_NOT_CANONICAL")
+    return content
 
 
 def _public_chat_message(locale: str, code: str) -> str:
@@ -622,10 +737,9 @@ def _asset_response(path: Path, content_type: str, version: str, variant: str) -
         return None
     headers = {"ETag": _etag(version, variant, payload)}
     if content_type == "image/svg+xml":
-        svg_csp = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
         headers.update(
             {
-                "Content-Security-Policy": svg_csp,
+                "Content-Security-Policy": SVG_ASSET_CSP,
                 "X-Content-Type-Options": "nosniff",
             }
         )

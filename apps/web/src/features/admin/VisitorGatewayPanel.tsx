@@ -27,7 +27,6 @@ type GatewayError =
   | "conflict"
   | "configuration"
   | "unavailable"
-  | "stale"
   | "auth"
   | "csrf"
   | "validation"
@@ -47,10 +46,6 @@ const ERROR_MESSAGES: Record<GatewayError, Record<AdminLocale, string>> = {
   unavailable: {
     "zh-TW": "本機 gateway 無法完成操作。請確認本機就緒狀態與連接埠後重試。",
     en: "The local gateway could not complete the operation. Check local readiness and the port, then retry.",
-  },
-  stale: {
-    "zh-TW": "外網檢查已不符合目前的設定、版本或就緒狀態。請重新完成檢查清單。",
-    en: "The external check no longer matches the current settings, bundle, or readiness. Complete the checklist again.",
   },
   auth: {
     "zh-TW": "管理工作階段已失效。請重新登入後再試。",
@@ -82,8 +77,6 @@ function gatewayErrorKind(code: unknown): GatewayError {
       return "configuration";
     case "GATEWAY_UNAVAILABLE":
       return "unavailable";
-    case "GATEWAY_VERIFICATION_STALE":
-      return "stale";
     case "AUTHENTICATION_REQUIRED":
       return "auth";
     case "CSRF_FAILED":
@@ -256,27 +249,7 @@ export function VisitorGatewayPanel({
       !status.listener_ready,
   );
   const canStop = Boolean(status && !gateway.pending && localListenerActive);
-  const checklistKey = status
-    ? [
-        status.revision,
-        status.enabled,
-        status.listener_ready,
-        status.local_ready,
-        status.active_bundle_id,
-        status.external_verified,
-        status.verified_at,
-        status.gateway_origin,
-        status.pages_origin,
-      ].join(":")
-    : "loading";
-  const [checkState, setCheckState] = useState<{
-    key: string;
-    checked: boolean[];
-  }>({ key: "", checked: [false, false, false, false] });
-  const checks =
-    checkState.key === checklistKey
-      ? checkState.checked
-      : [false, false, false, false];
+  const [checks, setChecks] = useState([false, false, false, false]);
   const checksComplete = checks.every(Boolean);
   const canVerify = Boolean(
     status &&
@@ -315,7 +288,10 @@ export function VisitorGatewayPanel({
       gateway_origin: draft.gateway.trim() || null,
       pages_origin: draft.pages.trim() || null,
     });
-    if (saved) setDraft(null);
+    if (saved) {
+      setDraft(null);
+      setChecks([false, false, false, false]);
+    }
   }
 
   function rebaseDraft(next: VisitorGatewayStatus) {
@@ -337,7 +313,10 @@ export function VisitorGatewayPanel({
       "POST",
       { revision: status.revision },
     );
-    if (next) rebaseDraft(next);
+    if (next) {
+      rebaseDraft(next);
+      setChecks([false, false, false, false]);
+    }
   }
 
   async function stop() {
@@ -347,7 +326,10 @@ export function VisitorGatewayPanel({
       "POST",
       { revision: status.revision },
     );
-    if (next) rebaseDraft(next);
+    if (next) {
+      rebaseDraft(next);
+      setChecks([false, false, false, false]);
+    }
   }
 
   async function verify() {
@@ -357,13 +339,13 @@ export function VisitorGatewayPanel({
       "POST",
       {
         revision: status.revision,
-        gateway_origin: status.gateway_origin,
-        pages_origin: status.pages_origin,
-        bundle_id: status.active_bundle_id,
         external_checks_confirmed: true,
       },
     );
-    if (next) setDraft(null);
+    if (next) {
+      setDraft(null);
+      setChecks([false, false, false, false]);
+    }
   }
 
   const checklist = zh
@@ -388,7 +370,7 @@ export function VisitorGatewayPanel({
       className="admin-surface visitor-gateway"
     >
       <h2 id="visitor-gateway-heading">
-        {zh ? "私人訪客 Gateway" : "Private visitor gateway"}
+        {zh ? "2. 設定訪客連線" : "2. Set up visitor access"}
       </h2>
       <p>
         {zh
@@ -418,9 +400,7 @@ export function VisitorGatewayPanel({
               <dd>{fact(status.local_ready)}</dd>
             </div>
             <div>
-              <dt>
-                {zh ? "訪客入口與 Listener" : "Visitor entry and listener"}
-              </dt>
+              <dt>{zh ? "訪客網址設定" : "Visitor address configuration"}</dt>
               <dd>{fact(status.entry_configured)}</dd>
             </div>
             <div>
@@ -430,7 +410,7 @@ export function VisitorGatewayPanel({
               <dd>{fact(status.external_verified)}</dd>
             </div>
             <div>
-              <dt>{zh ? "目前 Listener" : "Current listener"}</dt>
+              <dt>{zh ? "本機訪客服務" : "Local visitor service"}</dt>
               <dd>
                 {status.listener_ready
                   ? zh
@@ -476,7 +456,11 @@ export function VisitorGatewayPanel({
         className="visitor-gateway__origins"
         disabled={!status || gateway.pending}
       >
-        <legend>{zh ? "設定兩個來源網址" : "Configure the two origins"}</legend>
+        <legend>
+          {zh
+            ? "填入聊天入口與網站網域"
+            : "Enter the chat address and site domain"}
+        </legend>
         <label htmlFor="visitor-gateway-origin">
           {zh ? "Tailscale Funnel 訪客網址" : "Tailscale Funnel visitor origin"}
           <input
@@ -491,8 +475,12 @@ export function VisitorGatewayPanel({
           />
         </label>
         <label htmlFor="visitor-pages-origin">
-          {zh ? "GitHub Pages 網址" : "GitHub Pages origin"}
+          {zh
+            ? "GitHub Pages 網域（不含專案路徑）"
+            : "GitHub Pages domain (without a project path)"}
           <input
+            aria-describedby="visitor-pages-origin-help"
+            placeholder="https://account.github.io"
             autoCapitalize="none"
             autoComplete="url"
             id="visitor-pages-origin"
@@ -504,6 +492,11 @@ export function VisitorGatewayPanel({
           />
         </label>
       </fieldset>
+      <p id="visitor-pages-origin-help">
+        {zh
+          ? "例如網站是 https://account.github.io/project/，這裡只填 https://account.github.io。下一步再填完整網站網址。儲存後啟動本機訪客服務，並依下方說明在 Tailscale 啟用 Funnel。"
+          : "For https://account.github.io/project/, enter only https://account.github.io here. Enter the full site URL in the next step. After saving, start the local visitor service and enable Funnel in Tailscale using the instructions below."}
+      </p>
       <p>
         {zh
           ? "必須同時填入兩個網址，或同時清空。儲存不會驗證 Pages 託管狀態、GitHub 卡片或外網連線。gateway 執行中時，須先停止才能變更來源。"
@@ -512,8 +505,8 @@ export function VisitorGatewayPanel({
       {changed && status?.external_verified && (
         <p role="status">
           {zh
-            ? "外網檢查狀態只適用於已儲存的網址與版本；目前未儲存的編輯尚未檢查。"
-            : "The external-check status applies only to the saved origins and bundle. These unsaved edits have not been checked."}
+            ? "外網檢查狀態只適用於已儲存的網址；目前未儲存的編輯尚未檢查。"
+            : "The external-check status applies only to the saved origins. These unsaved edits have not been checked."}
         </p>
       )}
       {changed && !hasBothOrNeither && (
@@ -562,14 +555,14 @@ export function VisitorGatewayPanel({
         <button disabled={!canStart} onClick={() => void start()} type="button">
           {status?.enabled
             ? zh
-              ? "重新啟動 Visitor Gateway"
-              : "Retry visitor gateway start"
+              ? "重試啟動訪客連線"
+              : "Retry starting visitor access"
             : zh
-              ? "啟動 Visitor Gateway"
-              : "Start visitor gateway"}
+              ? "啟動訪客連線"
+              : "Start visitor access"}
         </button>
         <button disabled={!canStop} onClick={() => void stop()} type="button">
-          {zh ? "停止本機 Gateway" : "Stop local gateway"}
+          {zh ? "停止本機訪客連線" : "Stop local visitor access"}
         </button>
         <button
           disabled={!status || gateway.pending}
@@ -589,8 +582,8 @@ export function VisitorGatewayPanel({
             {status.external_verified &&
             status.verification_method === "owner_reported"
               ? zh
-                ? `目前 listener 啟動期間已由擁有者回報檢查完成；時間：${status.verified_at ?? "未知"}。這是當時的觀察，不是持續連線監控。`
-                : `The owner reported completing the checks during this listener start at ${status.verified_at ?? "an unknown time"}. This is a dated observation, not ongoing uptime monitoring.`
+                ? `目前訪客服務啟動期間已由擁有者回報檢查完成；時間：${status.verified_at ?? "未知"}。這是當時的觀察，不是持續連線監控。`
+                : `The owner reported completing the checks during this visitor service start at ${status.verified_at ?? "an unknown time"}. This is a dated observation, not ongoing uptime monitoring.`
               : status.verified_at &&
                   status.verification_method === "owner_reported"
                 ? zh
@@ -620,12 +613,11 @@ export function VisitorGatewayPanel({
                 <input
                   checked={checks[index]}
                   onChange={(event) =>
-                    setCheckState({
-                      key: checklistKey,
-                      checked: checks.map((checked, itemIndex) =>
+                    setChecks(
+                      checks.map((checked, itemIndex) =>
                         itemIndex === index ? event.target.checked : checked,
                       ),
-                    })
+                    )
                   }
                   type="checkbox"
                 />
@@ -642,8 +634,8 @@ export function VisitorGatewayPanel({
           </button>
           <p>
             {zh
-              ? "重啟、停止、來源或版本變更，以及本機就緒失敗都會使檢查失效；Funnel 或網際網路的未觀察中斷不會被偵測。這不會驗證 GitHub Pages 或卡片。"
-              : "Restart, stop, origin or bundle changes, and observed local readiness failures invalidate this check. Unobserved Funnel or internet outages are not detected. This does not verify GitHub Pages or cards."}
+              ? "重新啟動、停止或來源變更會清除檢查；版本與本機就緒變更不會清除這筆當時的觀察；Funnel 或網際網路的未觀察中斷不會被偵測。這不會驗證 GitHub Pages 或卡片。"
+              : "Restart, stop or origin changes clear the check. Bundle and local readiness changes do not clear this dated observation. Unobserved Funnel or internet outages are not detected. This does not verify GitHub Pages or cards."}
           </p>
         </section>
       )}

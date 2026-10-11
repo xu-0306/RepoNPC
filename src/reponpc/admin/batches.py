@@ -478,6 +478,11 @@ class AnalysisBatchService:
 
         self._store.cleanup_expired()
 
+    def has_live_workers(self) -> bool:
+        """A maintenance precheck: never replace runtime under an analysis writer."""
+        with self._workers_lock:
+            return any(worker.is_alive() for worker in self._workers.values())
+
     @property
     def stage_gates(self) -> BatchStageGates:
         """Expose shared bounded stage permits to the configured runner."""

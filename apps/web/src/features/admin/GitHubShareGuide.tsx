@@ -1,11 +1,12 @@
 import type { ChangeEvent } from "react";
 
-import { githubAccount } from "./sharing";
+import { githubAccount, verifiedPagesMarkdown } from "./sharing";
 
 export type GitHubShareGuideProps = {
   locale: "zh-TW" | "en";
   account: string;
   publicUrl: string;
+  verifiedPagesUrl: string | null;
   profileStatus:
     | "unchecked"
     | "ready"
@@ -27,7 +28,7 @@ export type GitHubShareGuideProps = {
   onCheckProfile: () => void;
   onCheckImage: () => void;
   onDownload: () => void;
-  onCopy: () => void;
+  onCopy: (markdown: string) => void;
 };
 
 type ProfileStatus = GitHubShareGuideProps["profileStatus"];
@@ -63,6 +64,9 @@ type GuideCopy = {
   publicUrlHelp: string;
   publicUrlNotReady: string;
   publicUrlEntered: string;
+  legacyRouteNote: string;
+  legacyRouteSummary: string;
+  verifyPages: string;
   cardIntro: string;
   filenameLabel: string;
   filenameMissing: string;
@@ -78,6 +82,7 @@ type GuideCopy = {
   protectedBranch: string;
   readmeIntro: string;
   markdownPreviewHeading: string;
+  markdownLegacyHeading: string;
   markdownLabel: string;
   markdownReady: string;
   markdownMissing: string;
@@ -95,7 +100,7 @@ type GuideCopy = {
 
 const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
   "zh-TW": {
-    title: "把 RepoNPC 卡片放到 GitHub 個人頁",
+    title: "4. 把 RepoNPC 卡片放到 GitHub 個人頁",
     subtitle:
       "GitHub 帳號和用來放個人介紹的儲存庫（repository）是兩回事。要在個人頁顯示卡片，請準備與帳號同名的公開儲存庫，把 README.md 和卡片圖片放在一起；不必另外建立卡片專用 repository。這裡只檢查公開資料並說明步驟，不會替你修改 GitHub。",
     stageProfile: "確認個人頁的同名 repository",
@@ -135,13 +140,17 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     openCreatePage: "前往 GitHub 建立 repository",
     openReadme: "編輯 README.md",
     openProfile: "查看 GitHub 帳號頁",
-    publicUrlLabel: "公開 RepoNPC 訪客網址",
+    publicUrlLabel: "舊版由管理者維護的訪客網址",
     publicUrlHelp:
-      "訪客點卡片後會開啟這個 RepoNPC 網站。請填能從外網開啟的 HTTPS 網址；localhost 只能在你的電腦使用。沒有公開網址也可先準備圖片。",
+      "這是與 GitHub Pages 核對分開的進階部署路線。請填能從外網開啟的 HTTPS 網址；localhost 只能在你的電腦使用。",
     publicUrlNotReady:
       "還沒有可用的公開訪客連結。可先下載圖片，之後再產生要貼進 README 的連結。",
     publicUrlEntered:
       "網址格式已通過檢查；發佈後仍要從 GitHub 實際點擊卡片並試問。",
+    legacyRouteSummary: "選填進階：使用舊版獨立部署網址",
+    verifyPages: "前往第 3 段上傳並核對 Pages 網站",
+    legacyRouteNote:
+      "上方 Pages 網站核對成功後，README 會使用該 Pages 網址；此欄只保留舊版管理者路線。",
     cardIntro:
       "先下載卡片，再把圖片上傳到第一步的同名 repository 根目錄。不用建立另一個 repository。",
     filenameLabel: "建議上傳檔名（根目錄）",
@@ -172,7 +181,8 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
       "受保護的預設分支可能需要提案與合併；圖片進入預設分支前，不要把上傳視為完成。",
     readmeIntro:
       "最後編輯同名 repository 的 README.md，把下方文字貼到想顯示卡片的位置，保留原本的介紹。",
-    markdownPreviewHeading: "要貼進 README.md 的文字",
+    markdownPreviewHeading: "已核對 Pages 網站的 README 文字",
+    markdownLegacyHeading: "舊版管理者路線的 README 文字",
     markdownLabel: "複製下方這段文字",
     markdownReady: "要貼進 README.md 的文字已準備好，可以複製。",
     markdownMissing:
@@ -199,7 +209,7 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     notCheckedAction: "在 GitHub 建立或修改後，回來按「檢查同名 repository」。",
   },
   en: {
-    title: "Put your RepoNPC card on your GitHub profile",
+    title: "4. Put your RepoNPC card on your GitHub profile",
     subtitle:
       "Your GitHub account and the repository used for your profile are different things. To show the card on your profile, use a public repository with the same name as your account and put README.md and the card image in it. You do not need a separate card repository. This guide checks public information and explains the steps; it never edits GitHub for you.",
     stageProfile: "Check the repository used for your profile",
@@ -240,13 +250,17 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     openCreatePage: "Create the repository on GitHub",
     openReadme: "Edit README.md",
     openProfile: "View GitHub account page",
-    publicUrlLabel: "Public RepoNPC visitor URL",
+    publicUrlLabel: "Legacy operator-managed visitor URL",
     publicUrlHelp:
-      "Visitors open this RepoNPC site when they click the card. Enter a public HTTPS URL they can reach; localhost only works on your computer. You can prepare the image before you have a public URL.",
+      "This legacy operator-managed route is separate from GitHub Pages verification. Enter a public HTTPS URL; localhost only works on your computer.",
     publicUrlNotReady:
       "No public visitor link is ready yet. You can download the image now and generate the README link later.",
     publicUrlEntered:
       "The URL format passed validation. After publishing, click the card from GitHub and ask a test question.",
+    legacyRouteSummary: "Optional advanced route: use a legacy deployment URL",
+    verifyPages: "Go to section 3 to upload and verify your Pages site",
+    legacyRouteNote:
+      "When the Pages site above is verified, README uses that Pages URL. This field is kept only for the separate legacy operator-managed route.",
     cardIntro:
       "Download the card, then upload the image to the root of the matching repository from step one. No other repository is needed.",
     filenameLabel: "Suggested upload filename (repository root)",
@@ -280,7 +294,8 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
       "A protected default branch may require a proposal and merge. Do not call the upload complete until the image is on the default branch.",
     readmeIntro:
       "Finally, edit README.md in the matching repository. Paste the text below where the card should appear and keep your existing introduction.",
-    markdownPreviewHeading: "Text to paste into README.md",
+    markdownPreviewHeading: "README text for the verified Pages site",
+    markdownLegacyHeading: "README text for the legacy operator-managed route",
     markdownLabel: "Copy the text below",
     markdownReady: "The text for README.md is ready to copy.",
     markdownMissing:
@@ -313,6 +328,7 @@ export function GitHubShareGuide({
   locale,
   account,
   publicUrl,
+  verifiedPagesUrl,
   profileStatus,
   imageStatus,
   repositoryUrl,
@@ -338,6 +354,36 @@ export function GitHubShareGuide({
   const profileOpen = profileStatus !== "ready";
   const cardOpen = profileStatus === "ready" && imageStatus !== "ready";
   const readmeOpen = profileStatus === "ready" && imageStatus === "ready";
+
+  function markdownField(value: string, id: string) {
+    const empty = !value.trim();
+    return (
+      <>
+        <label htmlFor={id}>{copy.markdownLabel}</label>
+        <textarea
+          aria-describedby={`${id}-status`}
+          id={id}
+          readOnly
+          rows={7}
+          value={value}
+        />
+        <div className="admin-workspace__actions" aria-label={copy.stageReadme}>
+          <button
+            aria-describedby={empty ? `${id}-status` : undefined}
+            className="ux-primary"
+            disabled={busy || empty}
+            onClick={() => onCopy(value)}
+            type="button"
+          >
+            {copy.copyMarkdown}
+          </button>
+        </div>
+        <p id={`${id}-status`} role="status">
+          {empty ? copy.markdownMissing : copy.markdownReady}
+        </p>
+      </>
+    );
+  }
 
   return (
     <section
@@ -465,7 +511,11 @@ export function GitHubShareGuide({
             <p className="ux-missing-fields">{copy.existingRepositoryReadme}</p>
           )}
 
-          <div className="ux-actions" aria-label={copy.stageProfile}>
+          <div
+            className="ux-actions"
+            aria-label={copy.stageProfile}
+            role="group"
+          >
             {repositoryUrl && (
               <ExternalLink href={repositoryUrl} label={copy.openRepository} />
             )}
@@ -503,7 +553,11 @@ export function GitHubShareGuide({
               </dd>
             </div>
           </dl>
-          <div className="admin-workspace__actions" aria-label={copy.stageCard}>
+          <div
+            className="admin-workspace__actions"
+            aria-label={copy.stageCard}
+            role="group"
+          >
             <button
               aria-describedby={
                 !cardReady ? "github-share-download-reason" : undefined
@@ -562,53 +616,64 @@ export function GitHubShareGuide({
           </summary>
           <p>{copy.readmeIntro}</p>
 
-          <label htmlFor="github-share-public-url">
-            {copy.publicUrlLabel}
-            <input
-              aria-describedby="github-share-public-url-help"
-              disabled={busy}
-              id="github-share-public-url"
-              inputMode="url"
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                onPublicUrlChange(event.target.value)
-              }
-              type="url"
-              value={publicUrl}
-            />
-          </label>
-          <p id="github-share-public-url-help">
-            {copy.publicUrlHelp}{" "}
-            {!markdownIsEmpty ? copy.publicUrlEntered : copy.publicUrlNotReady}
-          </p>
+          {verifiedPagesUrl ? (
+            <>
+              <h4>{copy.markdownPreviewHeading}</h4>
+              {markdownField(
+                verifiedPagesMarkdown(verifiedPagesUrl, locale),
+                "github-share-pages-markdown",
+              )}
+            </>
+          ) : (
+            <p>
+              <a
+                href="#pages-share-panel-heading"
+                onClick={() => {
+                  const heading = document.getElementById(
+                    "pages-share-panel-heading",
+                  );
+                  if (heading) {
+                    heading.tabIndex = -1;
+                    heading.focus({ preventScroll: true });
+                    heading.scrollIntoView({
+                      block: "start",
+                      behavior: "instant",
+                    });
+                  }
+                }}
+              >
+                {copy.verifyPages}
+              </a>
+            </p>
+          )}
 
-          <h4>{copy.markdownPreviewHeading}</h4>
-          <label htmlFor="github-share-markdown">{copy.markdownLabel}</label>
-          <textarea
-            aria-describedby="github-share-markdown-status"
-            id="github-share-markdown"
-            readOnly
-            rows={7}
-            value={markdown}
-          />
-          <div
-            className="admin-workspace__actions"
-            aria-label={copy.stageReadme}
-          >
-            <button
-              aria-describedby={
-                markdownIsEmpty ? "github-share-markdown-status" : undefined
-              }
-              className="ux-primary"
-              disabled={busy || markdownIsEmpty}
-              onClick={onCopy}
-              type="button"
-            >
-              {copy.copyMarkdown}
-            </button>
-          </div>
-          <p id="github-share-markdown-status" role="status">
-            {markdownIsEmpty ? copy.markdownMissing : copy.markdownReady}
-          </p>
+          <details>
+            <summary>{copy.legacyRouteSummary}</summary>
+            <label htmlFor="github-share-public-url">
+              {copy.publicUrlLabel}
+              <input
+                aria-describedby="github-share-public-url-help"
+                disabled={busy}
+                id="github-share-public-url"
+                inputMode="url"
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  onPublicUrlChange(event.target.value)
+                }
+                type="url"
+                value={publicUrl}
+              />
+            </label>
+            <p id="github-share-public-url-help">
+              {copy.publicUrlHelp}{" "}
+              {!markdownIsEmpty
+                ? copy.publicUrlEntered
+                : copy.publicUrlNotReady}
+            </p>
+            <p role="status">{copy.legacyRouteNote}</p>
+
+            <h4>{copy.markdownLegacyHeading}</h4>
+            {markdownField(markdown, "github-share-markdown")}
+          </details>
 
           <div className="ux-missing-fields">
             <h4>{copy.preserveReadmeHeading}</h4>

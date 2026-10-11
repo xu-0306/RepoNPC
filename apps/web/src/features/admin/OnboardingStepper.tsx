@@ -1,5 +1,9 @@
 import type { Locale } from "../../i18n/messages";
-import type { GuidedOnboardingState, GuidedStep } from "./guidedOnboarding";
+import {
+  onboardingProgress,
+  type GuidedOnboardingState,
+  type GuidedStep,
+} from "./guidedOnboarding";
 
 interface Props {
   copy: {
@@ -11,20 +15,9 @@ interface Props {
 }
 
 export function OnboardingStepper({ copy, locale, state }: Props) {
-  const steps: readonly GuidedStep[] =
-    state.route === "manual"
-      ? ["repositories", "contributions", "profile", "review"]
-      : [
-          "models",
-          "repositories",
-          "analysis",
-          "contributions",
-          "profile",
-          "review",
-        ];
+  const { steps, completed, total } = onboardingProgress(state);
   const current = steps.indexOf(state.step);
   if (current < 0) return null;
-  const currentLabel = copy.steps[state.step];
   const routeLabel =
     locale === "zh-TW"
       ? state.route === "manual"
@@ -36,25 +29,18 @@ export function OnboardingStepper({ copy, locale, state }: Props) {
 
   return (
     <nav aria-label={copy.progress} className="onboarding-stepper">
-      <div className="onboarding-stepper__summary">
-        <span>{routeLabel}</span>
-        <strong>{currentLabel}</strong>
-        <span>
-          {current + 1}/{steps.length}
-        </span>
-      </div>
-      <progress max={steps.length} value={current}>
-        {current}/{steps.length}
+      <progress aria-label={copy.progress} max={total} value={completed}>
+        {completed}/{total}
       </progress>
       <details className="onboarding-stepper__details">
         <summary>
-          {copy.progress}: {current + 1}/{steps.length}
+          {routeLabel} ·{" "}
+          {locale === "zh-TW"
+            ? `目前第 ${current + 1} 步，共 ${total} 步 · 已完成 ${completed}/${total}`
+            : `Step ${current + 1} of ${total} · ${completed}/${total} complete`}
         </summary>
         <StepList copy={copy} current={current} steps={steps} />
       </details>
-      <div className="onboarding-stepper__desktop">
-        <StepList copy={copy} current={current} steps={steps} />
-      </div>
     </nav>
   );
 }

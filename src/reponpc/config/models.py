@@ -12,7 +12,15 @@ from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 Locale = Literal["zh-TW", "en"]
 LocalizedText = dict[str, str]
@@ -243,12 +251,64 @@ class CharacterAnimationConfig(StrictModel):
     movement: Literal["none", "subtle"]
 
 
+class SceneFocusConfig(StrictModel):
+    x: Annotated[int, Field(strict=True, ge=0, le=100)] = 50
+    y: Annotated[int, Field(strict=True, ge=0, le=100)] = 50
+
+
+class SceneConfig(StrictModel):
+    color_scheme: Annotated[str, Field(min_length=1, max_length=64)] = "neutral"
+    color_mode: Literal["system", "light", "dark"] = "system"
+    visitor_mode_toggle: Annotated[bool, Field(strict=True)] = True
+    accent: str | None = None
+    background_path: str | None = None
+    background_scaling: Literal["smooth", "pixelated"] = "smooth"
+    background_focus: SceneFocusConfig = Field(default_factory=SceneFocusConfig)
+    background_dim: Literal["auto", "none", "low", "medium", "high"] = "auto"
+
+    @field_validator("color_scheme")
+    @classmethod
+    def validate_color_scheme(cls, value: str, info: ValidationInfo) -> str:
+        from reponpc.scene.registry import default_scene_registry
+
+        registry = (info.context or {}).get("scene_registry") or default_scene_registry()
+        try:
+            return registry.canonical_id(value)
+        except KeyError:
+            valid_ids = ", ".join(sorted(registry.schemes))
+            raise ValueError(f"unknown color scheme; valid ids: {valid_ids}") from None
+
+    @field_validator("accent")
+    @classmethod
+    def validate_accent(cls, value: str | None) -> str | None:
+        if value is not None and not HEX_COLOR_RE.fullmatch(value):
+            raise ValueError("accent must be a six-digit hexadecimal color")
+        return value.lower() if value is not None else None
+
+    @field_validator("background_path")
+    @classmethod
+    def validate_background_path(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = _relative_pattern(value)
+        path = PurePosixPath(value)
+        if (
+            len(path.parts) != 3
+            or path.parts[:2] != ("assets", "scene")
+            or path.suffix not in {".png", ".webp"}
+            or path.name in {".", ".."}
+        ):
+            raise ValueError("background must be a PNG or WebP directly below assets/scene/")
+        return value
+
+
 class CharacterConfig(StrictModel):
     mode: Literal["builtin", "custom"]
     revision: Annotated[int, Field(ge=0)]
     builtin: BuiltinCharacterPackConfig | None = None
     custom: CustomCharacterConfig | None = None
     animation: CharacterAnimationConfig
+    scene: SceneConfig = Field(default_factory=SceneConfig)
 
     @model_validator(mode="after")
     def validate_mode(self) -> CharacterConfig:
@@ -321,12 +381,29 @@ class EmbeddingConfig(StrictModel):
     # stripping here would silently change both index and runtime semantics.
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=False)
 
-    adapter: Literal["local_sentence_transformers", "openai_compatible", "ollama"]
+    adapter: Literal["local_sentence_transformers", "openai_compatible", "ollama", "builtin_onnx"]
     model: Annotated[str, Field(min_length=1, max_length=200)]
     dimension: Annotated[int, Field(gt=0, le=65536)]
     normalized: Literal[True]
     query_prefix: Annotated[str, Field(max_length=64)]
     passage_prefix: Annotated[str, Field(max_length=64)]
+
+    @model_validator(mode="after")
+    def validate_builtin_identity(self) -> EmbeddingConfig:
+        if self.adapter == "builtin_onnx":
+            # The source pin lives in one trusted resource. Public YAML cannot
+            # select another local model, revision or tokenizer behaviour.
+            from reponpc.providers.builtin_artifacts import builtin_embedding_identity
+
+            expected = builtin_embedding_identity()
+            if (
+                self.model != expected.model_id
+                or self.dimension != expected.dimension
+                or self.query_prefix != expected.query_prefix
+                or self.passage_prefix != expected.passage_prefix
+            ):
+                raise ValueError("built-in embedding identity must match the pinned source")
+        return self
 
 
 class FusionConfig(StrictModel):
@@ -416,9 +493,12 @@ def _safe_issues(exc: ValidationError) -> list[ConfigIssue]:
 def validate_public_config(data: Any) -> PublicConfig:
     """Validate decoded YAML data and return an immutable public configuration."""
 
+    from reponpc.scene.registry import default_scene_registry
+
+    scene_registry = default_scene_registry()
     _reject_secret_keys(data)
     try:
-        config = PublicConfig.model_validate(data)
+        config = PublicConfig.model_validate(data, context={"scene_registry": scene_registry})
     except ValidationError as exc:
         raise ConfigValidationError(_safe_issues(exc)) from None
     if config.character.builtin is not None:

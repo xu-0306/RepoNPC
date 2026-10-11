@@ -432,7 +432,7 @@ def test_changed_provider_generation_caps_stale_the_preflight_plan(tmp_path) -> 
 
 def test_batch_service_rejects_budget_different_from_runner(tmp_path) -> None:
     with pytest.raises(ValueError, match="match batch runner"):
-        _service(tmp_path, runner=_BudgetedRunner(16384))
+        _service(tmp_path, runner=_BudgetedRunner(8192))
 
 
 def test_runner_rate_waits_without_busy_loop_then_resumes(tmp_path) -> None:

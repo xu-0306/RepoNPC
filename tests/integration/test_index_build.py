@@ -7,6 +7,7 @@ import json
 import sqlite3
 from dataclasses import replace
 from pathlib import Path
+from typing import Literal, cast
 
 import numpy as np
 import pytest
@@ -39,14 +40,15 @@ FIXTURE_SHA = "a" * 40
 class DeterministicEmbeddingProvider:
     """A non-network, unit-normalized fixture provider with the declared identity."""
 
-    def __init__(self, *, dimension: int = 384, prefix: str = "passage: ") -> None:
+    def __init__(self, *, dimension: int | None = None, prefix: str | None = None) -> None:
+        configured = load_public_config(FIXTURE_CONFIG).retrieval.embedding
         self._identity = EmbeddingIdentity(
-            adapter="local_sentence_transformers",
-            model_id="intfloat/multilingual-e5-small",
-            dimension=dimension,
-            normalized=True,
-            query_prefix="query: ",
-            passage_prefix=prefix,
+            adapter=configured.adapter,
+            model_id=configured.model,
+            dimension=configured.dimension if dimension is None else dimension,
+            normalized=configured.normalized,
+            query_prefix=configured.query_prefix,
+            passage_prefix=configured.passage_prefix if prefix is None else prefix,
         )
         self.raw_passages: list[str] = []
         self.passage_batches: list[int] = []
@@ -63,6 +65,9 @@ class DeterministicEmbeddingProvider:
             digest = hashlib.sha256(prefixed.encode("utf-8")).digest()
             result[row, int.from_bytes(digest[:2], "big") % self._identity.dimension] = 1.0
         return result
+
+    def embed_query(self, texts: list[str]) -> np.ndarray:
+        return self.embed_passages(texts)
 
 
 def _fixture_snapshot(*, extra_blobs: tuple[RepositoryBlob, ...] = ()) -> ResolvedRepository:
@@ -153,10 +158,9 @@ def test_fixture_sources_flow_through_exclusion_chunking_evidence_and_schema(
         assert assertion[1] == "fixture_retrieval_design"
         assert assertion[2] <= assertion[3]
         assert connection.execute("PRAGMA quick_check").fetchone() == ("ok",)
-        unavailable = connection.execute(
-            "SELECT content FROM evidence WHERE evidence_class = 'PARTICIPATION'"
-        ).fetchone()[0]
-        assert "No linked commits" not in unavailable
+        assert connection.execute(
+            "SELECT COUNT(*) FROM evidence WHERE evidence_class = 'PARTICIPATION'"
+        ).fetchone() == (0,)
 
 
 def test_participation_facts_keep_unavailable_distinct_and_link_to_immutable_commits(
@@ -177,10 +181,15 @@ def test_participation_facts_keep_unavailable_distinct_and_link_to_immutable_com
         output_path=tmp_path / "index.sqlite",
     )
     with sqlite3.connect(result.database_path) as connection:
+        assert (
+            connection.execute(
+                "SELECT value FROM bundle_meta WHERE key LIKE 'participation:%'"
+            ).fetchone()
+            is None
+        )
         stored = json.loads(
             connection.execute(
-                "SELECT value FROM bundle_meta WHERE key = ?",
-                ("participation:fixture-owner/reponpc-demo",),
+                "SELECT metadata_json FROM evidence WHERE evidence_class = 'PARTICIPATION' LIMIT 1"
             ).fetchone()[0]
         )
         assert stored["other_contributors_visible"] is None
@@ -194,7 +203,11 @@ def test_participation_facts_keep_unavailable_distinct_and_link_to_immutable_com
     reader = ReadOnlyIndex.open(result.database_path, expected_embedding=provider.identity())
     try:
         assert reader.owner_aliases == ("fixture-owner",)
-        assert [reader.evidence(evidence_id).github_permalink for evidence_id, _ in rows] == [
+        participation_records = [reader.evidence(evidence_id) for evidence_id, _ in rows]
+        assert all(record is not None for record in participation_records)
+        assert [
+            record.github_permalink for record in participation_records if record is not None
+        ] == [
             "https://github.com/fixture-owner/reponpc-demo/tree/" + FIXTURE_SHA,
             "https://github.com/fixture-owner/reponpc-demo/commit/" + "b" * 40,
             "https://github.com/fixture-owner/reponpc-demo/commit/" + "c" * 40,
@@ -224,7 +237,7 @@ def test_participation_facts_keep_unavailable_distinct_and_link_to_immutable_com
                     "insufficient_evidence": False,
                 },
                 {"S1": first, "S2": project},
-                locale,
+                cast(Literal["zh-TW", "en"], locale),
                 owner_name="Fixture Developer",
                 owner_aliases=reader.owner_aliases,
             )
@@ -238,7 +251,7 @@ def test_participation_facts_keep_unavailable_distinct_and_link_to_immutable_com
         reader.close()
 
 
-def test_root_manifest_is_line_addressable_repository_metadata_and_provider_adds_prefix(
+def test_root_manifest_is_line_addressable_and_provider_receives_stored_plaintext(
     tmp_path: Path,
 ) -> None:
     provider = DeterministicEmbeddingProvider()
@@ -250,6 +263,7 @@ def test_root_manifest_is_line_addressable_repository_metadata_and_provider_adds
             "evidence.end_line, evidence.metadata_json "
             "FROM sources JOIN evidence USING(source_id) WHERE sources.path = 'pyproject.toml'"
         ).fetchall()
+        stored_passages = [row[0] for row in connection.execute("SELECT content FROM evidence")]
 
     assert rows
     assert all(row[0] == "repository_metadata" for row in rows)
@@ -257,8 +271,8 @@ def test_root_manifest_is_line_addressable_repository_metadata_and_provider_adds
     assert all(1 <= row[2] <= row[3] for row in rows)
     assert all(json.loads(row[4])["source_type"] == "repository_metadata" for row in rows)
     assert provider.raw_passages
-    passage_prefix = provider.identity().passage_prefix
-    assert all(not text.startswith(passage_prefix) for text in provider.raw_passages)
+    assert sorted(provider.raw_passages) == sorted(stored_passages)
+    assert provider.identity().passage_prefix == ""
 
 
 def test_index_builder_splits_embeddings_below_transport_response_limit(
@@ -327,7 +341,8 @@ def test_high_confidence_secret_blob_is_skipped_without_persisting_its_body(tmp_
 
 def test_embedding_identity_mismatch_fails_before_writing_an_index(tmp_path: Path) -> None:
     with pytest.raises(IndexBuildError, match="index build failed") as exc_info:
-        _build(tmp_path, provider=DeterministicEmbeddingProvider(dimension=383))
+        dimension = load_public_config(FIXTURE_CONFIG).retrieval.embedding.dimension
+        _build(tmp_path, provider=DeterministicEmbeddingProvider(dimension=dimension - 1))
 
     assert exc_info.value.code == "embedding_identity_mismatch"
     assert not (tmp_path / "index.sqlite").exists()
@@ -350,3 +365,27 @@ def test_built_database_opens_read_only_and_consumes_both_real_fts_tables(tmp_pa
             reader._connection.execute("DELETE FROM evidence")
     finally:
         reader.close()
+
+
+def test_onboarding_placeholder_does_not_create_participation(tmp_path: Path) -> None:
+    from reponpc.admin.onboarding import _analysis_config
+
+    provider = DeterministicEmbeddingProvider()
+    config, content = _analysis_config(
+        slug="fixture-owner/reponpc-demo",
+        ref=FIXTURE_SHA,
+        include=(),
+        exclude=(),
+        identity=provider.identity(),
+    )
+    assert config.profile.github_login == "reponpc-onboarding"
+    result = IndexDatabaseBuilder(provider).build(
+        config=config,
+        configuration_source=replace(_configuration_source(), content=content),
+        repositories=(_fixture_snapshot(),),
+        output_path=tmp_path / "index.sqlite",
+    )
+    with sqlite3.connect(result.database_path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM evidence WHERE evidence_class = 'PARTICIPATION'"
+        ).fetchone() == (0,)

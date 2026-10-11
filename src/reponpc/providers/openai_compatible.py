@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from reponpc.providers.chat_stream import ChatStreamParser, ProviderActivity
 from reponpc.providers.contracts import (
     ChatProvider,
     ProviderCapabilities,
@@ -99,6 +101,9 @@ class OpenAICompatibleChatProvider(ChatProvider):
         response_schema: ResponseSchema,
         max_output_tokens: int,
         timeout: float,
+        *,
+        on_progress: Callable[[ProviderActivity], None] | None = None,
+        cancelled: Callable[[], bool] = lambda: False,
     ) -> ProviderResult:
         _validate_request(self.capabilities_config, messages, max_output_tokens, timeout)
         request: dict[str, Any] = {
@@ -107,7 +112,7 @@ class OpenAICompatibleChatProvider(ChatProvider):
                 {"role": message.role, "content": message.content} for message in messages
             ],
             "max_tokens": max_output_tokens,
-            "stream": False,
+            "stream": on_progress is not None,
         }
         if self.capabilities_config.structured_output:
             request["response_format"] = {
@@ -119,6 +124,34 @@ class OpenAICompatibleChatProvider(ChatProvider):
                 },
             }
         started = time.monotonic()
+        if on_progress is not None:
+            stream_lines = getattr(self.transport, "stream_lines", None)
+            if not callable(stream_lines):
+                raise ProviderError(ProviderFailureCode.UNAVAILABLE)
+            parser = ChatStreamParser(ollama=False, on_activity=on_progress)
+            status = stream_lines(
+                "POST",
+                self._origin.endpoint("chat/completions"),
+                headers=self._headers(
+                    {"Content-Type": "application/json", "Accept": "text/event-stream"}
+                ),
+                body=_json_bytes(request),
+                timeout=timeout,
+                cancelled=cancelled,
+                on_line=parser.line,
+            )
+            if status != 200:
+                raise ProviderError(failure_for_status(status))
+            parser.finish()
+            return ProviderResult(
+                content=parser.content or ({} if parser.finish_reason == "length" else ""),
+                finish_reason=parser.finish_reason or "stop",
+                usage=_usage(parser.payload.get("usage"))
+                if self.capabilities_config.usage_reporting
+                else None,
+                provider_request_id=None,
+                duration_ms=(time.monotonic() - started) * 1000,
+            )
         response = self.transport.request(
             "POST",
             self._origin.endpoint("chat/completions"),
@@ -173,6 +206,27 @@ class OpenAICompatibleChatProvider(ChatProvider):
             usage=usage,
             provider_request_id=request_id,
             duration_ms=(time.monotonic() - started) * 1000,
+        )
+
+    def generate_with_progress(
+        self,
+        messages: tuple[ProviderMessage, ...],
+        response_schema: ResponseSchema,
+        max_output_tokens: int,
+        timeout: float,
+        *,
+        on_progress: Callable[[ProviderActivity], None],
+        cancelled: Callable[[], bool],
+    ) -> ProviderResult:
+        if not callable(getattr(self.transport, "stream_lines", None)):
+            return self.generate(messages, response_schema, max_output_tokens, timeout)
+        return self.generate(
+            messages,
+            response_schema,
+            max_output_tokens,
+            timeout,
+            on_progress=on_progress,
+            cancelled=cancelled,
         )
 
     def _headers(self, additional: dict[str, str] | None = None) -> dict[str, str]:

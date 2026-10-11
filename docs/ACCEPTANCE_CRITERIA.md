@@ -1,8 +1,17 @@
 # RepoNPC v1 Acceptance Criteria
 
+**2026-10-03 next parallel run:** A7 now renders the authored per-model resource
+grades and explicit existing-form handoff described in the
+[A7 card contract](A7_MODEL_CARDS_IMPLEMENTATION_2026-10-03.md). Real model,
+isolated installer and private Man evidence is recorded in the latest parallel
+handoff. Partial local checks do not promote complete AC-057/069/070 or A12 rows.
+
+**2026-09-30 A5/R08 local evidence:** [The A5 contract](A5_VISITOR_APPEARANCE_EXPORT_CONTRACT.md) records local checks for AC-068/072–075/079 and preservation of AC-071. ChatGPT review6 accepted the prior phone drawer/FAQ fixes but found a technical path/dot FAQ collision; Luna max repaired it, and Main reproduced six single-row failures before repair. Final Web377/37 files, frontend format/lint/type/build, registry/source guard and Docker/Compose2 passed; unchanged 62 backend inputs retain Python1,638/2 Windows skips, mypy91 and Ruff221 results. Earlier native phone drawer checks at host1440/375 and admin/static axe checks remain unchanged; contrast needs manual review. The final repair is locally checked but has no later ChatGPT review; see [handoff](A5_HANDOFF_2026-09-30.md). Update 2026-09-30: the owner approved static live chat (decision A) and exact offline FAQ matching (decision B); both are implemented locally with Web385/37 files, Python1,640/2 Windows skips and both Docker smokes passing; closing review, native ZIP completion and actual200% native zoom remain open. Formal release criteria and A12 external/clean-host acceptance remain open.
+
 **2026-09-27 amendment (ADR-052, Technical Specification 0.4.5, FR-049/053):** AC-076 (maintenance page), AC-077 (R11 recovery), AC-078 (R12-B reuse) and AC-079 (R08 protected previews) are added. All start **not-run**.
 
 **2026-09-26 chat-interface and colour-scheme amendment (ADR-051, Technical Specification 0.4.4, FR-047/050/051/052):** AC-068 and AC-072–AC-075 are revised:
+
 - The visitor page is a simple chat interface.
 - Colours come from owner-selected fixed schemes with light and dark variants, validated for contrast when the registry loads.
 - Visitors may switch light/dark only; the choice is stored in their browser.
@@ -398,7 +407,7 @@ The following criteria are normative release requirements under the owner-approv
 
 ### AC-039 — Analysis is selected-only, batch-backed, and evidence-safe
 
-**0.2.7 / ADR-034 regression, amended by 0.3.0 / ADR-037:** With `REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS` absent, actual analysis generation requests 8,192 tokens when provider/context capacity permits. An explicit 16,384 is accepted; non-positive, non-integer and larger values are rejected safely. Visitor/probe output remains independent and now uses the ADR-037 4,096-default / 8,192-maximum policy; contribution suggestions remain 700. Both analysis paths reserve full prompt, evidence/IDs, schema/framing and output before generation; insufficient context triggers no chat call. A returned `length` termination or adapter empty-output/length diagnostic fails with `PROVIDER_ERROR` / `PROVIDER_OUTPUT_LIMIT_REACHED` before parsing, even for valid JSON, without retry, raw-output retention or successful cache insertion. Normal complete bilingual output still passes canonical/evidence/person validation. Exercise OpenAI-compatible and Ollama transports, a smaller actual provider capability and clean application wiring; synthetic results do not establish live-model quality.
+**ADR-034/037 regression, amended by 0.4.8 / ADR-055:** With `REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS` absent, actual analysis generation requests 16,384 tokens when provider/context capacity permits. Explicit positive lower values and 16,384 are accepted; non-positive, non-integer and larger values are rejected safely. Visitor/probe output remains independent with a 16,384-default / 16,384-maximum policy; contribution suggestions remain 700. Both analysis paths reserve full prompt, evidence/IDs, schema/framing and output before generation; insufficient context triggers no chat call. A returned `length` termination or adapter empty-output/length diagnostic fails with `PROVIDER_ERROR` / `PROVIDER_OUTPUT_LIMIT_REACHED` before parsing, even for valid JSON, without retry, raw-output retention or successful cache insertion. Normal complete bilingual output still passes canonical/evidence/person validation. Exercise OpenAI-compatible and Ollama transports, a smaller actual provider capability and clean application wiring; synthetic results do not establish live-model quality.
 
 **Maps to:** FR-027, FR-028, FR-008 through FR-012, NFR-001, NFR-002, NFR-014
 
@@ -407,6 +416,8 @@ The following criteria are normative release requirements under the owner-approv
 - **Then** only confirmed public repositories enter analysis, every item pins one full commit and reuses production exclusions/chunking/evidence/provider validation, an empty include selection covers documented directories/manifests and common root-level source extensions without bypassing mandatory exclusions, only one owner-scoped durable batch is active, and the legacy one-item route creates a one-item batch instead of bypassing batch policy. The configurable bounded active-item and provider deadlines in AC-061 apply; every terminal/recovery path removes unique staging; no archive, repository body, prompt, provider body, incomplete output, or path becomes durable; only bounded safe progress, closed-set failure reasons, and validated normalized results may persist; no fallback occurs; and returned results keep `REPOSITORY_FACT` separate from supported `MODEL_INFERENCE`.
 
 ### AC-040 — Personal claims require confirmation and the guided flow remains usable
+
+**2026-10-07 owner-approved analysis presentation:** Existing inferences are readable unconfirmed cards; each collapsed source group contains only its matched facts, with actual paths/lines/excerpts. Long interpretations expand intact, technical IDs are secondary, and uncited facts and empty/missing-source states remain accessible. Source disclosure does not create an owner assertion or invoke generation. The single next action opens contribution entry. Verify both locales, keyboard disclosure/focus, responsive widths and confirmation isolation. This is scoped UI evidence, not full release acceptance.
 
 **Maps to:** FR-025, FR-028, FR-018, FR-022, NFR-002, NFR-003, NFR-009
 
@@ -452,90 +463,90 @@ For contribution-model assistance, the request keeps the fixed 700-token output 
 
 ## 10. Traceability matrix
 
-| Requirement | Acceptance criteria |
-| --- | --- |
-| FR-001 | AC-001, AC-002 |
-| FR-002 | AC-003, AC-044, AC-046 |
-| FR-003 | AC-004, AC-033, AC-044 |
-| FR-004 | AC-005, AC-006 |
-| FR-005 | AC-007, AC-009 |
-| FR-006 | AC-008, AC-009, AC-046, AC-047 |
-| FR-007 | AC-007, AC-009 |
-| FR-008 | AC-010, AC-012 |
-| FR-009 | AC-011–AC-014, AC-033 |
-| FR-010 | AC-003, AC-011, AC-012, AC-014 |
-| FR-011 | AC-010, AC-012–AC-014 |
-| FR-012 | AC-015, AC-016, AC-046, AC-047 |
-| FR-013 | AC-011, AC-017, AC-018 |
-| FR-014 | AC-019, AC-034 |
-| FR-015 | AC-020, AC-037 |
-| FR-016 | AC-021, AC-022, AC-028, AC-034 |
-| FR-017 | AC-024, AC-049, AC-050 |
-| FR-018 | AC-001, AC-025, AC-027, AC-034, AC-040 |
-| FR-019 | AC-026, AC-027 |
-| FR-020 | AC-003, AC-029, AC-037 |
-| FR-021 | AC-030–AC-032, AC-037 |
-| FR-022 | AC-008, AC-019, AC-023, AC-025, AC-040, AC-043 |
-| FR-023 | AC-016, AC-019, AC-032, AC-035 |
-| FR-024 | AC-022, AC-028 |
-| FR-025 | AC-038, AC-040 |
-| FR-026 | AC-038 |
-| FR-027 | AC-039, AC-045 |
-| FR-028 | AC-039, AC-040 |
-| FR-029 | AC-050 |
-| FR-030 | Legacy; AC-051 proves retirement |
-| FR-031 | AC-051 |
-| FR-032 | AC-044, AC-052 |
-| FR-033 | AC-045, AC-046 |
-| FR-034 | Legacy; AC-051 proves retirement |
-| FR-035 | AC-047, AC-048 |
-| FR-036 | AC-049, AC-050 |
-| FR-037 | AC-051, AC-052 |
-| FR-038 | AC-053, AC-054, AC-056 |
-| FR-039 | AC-054, AC-055, AC-056 |
-| FR-040 | AC-053, AC-057 |
-| FR-041 | AC-058, AC-060 |
-| FR-042 | AC-059, AC-060 |
-| NFR-001 | AC-002, AC-004, AC-014, AC-016, AC-024, AC-027, AC-030, AC-033, AC-034, AC-037–AC-040, AC-044–AC-046, AC-048–AC-052, AC-059 |
-| NFR-002 | AC-004, AC-016, AC-024, AC-035, AC-038–AC-040, AC-044–AC-046, AC-048, AC-051, AC-052, AC-059, AC-060 |
-| NFR-003 | AC-019, AC-025, AC-026, AC-029–AC-032, AC-040, AC-047, AC-050–AC-053, AC-056–AC-060 |
-| NFR-004 | AC-009 |
-| NFR-005 | AC-015, AC-017 |
-| NFR-006 | AC-007–AC-009 |
-| NFR-007 | AC-011–AC-013 |
-| NFR-008 | AC-008, AC-009, AC-023, AC-057, AC-058 |
-| NFR-009 | AC-019–AC-023, AC-038, AC-040, AC-049–AC-052, AC-057, AC-058, AC-060 |
-| NFR-010 | AC-001, AC-036, AC-037 |
-| NFR-011 | AC-003, AC-005, AC-006, AC-029, AC-036, AC-046, AC-047, AC-056, AC-059, AC-060 |
-| NFR-012 | AC-017, AC-032, AC-035, AC-044, AC-045, AC-050, AC-052 |
-| NFR-013 | AC-001, AC-005, AC-015, AC-036, AC-037, AC-051, AC-053–AC-060 |
-| NFR-014 | AC-018, AC-039, AC-045, AC-052, AC-054, AC-055, AC-059 |
+| Requirement | Acceptance criteria                                                                                                         |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------- |
+| FR-001      | AC-001, AC-002                                                                                                              |
+| FR-002      | AC-003, AC-044, AC-046                                                                                                      |
+| FR-003      | AC-004, AC-033, AC-044                                                                                                      |
+| FR-004      | AC-005, AC-006                                                                                                              |
+| FR-005      | AC-007, AC-009                                                                                                              |
+| FR-006      | AC-008, AC-009, AC-046, AC-047                                                                                              |
+| FR-007      | AC-007, AC-009                                                                                                              |
+| FR-008      | AC-010, AC-012                                                                                                              |
+| FR-009      | AC-011–AC-014, AC-033                                                                                                       |
+| FR-010      | AC-003, AC-011, AC-012, AC-014                                                                                              |
+| FR-011      | AC-010, AC-012–AC-014                                                                                                       |
+| FR-012      | AC-015, AC-016, AC-046, AC-047                                                                                              |
+| FR-013      | AC-011, AC-017, AC-018                                                                                                      |
+| FR-014      | AC-019, AC-034                                                                                                              |
+| FR-015      | AC-020, AC-037                                                                                                              |
+| FR-016      | AC-021, AC-022, AC-028, AC-034                                                                                              |
+| FR-017      | AC-024, AC-049, AC-050                                                                                                      |
+| FR-018      | AC-001, AC-025, AC-027, AC-034, AC-040                                                                                      |
+| FR-019      | AC-026, AC-027                                                                                                              |
+| FR-020      | AC-003, AC-029, AC-037                                                                                                      |
+| FR-021      | AC-030–AC-032, AC-037                                                                                                       |
+| FR-022      | AC-008, AC-019, AC-023, AC-025, AC-040, AC-043                                                                              |
+| FR-023      | AC-016, AC-019, AC-032, AC-035                                                                                              |
+| FR-024      | AC-022, AC-028                                                                                                              |
+| FR-025      | AC-038, AC-040                                                                                                              |
+| FR-026      | AC-038                                                                                                                      |
+| FR-027      | AC-039, AC-045                                                                                                              |
+| FR-028      | AC-039, AC-040                                                                                                              |
+| FR-029      | AC-050                                                                                                                      |
+| FR-030      | Legacy; AC-051 proves retirement                                                                                            |
+| FR-031      | AC-051                                                                                                                      |
+| FR-032      | AC-044, AC-052                                                                                                              |
+| FR-033      | AC-045, AC-046                                                                                                              |
+| FR-034      | Legacy; AC-051 proves retirement                                                                                            |
+| FR-035      | AC-047, AC-048                                                                                                              |
+| FR-036      | AC-049, AC-050                                                                                                              |
+| FR-037      | AC-051, AC-052                                                                                                              |
+| FR-038      | AC-053, AC-054, AC-056                                                                                                      |
+| FR-039      | AC-054, AC-055, AC-056                                                                                                      |
+| FR-040      | AC-053, AC-057                                                                                                              |
+| FR-041      | AC-058, AC-060                                                                                                              |
+| FR-042      | AC-059, AC-060                                                                                                              |
+| NFR-001     | AC-002, AC-004, AC-014, AC-016, AC-024, AC-027, AC-030, AC-033, AC-034, AC-037–AC-040, AC-044–AC-046, AC-048–AC-052, AC-059 |
+| NFR-002     | AC-004, AC-016, AC-024, AC-035, AC-038–AC-040, AC-044–AC-046, AC-048, AC-051, AC-052, AC-059, AC-060                        |
+| NFR-003     | AC-019, AC-025, AC-026, AC-029–AC-032, AC-040, AC-047, AC-050–AC-053, AC-056–AC-060                                         |
+| NFR-004     | AC-009                                                                                                                      |
+| NFR-005     | AC-015, AC-017                                                                                                              |
+| NFR-006     | AC-007–AC-009                                                                                                               |
+| NFR-007     | AC-011–AC-013                                                                                                               |
+| NFR-008     | AC-008, AC-009, AC-023, AC-057, AC-058                                                                                      |
+| NFR-009     | AC-019–AC-023, AC-038, AC-040, AC-049–AC-052, AC-057, AC-058, AC-060                                                        |
+| NFR-010     | AC-001, AC-036, AC-037                                                                                                      |
+| NFR-011     | AC-003, AC-005, AC-006, AC-029, AC-036, AC-046, AC-047, AC-056, AC-059, AC-060                                              |
+| NFR-012     | AC-017, AC-032, AC-035, AC-044, AC-045, AC-050, AC-052                                                                      |
+| NFR-013     | AC-001, AC-005, AC-015, AC-036, AC-037, AC-051, AC-053–AC-060                                                               |
+| NFR-014     | AC-018, AC-039, AC-045, AC-052, AC-054, AC-055, AC-059                                                                      |
 
 Version 0.1.9 additions:
 
-| Requirement | Acceptance criteria |
-| --- | --- |
+| Requirement                                                     | Acceptance criteria            |
+| --------------------------------------------------------------- | ------------------------------ |
 | External embedding profiles and provider-aware model management | AC-008, AC-032, AC-047, AC-048 |
-| Deployment-aware password/private administration | AC-024, AC-036, AC-049 |
-| Local-first GitHub binding and host recovery | AC-041, AC-042, AC-050 |
-| Bounded operations CLI | AC-049, AC-050 |
+| Deployment-aware password/private administration                | AC-024, AC-036, AC-049         |
+| Local-first GitHub binding and host recovery                    | AC-041, AC-042, AC-050         |
+| Bounded operations CLI                                          | AC-049, AC-050                 |
 
 Version 0.2.0 corrections:
 
-| Requirement | Acceptance criteria |
-| --- | --- |
-| Passwordless one-use loopback launch | AC-024, AC-043, AC-049, AC-050 |
+| Requirement                                          | Acceptance criteria            |
+| ---------------------------------------------------- | ------------------------------ |
+| Passwordless one-use loopback launch                 | AC-024, AC-043, AC-049, AC-050 |
 | Production password/setup preservation and migration | AC-024, AC-042, AC-049, AC-050 |
-| GitHub OAuth connection-only behavior | AC-041, AC-042, AC-043 |
+| GitHub OAuth connection-only behavior                | AC-041, AC-042, AC-043         |
 
 Version 0.2.1 retirement amendment:
 
-| Requirement | Acceptance criteria |
-| --- | --- |
-| Remove OAuth and browser-entered public-read PAT product surfaces | AC-051 |
-| Migrate encrypted public-read state without affecting owner/writeback state | AC-051 |
-| Anonymous REST exact-SHA public-repository analysis | AC-044, AC-052 |
-| Recoverable anonymous GitHub rate exhaustion and manual continuation | AC-052, AC-039, AC-040 |
+| Requirement                                                                 | Acceptance criteria    |
+| --------------------------------------------------------------------------- | ---------------------- |
+| Remove OAuth and browser-entered public-read PAT product surfaces           | AC-051                 |
+| Migrate encrypted public-read state without affecting owner/writeback state | AC-051                 |
+| Anonymous REST exact-SHA public-repository analysis                         | AC-044, AC-052         |
+| Recoverable anonymous GitHub rate exhaustion and manual continuation        | AC-052, AC-039, AC-040 |
 
 Version 0.2.2 model-setup amendment additionally maps FR-006/FR-012/FR-035 to AC-054/AC-056, FR-025/FR-022 to AC-053/AC-057, NFR-001/002 to AC-055, NFR-003/011 to AC-056, NFR-008/009 to AC-057, NFR-012/014 to AC-054/AC-055, and NFR-013 to AC-053 through AC-057. Earlier evidence does not establish these new results.
 
@@ -544,11 +555,11 @@ AC-041 through AC-043 are historical 0.1.6–0.2.0 criteria and are not 0.2.1 re
 Version 0.1.4 additions:
 
 | Requirement | Acceptance criteria |
-| --- | --- |
-| FR-025 | AC-038, AC-040 |
-| FR-026 | AC-038 |
-| FR-027 | AC-039 |
-| FR-028 | AC-039, AC-040 |
+| ----------- | ------------------- |
+| FR-025      | AC-038, AC-040      |
+| FR-026      | AC-038              |
+| FR-027      | AC-039              |
+| FR-028      | AC-039, AC-040      |
 
 Version 0.1.5 strengthens existing FR-012/AC-015 with the named vLLM preset; it adds no requirement ID, browser endpoint, or bundle schema.
 
@@ -709,7 +720,7 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 
 - **Given** one or more repositories contending for archive, index and provider capacity; a slow but responsive configured model; transient timeout/rate/unavailable failures; an archive with an oversized individual file; and deployments using default, valid override and invalid relationship values,
 - **When** the owner starts analysis, observes progress, waits, retries or continues manually,
-- **Then** scheduler semaphore waiting does not spend active repository time; the default active/provider/GitHub budgets are 1,800/300/60 seconds and remain bounded by 7,200/3,600/300-second ceilings; only the same frozen provider/model is retried for transient failures up to three attempts; public chat requests 4,096 tokens by default and never more than 8,192/provider/context capacity; analysis remains independently capped at 8,192/16,384; individual archive members over the materialization threshold are body-free `FILE_TOO_LARGE` skips while unsafe paths/types and total archive ceilings fail closed; snapshots and both locales show the specific terminal code, active elapsed time, budget and generation-attempt count; invalid cross-limit configuration prevents startup without exposing secrets.
+- **Then** scheduler semaphore waiting does not spend active repository time; the default active/provider/GitHub budgets are 1,800/300/60 seconds and remain bounded by 7,200/3,600/300-second ceilings; only the same frozen provider/model is retried for transient failures up to three attempts; under ADR-055 public chat and analysis each default to 16,384 generated tokens and independently remain capped at 16,384/provider/context capacity; explicit lower deployment settings remain valid; individual archive members over the materialization threshold are body-free `FILE_TOO_LARGE` skips while unsafe paths/types and total archive ceilings fail closed; snapshots and both locales show the specific terminal code, active elapsed time, budget and generation-attempt count; invalid cross-limit configuration prevents startup without exposing secrets.
 - **And** terminal elapsed time is immutable, `completed_with_errors` is terminal for controls/SSE/ETA, processed and successful counts remain distinct, migration 26 preserves existing batches/events/results while adding only secret-free lineage and failure-stage metadata, and migration 27 preserves source consumption plus bounded reanalysis request bindings across ordinary cleanup.
 - **Verification:** environment/Compose contract tests, migration-25/26/27 preservation and rollback, deterministic semaphore-clock tests, archive skip and zip-bomb regressions, same-provider retry/no-fallback tests, frontend unit/accessibility checks, production build and a controlled slow-provider browser run. Buffered-provider evidence must be labeled as socket-inactivity behavior rather than token-level streaming evidence.
 
@@ -946,12 +957,12 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 
 ### AC-076 - The owner can maintain the installation without a terminal
 
-**Maps to:** FR-053, FR-048, NFR-003
+**Maps to:** FR-053, FR-048, NFR-003; ADR-054 / Specification §11.7
 
 - **Given** an installed deployment with an active bundle and a retained previous bundle,
 - **When** the owner opens 「維護」, creates and downloads a backup, restores it, pins the previous bundle and stops the visitor gateway,
-- **Then** the status shows local / gateway configured / externally verified and the last backup time; the backup passes `runtime check`; restore asks for confirmation and first writes an automatic backup; the pinned bundle becomes active; the gateway stops at once; the update and Funnel-off guidance is shown in both locales; and no Tailscale credential is requested, logged or shown.
-- **Verification:** API tests for each action, one admin browser pass in both locales, and a restore round trip on a temporary data directory.
+- **Then** the status shows local / gateway configured / externally verified and the last backup time; the password-encrypted `.reponpc-backup` authenticates and its host-decrypted SQLite passes `runtime check`; restore validates the original data directory's owner, keys and referenced resources, asks for explicit confirmation and first writes an automatic encrypted backup; old sessions/grants are revoked and the gateway stays off; the pinned previous bundle becomes active; gateway stop stops the listener; the update and Funnel-off guidance is shown in both locales; and no raw SQLite, admin hash, stored secret or Tailscale credential is returned, logged or shown.
+- **Verification:** API/security tests for each action, wrong password/tamper/foreign schema/missing resources/expiry/cancel/drain/rollback failures, one admin browser pass in both locales including actual downloaded-file completion, and a restore round trip on a temporary original data directory. Preserve complete installed-deployment/retained-bundle/gateway evidence; local fixture partial evidence does not close AC-076.
 
 ### AC-077 - A recent actionable batch is found again after a reload
 
@@ -982,23 +993,23 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 
 **0.4.0–0.4.5 traceability additions:**
 
-| Requirement | Acceptance criteria |
-| --- | --- |
-| FR-043 | AC-062, AC-063, AC-064 |
-| FR-044 | AC-064, AC-065 |
-| FR-045 | AC-066 |
-| FR-046 | AC-067 |
-| FR-047 | AC-068, AC-071, AC-072, AC-074 |
-| FR-048 | AC-069 |
-| FR-049 | AC-070 |
-| FR-050 | AC-072, AC-073, AC-074, AC-075 |
-| FR-051 | AC-074 |
-| FR-052 | AC-075, AC-079 |
-| FR-053 | AC-076 |
-| NFR-001 | AC-071, AC-073, AC-075 |
-| NFR-009 | AC-072, AC-073, AC-074, AC-075 |
-| NFR-011 | AC-072, AC-074 |
-| NFR-014 | AC-071 |
+| Requirement | Acceptance criteria            |
+| ----------- | ------------------------------ |
+| FR-043      | AC-062, AC-063, AC-064         |
+| FR-044      | AC-064, AC-065                 |
+| FR-045      | AC-066                         |
+| FR-046      | AC-067                         |
+| FR-047      | AC-068, AC-071, AC-072, AC-074 |
+| FR-048      | AC-069                         |
+| FR-049      | AC-070                         |
+| FR-050      | AC-072, AC-073, AC-074, AC-075 |
+| FR-051      | AC-074                         |
+| FR-052      | AC-075, AC-079                 |
+| FR-053      | AC-076                         |
+| NFR-001     | AC-071, AC-073, AC-075         |
+| NFR-009     | AC-072, AC-073, AC-074, AC-075 |
+| NFR-011     | AC-072, AC-074                 |
+| NFR-014     | AC-071                         |
 
 **AC-057 extension (0.4.0):** the device check, `model_catalog.yml` guidance (適合 / 勉強可用 / 不建議), canirun.ai link, Ollama explicit pull, plain-language error mapping, one-line status and cloud data disclosure are owner-only admin surfaces; none of them appear in visitor pages or responses.
 
@@ -1023,4 +1034,24 @@ The current machine-readable evidence ledger is `release-evidence/acceptance-led
 
 **0.2.3 evidence boundary (2026-09-10):** Release coverage must extend through AC-060, excluding legacy AC-041 through AC-043. The auditor still enumerates only AC-052 at this review. Extend both document coverage and ledger validation, with missing/duplicate-new-ID tests, during the implementation package. Source presence is not full acceptance for AC-053 through AC-057 either.
 
-Chat parser regression (2026-09-12, amended 2026-09-14; AC-054/055/057 and AC-023): test OpenAI-compatible and Ollama HTTP-200 responses with malformed JSON, invalid message/content/termination/usage, and empty or partial output stopped by `length`. The retained diagnostic identifies the application check and excludes arbitrary body canaries. A configured output budget above 32 can complete the synthetic reasoning-budget case; a configured smaller budget remains bounded and fails honestly. One explicit test means one provider call with a 10-second baseline plus one 10-second grace window, no activation and no hidden retry. Successful retest clears diagnostics. Both languages show the same source-labelled check, while actual HTTP error prose stays unmodified. A synthetic regression does not establish the cause of an unreplayed live gateway failure.
+Chat parser regression (2026-09-12, amended 2026-09-14 and ADR-055 on 2026-10-03; AC-054/055/057 and AC-023): test OpenAI-compatible and Ollama HTTP-200 responses with malformed JSON, invalid message/content/termination/usage, and empty or partial output stopped by `length`. The retained diagnostic identifies the application check and excludes arbitrary body canaries. A configured output budget above 32 can complete the synthetic reasoning-budget case; a configured smaller budget remains bounded and fails honestly. One explicit test means one provider call with a 10-second baseline plus one 10-second grace window, no activation and no hidden retry. Successful retest clears diagnostics. Both languages show the same source-labelled check, while actual HTTP error prose stays unmodified. A synthetic regression does not establish the cause of an unreplayed live gateway failure.
+
+**ADR-055 reasoning/control regression (AC-023/039/054/055/057/061):** Exercise absent/default and explicit lower chat/analysis budgets; the default probe follows the 16,384 capability while retaining one generation request and the existing 20-second total deadline. Bounded selected-model metadata preparation consumes the outer operation budget and is not repeated on generation. Verify boolean-supported `think: true`, exact advertised named reasoning default, legacy positive capability, and fully unknown controls retaining the backend default with no `think: false` or model-name heuristic. Present metadata with a missing, wrongly typed or unadvertised default fails safely before generation. A complete probe result arriving after its 20-second outer deadline remains failed with the existing timeout code, never ready. A configured context below the default output ceiling preserves manual/no-model startup while generation fails safely when input/output cannot fit. Verify explicit `num_ctx` respects configured context and any smaller verified native cap, with full UTF-8 messages/schema, 256-token framing reserve and output admitted before chat; insufficient context makes no generation call. OpenAI-compatible/vLLM semantics remain unchanged. Reasoning and answer share the finite Ollama generation allowance; a complete valid final envelope may pass, while any output-limit stop fails before parsing, even when content is valid JSON. Trace canaries must be absent from responses/SSE, diagnostics, logs, caches, runtime rows and exports. Changed reasoning/budget policy invalidates incompatible analysis cache reuse. Retain evidence/person validation, bilingual equivalence, no hidden retry/fallback and contribution 700. Record actual model revision, configured/verified context, generation cap, safe token counts and elapsed time separately from estimates; no fixed character-to-token ratio or universal 32k quality claim is accepted. Prior committed multi-fact question/oracle mismatches remain unresolved unless the existing strict suite passes; this amendment changes neither question nor oracle/threshold.
+
+**ADR-056 / OR-030 validation-fixture clarification (2026-10-03, AC-057):** The owner approved correcting only the `supported_two_facts` question so that retrieval fusion and evidence/runtime storage are both explicitly requested, with the prescribed equivalent Traditional Chinese question in the new bilingual runner. Retain the same evidence/source IDs, raw and expected fixture answers, reviewed claims, citation/refusal rules, thresholds, 14 committed fixture scenarios and complete 12 live bilingual cases; other questions remain unchanged. Preserve the original fixture bytes and earlier 10/12 evidence as historical results. Fingerprint the corrected question revision and independently verify the question-only byte/value diff. Model-catalog admission requires the full corrected suite to pass plus existing verified revision/source/license/quantization provenance; the correction alone grants no admission or AC pass. Production prompts and ADR-055 controls remain unchanged. Approved Specification stays 0.4.8.
+
+## ADR-057 supplemental waiting-experience verification (2026-10-04)
+
+FR-047 / NFR-005/009/014, AC-019/023/068/071: observe real bounded progress before
+provider completion; frozen terminal time; both locales; keyboard disclosure,
+reduced motion and stop/focus. Check raw thinking, credentials, prompt and unknown
+provider fields never enter public SSE/history/storage. Exercise NDJSON and SSE,
+incomplete/output-limited streams, blocked-read cancellation and absolute
+deadline despite activity. Validate unchanged FR-043/044 and AC-062–064 behavior.
+Default timeout is 180, max 300, existing explicit values retained. Local tests
+do not promote external/browser/manual/real-model release acceptance. Requested
+model thinking text is still pending automatic-review resolution.
+
+## Approved public summary amendment (2026-10-04)
+
+OR-032 / ADR-058 / Specification 0.4.10 adopts the [public summary contract](CHAT_PUBLIC_SUMMARY_CONTRACT_2026-10-04.md). FR-040/043/044/047, NFR-005/009/014 and AC-019/023/057/062/063/064/068/071 retain their thresholds. Explicit Responses selection, legacy/revision compatibility, bounded untrusted plain text, prompt/secret negative tests, final-answer separation, cancellation and bilingual keyboard-accessible display require verification. No real provider invocation, publication, catalog admission or release acceptance is implied. Previous pending-summary notes are historical and superseded by this approval.

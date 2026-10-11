@@ -49,6 +49,26 @@ function props(
 }
 
 describe("AdminWorkspace", () => {
+  it("uses the active canonical character for its guide and falls back before publication", () => {
+    const markup = renderToStaticMarkup(
+      <AdminWorkspace
+        {...props({
+          activeCharacter: {
+            mode: "custom",
+            revision: 42,
+            asset_url: "/api/public/character.png?rev=42",
+            frame_duration_ms: 160,
+            movement: "none",
+          },
+        })}
+      />,
+    );
+    expect(markup).toContain("/api/public/character.png?rev=42");
+    expect(markup).not.toContain('class="admin-workspace__npc"');
+    expect(renderToStaticMarkup(<AdminWorkspace {...props()} />)).toContain(
+      'class="admin-workspace__npc"',
+    );
+  });
   it("renders semantic editable, validation, preview, publication, and snippet regions", () => {
     const markup = renderToStaticMarkup(<AdminWorkspace {...props()} />);
 
@@ -270,3 +290,27 @@ describe("AdminWorkspace", () => {
     expect(advanced).not.toContain("Guided operation failure");
   });
 });
+
+it.each(["guided", "advanced", "character", "publish", "maintenance"] as const)(
+  "links help to the rendered %s heading",
+  (workspaceMode) => {
+    const markup = renderToStaticMarkup(
+      <AdminWorkspace
+        {...props({
+          workspaceMode,
+          guidedView: <h2 id="guided-onboarding-heading">Guide</h2>,
+          characterAssetView: (
+            <h2 id="admin-character-converter-heading">Character</h2>
+          ),
+          publicationView: <h2 id="local-publication-heading">Publication</h2>,
+          maintenanceView: <h2 id="admin-maintenance-heading">Maintenance</h2>,
+        })}
+      />,
+    );
+    const target = markup.match(
+      /class="admin-workspace__help" href="#([^"]+)"/,
+    )?.[1];
+    expect(target).toBeTruthy();
+    expect(markup).toContain('id="' + target + '"');
+  },
+);

@@ -93,9 +93,6 @@ async def test_enabled_intent_resumes_listener_without_restoring_external_proof(
     started = await configure_and_start(gateway)
     verified = await gateway.verify(
         revision=started["revision"],
-        gateway_origin="https://fixture.ts.net",
-        pages_origin="https://fixture.github.io",
-        bundle_id="active-bundle",
         external_checks_confirmed=True,
     )
     assert verified["external_verified"]
@@ -114,7 +111,7 @@ async def test_enabled_intent_resumes_listener_without_restoring_external_proof(
         snapshot = await resumed.resume()
         assert snapshot["enabled"] and snapshot["listener_ready"]
         assert not snapshot["external_verified"]
-        assert snapshot["verified_at"] == verified["verified_at"]
+        assert snapshot["verified_at"] is None
         stopped = await resumed.stop(revision=snapshot["revision"])
         assert not stopped["enabled"] and not stopped["listener_ready"]
     finally:
@@ -146,72 +143,57 @@ async def test_busy_loopback_port_keeps_private_service_available_and_intent_vis
 
 
 @run_async
-async def test_observed_readiness_and_bundle_changes_invalidate_owner_report(
-    tmp_path: Path,
-) -> None:
-    gateway, _database, _port, state, manager = make_gateway(tmp_path)
+async def test_dated_report_survives_bundle_and_local_readiness_changes(tmp_path: Path) -> None:
+    gateway, database, _port, state, manager = make_gateway(tmp_path)
     started = await configure_and_start(gateway)
-    verified = await gateway.verify(
-        revision=started["revision"],
-        gateway_origin="https://fixture.ts.net",
-        pages_origin="https://fixture.github.io",
-        bundle_id="active-bundle",
-        external_checks_confirmed=True,
-    )
-    assert verified["external_verified"]
-
-    state.ready = False
-    gateway.observe_state()
-    state.ready = True
-    gateway.observe_state()
-    after_recovery = gateway.snapshot()
-    assert not after_recovery["external_verified"]
-    assert after_recovery["verified_at"] == verified["verified_at"]
-
-    verified_again = await gateway.verify(
-        revision=after_recovery["revision"],
-        gateway_origin="https://fixture.ts.net",
-        pages_origin="https://fixture.github.io",
-        bundle_id="active-bundle",
-        external_checks_confirmed=True,
-    )
-    assert verified_again["external_verified"]
-    manager.bundle_id = "next-bundle"
-    gateway.observe_state()
-    assert not gateway.snapshot()["external_verified"]
-    await gateway.shutdown()
+    try:
+        verified = await gateway.verify(
+            revision=started["revision"], external_checks_confirmed=True
+        )
+        state.ready = False
+        manager.bundle_id = "next-bundle"
+        observed = gateway.snapshot()
+        assert not observed["local_ready"] and observed["external_verified"]
+        assert observed["active_bundle_id"] == "next-bundle"
+        assert observed["verified_at"] == verified["verified_at"]
+        stopped = await gateway.stop(revision=verified["revision"])
+        assert not stopped["external_verified"] and stopped["verified_at"] is None
+        with database.connection() as connection:
+            row = connection.execute(
+                "SELECT verification_gateway_origin, verification_pages_origin, "
+                "verification_bundle_id, verified_at, verification_method "
+                "FROM visitor_gateway_settings WHERE id=1"
+            ).fetchone()
+            assert tuple(row) == (None,) * 5
+        restarted = await gateway.start(revision=stopped["revision"])
+        assert restarted["verified_at"] is None
+        verified = await gateway.verify(
+            revision=restarted["revision"], external_checks_confirmed=True
+        )
+        started_again = await gateway.start(revision=verified["revision"])
+        assert started_again["verified_at"] is None and started_again["listener_ready"]
+    finally:
+        await gateway.shutdown()
 
 
 @run_async
-async def test_readiness_change_during_report_save_leaves_report_unverified(
-    tmp_path: Path,
-) -> None:
-    gateway, _database, _port, state, _manager = make_gateway(tmp_path)
-    started = await configure_and_start(gateway)
-    original_verify = gateway._store.verify
-
-    def save_while_readiness_changes(**values: Any) -> Any:
-        result = original_verify(**values)
-        state.ready = False
-        gateway.observe_state()
-        state.ready = True
-        gateway.observe_state()
-        return result
-
-    gateway._store.verify = save_while_readiness_changes  # type: ignore[method-assign]
-    with pytest.raises(VisitorGatewayError) as raised:
-        await gateway.verify(
-            revision=started["revision"],
-            gateway_origin="https://fixture.ts.net",
-            pages_origin="https://fixture.github.io",
-            bundle_id="active-bundle",
-            external_checks_confirmed=True,
-        )
-    assert raised.value.code == "GATEWAY_VERIFICATION_STALE"
-    snapshot = gateway.snapshot()
-    assert not snapshot["external_verified"]
-    assert snapshot["verified_at"] is not None
-    await gateway.shutdown()
+async def test_verify_rejects_unavailable_listener_and_stale_revision(tmp_path: Path) -> None:
+    gateway, _database, _port, _state, _manager = make_gateway(tmp_path)
+    configured = await gateway.configure(
+        revision=1,
+        gateway_origin="https://fixture.ts.net",
+        pages_origin="https://fixture.github.io",
+    )
+    try:
+        with pytest.raises(VisitorGatewayError) as unavailable:
+            await gateway.verify(revision=configured["revision"], external_checks_confirmed=True)
+        assert unavailable.value.code == "GATEWAY_UNAVAILABLE"
+        with pytest.raises(VisitorGatewayError) as conflict:
+            await gateway.verify(revision=1, external_checks_confirmed=True)
+        assert conflict.value.code == "GATEWAY_CONFLICT"
+        assert gateway.snapshot()["verified_at"] is None
+    finally:
+        await gateway.shutdown()
 
 
 def test_bundle_manager_failure_does_not_fall_back_to_stale_setup_state(

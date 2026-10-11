@@ -1,5 +1,6 @@
 """RepoNPC-owned model provider adapters and capability boundaries."""
 
+from reponpc.providers.builtin_onnx import BuiltinOnnxEmbeddingProvider
 from reponpc.providers.contracts import (
     ChatProvider,
     ProviderCapabilities,
@@ -18,6 +19,7 @@ from reponpc.providers.openai_compatible import OpenAICompatibleChatProvider
 from reponpc.providers.openai_embeddings import OpenAICompatibleEmbeddingProvider
 
 __all__ = [
+    "BuiltinOnnxEmbeddingProvider",
     "ChatProvider",
     "OllamaChatProvider",
     "OllamaEmbeddingProvider",

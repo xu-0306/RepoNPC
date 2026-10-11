@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import sqlite3
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -23,6 +23,7 @@ from reponpc.admin.chat_profiles import (
     ChatProfileInput,
     ChatProfileRegistry,
 )
+from reponpc.admin.device_check import collect_hardware_profile
 from reponpc.admin.embedding_profiles import (
     EmbeddingProfile,
     EmbeddingProfileError,
@@ -39,6 +40,7 @@ from reponpc.admin.model_connections import (
     ModelConnectionInput,
     ModelConnectionRegistry,
 )
+from reponpc.admin.model_guidance import estimate_model_suitability, load_model_catalog
 from reponpc.admin.model_operations import (
     OllamaModelOperation,
     OllamaModelOperationCoordinator,
@@ -69,6 +71,7 @@ from reponpc.cards.render import (
 )
 from reponpc.cards.sprite_composer import compose_builtin
 from reponpc.config.models import ConfigValidationError, PublicConfig, parse_public_config_bytes
+from reponpc.providers.builtin_artifacts import builtin_embedding_identity, load_builtin_manifest
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 
 
@@ -341,8 +344,13 @@ class AdminOperations:
         )
 
     def _bind_embedding_connection(self, values: EmbeddingProfileInput) -> EmbeddingProfileInput:
+        if values.provider == "builtin_onnx":
+            values.validate()
+            return values
         if self.model_connections is None or values.connection_reference == "environment":
             return values
+        if values.connection_reference is None:
+            raise EmbeddingProfileError("EMBEDDING_CONNECTION_REQUIRED")
         try:
             connection = self.model_connections.get(values.connection_reference)
         except ModelConnectionError:
@@ -412,6 +420,59 @@ class AdminOperations:
         if self.ollama_model_operations is None:
             raise EmbeddingProfileError("NOT_FOUND")
         return self.ollama_model_operations.get(operation_id)
+
+    def builtin_model_info(self) -> dict[str, object]:
+        manifest = load_builtin_manifest()
+        profile = next(
+            (p for p in self._embedding_profiles().list() if p.provider == "builtin_onnx"), None
+        )
+        operation = (
+            self.ollama_model_operations.latest_builtin()
+            if self.ollama_model_operations is not None
+            else None
+        )
+        return {
+            "model_id": builtin_embedding_identity().model_id,
+            "display_name": manifest.model_id,
+            "total_bytes": manifest.total_bytes,
+            "license": manifest.license,
+            "source_url": manifest.source_url,
+            "profile_id": profile.profile_id if profile is not None else None,
+            "operation": asdict(operation) if operation is not None else None,
+        }
+
+    def start_builtin_download(self, *, confirmed: bool) -> OllamaModelOperation:
+        if self.ollama_model_operations is None:
+            raise EmbeddingProfileError("SERVICE_NOT_READY")
+        return self.ollama_model_operations.queue_builtin(confirmed=confirmed)
+
+    def check_model_device(self) -> dict[str, object]:
+        hardware = collect_hardware_profile(self.database.database_path.parent)
+        catalog = load_model_catalog()
+        models = [
+            {
+                "model_id": model.model_id,
+                "quantization_id": quant.quantization_id,
+                "parameter_count": model.parameter_count,
+                "bits_per_weight": quant.bits_per_weight,
+                "download_bytes": quant.download_bytes,
+                "memory_overhead_bytes": quant.memory_overhead_bytes,
+                "last_reviewed": model.last_reviewed.isoformat(),
+                "source_url": model.source_url,
+                "license_id": model.license_id,
+                "license_url": model.license_url,
+                "envelope_evidence": {
+                    **asdict(quant.envelope_evidence),
+                    "tested_on": quant.envelope_evidence.tested_on.isoformat(),
+                },
+                "suitability": asdict(
+                    estimate_model_suitability(model, quant, hardware, execution_target="cpu")
+                ),
+            }
+            for model in catalog.models
+            for quant in model.quantizations
+        ]
+        return {"hardware": asdict(hardware), "models": models}
 
     def cancel_ollama_embedding_model_operation(self, operation_id: str) -> OllamaModelOperation:
         if self.ollama_model_operations is None:

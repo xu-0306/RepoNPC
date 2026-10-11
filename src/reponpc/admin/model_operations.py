@@ -10,7 +10,13 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from reponpc.admin.embedding_profiles import EmbeddingProfileError, EmbeddingProfileRegistry
+from reponpc.admin.embedding_profiles import (
+    EmbeddingProfileError,
+    EmbeddingProfileInput,
+    EmbeddingProfileRegistry,
+)
+from reponpc.providers.builtin_artifacts import builtin_embedding_identity
+from reponpc.providers.builtin_download import BuiltinDownloadCancelled, BuiltinDownloadError
 from reponpc.providers.ollama_embeddings import OllamaPullCancelled
 
 
@@ -29,8 +35,14 @@ class OllamaModelOperation:
 class OllamaModelOperationCoordinator:
     """Own one cancellable pull lane without persisting provider response bodies."""
 
-    def __init__(self, registry: EmbeddingProfileRegistry) -> None:
+    def __init__(
+        self,
+        registry: EmbeddingProfileRegistry,
+        *,
+        builtin_download: Callable[..., None] | None = None,
+    ) -> None:
         self._registry = registry
+        self._builtin_download = builtin_download
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ollama-pull")
         self._lock = threading.RLock()
         self._operations: dict[str, OllamaModelOperation] = {}
@@ -41,14 +53,54 @@ class OllamaModelOperationCoordinator:
         profile, operation = self._registry.prepare_ollama_model_action(
             profile_id, action="pull", confirmed=confirmed
         )
+        return self._queue(profile.profile_id, profile.model_id, operation)
+
+    def queue_builtin(self, *, confirmed: bool) -> OllamaModelOperation:
+        if confirmed is not True or self._builtin_download is None:
+            raise EmbeddingProfileError("VALIDATION_ERROR")
         with self._lock:
-            if any(item.status in {"queued", "running"} for item in self._operations.values()):
-                raise EmbeddingProfileError("EMBEDDING_MODEL_OPERATION_ACTIVE")
+            self._check_idle()
+            identity = builtin_embedding_identity()
+            profile = next((p for p in self._registry.list() if p.provider == "builtin_onnx"), None)
+            if profile is None:
+                profile = self._registry.create(
+                    EmbeddingProfileInput(
+                        provider="builtin_onnx",
+                        model_id=identity.model_id,
+                        dimension=identity.dimension,
+                        normalized=True,
+                        query_prefix="",
+                        passage_prefix="",
+                        connection_reference=None,
+                    )
+                )
+            return self._queue(profile.profile_id, profile.model_id, self._builtin_download)
+
+    def latest_builtin(self) -> OllamaModelOperation | None:
+        with self._lock:
+            return next(
+                (
+                    op
+                    for op in reversed(tuple(self._operations.values()))
+                    if op.model_id == builtin_embedding_identity().model_id
+                ),
+                None,
+            )
+
+    def _check_idle(self) -> None:
+        if any(item.status in {"queued", "running"} for item in self._operations.values()):
+            raise EmbeddingProfileError("EMBEDDING_MODEL_OPERATION_ACTIVE")
+
+    def _queue(
+        self, profile_id: str, model_id: str, operation: Callable[..., None]
+    ) -> OllamaModelOperation:
+        with self._lock:
+            self._check_idle()
             operation_id = str(uuid.uuid4())
             snapshot = OllamaModelOperation(
                 operation_id=operation_id,
-                profile_id=profile.profile_id,
-                model_id=profile.model_id,
+                profile_id=profile_id,
+                model_id=model_id,
                 status="queued",
                 completed=None,
                 total=None,
@@ -89,6 +141,13 @@ class OllamaModelOperationCoordinator:
                     self._cancel[operation_id].set()
         self._executor.shutdown(wait=True, cancel_futures=True)
 
+    def busy(self) -> bool:
+        """Return whether any owned model operation is queued or running."""
+        with self._lock:
+            return any(
+                snapshot.status in {"queued", "running"} for snapshot in self._operations.values()
+            )
+
     def _run(
         self,
         operation_id: str,
@@ -111,11 +170,16 @@ class OllamaModelOperationCoordinator:
             if cancel.is_set():
                 raise OllamaPullCancelled
             snapshot = self.get(operation_id)
-            self._registry.complete_ollama_model_action(
-                snapshot.profile_id, action="pull", succeeded=True
-            )
-        except OllamaPullCancelled:
+            # Installation does not load, select or activate a provider. Testing
+            # and full reindex remain explicit existing profile actions.
+            if snapshot.model_id != builtin_embedding_identity().model_id:
+                self._registry.complete_ollama_model_action(
+                    snapshot.profile_id, action="pull", succeeded=True
+                )
+        except (OllamaPullCancelled, BuiltinDownloadCancelled):
             self._set(operation_id, status="cancelled", error_code=None)
+        except BuiltinDownloadError as exc:
+            self._set(operation_id, status="failed", error_code=exc.code.upper())
         except Exception:
             self._set(
                 operation_id,

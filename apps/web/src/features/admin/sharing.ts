@@ -93,3 +93,37 @@ export function cardMarkdown(url: string, locale: "zh-TW" | "en"): string {
   if (!target) return "";
   return `[![${locale === "zh-TW" ? "與我的 RepoNPC 對話" : "Chat with my RepoNPC"}](./${CARD_FILENAME})](<${target}>)`;
 }
+
+export function verifiedPagesMarkdown(
+  value: string,
+  locale: "zh-TW" | "en",
+): string {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    const pathParts = url.pathname.split("/").filter(Boolean);
+    if (
+      url.protocol !== "https:" ||
+      value !== `${url.origin}${url.pathname}` ||
+      !/^[a-z0-9-]+\.github\.io$/.test(host) ||
+      url.port ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      !url.pathname.startsWith("/") ||
+      !url.pathname.endsWith("/") ||
+      pathParts.some(
+        (part) =>
+          !/^[A-Za-z0-9._-]{1,128}$/.test(part) ||
+          part === "." ||
+          part === "..",
+      )
+    ) {
+      return "";
+    }
+    return `[![${locale === "zh-TW" ? "與我的 RepoNPC 對話" : "Chat with my RepoNPC"}](./${CARD_FILENAME})](<${url.href}>)`;
+  } catch {
+    return "";
+  }
+}

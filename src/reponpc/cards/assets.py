@@ -88,6 +88,7 @@ def validate_sprite(
                 raise SpriteValidationError("EMPTY_FRAME")
 
     output = io.BytesIO()
+    image = Image.frombytes("RGBA", image.size, image.tobytes())
     image.save(output, format="PNG", optimize=False, compress_level=9, interlace=False)
     canonical = output.getvalue()
     return CanonicalSprite(content=canonical, sha256=hashlib.sha256(canonical).hexdigest())

@@ -113,5 +113,58 @@ describe("VisitorConversation", () => {
     expect(markup).toContain("Which project uses retrieval?");
     expect(markup).toContain('href="https://example.com/contact"');
     expect(markup).toContain("Portfolio contact");
+    expect(markup).toMatch(
+      /<ul class="answer-suggestions"><li><button type="button">Which project uses retrieval\?<\/button>/,
+    );
+  });
+
+  it.each(["en", "zh-TW"] as const)(
+    "%s allows a current approved suggestion offline while keeping failed live retry disabled",
+    (locale) => {
+      const markup = renderToStaticMarkup(
+        <VisitorConversation
+          canAskSuggestion={(question) => question === "Approved FAQ"}
+          chatAvailable={false}
+          locale={locale}
+          onRetry={vi.fn()}
+          pending={false}
+          turns={[
+            {
+              ...failedTurn,
+              suggestedQuestions: ["Approved FAQ"],
+            },
+          ]}
+        />,
+      );
+
+      expect(markup).toMatch(
+        /<ul class="answer-suggestions"><li><button type="button">Approved FAQ<\/button>/,
+      );
+      expect(markup).toMatch(
+        /<button disabled="" type="button">(?:Retry this question|重試這個問題)<\/button>/,
+      );
+    },
+  );
+
+  it("keeps stale suggestions disabled offline even with no pending request", () => {
+    const markup = renderToStaticMarkup(
+      <VisitorConversation
+        canAskSuggestion={() => false}
+        chatAvailable={false}
+        locale="en"
+        onRetry={vi.fn()}
+        pending={false}
+        turns={[
+          {
+            ...failedTurn,
+            suggestedQuestions: ["Stale FAQ"],
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toMatch(
+      /<ul class="answer-suggestions"><li><button disabled="" type="button">Stale FAQ<\/button>/,
+    );
   });
 });

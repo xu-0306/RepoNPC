@@ -49,11 +49,15 @@ def test_analysis_and_public_budgets_reach_production_transport(
         **kwargs: Any,
     ) -> ProviderHttpResponse:
         assert method == "POST"
+        if url.endswith("/api/show"):
+            return ProviderHttpResponse(
+                200, {}, b'{"thinking":{"values":[false,true],"default":true}}'
+            )
         requests.append(json.loads(kwargs["body"]))
         message = {"content": '{"inferences":[]}'}
         if provider_name == "ollama":
             assert url.endswith("/api/chat")
-            response = {"message": message, "done_reason": "stop"}
+            response: dict[str, Any] = {"message": message, "done_reason": "stop"}
         else:
             assert url.endswith("/chat/completions")
             response = {"choices": [{"message": message, "finish_reason": "stop"}]}
@@ -85,7 +89,7 @@ def test_analysis_and_public_budgets_reach_production_transport(
         request["options"]["num_predict"] if provider_name == "ollama" else request["max_tokens"]
         for request in requests
     ]
-    assert limits == [8192 if budget is None else 16384, 4096, 700]
+    assert limits == [16384, 16384, 700]
 
 
 def test_contribution_capability_remains_700_when_analysis_budget_is_smaller(

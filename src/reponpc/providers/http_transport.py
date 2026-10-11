@@ -5,7 +5,10 @@ from __future__ import annotations
 import ipaddress
 import socket
 import ssl
+import threading
+import time
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass, field
 from http.client import HTTPConnection, HTTPException, HTTPMessage, HTTPSConnection
 from typing import IO, Protocol, cast
@@ -118,14 +121,47 @@ class UrllibProviderHttpTransport:
             raise ProviderError(ProviderFailureCode.TIMEOUT)
         connection, target = self._connection(url, timeout)
         consumed = 0
+        deadline = time.monotonic() + timeout
+        finished = threading.Event()
+        expired = threading.Event()
+        active_socket: socket.socket | None = None
+
+        def watch() -> None:
+            while not finished.wait(0.05):
+                if cancelled() or time.monotonic() >= deadline:
+                    if not cancelled():
+                        expired.set()
+                    sock = active_socket or connection.sock
+                    if sock is not None:
+                        with suppress(OSError):
+                            sock.shutdown(socket.SHUT_RDWR)
+                        # makefile() retains the descriptor after socket.close().
+                        # Windows may keep its blocking read alive after shutdown;
+                        # detach closes the handle once, without a later stale-fd
+                        # close when HTTPResponse releases its file reference.
+                        with suppress(OSError):
+                            socket.close(sock.detach())
+                    connection.close()
+                    return
+
+        watcher = threading.Thread(target=watch, daemon=True)
+        watcher.start()
         try:
+            if cancelled():
+                raise InterruptedError
             connection.request(method, target, body=body, headers=dict(headers))
+            active_socket = connection.sock
             response = connection.getresponse()
             if response.status >= 300:
                 return int(response.status)
             while True:
                 if cancelled():
                     raise InterruptedError
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ProviderError(ProviderFailureCode.TIMEOUT)
+                if active_socket is not None:
+                    active_socket.settimeout(remaining)
                 line = response.readline(min(64 * 1024, self._max_response_bytes) + 1)
                 if not line:
                     break
@@ -133,6 +169,10 @@ class UrllibProviderHttpTransport:
                 if len(line) > 64 * 1024 or consumed > self._max_response_bytes:
                     raise ProviderError(ProviderFailureCode.INVALID_RESPONSE)
                 on_line(line)
+            if cancelled():
+                raise InterruptedError
+            if expired.is_set() or time.monotonic() >= deadline:
+                raise ProviderError(ProviderFailureCode.TIMEOUT)
             return int(response.status)
         except InterruptedError:
             raise
@@ -141,9 +181,15 @@ class UrllibProviderHttpTransport:
         except TimeoutError as exc:
             raise ProviderError(ProviderFailureCode.TIMEOUT) from exc
         except (HTTPException, OSError) as exc:
+            if cancelled():
+                raise InterruptedError from None
+            if expired.is_set():
+                raise ProviderError(ProviderFailureCode.TIMEOUT) from None
             raise ProviderError(ProviderFailureCode.UNAVAILABLE) from exc
         finally:
+            finished.set()
             connection.close()
+            watcher.join(timeout=0.1)
 
     def _connection(self, url: str, timeout: float) -> tuple[HTTPConnection, str]:
         try:

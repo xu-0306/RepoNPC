@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -46,6 +47,7 @@ from reponpc.indexing.publication import (
 from reponpc.indexing.sources import (
     EmbeddingIdentity,
     EmbeddingProvider,
+    RepositoryParticipation,
     ResolvedConfiguration,
     ResolvedRepository,
 )
@@ -102,6 +104,7 @@ def build_index_bundle(
     output_directory: str | Path,
     *,
     resolver: RepositoryResolver | None = None,
+    participation_collector: Callable[..., RepositoryParticipation] | None = None,
     embedding_provider: EmbeddingProvider | None = None,
     configuration_source: ResolvedConfiguration | None = None,
     built_at: datetime | None = None,
@@ -142,20 +145,22 @@ def build_index_bundle(
             }
         )
     source_resolver = resolver or GitHubSourceResolver()
-    participation = getattr(source_resolver, "participation", None)
     snapshots: list[ResolvedRepository] = []
     for repository in config.repositories:
         if not repository.enabled:
             continue
         snapshot = source_resolver.resolve(slug=repository.slug, ref=repository.ref)
-        if callable(participation):
-            collected = participation(
+        if participation_collector is not None:
+            collected = participation_collector(
                 slug=snapshot.slug,
                 pinned_sha=snapshot.commit_sha,
                 github_login=config.profile.github_login,
             )
-            if collected is not None:
-                snapshot = replace(snapshot, participation=collected)
+            if not isinstance(collected, RepositoryParticipation):
+                raise IndexPipelineError("participation_invalid")
+            snapshot = replace(snapshot, participation=collected)
+        else:
+            snapshot = replace(snapshot, participation=None)
         snapshots.append(snapshot)
     resolved_snapshots = tuple(snapshots)
     instant = built_at or datetime.now(UTC)
@@ -179,11 +184,23 @@ def build_index_bundle(
         if public_directory is not None
         else build_public_card_assets(config, config_directory=config_path.parent)
     )
+    scene_paths = [path for path in assets if path.startswith("public/scene/")]
+    if config.character.scene.background_path is None:
+        if scene_paths:
+            raise ValueError("scene background asset is unexpected")
+        background_content = None
+    else:
+        if len(scene_paths) != 1:
+            raise ValueError("scene background asset is missing")
+        background_content = assets[scene_paths[0]]
     assets["public/profile.json"] = build_public_profile_bytes(
         config=config,
         index_version=bundle_id,
         built_at=instant,
         repository_count=index_result.repository_count,
+        sprite_content=assets["public/character.png"],
+        background_content=background_content,
+        repository_snapshots=resolved_snapshots,
     )
     bundle = build_bundle(
         index_result=index_result,

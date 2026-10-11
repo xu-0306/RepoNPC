@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from reponpc.config.environment import EnvironmentValidationError, load_environment
+from reponpc.config.environment import (
+    EnvironmentValidationError,
+    _canonical_origin,
+    load_environment,
+)
 
 
 def values(**overrides: str) -> dict[str, str]:
@@ -15,6 +19,34 @@ def values(**overrides: str) -> dict[str, str]:
     }
     result.update(overrides)
     return result
+
+
+@pytest.mark.parametrize(
+    "origin, expected",
+    [
+        ("HTTPS://Admin.Example.com:443", "https://admin.example.com"),
+        ("https://admin.example.com:8443", "https://admin.example.com:8443"),
+        ("https://admin.example.com/", None),
+        ("https://user:password@admin.example.com", None),
+        ("https://測試.example", None),
+        ("https://xn--g6w251d.example", "https://xn--g6w251d.example"),
+        ("https://[2001:0DB8:0000::1]:443", "https://[2001:db8::1]"),
+        ("https://[fe80::1%25eth0]", None),
+        ("https://admin.example.com.", None),
+        ("https://127.000.000.001", None),
+        ("https://admin.example.com:0", None),
+        ("https://admin.example.com:", None),
+        ("http://admin.example.com", None),
+        ("http://127.0.0.1:80", "http://127.0.0.1"),
+        ("http://[::1]:9000", "http://[::1]:9000"),
+        ("ftp://admin.example.com", None),
+    ],
+)
+def test_shared_origin_boundary_uses_strict_rules(origin: str, expected: str | None) -> None:
+    assert _canonical_origin(origin) == expected
+    assert _canonical_origin(origin, https_only=True) == (
+        expected if expected is not None and expected.startswith("https://") else None
+    )
 
 
 def test_gateway_environment_defaults_to_loopback_aggregate_and_base_admin_origin(

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 
 import { Base64PngCanvas } from "./Base64PngCanvas";
+import { CharacterRenderer } from "../character/CharacterRenderer";
+import type { PublicProfile } from "../../app/publicTypes";
 import {
   ADMIN_UI_SCALES,
   applyAdminUiScale,
@@ -15,7 +17,16 @@ export type AdminWorkspaceMode =
   | "guided"
   | "character"
   | "publish"
+  | "maintenance"
   | "advanced";
+
+const WORKSPACE_HEADINGS: Record<AdminWorkspaceMode, string> = {
+  advanced: "admin-draft-heading",
+  character: "admin-character-converter-heading",
+  guided: "guided-onboarding-heading",
+  publish: "local-publication-heading",
+  maintenance: "admin-maintenance-heading",
+};
 
 export interface ValidationIssue {
   path: string;
@@ -42,13 +53,17 @@ export interface PreviewCharacter {
   mode: string;
   revision: number;
   png_base64?: string;
+  png_url?: string;
   sha256?: string;
 }
 
 export interface PreviewCard {
   png_base64?: string;
+  png_url?: string;
   svg_base64?: string;
+  svg_url?: string;
   gif_base64?: string;
+  gif_url?: string;
 }
 
 export interface AdminPreview {
@@ -107,6 +122,8 @@ export interface AdminWorkspaceProps {
   embeddingProfileView?: ReactNode;
   characterAssetView?: ReactNode;
   publicationView?: ReactNode;
+  maintenanceView?: ReactNode;
+  activeCharacter?: PublicProfile["character"] | null;
   workspaceMode?: AdminWorkspaceMode;
   onWorkspaceModeChange?: (mode: AdminWorkspaceMode) => void;
 }
@@ -165,6 +182,7 @@ const COPY = {
     guidedMode: "引導設定",
     characterMode: "角色與動畫",
     advancedMode: "進階：編輯原始 YAML",
+    maintenanceMode: "維護",
   },
   en: {
     title: "RepoNPC admin workspace",
@@ -225,6 +243,7 @@ const COPY = {
     guidedMode: "Guided setup",
     characterMode: "Character & animation",
     advancedMode: "Advanced: edit raw YAML",
+    maintenanceMode: "Maintenance",
   },
 } as const;
 
@@ -292,12 +311,25 @@ export function AdminWorkspace({
   embeddingProfileView,
   characterAssetView,
   publicationView,
+  maintenanceView,
+  activeCharacter,
   workspaceMode = guidedView ? "guided" : "advanced",
   onWorkspaceModeChange,
 }: AdminWorkspaceProps) {
   const copy = COPY[locale];
   const [uiScale, setUiScale] = useState<AdminUiScale>(readAdminUiScale);
   const displaySettingsRef = useRef<HTMLDetailsElement>(null);
+  const previousMode = useRef(workspaceMode);
+  useEffect(() => {
+    if (previousMode.current === workspaceMode) return;
+    previousMode.current = workspaceMode;
+    const heading = document.getElementById(WORKSPACE_HEADINGS[workspaceMode]);
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+      heading.scrollIntoView({ block: "start", behavior: "instant" });
+    }
+  }, [workspaceMode]);
   useEffect(() => {
     function closeOutside(event: PointerEvent) {
       const panel = displaySettingsRef.current;
@@ -341,9 +373,28 @@ export function AdminWorkspace({
           <p className="admin-workspace__subtitle">{copy.subtitle}</p>
         </div>
         <div className="admin-workspace__guide" aria-hidden="true">
-          <span className="admin-workspace__npc">
-            <span />
-          </span>
+          {activeCharacter ? (
+            <span
+              style={{
+                backgroundColor: activeCharacter.scene?.themes.light.stage,
+                border: `2px solid ${activeCharacter.scene?.themes.light.border ?? "currentColor"}`,
+                borderRadius: "50%",
+                display: "inline-flex",
+                flexShrink: 0,
+              }}
+            >
+              <CharacterRenderer
+                assetUrl={`/api/public/character.png?rev=${activeCharacter.revision}`}
+                state="idle"
+                stateLabel=""
+                reducedMotion
+              />
+            </span>
+          ) : (
+            <span className="admin-workspace__npc">
+              <span />
+            </span>
+          )}
           <span className="admin-workspace__speech">{copy.guideMessage}</span>
         </div>
         <div className="admin-workspace__utilities">
@@ -405,13 +456,7 @@ export function AdminWorkspace({
           </details>
           <a
             className="admin-workspace__help"
-            href={
-              workspaceMode === "advanced"
-                ? "#admin-draft-heading"
-                : workspaceMode === "character"
-                  ? "#admin-character-converter-heading"
-                  : "#guided-onboarding-heading"
-            }
+            href={`#${WORKSPACE_HEADINGS[workspaceMode]}`}
           >
             <span aria-hidden="true">?</span>
             {copy.help}
@@ -470,6 +515,16 @@ export function AdminWorkspace({
           >
             {copy.advancedMode}
           </button>
+          {maintenanceView && (
+            <button
+              aria-pressed={workspaceMode === "maintenance"}
+              disabled={busy}
+              onClick={() => onWorkspaceModeChange?.("maintenance")}
+              type="button"
+            >
+              {copy.maintenanceMode}
+            </button>
+          )}
         </nav>
       )}
 
@@ -493,6 +548,7 @@ export function AdminWorkspace({
 
       {guidedView && workspaceMode === "guided" && guidedView}
       {authenticated && workspaceMode === "publish" && publicationView}
+      {authenticated && workspaceMode === "maintenance" && maintenanceView}
 
       {(!guidedView || workspaceMode === "advanced") && (
         <>
@@ -603,6 +659,7 @@ export function AdminWorkspace({
                     height={448}
                     label={copy.characterAlt}
                     pngBase64={preview.character.png_base64}
+                    pngUrl={preview.character.png_url}
                     width={256}
                   />
                 </article>
@@ -621,6 +678,7 @@ export function AdminWorkspace({
                               height={180}
                               label={`${copy.cardAlt}: ${variant}`}
                               pngBase64={card.png_base64}
+                              pngUrl={card.png_url}
                               width={600}
                             />
                           </figure>

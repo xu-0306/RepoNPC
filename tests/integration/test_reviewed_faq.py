@@ -4,19 +4,22 @@ from __future__ import annotations
 
 import hashlib
 import json
-import threading
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 
 from reponpc.admin.embedding_reindex import EmbeddingReindexCoordinator
-from reponpc.admin.faq import FaqError, ReviewedFaq
+from reponpc.admin.faq import (
+    FaqError,
+    ReviewedFaq,
+    normalize_question,
+    validate_question_variants,
+)
 from reponpc.admin.faq_registry import STANDARD_QUESTIONS
 from reponpc.admin.local_portfolio import LocalPortfolioStore
 from reponpc.admin.local_publication import LocalPortfolioBuilder
-from reponpc.bundles.manager import BundleActivationError
 from reponpc.chat.limits import ProviderLane
 from reponpc.chat.service import GroundedChatService, delivery_events
 from reponpc.providers import ProviderCapabilities, ProviderHealth, ProviderResult
@@ -126,21 +129,43 @@ def faq_system(tmp_path):
         max_output_tokens=1000,
         timeout_seconds=5,
     )
-    faq = ReviewedFaq(
-        database=database, bundles=manager, chat_supplier=lambda: service, store=store
-    )
+    faq = ReviewedFaq(database=database, bundles=manager, chat_supplier=lambda: service)
     return database, manager, store, chat, service, limits, faq, build
 
 
+def save_owner_statement(store):
+    """Use the ordinary draft store; there is no FAQ-specific association."""
+    draft = store.read()
+    values = yaml.safe_load(draft.content)
+    target = next(
+        item for item in values["repositories"] if item["slug"] == _fixture_snapshot().slug
+    )
+    target.setdefault("claims", []).append(
+        {
+            "id": "manual_faq_statement",
+            "kind": "responsibility",
+            "statement": {
+                "zh-TW": "我實作資料驗證與例外處理。",
+                "en": "I implemented café input validation\r\nand exception handling.",
+            },
+        }
+    )
+    return store.save(
+        content=yaml.safe_dump(values, allow_unicode=True, sort_keys=False),
+        sprite_base64=draft.sprite_base64,
+        expected_revision=draft.revision,
+    )
+
+
 @pytest.mark.parametrize("locale", ["zh-TW", "en"])
-def test_actual_local_rewrite_waits_for_matching_new_claim_and_requires_approval(tmp_path, locale):
-    _database, manager, store, chat, _service, limits, faq, build = faq_system(tmp_path)
+def test_manual_claim_save_then_normal_regeneration_requires_new_review(tmp_path, locale):
+    _database, _manager, store, _chat, _service, limits, faq, build = faq_system(tmp_path)
     initial = faq.initialize_queue(locale)
     assert len([entry for entry in initial["entries"] if entry["topic"]]) == 6
     assert all(entry["coverage_status"] == "unchecked" for entry in initial["entries"])
     entry = faq.regenerate(initial["entries"][0]["entry_id"], 1)
     assert entry["coverage_status"] == "answered"
-    faq.review(entry["entry_id"], entry["revision"], entry["bundle_id"], "approve")
+    faq.review(entry["entry_id"], entry["revision"], "approve")
     assert len(faq.public_payload(locale)["entries"]) == 1
     before = {
         path: hashlib.sha256(path.read_bytes()).hexdigest()
@@ -148,54 +173,27 @@ def test_actual_local_rewrite_waits_for_matching_new_claim_and_requires_approval
         if path.is_file()
     }
     entry = faq.view(locale)["entries"][0]
-    rewrite = faq.rewrite(
-        entry["entry_id"],
-        entry["revision"],
-        expected_draft_revision=store.read().revision,
-        repository=_fixture_snapshot().slug,
-        kind="responsibility",
-        statement={
-            "zh-TW": "我實作資料驗證與例外處理。",
-            "en": "I implemented cafe\u0301 input validation\r\nand exception handling.",
-        },
-    )
-    assert faq.public_payload(locale)["entries"] == []
+    save_owner_statement(store)
+    # Saving a draft does not change the active bundle or its reviewed FAQ.
+    assert len(faq.public_payload(locale)["entries"]) == 1
     assert all(
         hashlib.sha256(path.read_bytes()).hexdigest() == digest for path, digest in before.items()
     )
-    entry = rewrite["entry"]
-    calls = chat.calls
-    with pytest.raises(BundleActivationError, match="bundle activation failed"):
-        faq.regenerate(entry["entry_id"], entry["revision"])
-    assert chat.calls == calls
-    entry = faq.view(locale)["entries"][0]
-    assert entry["error_code"] == "FAQ_REWRITE_NOT_INDEXED"
     new_bundle = build()
     assert new_bundle != entry["bundle_id"]
-    # Real immutable index checks ID, exact bilingual text and selected repository.
-    association = entry["rewrite"]
-    with manager.acquire() as index:
-        assert index.owner_claim_evidence(
-            association["claim_id"], association["repository"], association["statement"]
-        )
-        assert not index.owner_claim_evidence(
-            association["claim_id"], "someone/else", association["statement"]
-        )
-        assert not index.owner_claim_evidence(
-            association["claim_id"],
-            association["repository"],
-            {"zh-TW": "另一段", "en": "different"},
-        )
-    regenerated = faq.regenerate(entry["entry_id"], entry["revision"])
-    assert regenerated["bundle_id"] == new_bundle
-    assert regenerated["rewrite"] is None and regenerated["review_state"] == "pending"
+    stale = faq.view(locale)["entries"][0]
+    assert stale["needs_reconfirmation"]
     assert faq.public_payload(locale)["entries"] == []
-    approved = faq.review(regenerated["entry_id"], regenerated["revision"], new_bundle, "approve")
+    with pytest.raises(FaqError) as rejected:
+        faq.review(stale["entry_id"], stale["revision"], "approve")
+    assert rejected.value.code == "FAQ_STALE"
+    regenerated = faq.regenerate(stale["entry_id"], stale["revision"])
+    assert regenerated["bundle_id"] == new_bundle
+    assert "rewrite" not in regenerated and regenerated["review_state"] == "pending"
+    assert faq.public_payload(locale)["entries"] == []
+    approved = faq.review(regenerated["entry_id"], regenerated["revision"], "approve")
     assert approved["review_state"] == "approved"
-    assert (
-        faq.public_payload(locale)["entries"][0]["citations"][0]["evidence_class"]
-        == "OWNER_ASSERTION"
-    )
+    assert faq.public_payload(locale)["entries"][0]["citations"]
     assert limits.public_admissions == 0 and set(limits.lanes) == {ProviderLane.ADMIN_SINGLE}
 
 
@@ -276,7 +274,6 @@ def test_faq_api_all_owner_actions_and_safe_failure(tmp_path):
                 headers=headers,
                 json={
                     "revision": entry["revision"],
-                    "bundle_id": entry["bundle_id"],
                     "action": action,
                 },
             )
@@ -287,26 +284,20 @@ def test_faq_api_all_owner_actions_and_safe_failure(tmp_path):
             exported = client.get("/api/admin/portfolio/faq/export?locale=en", headers=headers)
             assert exported.json() == public
             assert "attachment" in exported.headers["content-disposition"]
-        response = client.post(
-            root + "/rewrite",
-            headers=headers,
-            json={
-                "revision": entry["revision"],
-                "expected_draft_revision": store.read().revision,
-                "repository": _fixture_snapshot().slug,
-                "kind": "context",
-                "statement": {"zh-TW": "專案使用 Python。", "en": "The project uses Python."},
-            },
+        assert client.post(root + "/rewrite", headers=headers, json={}).status_code == 405
+        assert (
+            client.post(
+                root + "/review",
+                headers=headers,
+                json={
+                    "revision": entry["revision"],
+                    "bundle_id": entry["bundle_id"],
+                    "action": "approve",
+                },
+            ).status_code
+            == 400
         )
-        assert response.status_code == 200
-        entry = response.json()["entry"]
-        response = client.post(
-            root + "/regenerate", headers=headers, json={"revision": entry["revision"]}
-        )
-        assert response.status_code == 409
-        entry = client.get("/api/admin/portfolio/faq?locale=en", headers=headers).json()["entries"][
-            0
-        ]
+        save_owner_statement(store)
         build()
         response = client.post(
             root + "/regenerate", headers=headers, json={"revision": entry["revision"]}
@@ -328,73 +319,107 @@ def test_faq_api_all_owner_actions_and_safe_failure(tmp_path):
         )
 
 
-def test_rewrite_insufficient_context_is_explicit_and_keeps_resume_association(tmp_path):
-    _, _manager, store, chat, service, _, faq, build = faq_system(tmp_path)
-    entry = faq.initialize_queue("en")["entries"][0]
-    result = faq.rewrite(
-        entry["entry_id"],
-        entry["revision"],
-        expected_draft_revision=store.read().revision,
-        repository=_fixture_snapshot().slug,
-        kind="context",
-        statement={"zh-TW": "背景陳述。", "en": "Context statement."},
+def test_question_variants_withdraw_approval_and_use_existing_revision(tmp_path):
+    database, manager, store, _chat, service, _, _faq, _build = faq_system(tmp_path / "build")
+    application = _application_without_github(tmp_path / "admin")
+    application.state.admin_operations = replace(
+        application.state.admin_operations, database=database, local_portfolio=store
     )
-    build()
-    service._max_output_tokens = 20000
-    entry = result["entry"]
-    calls = chat.calls
-    with pytest.raises(BundleActivationError):
-        faq.regenerate(entry["entry_id"], entry["revision"])
-    entry = faq.view("en")["entries"][0]
-    assert entry["rewrite"] and entry["error_code"] == "FAQ_CONTEXT_INSUFFICIENT"
-    assert entry["coverage_status"] == "unchecked" and chat.calls == calls
+    application.state.runtime_database = database
+    application.state.bundle_manager = manager
+    application.state.chat_service = service
+    with TestClient(application, base_url=ORIGIN) as client:
+        csrf = _login(client)
+        headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
+        queue = client.post(
+            "/api/admin/portfolio/faq/check", headers=headers, json={"locale": "en"}
+        ).json()
+        entry = client.post(
+            f"/api/admin/portfolio/faq/{queue['entries'][0]['entry_id']}/regenerate",
+            headers=headers,
+            json={"revision": 1},
+        ).json()
+        approved = client.post(
+            f"/api/admin/portfolio/faq/{entry['entry_id']}/review",
+            headers=headers,
+            json={
+                "revision": entry["revision"],
+                "action": "approve",
+            },
+        ).json()
+        public_before = client.get("/api/public/faq?locale=en").json()
+        assert public_before["entries"][0]["variants"] == []
+        assert set(public_before) == {"bundle_id", "locale", "entries"}
 
+        path = f"/api/admin/portfolio/faq/{approved['entry_id']}/variants"
+        body = {
+            "bundle_id": approved["bundle_id"],
+            "revision": approved["revision"],
+            "variants": ["Which portfolio projects stand out?", "What are the top projects?"],
+        }
+        assert client.put(path, headers={"Origin": ORIGIN}, json=body).status_code == 403
+        updated_response = client.put(path, headers=headers, json=body)
+        assert updated_response.status_code == 200
+        updated = updated_response.json()
+        assert updated["revision"] == approved["revision"] + 1
+        assert updated["review_state"] == "pending"
+        assert updated["answer_markdown"] == approved["answer_markdown"]
+        assert updated["citations"] == approved["citations"]
+        assert client.get("/api/public/faq?locale=en").json()["entries"] == []
 
-def test_rewrite_save_and_runtime_association_serialize_concurrent_review(tmp_path, monkeypatch):
-    _, _manager, store, _, _, _, faq, _ = faq_system(tmp_path)
-    entry = faq.initialize_queue("en")["entries"][0]
-    entry = faq.regenerate(entry["entry_id"], entry["revision"])
-    entered = threading.Event()
-    release = threading.Event()
-    review_started = threading.Event()
-    original_save = store.save
-
-    def blocked_save(**kwargs):
-        entered.set()
-        assert release.wait(5)
-        return original_save(**kwargs)
-
-    monkeypatch.setattr(store, "save", blocked_save)
-
-    def review():
-        review_started.set()
-        return faq.review(entry["entry_id"], entry["revision"], entry["bundle_id"], "approve")
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        rewrite = executor.submit(
-            faq.rewrite,
-            entry["entry_id"],
-            entry["revision"],
-            expected_draft_revision=store.read().revision,
-            repository=_fixture_snapshot().slug,
-            kind="context",
-            statement={"zh-TW": "團隊背景。", "en": "Team context."},
+        invalid = client.put(
+            path,
+            headers=headers,
+            json={
+                "bundle_id": updated["bundle_id"],
+                "revision": updated["revision"],
+                "variants": [updated["question"].upper()],
+            },
         )
-        assert entered.wait(5)
-        approval = executor.submit(review)
-        assert review_started.wait(5)
-        try:
-            assert not approval.done()
-        finally:
-            release.set()
-        saved = rewrite.result(timeout=5)
-        with pytest.raises(FaqError) as error:
-            approval.result(timeout=5)
-        assert error.value.code == "FAQ_NOT_READY"
-    assert saved["entry"]["rewrite"]["draft_revision"] == store.read().revision
-    assert (
-        faq.view("en")["entries"][0]["rewrite"]["claim_id"] == saved["entry"]["rewrite"]["claim_id"]
-    )
+        assert invalid.status_code == 422
+        assert invalid.json()["error"]["code"] == "FAQ_VARIANTS_INVALID"
+        assert "PRIVATE" not in invalid.text
+
+        rereviewed = client.post(
+            f"/api/admin/portfolio/faq/{updated['entry_id']}/review",
+            headers=headers,
+            json={
+                "revision": updated["revision"],
+                "action": "approve",
+            },
+        )
+        assert rereviewed.status_code == 200
+        public_after = client.get("/api/public/faq?locale=en").json()
+        assert public_after["entries"][0]["variants"] == body["variants"]
+
+
+def test_question_variant_validation_is_bounded_and_unicode_normalized(tmp_path):
+    _database, _manager, _store, _chat, _service, _limits, faq, _build = faq_system(tmp_path)
+    queue = faq.initialize_queue("en")
+    entry = queue["entries"][0]
+    generated = faq.regenerate(entry["entry_id"], entry["revision"])
+    assert faq.replace_variants(
+        entry["entry_id"],
+        generated["revision"],
+        generated["bundle_id"],
+        ["What is this project's overview?"],
+    )["variants"] == ["What is this project's overview?"]
+    invalid_sets = [
+        [" "],
+        ["a" * 201],
+        ["\uff33\uff41\uff4d\uff45\u3000question\uff1f", "same  question!"],
+        [entry["question"].upper()],
+        [str(index) for index in range(9)],
+    ]
+    for variants in invalid_sets:
+        with pytest.raises(FaqError) as rejected:
+            faq.replace_variants(
+                entry["entry_id"],
+                faq.view("en")["entries"][0]["revision"],
+                entry["bundle_id"],
+                variants,
+            )
+        assert rejected.value.code == "FAQ_VARIANTS_INVALID"
 
 
 def test_migration_29_backup_reopen_and_failed_upgrade_preserve_prior_state(tmp_path):
@@ -448,3 +473,37 @@ def test_migration_29_backup_reopen_and_failed_upgrade_preserve_prior_state(tmp_
             ).fetchone()[0]
             == "approved"
         )
+
+
+FAQ_NORMALIZATION_CASES = [
+    ("  \uff33\uff45\uff54\u3000 UP?!  ", "set up"),
+    ("setup", "setup"),
+    ("使用 C 嗎\uff1f", "使用 c 嗎"),
+    ("使用C嗎\uff1f", "使用c嗎"),
+    ("5 ms", "5 ms"),
+    ("5ms", "5ms"),
+    ("user_id", "user_id"),
+    ("userid", "userid"),
+    ("file-name / path", "file-name / path"),
+    ("\ufeffA\t\u2003B\ufeff。", "a b"),
+    ("A\u0085B", "a\u0085b"),
+    ("A\u001cB", "a\u001cb"),
+]
+
+
+@pytest.mark.parametrize("value,expected", FAQ_NORMALIZATION_CASES)
+def test_question_normalization_matches_exact_v2(value, expected):
+    assert normalize_question(value) == expected
+
+
+@pytest.mark.parametrize(
+    "question,variant",
+    [
+        ("How do I set up the project?", "How do I setup the project?"),
+        ("這個專案使用 C 嗎\uff1f", "這個專案使用C嗎\uff1f"),
+        ("Latency is 5 ms?", "Latency is 5ms?"),
+        ("Does user_id exist?", "Does userid exist?"),
+    ],
+)
+def test_internal_question_structure_can_be_explicitly_approved(question, variant):
+    assert validate_question_variants(question, [variant]) == [variant]

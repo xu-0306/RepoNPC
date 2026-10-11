@@ -1,5 +1,42 @@
 # Isolated UI and event checks
 
+## Admin UX continuation (2026-10-11)
+
+Build the web app, start a fresh disposable `tests.browser.a5_server` on loopback,
+and sign in with its public fixture credentials. Wait for the saved fixture to
+open the manual Profile step in Traditional Chinese. No real services are needed.
+With the existing Playwright CLI session:
+
+```powershell
+npx --yes --package @playwright/cli playwright-cli -s=ux-fix-20261011 run-code --filename tests/browser/check-admin-ux.js
+```
+
+The script checks language changes without reloading the saved draft, keyboard
+model detours, return focus/scroll, progress, sharing order, collapsed optional
+content, keyboard service forms, first AI entry and reload. It uses 1024×768 and
+390×844 in both languages and saves screenshots under
+`output/playwright/ux-fix-20261011/`. It never enters a service URL/key or submits
+a model call. Expected 503 responses from unconfigured fixture model-management
+routes are not real-provider acceptance. Run against this disposable fixture only;
+the test edits its in-browser public profile draft. Stop the host and close the
+owned browser session afterward. Results and exclusions are recorded in
+`docs/OPTIMIZATION_PLAN_2026-10-11.md`.
+
+## Analysis cards (2026-10-07)
+
+`analysis-card-review.tsx` mounts the production guided view and reducer with
+synthetic in-memory analysis. Copy it to `apps/web/.analysis-card-review.tsx`
+and create `apps/web/.analysis-card-review.html` using the existing fixture HTML
+with its module URL set to `/.analysis-card-review.tsx`. Run Vite on an unused
+loopback port and open that HTML with the documented Chrome browser runtime.
+Import `check-analysis-cards.js` in that runtime and call
+`checkAnalysisCards(tab, await chrome.capabilities.get("viewport"))`.
+It checks both locales at 375/768/1024/1440px, keyboard disclosure, exact sources,
+escaped excerpts, long text, 44px controls, overflow and confirmation isolation.
+Stop the owned Vite process and remove only the two copied fixture files afterward.
+The dated results and scope limits are in
+`release-evidence/analysis-cards-20261007/RESULT.zh-TW.md`.
+
 These fixtures mount production React components and styles. They use synthetic data only. `admin-events-review.tsx` and `visitor-ui-review.tsx` replace **all** fetch requests; unhandled routes never reach a real API. Do not remove that interception or reuse this harness with real credentials.
 
 They intentionally live outside the production app and are not included in its Vitest suite or build. Use the project's documented browser tooling for interactive execution. The recorded matrix is dated evidence, not a test run performed automatically by CI.
@@ -50,8 +87,12 @@ as `apps/web/a1-gateway-review.html`, and open that page on the fixture Vite ser
 It performs no provider, Tailscale, GitHub or real admin request.
 
 Check both languages: start leaves the owner-report fact false; all four checks
-are required before recording it; stop, bundle changes and observed local failure
-clear it and reset the checklist. Exercise dirty-origin preservation after a
+are required before recording it; stop/configure/start clear it and reset the
+checklist. Bundle and local-readiness changes retain the dated report.
+Run `checkGatewaySimplification(tab)` from `check-gateway-simplification.js`
+against the fresh harness for 11 bilingual lifecycle, request-body, mutation
+and revision checks. The harness report is synthetic, not an external check.
+Exercise dirty-origin preservation after a
 revision conflict, mutation controls while Hold/Release is active, recovery and
 display-only scoped Funnel commands. Inspect labels and keyboard focus and repeat
 at 375px. Clean up the two exact copied files after the run. Native ASGI, persisted
@@ -98,3 +139,107 @@ uv run python tests/browser/visitor_chat_server.py --runtime <fresh-temp-directo
 In the documented browser runtime, import `check-visitor-chat.js` and run `checkVisitorChat(tab, {baseUrl, reducedMotion: false})` for the normal-motion flow. It validates real React and public API behavior for progressive SSE delivery, citations, bounded contiguous history, long-answer isolation, failed/incomplete delivery recovery, synchronous duplicate-submit prevention, unmount cancellation, locale continuity, status degradation/recovery, focus, and the character-state sequence. Run `checkVisitorChat(tab, {baseUrl, reducedMotion: true})` against a second fresh runtime; repeat at 375px and a desktop viewport. The reduced-motion path must expose its semantic state while computed sprite animation remains disabled and the page has no horizontal overflow.
 
 The harness does not call a live model, GitHub, or any external network. It does not validate the still-open card text/layout, character setup guidance, protected custom-preview, or publication workflows. Record only safe counts, roles, code-point lengths, state transitions, runtime identifiers, browser/version, viewports, verification results, and a per-file SHA-256 manifest in `visitor-chat-evidence.json`; do not record the local launch URL or full conversation bodies.
+
+## A5 production page and static transport
+
+`a5_server.py` creates a fresh runtime, canonical character, activated local bundle
+and reviewed bilingual FAQ through production services. Only embedding and chat
+providers are synthetic. It serves the production build and real authenticated
+admin/public routes. The disposable credentials are `a5-fixture` / `A5 disposable
+browser fixture 2026`; they grant access only to this synthetic runtime.
+
+Run it as a module from the repository root, so its test-package imports resolve:
+
+```powershell
+pnpm run web:build
+$a5Runtime = Join-Path $env:TEMP "reponpc-a5-$([guid]::NewGuid())"
+uv run python -m tests.browser.a5_server --runtime $a5Runtime --port 8780 --gateway-port 8782 --static-origin http://127.0.0.1:8781 --export-directory .test-tmp/a5-browser-sites
+```
+
+`a5_transport.py` serves a supplied exported site from a separate loopback origin.
+Pass the actual extracted site with `--site`, and use `--base-path /project/` to exercise
+a project Pages path. Open `/__a5-test/start` and select **Connect fixture
+transport**, then **Check fixture gateway**. The test-only service worker maps
+only `https://fixture.ts.net` to the real stoppable gateway on port 8782. It
+requires credential-free requests, forwards real responses and fails when that
+listener stops. Host/Origin and matching CORS headers are mapped by the test
+wrapper; production controllers and API payloads remain intact. The worker streams
+the real response through a new `Response` so its loopback transport URL does not
+leak into the page's production CSP checks; status, headers and body are preserved.
+Returning the mapped fetch response directly makes production status/chat reads
+fail even when the no-CSP transport readiness probe succeeds.
+
+```powershell
+uv run python -m tests.browser.a5_transport --site <extracted-site-directory> --base-path /project/ --port 8781 --gateway-port 8782
+```
+
+An optional `--axe-script <local-axe.min.js>` on either fixture adds same-origin
+audit controls through HTML responses; saved build/export bytes and CSP remain
+unchanged. `a5-acceptance.js` exposes the audit results without DOM text or
+credentials, including computed profile-initial colors and a 4.5:1 contrast
+check for the decorative initial that axe may skip. Require every reported
+`profileInitialContrast` entry to pass; admin results also include hidden gallery
+and layout instances, so record the visible preview mode separately.
+`?a5-reduced=1` simulates the reduced-motion media query and provides
+a UI control to change it. Record this as a simulated media environment, not an
+operating-system preference or native browser emulation.
+
+These mapped checks establish local page/controller integration only. A transport
+probe with a placeholder manifest is not export validation. Actual export closure,
+identity, base-path and offline behavior require a verified exported artifact.
+External TLS, Pages publication, Funnel reachability and clean-host acceptance
+remain A12. At the end, select **Disconnect fixture transport**, stop both owned
+fixture processes and reset the viewport. Preserve the ChatGPT planning tab.
+
+The optional audit controls also expose **Delay next scene preview**. On the
+primary disposable host it delays one production preview by 750ms without
+replacing its payload/response, allowing a newer form edit to prove that the
+late response cannot enable application. This control is not included in the
+exported artifact.
+
+Native background checks use the documented filechooser event and `setFiles`,
+then the actual preview/apply/remove/cancel buttons. Check cancel after changing
+the background radio or resetting settings, in both locales: the private draft
+must be deleted and published revision/model-call observations must stay fixed.
+For ZIP download, save a valid Pages URL, then arm the native download event
+before clicking either Download static site or Download site archive. Both links
+use the authenticated read-only export GET directly. A visible download link
+alone does not prove a completed file download. The optional fresh
+`--export-directory` creates root/project exports from the exact fixture bundle
+using the production exporter and checks every manifest record before extraction;
+it is independent of the native download check. Validate the downloaded archive's
+manifest/file hashes before using its extracted site. An
+unchanged viewport after Control++ is not evidence of actual 200% zoom.
+
+For the backend-to-browser exact FAQ contract, run the production admin/API and
+export regression, then check its captured public payload with the actual
+TypeScript matcher. The checker uses the already installed TypeScript compiler;
+it does not copy the matcher or require Node's native TypeScript support.
+
+```powershell
+uv run pytest tests/security/test_a5_sharing_review.py::test_question_variant_export_and_matcher_inputs -q -p no:cacheprovider --basetemp=.test-tmp/a5-faq-parity
+node tests/browser/a5-faq-match.mjs .test-tmp/a5-faq-parity/test_question_variant_export_a0/faq-matcher-cases.json
+```
+
+This covers both locales, CSRF and stale revision rejection, withdrawal on edit,
+pending export exclusion, explicit reapproval, public/export equality, exact
+variant admission, unapproved-input rejection and Unicode normalization parity.
+The chat admission suite also sends real Node Fetch requests to an ephemeral
+loopback HTTP server: 307/308 must not reach their target on the initial POST
+or after a 413 admission retry. This is transport evidence, not a native browser
+redirect observation. All providers and credentials in these checks are synthetic.
+
+For A7 model-card keyboard regression, use the production Web distribution and
+the disposable synthetic catalog fixtures recorded in
+`release-evidence/a7/parallel-20261003/`. Check both locales at desktop and375px:
+choosing preserves draft input and service choice, explicit fill changes only the
+model name, and no profile is saved/tested/selected. With no service, each choice
+must focus `chat-profile-heading`; press Tab to reach the existing Refresh action.
+Move focus away and select the same card again, including after changing locale:
+the heading must receive focus again. Repeated choices must not be ignored because
+the catalog row has the same JavaScript object identity. The supplemental receipt
+stores actual DOM assertions and screenshot hashes. These synthetic rows do not
+admit any real model to the production catalog or prove screen-reader/200%zoom
+acceptance. A native-confirm fixture deletion stalled the in-app CDP focus API;
+retain that failure, and use a fresh empty-service fixture rather than replacing
+browser APIs or touching an owner's service settings.

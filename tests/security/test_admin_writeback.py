@@ -197,9 +197,13 @@ def test_validate_and_preview_are_side_effect_free_and_reject_secret_fields(
 ) -> None:
     app, _database, transport = _application(tmp_path)
     with TestClient(app, base_url=ORIGIN) as client:
-        _login(client)
+        csrf = _login(client)
         valid = client.post("/api/admin/config/validate", json={"content": CONFIG.decode()})
-        preview = client.post("/api/admin/config/preview", json={"content": CONFIG.decode()})
+        preview = client.post(
+            "/api/admin/config/preview",
+            headers={"X-CSRF-Token": csrf},
+            json={"content": CONFIG.decode()},
+        )
         invalid = client.post(
             "/api/admin/config/validate",
             json={"content": CONFIG.decode() + "\npassword: CANARY-SECRET\n"},
@@ -308,13 +312,19 @@ def test_github_token_only_gates_github_backed_admin_endpoints(tmp_path: Path) -
             "validate": client.post(
                 "/api/admin/config/validate", json={"content": CONFIG.decode()}
             ),
-            "preview": client.post("/api/admin/config/preview", json={"content": CONFIG.decode()}),
+            "preview": client.post(
+                "/api/admin/config/preview",
+                headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
+                json={"content": CONFIG.decode()},
+            ),
             "asset_validate": client.post(
                 "/api/admin/assets/character/validate",
+                headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
                 files={"file": ("hero.png", _sprite(), "image/png")},
             ),
             "asset_convert": client.post(
                 "/api/admin/assets/character/convert",
+                headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
                 files={"file": ("source.png", _source_grid(), "image/png")},
                 data={"strategy": "pixelize"},
             ),
@@ -329,7 +339,11 @@ def test_github_token_only_gates_github_backed_admin_endpoints(tmp_path: Path) -
             ),
             "status": client.get("/api/admin/index/status"),
         }
-        custom_preview = client.post("/api/admin/config/preview", json={"content": CUSTOM_CONFIG})
+        custom_preview = client.post(
+            "/api/admin/config/preview",
+            headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
+            json={"content": CUSTOM_CONFIG},
+        )
         github_responses = {
             "read": client.get("/api/admin/config"),
             "write": client.put(
@@ -384,9 +398,10 @@ def test_character_convert_returns_an_optional_validated_cleanup_without_writing
 ) -> None:
     app = _application_without_github(tmp_path)
     with TestClient(app, base_url=ORIGIN) as client:
-        _login(client)
+        csrf = _login(client)
         response = client.post(
             "/api/admin/assets/character/convert",
+            headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
             files={"file": ("unfamiliar.png", _source_grid_with_edge_spill(), "image/png")},
             data={"strategy": "pixelize"},
         )
@@ -410,9 +425,10 @@ def test_material_bundle_api_discovers_zip_and_folder_candidates_without_github(
     app = _application_without_github(tmp_path)
     archive = _discovery_zip()
     with TestClient(app, base_url=ORIGIN) as client:
-        _login(client)
+        csrf = _login(client)
         discovery = client.post(
             "/api/admin/assets/character/convert",
+            headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
             files={"file": ("anything.zip", archive, "application/zip")},
             data={"strategy": "pixelize"},
         )
@@ -425,6 +441,7 @@ def test_material_bundle_api_discovers_zip_and_folder_candidates_without_github(
 
         selected = client.post(
             "/api/admin/assets/character/convert",
+            headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
             files={"file": ("anything.zip", archive, "application/zip")},
             data={
                 "strategy": "pixelize",
@@ -433,6 +450,7 @@ def test_material_bundle_api_discovers_zip_and_folder_candidates_without_github(
         )
         folder = client.post(
             "/api/admin/assets/character/convert",
+            headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
             files=[
                 ("files", ("first.png", _source_grid(79), "image/png")),
                 ("files", ("second.png", _source_grid(97), "image/png")),

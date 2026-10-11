@@ -1,13 +1,4 @@
 # syntax=docker/dockerfile:1
-FROM node:24.14.0-bookworm-slim AS web-build
-
-WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/web/package.json apps/web/package.json
-RUN corepack enable && corepack prepare pnpm@11.16.0 --activate && pnpm install --frozen-lockfile
-COPY apps/web apps/web
-RUN pnpm --dir apps/web run build
-
 FROM python:3.14.7-slim-bookworm AS python-build
 COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /bin/
 
@@ -19,6 +10,20 @@ COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY src src
 RUN uv sync --locked --no-dev
+COPY scripts/build_scene_assets.py scripts/build_scene_assets.py
+RUN .venv/bin/python scripts/build_scene_assets.py
+
+FROM node:24.14.0-bookworm-slim AS web-build
+
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json apps/web/package.json
+RUN corepack enable && corepack prepare pnpm@11.16.0 --activate && pnpm install --frozen-lockfile
+COPY apps/web apps/web
+COPY scripts/check_visitor_source.mjs scripts/check_visitor_source.mjs
+COPY src/reponpc/scene/color_schemes.yml src/reponpc/scene/color_schemes.yml
+COPY --from=python-build /app/apps/web/src/app/scene-fallback.generated.css apps/web/src/app/scene-fallback.generated.css
+RUN pnpm --dir apps/web run build
 
 FROM python:3.14.7-slim-bookworm AS runtime
 

@@ -14,7 +14,7 @@ from urllib.parse import quote
 
 import numpy as np
 
-from reponpc.domain.evidence import COMMIT_RE, normalize_content
+from reponpc.domain.evidence import COMMIT_RE
 from reponpc.indexing.index_database import INDEX_SCHEMA_VERSION
 from reponpc.indexing.sources import EmbeddingIdentity
 from reponpc.retrieval.fts_query import FtsQueryMode, compile_fts_query
@@ -155,26 +155,6 @@ class ReadOnlyIndex:
 
         self._connection.close()
 
-    def owner_claim_evidence(
-        self, claim_id: str, repository_slug: str, statement: dict[str, str]
-    ) -> str | None:
-        """Confirm the saved rewrite is present in this immutable index."""
-
-        content = normalize_content(
-            "\n".join(f"{locale}: {statement[locale]}" for locale in sorted(statement))
-        )
-        row = self._connection.execute(
-            "SELECT evidence_id, content, metadata_json FROM evidence "
-            "WHERE evidence_class = 'OWNER_ASSERTION' AND owner_claim_id = ?",
-            (claim_id,),
-        ).fetchone()
-        if row is None or str(row["content"]) != content:
-            return None
-        metadata = json.loads(str(row["metadata_json"]))
-        if metadata.get("repository_slug") != repository_slug:
-            return None
-        return str(row["evidence_id"])
-
     def evidence(self, evidence_id: str) -> IndexedEvidence | None:
         """Load one evidence record without accepting caller-controlled SQL."""
 
@@ -249,7 +229,110 @@ class ReadOnlyIndex:
         return fuse_rankings(
             ([str(row[0]) for row in term_rows], [str(row[0]) for row in trigram_rows]),
             (1.0, 1.0),
-        )[:limit]
+        )[:limit] or self._fallback_lexical_candidates(
+            compiled.fallback_fragments,
+            ascii_terms=compiled.fallback_ascii_terms,
+            required_expression=compiled.fallback_required_expression,
+            limit=limit,
+        )
+
+    def _fallback_lexical_candidates(
+        self,
+        fragments: Sequence[tuple[str, int, int]],
+        *,
+        ascii_terms: Sequence[str],
+        required_expression: str | None,
+        limit: int,
+    ) -> list[str]:
+        """Recover unspaced non-ASCII matches with bounded generated fragments."""
+        if not fragments:
+            return []
+
+        # Apply path requirements before each channel's candidate limit.
+        constraint = (
+            " AND evidence_id IN (SELECT evidence_id FROM evidence_fts_terms "
+            "WHERE evidence_fts_terms MATCH ?)"
+            if required_expression
+            else ""
+        )
+        required_parameters = (required_expression,) if required_expression else ()
+        if (
+            required_expression
+            and not self._connection.execute(
+                "SELECT 1 FROM evidence_fts_terms WHERE evidence_fts_terms MATCH ? LIMIT 1",
+                required_parameters,
+            ).fetchone()
+        ):
+            return []
+        fragment_rankings: list[list[str]] = []
+        ascii_hit_counts: dict[str, int] = {}
+        trigram_hit_counts: dict[str, int] = {}
+        exact_hit_positions: dict[str, list[int]] = {}
+        fragment_limit = max(limit, 2)
+        for expression in ascii_terms:
+            rows = self._connection.execute(
+                "SELECT evidence_id FROM evidence_fts_terms "
+                "WHERE evidence_fts_terms MATCH ?"
+                + constraint
+                + " ORDER BY bm25(evidence_fts_terms), evidence_id ASC LIMIT ?",
+                (expression, *required_parameters, fragment_limit),
+            ).fetchall()
+            ranking = [str(row[0]) for row in rows]
+            fragment_rankings.append(ranking)
+            for evidence_id in ranking:
+                ascii_hit_counts[evidence_id] = ascii_hit_counts.get(evidence_id, 0) + 1
+        for expression, position, width in fragments:
+            if width == 3:
+                rows = self._connection.execute(
+                    """
+                    SELECT evidence_id FROM evidence_fts_trigram
+                    WHERE evidence_fts_trigram MATCH ?
+                    """
+                    + constraint
+                    + " ORDER BY bm25(evidence_fts_trigram), evidence_id ASC LIMIT ?",
+                    (expression, *required_parameters, fragment_limit),
+                ).fetchall()
+            else:
+                # ponytail: two-character matches scan rows; use a bigram index
+                # only if measured retrieval latency requires it.
+                rows = self._connection.execute(
+                    """
+                    SELECT evidence_id FROM evidence_fts_terms
+                    WHERE instr(
+                      lower(COALESCE(title, '') || ' ' || COALESCE(symbol, '') ||
+                        ' ' || path || ' ' || content), lower(?)
+                    ) > 0
+                    """
+                    + constraint
+                    + " ORDER BY evidence_id ASC LIMIT ?",
+                    (expression, *required_parameters, fragment_limit),
+                ).fetchall()
+            ranking = [str(row[0]) for row in rows]
+            fragment_rankings.append(ranking)
+            if width == 3:
+                for evidence_id in ranking:
+                    trigram_hit_counts[evidence_id] = trigram_hit_counts.get(evidence_id, 0) + 1
+            else:
+                for evidence_id in ranking:
+                    exact_hit_positions.setdefault(evidence_id, []).append(position)
+
+        ranked = fuse_rankings(
+            fragment_rankings,
+            tuple(1.0 for _ in fragment_rankings),
+        )
+        return [
+            evidence_id
+            for evidence_id in ranked
+            if trigram_hit_counts.get(evidence_id, 0) >= 2
+            or _has_non_overlapping_exact_hits(exact_hit_positions.get(evidence_id, ()))
+            or (
+                ascii_hit_counts.get(evidence_id, 0) >= 1
+                and (
+                    trigram_hit_counts.get(evidence_id, 0) >= 1
+                    or bool(exact_hit_positions.get(evidence_id))
+                )
+            )
+        ][:limit]
 
     def hybrid_candidates(
         self,
@@ -527,6 +610,13 @@ def _source_category(evidence: IndexedEvidence) -> str:
         if value in {"repository_metadata", "documentation", "source_code"}
         else "source_code"
     )
+
+
+def _has_non_overlapping_exact_hits(positions: Sequence[int]) -> bool:
+    """Require two separated two-character windows for exact recovery."""
+
+    ordered = sorted(set(positions))
+    return len(ordered) >= 2 and ordered[-1] - ordered[0] >= 2
 
 
 def _escape_context_markers(content: str) -> str:

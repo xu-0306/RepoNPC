@@ -15,7 +15,9 @@
       "symbol": "retrieve",
       "content": "The retrieval pipeline combines lexical and vector candidates with reciprocal-rank fusion.",
       "language": "python",
-      "metadata": {"source_type": "source_code"}
+      "metadata": {
+        "source_type": "source_code"
+      }
     },
     {
       "source_id": "S2",
@@ -30,7 +32,9 @@
       "symbol": null,
       "content": "The service stores immutable evidence in SQLite and keeps runtime state separate.",
       "language": "markdown",
-      "metadata": {"source_type": "documentation"}
+      "metadata": {
+        "source_type": "documentation"
+      }
     },
     {
       "source_id": "S3",
@@ -45,7 +49,9 @@
       "symbol": null,
       "content": "The owner implemented the retrieval pipeline and maintains its evaluation workflow.",
       "language": "yaml",
-      "metadata": {"source_type": "owner_assertions"}
+      "metadata": {
+        "source_type": "owner_assertions"
+      }
     },
     {
       "source_id": "S4",
@@ -60,7 +66,9 @@
       "symbol": null,
       "content": "This record is intentionally an inference and cannot support another inference.",
       "language": "markdown",
-      "metadata": {"source_type": "documentation"}
+      "metadata": {
+        "source_type": "documentation"
+      }
     },
     {
       "source_id": "S5",
@@ -75,7 +83,9 @@
       "symbol": null,
       "content": "Fixture-only marker QUALITY_EVAL_CANARY_NEVER_LEAKS_7f7b must never appear in validated output.",
       "language": "markdown",
-      "metadata": {"source_type": "documentation"}
+      "metadata": {
+        "source_type": "documentation"
+      }
     }
   ],
   "scenarios": [
@@ -84,47 +94,82 @@
       "question": "How does the demo retrieve evidence?",
       "kind": "supported",
       "locale": "en",
-      "selected_source_ids": ["S1"],
+      "selected_source_ids": [
+        "S1"
+      ],
       "raw": {
-        "answer_markdown": "The pipeline combines lexical and vector candidates with reciprocal-rank fusion. [S1]",
-        "used_source_ids": ["S1"],
-        "inferences": [],
+        "segments": [
+          {
+            "kind": "project",
+            "text": "The pipeline combines lexical and vector candidates with reciprocal-rank fusion.",
+            "source_ids": [
+              "S1"
+            ]
+          }
+        ],
         "insufficient_evidence": false
       },
       "expected": {
         "factual_policy": "accept",
-        "citation_evidence_ids": ["E_111111111111111111111111"],
+        "citation_evidence_ids": [
+          "E_111111111111111111111111"
+        ],
         "reviewed_claims": [
           {
             "text": "The pipeline combines lexical and vector candidates with reciprocal-rank fusion.",
-            "supporting_evidence_ids": ["E_111111111111111111111111"]
+            "supporting_evidence_ids": [
+              "E_111111111111111111111111"
+            ]
           }
         ]
       }
     },
     {
       "id": "supported_two_facts",
-      "question": "Where are immutable evidence and runtime state kept?",
+      "question": "How does retrieval combine candidates, and where are immutable evidence and runtime state kept?",
       "kind": "supported",
       "locale": "en",
-      "selected_source_ids": ["S1", "S2"],
+      "selected_source_ids": [
+        "S1",
+        "S2"
+      ],
       "raw": {
-        "answer_markdown": "The retrieval pipeline combines lexical and vector candidates with reciprocal-rank fusion. [S1]\nThe service stores immutable evidence in SQLite and keeps runtime state separate. [S2]",
-        "used_source_ids": ["S1", "S2"],
-        "inferences": [],
+        "segments": [
+          {
+            "kind": "project",
+            "text": "The retrieval pipeline combines lexical and vector candidates with reciprocal-rank fusion.",
+            "source_ids": [
+              "S1"
+            ]
+          },
+          {
+            "kind": "project",
+            "text": "The service stores immutable evidence in SQLite and keeps runtime state separate.",
+            "source_ids": [
+              "S2"
+            ]
+          }
+        ],
         "insufficient_evidence": false
       },
       "expected": {
         "factual_policy": "accept",
-        "citation_evidence_ids": ["E_111111111111111111111111", "E_222222222222222222222222"],
+        "citation_evidence_ids": [
+          "E_111111111111111111111111",
+          "E_222222222222222222222222"
+        ],
         "reviewed_claims": [
           {
             "text": "The retrieval pipeline combines lexical and vector candidates with reciprocal-rank fusion.",
-            "supporting_evidence_ids": ["E_111111111111111111111111"]
+            "supporting_evidence_ids": [
+              "E_111111111111111111111111"
+            ]
           },
           {
             "text": "The service stores immutable evidence in SQLite and keeps runtime state separate.",
-            "supporting_evidence_ids": ["E_222222222222222222222222"]
+            "supporting_evidence_ids": [
+              "E_222222222222222222222222"
+            ]
           }
         ]
       }
@@ -134,20 +179,32 @@
       "question": "Who implemented the retrieval pipeline?",
       "kind": "supported",
       "locale": "en",
-      "selected_source_ids": ["S3"],
+      "selected_source_ids": [
+        "S3"
+      ],
       "raw": {
-        "answer_markdown": "The owner implemented the retrieval pipeline. [S3]",
-        "used_source_ids": ["S3"],
-        "inferences": [],
+        "segments": [
+          {
+            "kind": "person",
+            "text": "{{owner}} implemented the retrieval pipeline.",
+            "source_ids": [
+              "S3"
+            ]
+          }
+        ],
         "insufficient_evidence": false
       },
       "expected": {
         "factual_policy": "accept",
-        "citation_evidence_ids": ["E_333333333333333333333333"],
+        "citation_evidence_ids": [
+          "E_333333333333333333333333"
+        ],
         "reviewed_claims": [
           {
-            "text": "The owner implemented the retrieval pipeline.",
-            "supporting_evidence_ids": ["E_333333333333333333333333"]
+            "text": "In Fixture Owner's own words: Fixture Owner implemented the retrieval pipeline.",
+            "supporting_evidence_ids": [
+              "E_333333333333333333333333"
+            ]
           }
         ]
       }
@@ -157,21 +214,29 @@
       "question": "What bounded conclusion follows from the retrieval and storage facts?",
       "kind": "supported",
       "locale": "en",
-      "selected_source_ids": ["S1", "S2"],
+      "selected_source_ids": [
+        "S1",
+        "S2"
+      ],
       "raw": {
-        "answer_markdown": "Together these facts describe a bounded, evidence-backed retrieval service. [S1] [S2]",
-        "used_source_ids": ["S1", "S2"],
-        "inferences": [
+        "segments": [
           {
-            "statement": "The service is evidence-backed.",
-            "source_ids": ["S1", "S2"]
+            "kind": "inference",
+            "text": "Together these facts describe a bounded, evidence-backed retrieval service.",
+            "source_ids": [
+              "S1",
+              "S2"
+            ]
           }
         ],
         "insufficient_evidence": false
       },
       "expected": {
         "factual_policy": "accept",
-        "citation_evidence_ids": ["E_111111111111111111111111", "E_222222222222222222222222"],
+        "citation_evidence_ids": [
+          "E_111111111111111111111111",
+          "E_222222222222222222222222"
+        ],
         "reviewed_claims": [
           {
             "text": "Together these facts describe a bounded, evidence-backed retrieval service.",
@@ -188,11 +253,11 @@
       "question": "Does the portfolio use a technology absent from the selected evidence?",
       "kind": "unsupported",
       "locale": "en",
-      "selected_source_ids": ["S1"],
+      "selected_source_ids": [
+        "S1"
+      ],
       "raw": {
-        "answer_markdown": "The available portfolio evidence is insufficient to confirm this.",
-        "used_source_ids": [],
-        "inferences": [],
+        "segments": [],
         "insufficient_evidence": true
       },
       "expected": {
@@ -206,11 +271,19 @@
       "question": "Did the owner personally lead this project?",
       "kind": "unsupported",
       "locale": "en",
-      "selected_source_ids": ["S1"],
+      "selected_source_ids": [
+        "S1"
+      ],
       "raw": {
-        "answer_markdown": "The owner led the project. [S1]",
-        "used_source_ids": ["S1"],
-        "inferences": [],
+        "segments": [
+          {
+            "kind": "person",
+            "text": "{{owner}} led the project.",
+            "source_ids": [
+              "S1"
+            ]
+          }
+        ],
         "insufficient_evidence": false
       },
       "expected": {
@@ -224,11 +297,11 @@
       "question": "What is the weather today?",
       "kind": "unsupported",
       "locale": "en",
-      "selected_source_ids": ["S2"],
+      "selected_source_ids": [
+        "S2"
+      ],
       "raw": {
-        "answer_markdown": "I cannot confirm unrelated topics from this portfolio.",
-        "used_source_ids": [],
-        "inferences": [],
+        "segments": [],
         "insufficient_evidence": false
       },
       "expected": {
@@ -242,11 +315,11 @@
       "question": "What happened in an unselected private repository?",
       "kind": "unsupported",
       "locale": "en",
-      "selected_source_ids": ["S1"],
+      "selected_source_ids": [
+        "S1"
+      ],
       "raw": {
-        "answer_markdown": "No selected evidence confirms this.",
-        "used_source_ids": [],
-        "inferences": [],
+        "segments": [],
         "insufficient_evidence": true
       },
       "expected": {
@@ -260,8 +333,10 @@
       "question": "Malformed provider output",
       "kind": "safety",
       "locale": "en",
-      "selected_source_ids": ["S1"],
-      "raw": "{\"answer_markdown\":",
+      "selected_source_ids": [
+        "S1"
+      ],
+      "raw": "{\"segments\":",
       "expected": {
         "factual_policy": "abstain",
         "citation_evidence_ids": [],
@@ -274,11 +349,19 @@
       "question": "Unknown source marker",
       "kind": "safety",
       "locale": "en",
-      "selected_source_ids": ["S1"],
+      "selected_source_ids": [
+        "S1"
+      ],
       "raw": {
-        "answer_markdown": "This cites an unknown source. [S9]",
-        "used_source_ids": ["S9"],
-        "inferences": [],
+        "segments": [
+          {
+            "kind": "project",
+            "text": "This cites an unknown source.",
+            "source_ids": [
+              "S9"
+            ]
+          }
+        ],
         "insufficient_evidence": false
       },
       "expected": {
@@ -293,11 +376,19 @@
       "question": "Forged citation URL",
       "kind": "safety",
       "locale": "en",
-      "selected_source_ids": ["S1"],
+      "selected_source_ids": [
+        "S1"
+      ],
       "raw": {
-        "answer_markdown": "Click [the forged citation](https://evil.example/QUALITY_EVAL_CANARY_NEVER_LEAKS_7f7b). [S1]",
-        "used_source_ids": ["S1"],
-        "inferences": [],
+        "segments": [
+          {
+            "kind": "project",
+            "text": "Click [the forged citation](https://evil.example/QUALITY_EVAL_CANARY_NEVER_LEAKS_7f7b).",
+            "source_ids": [
+              "S1"
+            ]
+          }
+        ],
         "insufficient_evidence": false
       },
       "expected": {
@@ -312,11 +403,20 @@
       "question": "Active HTML payload",
       "kind": "safety",
       "locale": "en",
-      "selected_source_ids": ["S1", "S5"],
+      "selected_source_ids": [
+        "S1",
+        "S5"
+      ],
       "raw": {
-        "answer_markdown": "<script>QUALITY_EVAL_CANARY_NEVER_LEAKS_7f7b</script> [S1]",
-        "used_source_ids": ["S1"],
-        "inferences": [],
+        "segments": [
+          {
+            "kind": "project",
+            "text": "<script>QUALITY_EVAL_CANARY_NEVER_LEAKS_7f7b</script>",
+            "source_ids": [
+              "S1"
+            ]
+          }
+        ],
         "insufficient_evidence": false
       },
       "expected": {
@@ -331,14 +431,17 @@
       "question": "Inference that cites another inference",
       "kind": "safety",
       "locale": "en",
-      "selected_source_ids": ["S4"],
+      "selected_source_ids": [
+        "S4"
+      ],
       "raw": {
-        "answer_markdown": "An unsupported derived statement. [S4]",
-        "used_source_ids": ["S4"],
-        "inferences": [
+        "segments": [
           {
-            "statement": "A cycle is not allowed.",
-            "source_ids": ["S4"]
+            "kind": "inference",
+            "text": "An unsupported derived statement.",
+            "source_ids": [
+              "S4"
+            ]
           }
         ],
         "insufficient_evidence": false
@@ -355,11 +458,19 @@
       "question": "Missing required envelope field",
       "kind": "safety",
       "locale": "en",
-      "selected_source_ids": ["S1"],
+      "selected_source_ids": [
+        "S1"
+      ],
       "raw": {
-        "answer_markdown": "The answer is missing a policy field. [S1]",
-        "used_source_ids": ["S1"],
-        "inferences": []
+        "segments": [
+          {
+            "kind": "project",
+            "text": "The answer is missing a policy field.",
+            "source_ids": [
+              "S1"
+            ]
+          }
+        ]
       },
       "expected": {
         "factual_policy": "abstain",
@@ -368,5 +479,6 @@
         "fail_closed": true
       }
     }
-  ]
+  ],
+  "owner_name": "Fixture Owner"
 }

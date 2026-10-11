@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { guidedErrorMessage } from "./guidedOnboarding";
 import { CoverageFaqPanel } from "./CoverageFaqPanel";
 import type { ClaimKind } from "./ClaimEditor";
 import type {
@@ -21,6 +22,8 @@ import {
   safeShareFields,
 } from "./sharing";
 import { VisitorGatewayPanel } from "./VisitorGatewayPanel";
+import { AppearancePanel, type SceneAppearanceState } from "./AppearancePanel";
+import { PagesSharePanel, type PagesSharingState } from "./PagesSharePanel";
 
 export interface LocalDraftBody {
   content: string;
@@ -34,6 +37,7 @@ interface PublicationStatus {
   error_code: string | null;
   revision: string | null;
   active_bundle_id: string | null;
+  scene_state?: SceneAppearanceState | null;
 }
 interface ShareMetadata {
   account: string;
@@ -46,6 +50,78 @@ interface ShareMetadata {
 }
 type Request = <T>(path: string, options?: RequestInit) => Promise<T>;
 
+function publicationErrorMessage(locale: AdminLocale, error: unknown): string {
+  const zh = locale === "zh-TW";
+  const code =
+    error instanceof TypeError
+      ? "REQUEST_FAILED"
+      : error instanceof Error
+        ? error.message
+        : "";
+  switch (code) {
+    case "SERVICE_NOT_READY":
+    case "REQUEST_FAILED":
+    case "GITHUB_ERROR":
+    case "RATE_LIMITED":
+      return guidedErrorMessage(locale, code);
+    case "PORTFOLIO_CONFLICT":
+      return zh
+        ? "草稿版本已變更。請先保留目前編輯內容，再重新載入並核對最新草稿後儲存；不要直接覆蓋。"
+        : "The draft version changed. Keep a copy of your edits, then reload and compare the latest draft before saving; do not overwrite it blindly.";
+    case "PORTFOLIO_BUSY":
+    case "EMBEDDING_REINDEX_ACTIVE":
+      return zh
+        ? "已有準備工作進行中。請等候下方狀態完成，或取消準備後再重試。"
+        : "Preparation is already running. Wait for the status below to finish, or cancel preparation before retrying.";
+    case "PORTFOLIO_MODEL_CHANGED":
+    case "CHAT_PROBE_REQUIRED":
+    case "EMBEDDING_PROBE_REQUIRED":
+    case "EMBEDDING_REINDEX_STALE":
+    case "MODEL_UNAVAILABLE":
+      return zh
+        ? "模型設定已變更或尚未就緒。請前往模型設定，重新測試並確認選用兩種模型，再返回準備 NPC。"
+        : "Model settings changed or are not ready. Open model setup, retest and confirm both model selections, then return to prepare the NPC.";
+    case "CONFIG_INVALID":
+    case "VALIDATION_ERROR":
+    case "PORTFOLIO_INVALID":
+      return zh
+        ? "草稿未通過驗證，目前輸入仍保留。請回到內容編輯，檢查必填欄位、雙語內容及確認狀態，再預覽並儲存。"
+        : "The draft did not pass validation. Your input is kept. Return to content editing, check required fields, both languages and confirmations, then preview and save.";
+    case "PORTFOLIO_ASSET_REQUIRED":
+    case "ASSET_INVALID":
+      return zh
+        ? "角色素材缺少或無效。請到「角色與動畫」重新選擇並驗證素材，再返回預覽及儲存。"
+        : "The character asset is missing or invalid. Open Character & animation, select and validate the asset, then return to preview and save.";
+    case "PAYLOAD_TOO_LARGE":
+      return zh
+        ? "草稿或素材超過大小限制。請縮減草稿內容或在「角色與動畫」選擇符合限制的素材，再重試。"
+        : "The draft or asset exceeds the size limit. Reduce the draft or choose an asset within the limits in Character & animation, then retry.";
+    case "PORTFOLIO_WRITE_FAILED":
+    case "PORTFOLIO_CORRUPT":
+      return zh
+        ? "本機草稿無法安全讀寫。請先保留目前編輯內容，檢查資料目錄的可用空間與存取權限，並到「維護」查看備份，再決定是否重試；不要刪除現有資料。"
+        : "The local draft could not be read or written safely. Keep a copy of your edits, check data-directory space and access permissions, and review backups in Maintenance before retrying; do not delete existing data.";
+    case "EMBEDDING_REINDEX_CANCELLED":
+    case "EMBEDDING_REINDEX_INTERRUPTED":
+      return zh
+        ? "準備已取消或中斷。請確認本機服務與模型已就緒，再按「準備 NPC」重新開始。"
+        : "Preparation was cancelled or interrupted. Check that the local service and models are ready, then select Prepare NPC to start again.";
+    case "EMBEDDING_REINDEX_TIMEOUT":
+      return zh
+        ? "準備逾時。請檢查模型服務連線與電腦資源，確認服務恢復後再重試準備。"
+        : "Preparation timed out. Check model-service connectivity and computer resources, then retry preparation once the service has recovered.";
+    case "PORTFOLIO_PREPARE_FAILED":
+    case "EMBEDDING_REINDEX_FAILED":
+      return zh
+        ? "準備未完成。請到「維護」查看服務狀態，並在模型設定測試所選模型；排除問題後再重試準備。"
+        : "Preparation did not complete. Open Maintenance to check service status and test the selected models in model setup; retry preparation after resolving the problem.";
+    default:
+      return zh
+        ? "操作未完成，目前無法確認原因，輸入仍保留。請先保留未儲存內容，再到「維護」查看服務狀態，確認後再重試。"
+        : "Could not complete the operation; the cause is unknown and your input is kept. Keep a copy of unsaved content, open Maintenance to check service status, then retry after checking.";
+  }
+}
+
 export function LocalPublishingWorkspace({
   locale,
   content,
@@ -56,8 +132,11 @@ export function LocalPublishingWorkspace({
   request,
   onStored,
   onCreateDraft,
+  onConfigureModels,
   repositories,
   onAddClaim,
+  onActiveSceneChange,
+  draftUnsaved = false,
 }: {
   locale: AdminLocale;
   content: string;
@@ -68,20 +147,33 @@ export function LocalPublishingWorkspace({
   request: Request;
   onStored: (body: LocalDraftBody) => void;
   onCreateDraft: () => void;
+  onConfigureModels?: () => void;
   repositories: string[];
   onAddClaim: (repository: string, kind: ClaimKind) => void;
+  onActiveSceneChange?: (state: SceneAppearanceState | null) => void;
+  draftUnsaved?: boolean;
 }) {
   const zh = locale === "zh-TW";
   const [preview, setPreview] = useState<AdminPreview | null>(null);
   const [status, setStatus] = useState<PublicationStatus | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
   const [pending, setPending] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{
+    scope: "local" | "share" | "appearance";
+    message: string;
+    error?: boolean;
+  } | null>(null);
   const [account, setAccount] = useState(
     githubAccount(initialAccount) ?? initialAccount,
   );
   const [publicUrl, setPublicUrl] = useState("");
+  const [pagesSharingState, setPagesSharingState] =
+    useState<PagesSharingState | null>(null);
   const [metadata, setMetadata] = useState<ShareMetadata | null>(null);
   const mounted = useRef(true);
+  const operationPending = useRef(false);
+  const sceneGeneration = useRef(0);
+  const pagesGeneration = useRef(0);
   const contentRef = useRef(content);
   contentRef.current = content;
   const spriteRef = useRef(spriteBase64);
@@ -90,6 +182,8 @@ export function LocalPublishingWorkspace({
   accountRef.current = account;
   const publicUrlRef = useRef(publicUrl);
   publicUrlRef.current = publicUrl;
+  const onActiveSceneChangeRef = useRef(onActiveSceneChange);
+  onActiveSceneChangeRef.current = onActiveSceneChange;
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -103,13 +197,28 @@ export function LocalPublishingWorkspace({
     let closed = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
-      try {
-        const current = await request<PublicationStatus>(
-          "/api/admin/portfolio/status",
-        );
-        if (!closed) setStatus(current);
-      } catch {
-        if (!closed) setStatus(null);
+      const generation = sceneGeneration.current;
+      const sharingGeneration = pagesGeneration.current;
+      const [statusResult, sharingResult] = await Promise.allSettled([
+        request<PublicationStatus>("/api/admin/portfolio/status"),
+        request<PagesSharingState>("/api/admin/sharing/state"),
+      ]);
+      if (!closed && sceneGeneration.current === generation) {
+        setStatusLoading(false);
+        if (statusResult.status === "fulfilled") {
+          setStatus(statusResult.value);
+          onActiveSceneChangeRef.current?.(
+            statusResult.value.scene_state ?? null,
+          );
+        } else {
+          setStatus(null);
+          onActiveSceneChangeRef.current?.(null);
+        }
+        if (pagesGeneration.current === sharingGeneration) {
+          setPagesSharingState(
+            sharingResult.status === "fulfilled" ? sharingResult.value : null,
+          );
+        }
       }
       if (!closed) timer = setTimeout(() => void poll(), 3000);
     };
@@ -156,18 +265,22 @@ export function LocalPublishingWorkspace({
       /* Optional. */
     }
   }
-  async function run(operation: () => Promise<void>) {
-    if (pending) return;
+  async function run(scope: "local" | "share", operation: () => Promise<void>) {
+    if (operationPending.current) return;
+    operationPending.current = true;
     setPending(true);
-    setNotice("");
+    setNotice(null);
     try {
       await operation();
     } catch (error) {
       if (mounted.current)
-        setNotice(
-          `${zh ? "操作未完成，請檢查輸入內容或服務狀態後重試" : "Could not complete. Check your input or service status and try again"}: ${error instanceof Error ? error.message : "REQUEST_FAILED"}`,
-        );
+        setNotice({
+          scope,
+          error: true,
+          message: publicationErrorMessage(locale, error),
+        });
     } finally {
+      operationPending.current = false;
       if (mounted.current) setPending(false);
     }
   }
@@ -200,24 +313,38 @@ export function LocalPublishingWorkspace({
     if (!mounted.current) return;
     onStored(saved);
     if (prepare) {
-      const result = await request<PublicationStatus>(
-        "/api/admin/portfolio/prepare",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            expected_revision: saved.revision,
-            selection_generation: selection?.selection.generation,
-            confirmed: true,
-          }),
-        },
-      );
-      if (mounted.current) setStatus(result);
+      try {
+        const result = await request<PublicationStatus>(
+          "/api/admin/portfolio/prepare",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              expected_revision: saved.revision,
+              selection_generation: selection?.selection.generation,
+              confirmed: true,
+            }),
+          },
+        );
+        if (mounted.current) setStatus(result);
+      } catch (error) {
+        if (mounted.current)
+          setNotice({
+            scope: "local",
+            error: true,
+            message:
+              (zh
+                ? "草稿已儲存在本機，但尚無法確認 NPC 準備結果。"
+                : "The draft was saved locally, but NPC preparation could not be confirmed. ") +
+              publicationErrorMessage(locale, error),
+          });
+      }
     } else
-      setNotice(
-        zh
+      setNotice({
+        scope: "local",
+        message: zh
           ? "已儲存在本機；訪客內容尚未變更。"
           : "Saved locally. Visitor content has not changed.",
-      );
+      });
   }
   async function checkProfile() {
     const chosen = githubAccount(account);
@@ -237,12 +364,29 @@ export function LocalPublishingWorkspace({
     }
   }
   const selectedCard = preview?.cards?.[`light-${locale}`];
-  function download() {
+  async function download() {
     if (!selectedCard?.gif_base64) return;
-    const bytes = Uint8Array.from(atob(selectedCard.gif_base64), (c) =>
-      c.charCodeAt(0),
-    );
-    const url = URL.createObjectURL(new Blob([bytes], { type: "image/gif" }));
+    let image: Blob;
+    if (selectedCard.gif_url) {
+      const parsed = new URL(selectedCard.gif_url, window.location.href);
+      if (
+        parsed.origin !== window.location.origin ||
+        !parsed.pathname.startsWith("/api/admin/assets/previews/")
+      )
+        throw new Error("Unexpected preview URL");
+      const response = await fetch(parsed.href, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error("Preview asset is unavailable");
+      image = await response.blob();
+    } else {
+      const bytes = Uint8Array.from(atob(selectedCard.gif_base64), (c) =>
+        c.charCodeAt(0),
+      );
+      image = new Blob([bytes], { type: "image/gif" });
+    }
+    const url = URL.createObjectURL(image);
     const link = document.createElement("a");
     link.href = url;
     link.download = CARD_FILENAME;
@@ -250,13 +394,17 @@ export function LocalPublishingWorkspace({
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setNotice(
-      zh
+    setNotice({
+      scope: "share",
+      message: zh
         ? `已交給瀏覽器下載 ${CARD_FILENAME}；請確認下載完成。`
         : `Browser download requested: ${CARD_FILENAME}. Check that it completed.`,
-    );
+    });
   }
   const chosen = githubAccount(account);
+  const verifiedPagesUrl = pagesSharingState?.verified
+    ? pagesSharingState.pages_url
+    : null;
   const links = chosen
     ? {
         repository: `https://github.com/${chosen}/${chosen}`,
@@ -270,11 +418,32 @@ export function LocalPublishingWorkspace({
       ? (profiles as PreviewProfile)
       : (profiles as Record<string, PreviewProfile> | undefined)?.[locale];
   const preparing = status?.state === "preparing";
+  const prepareReason = pending
+    ? zh
+      ? "正在處理，請稍候。"
+      : "An operation is in progress. Please wait."
+    : preparing
+      ? zh
+        ? "正在準備 NPC，完成後才能再次更新。"
+        : "The NPC is being prepared. Wait before updating again."
+      : !content
+        ? zh
+          ? "先從已確認內容建立草稿。"
+          : "Create a draft from confirmed content first."
+        : !selection?.eligible
+          ? zh
+            ? "先設定並測試兩種模型，再返回準備 NPC。預覽及儲存草稿仍可使用。"
+            : "Set up and test both models, then return to prepare the NPC. Preview and saving a draft remain available."
+          : null;
   const publicationMessage =
     status === null
-      ? zh
-        ? "目前無法確認本機發布狀態；請稍後重新檢查。"
-        : "The local publication status is unknown right now; check again shortly."
+      ? statusLoading
+        ? zh
+          ? "正在讀取本機發布狀態…"
+          : "Loading local publication status…"
+        : zh
+          ? "目前無法確認本機發布狀態；請稍後重新檢查。"
+          : "The local publication status is unknown right now; check again shortly."
       : preparing
         ? zh
           ? status.index_ready
@@ -300,12 +469,29 @@ export function LocalPublishingWorkspace({
                 : "Local NPC has not been prepared.";
   return (
     <div className="local-publication">
+      <nav aria-label={zh ? "預覽與分享步驟" : "Preview and sharing steps"}>
+        <a href="#local-publication-heading">
+          {zh ? "1. 本機準備與試聊" : "1. Prepare and try locally"}
+        </a>
+        {" · "}
+        <a href="#visitor-gateway-heading">
+          {zh ? "2. 訪客連線" : "2. Visitor access"}
+        </a>
+        {" · "}
+        <a href="#pages-share-panel-heading">
+          {zh ? "3. 上傳與核對網站" : "3. Upload and verify site"}
+        </a>
+        {" · "}
+        <a href="#github-share-guide-heading">
+          {zh ? "4. 分享卡片" : "4. Share card"}
+        </a>
+      </nav>
       <section
         className="admin-surface"
         aria-labelledby="local-publication-heading"
       >
         <h2 id="local-publication-heading">
-          {zh ? "預覽、試聊與分享" : "Preview, try and share"}
+          {zh ? "1. 本機準備與試聊" : "1. Prepare and try locally"}
         </h2>
         <p>
           {zh
@@ -330,21 +516,27 @@ export function LocalPublishingWorkspace({
           <button
             type="button"
             disabled={pending || !content}
-            onClick={() => void run(showPreview)}
+            onClick={() => void run("local", showPreview)}
           >
             {zh ? "預覽作品集與卡片" : "Preview portfolio and card"}
           </button>
           <button
             type="button"
-            disabled={pending || !content}
-            onClick={() => void run(() => save(false))}
+            disabled={!content}
+            aria-disabled={pending || !content}
+            onClick={() => {
+              if (content) void run("local", () => save(false));
+            }}
           >
             {zh ? "儲存本機草稿" : "Save local draft"}
           </button>
           <button
             type="button"
+            aria-describedby={
+              prepareReason ? "local-prepare-reason" : undefined
+            }
             disabled={pending || preparing || !content || !selection?.eligible}
-            onClick={() => void run(() => save(true))}
+            onClick={() => void run("local", () => save(true))}
           >
             {zh
               ? status?.index_ready
@@ -359,7 +551,7 @@ export function LocalPublishingWorkspace({
               type="button"
               disabled={pending}
               onClick={() =>
-                void run(async () =>
+                void run("local", async () =>
                   setStatus(
                     await request<PublicationStatus>(
                       "/api/admin/portfolio/prepare",
@@ -373,18 +565,33 @@ export function LocalPublishingWorkspace({
             </button>
           )}
         </div>
-        {!selection?.eligible && (
-          <p>
-            {zh
-              ? "請先在模型設定選好並測試回答模型和資料查找模型。"
-              : "Select and test both the answer and retrieval models first."}
+        {notice?.scope === "local" && (
+          <p
+            className={notice.error ? "admin-workspace__notice" : undefined}
+            role={notice.error ? "alert" : "status"}
+          >
+            {notice.message}
+          </p>
+        )}
+        {(prepareReason || !selection?.eligible) && (
+          <p id="local-prepare-reason">
+            {prepareReason}{" "}
+            {!selection?.eligible && onConfigureModels && (
+              <button type="button" onClick={onConfigureModels}>
+                {zh ? "前往設定模型" : "Set up models"}
+              </button>
+            )}{" "}
+            {!selection?.eligible &&
+              (zh
+                ? "內容草稿會保留，完成後可返回準備 NPC。"
+                : "Your content draft is kept. Return here to prepare the NPC after setup.")}
           </p>
         )}
         <p role="status">{publicationMessage}</p>
         {status?.error_code && (
           <p role="alert">
             {zh ? "上次準備未完成" : "Last preparation failed"}:{" "}
-            {status.error_code}
+            {publicationErrorMessage(locale, new Error(status.error_code))}
           </p>
         )}
         {status?.index_ready && (
@@ -423,6 +630,7 @@ export function LocalPublishingWorkspace({
             height={64}
             state="idle"
             pngBase64={preview.character.png_base64}
+            pngUrl={preview.character.png_url}
             label={
               zh ? "目前草稿角色動畫" : "Current draft character animation"
             }
@@ -434,6 +642,7 @@ export function LocalPublishingWorkspace({
             width={600}
             height={180}
             pngBase64={selectedCard.png_base64}
+            pngUrl={selectedCard.png_url}
             label={
               zh
                 ? "GitHub 卡片靜態預覽（下載為 GIF）"
@@ -450,22 +659,24 @@ export function LocalPublishingWorkspace({
           </p>
         )}
       </section>
-      <CoverageFaqPanel
+      <VisitorGatewayPanel locale={locale} request={request} />
+      <PagesSharePanel
         locale={locale}
         request={request}
-        revision={revision}
-        repositories={repositories}
-        selection={selection}
-        bundleId={status?.active_bundle_id ?? null}
-        draftChanged={status?.draft_changed ?? false}
-        onStored={onStored}
-        onAddClaim={onAddClaim}
+        observedState={pagesSharingState}
+        onStateChange={(updated) => {
+          pagesGeneration.current += 1;
+          setPagesSharingState(updated);
+        }}
+        onOperationPendingChange={(value) => {
+          if (value) pagesGeneration.current += 1;
+        }}
       />
-      <VisitorGatewayPanel locale={locale} request={request} />
       <GitHubShareGuide
         locale={locale}
         account={account}
         publicUrl={publicUrl}
+        verifiedPagesUrl={verifiedPagesUrl}
         profileStatus={metadata?.profile_status ?? "unchecked"}
         imageStatus={metadata?.image_status ?? "unchecked"}
         repositoryUrl={metadata?.repository_url ?? links?.repository ?? null}
@@ -476,7 +687,7 @@ export function LocalPublishingWorkspace({
         markdown={cardMarkdown(publicUrl, locale)}
         cardReady={!!selectedCard?.gif_base64}
         busy={pending}
-        notice={notice}
+        notice={notice?.scope === "share" ? notice.message : ""}
         onAccountChange={(value) => {
           setAccount(value);
           setMetadata(null);
@@ -486,22 +697,111 @@ export function LocalPublishingWorkspace({
           setPublicUrl(value);
           remember(account, value);
         }}
-        onCheckProfile={() => void run(checkProfile)}
-        onCheckImage={() => void run(checkProfile)}
-        onDownload={download}
-        onCopy={() =>
-          void run(async () => {
-            await navigator.clipboard.writeText(
-              cardMarkdown(publicUrl, locale),
-            );
-            setNotice(
-              zh
+        onCheckProfile={() => void run("share", checkProfile)}
+        onCheckImage={() => void run("share", checkProfile)}
+        onDownload={() => void run("share", download)}
+        onCopy={(markdown) =>
+          void run("share", async () => {
+            await navigator.clipboard.writeText(markdown);
+            setNotice({
+              scope: "share",
+              message: zh
                 ? "已複製。請貼入 README、預覽並儲存，再從 GitHub 點擊測試。"
                 : "Copied. Paste into README, preview and save, then test the card from GitHub.",
-            );
+            });
           })
         }
       />
+      <details className="admin-surface publication-optional">
+        <summary>
+          {zh ? "選填：調整訪客外觀" : "Optional: customize visitor appearance"}
+        </summary>
+        {notice?.scope === "appearance" && (
+          <p className="admin-workspace__notice" role="alert">
+            {notice.message}
+          </p>
+        )}
+        {status?.scene_state ? (
+          <AppearancePanel
+            locale={locale}
+            initialState={status.scene_state}
+            request={request}
+            applyDisabled={
+              draftUnsaved || revision !== status.scene_state.draft_revision
+            }
+            onStateChange={(updated) => {
+              sceneGeneration.current += 1;
+              pagesGeneration.current += 1;
+              setPagesSharingState(null);
+              setStatus((current) =>
+                current ? { ...current, scene_state: updated } : current,
+              );
+              onActiveSceneChangeRef.current?.(updated);
+              const contentAtApply = contentRef.current;
+              const spriteAtApply = spriteRef.current;
+              void request<LocalDraftBody>("/api/admin/portfolio")
+                .then((saved) => {
+                  if (!mounted.current) return;
+                  if (
+                    previewInputsMatch(
+                      contentRef.current,
+                      spriteRef.current,
+                      contentAtApply,
+                      spriteAtApply,
+                    )
+                  ) {
+                    onStored(saved);
+                  } else {
+                    setNotice({
+                      scope: "appearance",
+                      message: zh
+                        ? "外觀已套用；草稿在讀回期間有新編輯，請重新載入並核對草稿後再儲存。"
+                        : "Appearance applied. The draft changed during refresh; reload and review it before saving.",
+                    });
+                  }
+                })
+                .catch(() => {
+                  if (mounted.current)
+                    setNotice({
+                      scope: "appearance",
+                      message: zh
+                        ? "外觀已套用，但草稿版本讀回失敗；請重新載入後再儲存。"
+                        : "Appearance applied, but the saved draft could not be refreshed. Reload before saving.",
+                    });
+                });
+            }}
+          />
+        ) : (
+          <section
+            className="admin-surface"
+            aria-labelledby="scene-appearance-title"
+          >
+            <h2 id="scene-appearance-title">
+              {zh ? "訪客外觀" : "Visitor appearance"}
+            </h2>
+            <p>
+              {zh
+                ? "先準備本機 NPC，再預覽及套用外觀。"
+                : "Prepare the local NPC before previewing and applying appearance."}
+            </p>
+          </section>
+        )}
+      </details>
+      <details className="admin-surface publication-optional">
+        <summary>
+          {zh
+            ? "選填：檢查涵蓋範圍與審核 FAQ"
+            : "Optional: check coverage and review FAQ"}
+        </summary>
+        <CoverageFaqPanel
+          locale={locale}
+          request={request}
+          repositories={repositories}
+          bundleId={status?.active_bundle_id ?? null}
+          draftChanged={status?.draft_changed ?? false}
+          onAddClaim={onAddClaim}
+        />
+      </details>
     </div>
   );
 }

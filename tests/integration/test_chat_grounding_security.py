@@ -176,6 +176,49 @@ class ProjectChat(MaliciousChat):
         )
 
 
+@pytest.mark.parametrize("locale", ["zh-TW", "en"])
+@pytest.mark.parametrize("allow_retry", [False, True])
+def test_valid_nonempty_length_output_cannot_be_delivered_or_retried(
+    locale: Any,
+    allow_retry: bool,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class TruncatedChat(ProjectChat):
+        def generate(self, messages, response_schema, max_output_tokens, timeout):
+            result = super().generate(messages, response_schema, max_output_tokens, timeout)
+            return replace(result, finish_reason="length")
+
+    chat = TruncatedChat()
+    parsed: list[object] = []
+
+    def forbidden_parse(*args: object, **kwargs: object) -> None:
+        parsed.append(args)
+        raise AssertionError("truncated JSON must be rejected before validation")
+
+    monkeypatch.setattr("reponpc.chat.service.validate_v2_answer", forbidden_parse)
+    service = GroundedChatService(
+        bundles=Bundles(),
+        providers=ProviderRuntime(chat=chat, embedding=Embedding()),
+        limits=Limits(),
+        max_output_tokens=100,
+        timeout_seconds=5,
+    )  # type: ignore[arg-type]
+    with pytest.raises(ProviderError) as failure:
+        service.answer(
+            message="What is implemented?",
+            locale=locale,
+            history=(),
+            client_ip="203.0.113.1",
+            allow_retry=allow_retry,
+        )
+    assert failure.value.code == ProviderFailureCode.INVALID_RESPONSE
+    assert chat.calls == 1
+    assert parsed == []
+    assert "retrieval feature" not in str(failure.value)
+    assert "retrieval feature" not in caplog.text
+
+
 def test_service_renders_owner_from_leased_bundle_profile(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

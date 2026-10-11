@@ -23,8 +23,10 @@ import uvicorn
 from starlette.responses import JSONResponse
 
 from reponpc.api.public import SetupState
+from reponpc.cards.sprite_composer import compose_builtin
 from reponpc.chat.answers import Citation
 from reponpc.chat.service import ChatDelivery, ChatHistoryMessage
+from reponpc.config.models import load_public_config
 from reponpc.main import create_app
 
 
@@ -281,8 +283,11 @@ def _write_public_bundle(runtime_root: Path) -> Path:
         },
     }
     (public / "profile.json").write_text(json.dumps(profile, ensure_ascii=False), encoding="utf-8")
-    source_image = Path(__file__).resolve().parents[2] / "reponpc-how-it-works.png"
-    shutil.copyfile(source_image, public / "character.png")
+    fixture = load_public_config(
+        Path(__file__).resolve().parents[2] / "tests/fixtures/phase2/reponpc.yml"
+    )
+    assert fixture.character.builtin is not None
+    (public / "character.png").write_bytes(compose_builtin(fixture.character.builtin))
     return public
 
 

@@ -53,6 +53,9 @@ function props(
     ) as unknown as Request,
     onStored: vi.fn(),
     onCreateDraft: vi.fn(),
+    onConfigureModels: vi.fn(),
+    repositories: [],
+    onAddClaim: vi.fn(),
     ...overrides,
   };
 }
@@ -64,6 +67,33 @@ function renderWorkspace(overrides: Parameters<typeof props>[0] = {}): string {
 }
 
 describe("LocalPublishingWorkspace", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "%s explains blocked preparation beside its model shortcut",
+    (locale) => {
+      const markup = renderWorkspace({ locale, selection: null });
+      expect(markup).toMatch(
+        /<button[^>]*aria-describedby="local-prepare-reason"[^>]*disabled/,
+      );
+      expect(markup).toContain('id="local-prepare-reason"');
+      expect(markup).toContain(
+        locale === "zh-TW" ? "前往設定模型" : "Set up models",
+      );
+      const preparation = markup.indexOf('id="local-publication-heading"');
+      const gateway = markup.indexOf('id="visitor-gateway-heading"');
+      const pages = markup.indexOf('id="pages-share-panel-heading"');
+      const card = markup.indexOf('id="github-share-guide-heading"');
+      const optional = markup.indexOf(
+        'class="admin-surface publication-optional"',
+      );
+      expect(preparation).toBeLessThan(gateway);
+      expect(gateway).toBeLessThan(pages);
+      expect(pages).toBeLessThan(card);
+      expect(card).toBeLessThan(optional);
+      expect(markup).toContain(
+        '<details class="admin-surface publication-optional">',
+      );
+    },
+  );
   it("keeps local preparation available while sharing waits for a public URL", () => {
     const markup = renderWorkspace();
 
@@ -75,9 +105,7 @@ describe("LocalPublishingWorkspace", () => {
     );
     expect(markup).toMatch(/<button[^>]*>Prepare and apply NPC<\/button>/);
     expect(markup).toContain("No public visitor link is ready yet.");
-    expect(markup).toContain(
-      "The local publication status is unknown right now; check again shortly.",
-    );
+    expect(markup).toContain("Loading local publication status…");
     expect(markup).not.toContain("Local NPC has not been prepared.");
   });
 

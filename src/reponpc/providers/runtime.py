@@ -175,6 +175,43 @@ class ProviderRuntime:
             raise ProviderError(ProviderFailureCode.TIMEOUT)
         return self.chat.generate(messages, response_schema, max_output_tokens, float(timeout))
 
+    def generate_with_progress(
+        self,
+        messages: tuple[ProviderMessage, ...],
+        response_schema: ResponseSchema,
+        max_output_tokens: int,
+        timeout: float,
+        *,
+        on_progress: Callable[[str], None],
+        cancelled: Callable[[], bool],
+        on_summary: Callable[[str], None] | None = None,
+    ) -> ProviderResult:
+        """One call, closed activity labels and optional privacy-checked public summaries."""
+        with self._lock:
+            chat = self.chat
+        generate_summary = getattr(chat, "generate_with_public_summary", None)
+        if on_summary is not None and callable(generate_summary):
+            return generate_summary(
+                messages,
+                response_schema,
+                max_output_tokens,
+                timeout,
+                on_progress=on_progress,
+                cancelled=cancelled,
+                on_summary=on_summary,
+            )
+        generate = getattr(chat, "generate_with_progress", None)
+        if callable(generate):
+            return generate(
+                messages,
+                response_schema,
+                max_output_tokens,
+                timeout,
+                on_progress=on_progress,
+                cancelled=cancelled,
+            )
+        return chat.generate(messages, response_schema, max_output_tokens, timeout)
+
     def embed_query(self, texts: list[str], *, timeout: float) -> NDArray[np.float32]:
         """Embed a query batch with bounded same-adapter transient retries."""
 

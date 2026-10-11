@@ -20,6 +20,9 @@ describe("visitor gateway panel", () => {
       expect(markup).toContain('aria-labelledby="visitor-gateway-heading"');
       expect(markup).toContain('for="visitor-gateway-origin"');
       expect(markup).toContain('for="visitor-pages-origin"');
+      expect(markup).toContain('aria-describedby="visitor-pages-origin-help"');
+      expect(markup).toContain('id="visitor-pages-origin-help"');
+      expect(markup).not.toContain("Listener");
       expect(markup).toContain('type="url"');
       expect(markup).toContain(
         "tailscale funnel --bg --https=443 http://127.0.0.1:&lt;visitor-port&gt;",
@@ -35,9 +38,9 @@ describe("visitor gateway panel", () => {
     expect(visitorGatewayErrorMessage("GATEWAY_CONFLICT", "en")).toContain(
       "changed elsewhere",
     );
-    expect(
-      visitorGatewayErrorMessage("GATEWAY_VERIFICATION_STALE", "zh-TW"),
-    ).toContain("重新完成檢查清單");
+    expect(visitorGatewayErrorMessage("GATEWAY_UNAVAILABLE", "en")).toContain(
+      "port",
+    );
 
     const unknown = visitorGatewayErrorMessage(
       "PRIVATE_PROVIDER_URL_AND_EXCEPTION_TEXT",

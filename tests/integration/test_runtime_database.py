@@ -63,7 +63,7 @@ def test_runtime_database_is_idempotent_and_separate_from_index_data(tmp_path: P
 
     assert database.database_path == tmp_path / "runtime-data" / "runtime.sqlite"
     assert database.database_path.exists()
-    assert database.schema_version() == 30
+    assert database.schema_version() == MIGRATIONS[-1].version
     assert {
         "runtime_schema_migrations",
         "admin_sessions",
@@ -130,7 +130,7 @@ def test_provider_message_migration_is_atomic(tmp_path: Path) -> None:
                 row[1] for row in connection.execute(f"PRAGMA table_info({table})")
             }
     database.initialize()
-    assert database.schema_version() == 30
+    assert database.schema_version() == MIGRATIONS[-1].version
 
 
 def test_host_connection_override_migration_is_atomic(tmp_path: Path) -> None:
@@ -150,7 +150,7 @@ def test_host_connection_override_migration_is_atomic(tmp_path: Path) -> None:
     assert database.schema_version() == 20
     assert "host_managed_connection_overrides" not in table_names(database)
     database.initialize()
-    assert database.schema_version() == 30
+    assert database.schema_version() == MIGRATIONS[-1].version
 
 
 def test_connection_revision_rebinding_migration_repairs_safe_candidates(
@@ -246,7 +246,7 @@ def test_connection_revision_rebinding_migration_repairs_safe_candidates(
 
     database.initialize()
 
-    assert database.schema_version() == 30
+    assert database.schema_version() == MIGRATIONS[-1].version
     with database.connection() as connection:
         revisions = connection.execute(
             "SELECT revision, provider FROM model_connection_secrets ORDER BY revision"
@@ -312,7 +312,7 @@ def test_connection_revision_rebinding_migration_is_atomic(tmp_path: Path) -> No
         }
     assert "provider" not in columns
     database.initialize()
-    assert database.schema_version() == 30
+    assert database.schema_version() == MIGRATIONS[-1].version
 
 
 def test_analysis_batch_error_reason_migration_is_atomic(tmp_path: Path) -> None:
@@ -334,7 +334,7 @@ def test_analysis_batch_error_reason_migration_is_atomic(tmp_path: Path) -> None
         columns = {row[1] for row in connection.execute("PRAGMA table_info(analysis_batch_items)")}
     assert "error_reason" not in columns
     database.initialize()
-    assert database.schema_version() == 30
+    assert database.schema_version() == MIGRATIONS[-1].version
 
 
 def test_analysis_output_limit_reason_migration_preserves_results_events_and_foreign_keys(
@@ -355,7 +355,7 @@ def test_analysis_output_limit_reason_migration_preserves_results_events_and_for
 
     database.initialize()
 
-    assert database.schema_version() == 30
+    assert database.schema_version() == MIGRATIONS[-1].version
     with database.connection() as connection:
         item = connection.execute(
             "SELECT * FROM analysis_batch_items WHERE item_id = 'item-migration'"
@@ -471,7 +471,7 @@ def test_analysis_output_limit_reason_migration_rolls_back_without_losing_old_sc
             )
 
     database.initialize()
-    assert database.schema_version() == 30
+    assert database.schema_version() == MIGRATIONS[-1].version
 
 
 def test_flexible_analysis_budget_migration_preserves_existing_value(tmp_path: Path) -> None:
@@ -487,7 +487,7 @@ def test_flexible_analysis_budget_migration_preserves_existing_value(tmp_path: P
 
     database.initialize()
 
-    assert database.schema_version() == 30
+    assert database.schema_version() == MIGRATIONS[-1].version
     with database.connection() as connection:
         row = connection.execute(
             "SELECT legacy_execution_budget_seconds, execution_budget_seconds "
@@ -510,7 +510,7 @@ def test_analysis_recovery_lineage_migration_preserves_existing_batches(tmp_path
 
     database.initialize()
 
-    assert database.schema_version() == 30
+    assert database.schema_version() == MIGRATIONS[-1].version
     with database.connection() as connection:
         batch = connection.execute(
             "SELECT source_batch_id, analysis_round FROM analysis_batches "
@@ -571,7 +571,7 @@ def test_analysis_recovery_receipt_migration_backfills_durable_successor_marker(
 
     database.initialize()
 
-    assert database.schema_version() == 30
+    assert database.schema_version() == MIGRATIONS[-1].version
     with database.connection() as connection:
         marker = connection.execute(
             "SELECT successor_batch_id FROM analysis_batch_items WHERE item_id = 'item-migration'"
@@ -609,7 +609,7 @@ def test_analysis_recovery_receipt_migration_is_atomic(tmp_path: Path) -> None:
     assert receipt_table is None
 
     database.initialize()
-    assert database.schema_version() == 30
+    assert database.schema_version() == MIGRATIONS[-1].version
 
 
 def test_analysis_recovery_lineage_migration_is_atomic(tmp_path: Path) -> None:
@@ -646,11 +646,11 @@ def test_concurrent_initialization_creates_one_versioned_schema(tmp_path: Path) 
     with ThreadPoolExecutor(max_workers=2) as executor:
         list(executor.map(lambda _unused: database.initialize(), range(2)))
 
-    assert database.schema_version() == 30
+    assert database.schema_version() == MIGRATIONS[-1].version
     with database.connection() as connection:
         versions = connection.execute("SELECT version FROM runtime_schema_migrations").fetchall()
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()
-        assert [row[0] for row in versions] == list(range(1, 31))
+        assert [row[0] for row in versions] == list(range(1, MIGRATIONS[-1].version + 1))
     assert foreign_keys is not None and foreign_keys[0] == 1
 
 
@@ -701,13 +701,13 @@ def test_concurrent_initialization_across_database_owners_is_safe(tmp_path: Path
 
         database = RuntimeDatabase(data_dir)
         database.initialize()
-        assert database.schema_version() == 30
+        assert database.schema_version() == MIGRATIONS[-1].version
         with database.connection() as connection:
             versions = connection.execute(
                 "SELECT version FROM runtime_schema_migrations"
             ).fetchall()
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()
-            assert [row[0] for row in versions] == list(range(1, 31))
+            assert [row[0] for row in versions] == list(range(1, MIGRATIONS[-1].version + 1))
         assert journal_mode is not None and journal_mode[0] == "wal"
 
 
@@ -1037,3 +1037,155 @@ def test_runtime_database_reports_integrity_failure_without_exposing_path(tmp_pa
 
     assert raised.value.code in {"runtime_configuration_failed", "runtime_migration_failed"}
     assert str(data_dir) not in str(raised.value)
+
+
+@pytest.mark.parametrize("broken", [False, True])
+def test_faq_variants_migration_preserves_review_and_rolls_back_atomically(
+    tmp_path: Path, broken: bool
+) -> None:
+    previous = tuple(item for item in MIGRATIONS if item.version < 32)
+    database = RuntimeDatabase(tmp_path / "faq-variants-upgrade")
+    database.initialize(migrations=previous)
+    with database.connection() as connection:
+        connection.execute(
+            "INSERT INTO faq_entries(entry_id, question_key, bundle_id, locale, question, "
+            "claim_kind, answer_markdown, review_state, revision) "
+            "VALUES ('variant-fixture', 'responsibility', 'fixture-bundle', 'zh-TW', "
+            "'這個專案做什麼?', 'context', 'Existing reviewed answer.', 'approved', 4)"
+        )
+        connection.commit()
+    migration = next(item for item in MIGRATIONS if item.version == 32)
+    if broken:
+        failed = Migration(32, migration.name, (*migration.statements, "INVALID SQL"))
+        with pytest.raises(RuntimeDatabaseError) as raised:
+            database.initialize(migrations=(*previous, failed))
+        assert raised.value.code == "runtime_migration_failed"
+        assert database.schema_version() == 31
+    else:
+        database.initialize()
+        assert database.schema_version() == MIGRATIONS[-1].version
+    with database.connection() as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(faq_entries)")}
+        row = connection.execute(
+            "SELECT answer_markdown, review_state, revision FROM faq_entries "
+            "WHERE entry_id = 'variant-fixture'"
+        ).fetchone()
+        assert tuple(row) == ("Existing reviewed answer.", "approved", 4)
+        assert ("variants_json" in columns) is not broken
+        if not broken:
+            assert connection.execute("SELECT variants_json FROM faq_entries").fetchone()[0] == "[]"
+            connection.execute(
+                "UPDATE faq_entries SET variants_json = ?",
+                ('["這個專案有哪些功能?","What does this project do?"]',),
+            )
+            connection.commit()
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    ["{}", "null", "not-json", '["1","2","3","4","5","6","7","8","9"]', '["' + "x" * 8192 + '"]'],
+    ids=["object", "null", "malformed", "too-many", "too-large"],
+)
+def test_faq_variants_database_constraint_rejects_unbounded_or_non_array_json(
+    tmp_path: Path, invalid: str
+) -> None:
+    database = RuntimeDatabase(tmp_path / "faq-variants-bounds")
+    database.initialize()
+    with database.connection() as connection, pytest.raises(sqlite3.IntegrityError):
+        connection.execute(
+            "INSERT INTO faq_entries(entry_id, question_key, bundle_id, locale, question, "
+            "claim_kind, variants_json) VALUES ('fixture', 'q', 'bundle', 'en', "
+            "'Question?', 'context', ?)",
+            (invalid,),
+        )
+
+
+@pytest.mark.parametrize("broken", [False, True])
+def test_pages_sharing_migration_is_atomic_and_preserves_existing_state(
+    tmp_path: Path, broken: bool
+) -> None:
+    previous = tuple(item for item in MIGRATIONS if item.version < 33)
+    database = RuntimeDatabase(tmp_path / "pages-upgrade")
+    database.initialize(migrations=previous)
+    with database.connection() as connection:
+        connection.execute(
+            "UPDATE visitor_gateway_settings SET revision = 7, "
+            "gateway_origin = 'https://fixture.ts.net', pages_origin = 'https://fixture.github.io'"
+        )
+        connection.commit()
+    migration = next(item for item in MIGRATIONS if item.version == 33)
+    if broken:
+        failed = Migration(33, migration.name, (*migration.statements, "INVALID SQL"))
+        with pytest.raises(RuntimeDatabaseError) as raised:
+            database.initialize(migrations=(*previous, failed))
+        assert raised.value.code == "runtime_migration_failed"
+        assert database.schema_version() == 32
+        assert "pages_sharing_state" not in table_names(database)
+    else:
+        database.initialize()
+        database.initialize()
+        with database.connection() as connection:
+            row = connection.execute("SELECT * FROM pages_sharing_state").fetchone()
+            assert row["singleton_id"] == 1
+            assert set(row.keys()) == {
+                "singleton_id",
+                "pages_url",
+                "verified_pages_url",
+                "verified_content_sha256",
+                "verified_at",
+            }
+            assert all(value is None for value in tuple(row)[2:])
+    with database.connection() as connection:
+        row = connection.execute(
+            "SELECT revision, gateway_origin, pages_origin FROM visitor_gateway_settings"
+        ).fetchone()
+        assert tuple(row) == (7, "https://fixture.ts.net", "https://fixture.github.io")
+
+
+@pytest.mark.parametrize(
+    "assignment,parameters",
+    [
+        ("verified_pages_url = ?", ("https://fixture.github.io/",)),
+        ("verified_content_sha256 = ?", ("a" * 64,)),
+        ("verified_at = ?", ("now",)),
+        ("verified_content_sha256 = ?", ("A" * 64,)),
+        ("verified_content_sha256 = ?", ("a" * 63,)),
+        ("pages_url = ?", ("x" * 2049,)),
+    ],
+    ids=[
+        "partial-pages-url",
+        "partial-content-hash",
+        "partial-timestamp",
+        "uppercase-hash",
+        "short-hash",
+        "pages-url-bound",
+    ],
+)
+def test_pages_sharing_database_rejects_partial_or_invalid_verification(
+    tmp_path: Path, assignment: str, parameters: tuple[object, ...]
+) -> None:
+    database = RuntimeDatabase(tmp_path / "pages-constraints")
+    database.initialize()
+    with database.connection() as connection, pytest.raises(sqlite3.IntegrityError):
+        connection.execute(f"UPDATE pages_sharing_state SET {assignment}", parameters)
+
+
+def test_pages_sharing_database_accepts_complete_verification(tmp_path: Path) -> None:
+    database = RuntimeDatabase(tmp_path / "pages-verification")
+    database.initialize()
+    with database.connection() as connection:
+        connection.execute(
+            "UPDATE pages_sharing_state SET pages_url=?, verified_pages_url=?, "
+            "verified_content_sha256=?, verified_at=?",
+            (
+                "https://fixture.github.io/",
+                "https://fixture.github.io/",
+                "a" * 64,
+                "now",
+            ),
+        )
+        connection.commit()
+        row = connection.execute("SELECT * FROM pages_sharing_state").fetchone()
+    assert row["verified_pages_url"] == "https://fixture.github.io/"
+    assert row["verified_content_sha256"] == "a" * 64
+    assert row["verified_at"] == "now"

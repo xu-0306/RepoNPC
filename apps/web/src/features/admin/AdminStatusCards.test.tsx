@@ -47,6 +47,9 @@ describe("admin workspace navigation and status", () => {
 
     expect(welcome).toContain("0/6 complete");
     expect(welcome).toContain("Not started");
+    expect(welcome).toContain('<details class="admin-status-overview">');
+    expect(welcome).not.toContain("<details open");
+    expect(welcome.match(/Not configured/g)).toHaveLength(2);
     expect(firstStep).toContain("0/6 complete");
     expect(firstStep).toContain("Step 1 of 6");
   });
@@ -102,10 +105,36 @@ describe("admin workspace navigation and status", () => {
     );
 
     expect(markup).toContain("Manual route");
-    expect(markup).toContain("1/4");
-    expect(markup).toContain('<progress max="4" value="0">0/4</progress>');
+    expect(markup).toContain("Step 1 of 4 · 0/4 complete");
+    expect(markup).toContain(
+      '<progress aria-label="Setup progress" max="4" value="0">0/4</progress>',
+    );
     expect(markup).not.toContain(">Models<");
     expect(markup).not.toContain(">Analysis<");
     expect(markup).toContain('aria-current="step"');
   });
+});
+
+describe("shared onboarding progress", () => {
+  it.each([
+    ["ai", "models", 0, 6],
+    ["ai", "analysis", 2, 6],
+    ["manual", "contributions", 1, 4],
+    ["manual", "review", 3, 4],
+  ] as const)(
+    "keeps %s %s completion consistent in both displays",
+    (route, step, completed, total) => {
+      const state = { ...initialGuidedOnboardingState(), route, step };
+      const markup = renderToStaticMarkup(
+        <OnboardingStepper
+          copy={{ progress: "Setup progress", steps }}
+          locale="en"
+          state={state}
+        />,
+      );
+      expect(markup).toContain(`${completed}/${total} complete`);
+      expect(markup).toContain(`max="${total}" value="${completed}"`);
+      expect(markup).toContain(`Step ${completed + 1} of ${total}`);
+    },
+  );
 });

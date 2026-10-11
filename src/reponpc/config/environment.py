@@ -271,11 +271,13 @@ def _url_has_loopback_host(value: str) -> bool:
     return hostname is not None and _is_loopback_host(hostname)
 
 
-def _canonical_origin(value: str) -> str | None:
+def _canonical_origin(value: str, *, https_only: bool = False) -> str | None:
     """Return one strict normalized origin, rejecting URL components and ambiguity."""
 
     if (
-        not value
+        not isinstance(value, str)
+        or not value
+        or len(value) > 2048
         or any(ord(character) < 0x21 or ord(character) == 0x7F for character in value)
         or "\\" in value
         or "?" in value
@@ -326,7 +328,7 @@ def _canonical_origin(value: str) -> str | None:
     else:
         canonical_host = f"[{address.compressed}]" if address.version == 6 else str(address)
         loopback = address.is_loopback
-    if scheme == "http" and not loopback:
+    if scheme == "http" and (https_only or not loopback):
         return None
     default_port = 80 if scheme == "http" else 443
     authority = canonical_host if port in {None, default_port} else f"{canonical_host}:{port}"
@@ -746,7 +748,13 @@ def load_environment(
     log_level = _text(source, "REPONPC_LOG_LEVEL", "INFO", issues).upper()
     if log_level not in _LOG_LEVELS:
         _issue(issues, "REPONPC_LOG_LEVEL", "invalid_choice", "a supported log level is required")
-    config_repository = _text(source, "REPONPC_CONFIG_REPOSITORY", "", issues)
+    config_repository = _text(
+        source,
+        "REPONPC_CONFIG_REPOSITORY",
+        "",
+        issues,
+        allow_empty=deployment_profile == "loopback_evaluation",
+    )
     if config_repository and not _REPOSITORY_SLUG_RE.fullmatch(config_repository):
         _issue(issues, "REPONPC_CONFIG_REPOSITORY", "invalid_repository", "owner/name is required")
     chat_provider = _text(source, "REPONPC_CHAT_PROVIDER", "", issues, allow_empty=True)
@@ -819,7 +827,13 @@ def load_environment(
         config_repository=config_repository,
         config_branch=_text(source, "REPONPC_CONFIG_BRANCH", "main", issues),
         config_path=_text(source, "REPONPC_CONFIG_PATH", "reponpc.yml", issues),
-        index_manifest_url=_text(source, "REPONPC_INDEX_MANIFEST_URL", "", issues),
+        index_manifest_url=_text(
+            source,
+            "REPONPC_INDEX_MANIFEST_URL",
+            "",
+            issues,
+            allow_empty=deployment_profile == "loopback_evaluation",
+        ),
         index_poll_seconds=_integer(source, "REPONPC_INDEX_POLL_SECONDS", 300, issues),
         max_bundle_bytes=_integer(
             source,
@@ -836,12 +850,12 @@ def load_environment(
         chat_base_url=_text(source, "REPONPC_CHAT_BASE_URL", "", issues, allow_empty=True),
         chat_max_context_tokens=_integer(source, "REPONPC_CHAT_MAX_CONTEXT_TOKENS", 32768, issues),
         chat_max_output_tokens=_integer(
-            source, "REPONPC_CHAT_MAX_OUTPUT_TOKENS", 4096, issues, maximum=8192
+            source, "REPONPC_CHAT_MAX_OUTPUT_TOKENS", 16384, issues, maximum=16384
         ),
         analysis_max_output_tokens=_integer(
             source,
             "REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS",
-            8192,
+            16384,
             issues,
             maximum=16384,
         ),
@@ -915,7 +929,7 @@ def load_environment(
             maximum=1024 * 1024 * 1024,
         ),
         chat_timeout_seconds=_integer(
-            source, "REPONPC_CHAT_TIMEOUT_SECONDS", 45, issues, maximum=300
+            source, "REPONPC_CHAT_TIMEOUT_SECONDS", 180, issues, maximum=300
         ),
         embedding_provider=embedding_provider,
         embedding_model=_text(source, "REPONPC_EMBEDDING_MODEL", "", issues, allow_empty=True),

@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import stat
 import tarfile
@@ -16,6 +17,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
+from PIL import Image
+
 from reponpc.bundles.index_reader import IndexReadError, ReadOnlyIndex
 from reponpc.bundles.manifest import (
     BundleManifest,
@@ -24,6 +27,7 @@ from reponpc.bundles.manifest import (
     compatible_application,
     parse_bundle_manifest,
 )
+from reponpc.cards.assets import validate_sprite
 from reponpc.indexing.index_database import IndexBuildResult
 from reponpc.indexing.public_profile import (
     PublicProfileError,
@@ -31,10 +35,13 @@ from reponpc.indexing.public_profile import (
     validate_public_profile_metadata,
 )
 from reponpc.indexing.sources import EmbeddingIdentity, ResolvedConfiguration, ResolvedRepository
+from reponpc.scene.images import SceneImageError, validate_scene_image
+from reponpc.scene.registry import contrast_ratio
+from reponpc.scene.resolve import _average_edge_color
 
 APPLICATION_VERSION: Final = "0.1.0"
 ARCHIVE_FILE_LIMIT: Final = 64
-_PNG_SIGNATURE: Final = b"\x89PNG\r\n\x1a\n"
+_SCENE_PATH_RE: Final = re.compile(r"^public/scene/([0-9a-f]{64})\.(png|webp)$")
 _CARD_VARIANTS: Final = tuple(
     f"public/card-{theme}-{locale}.{extension}"
     for theme in ("light", "dark")
@@ -274,7 +281,15 @@ def _validate_build_inputs(index_path: Path, public_files: dict[str, bytes]) -> 
         raise BundleError("bundle_payload_invalid") from exc
     if not stat.S_ISREG(index_stat.st_mode) or index_stat.st_size <= 0:
         raise BundleError("bundle_payload_invalid")
-    if set(public_files) != REQUIRED_PAYLOAD_PATHS - {"index.sqlite"}:
+    base_paths = REQUIRED_PAYLOAD_PATHS - {"index.sqlite"}
+    if (
+        not base_paths.issubset(public_files)
+        or not _scene_file_matches_profile(public_files["public/profile.json"], public_files)
+        or any(
+            path not in base_paths and _SCENE_PATH_RE.fullmatch(path) is None
+            for path in public_files
+        )
+    ):
         raise BundleError("bundle_payload_layout_invalid")
     if any(not isinstance(value, bytes) or not value for value in public_files.values()):
         raise BundleError("bundle_payload_invalid")
@@ -314,10 +329,7 @@ def _verify_layout_and_checksums(staging: Path, manifest: BundleManifest) -> Non
     actual_paths = {
         path.relative_to(staging).as_posix() for path in staging.rglob("*") if path.is_file()
     }
-    if (
-        actual_paths != expected_paths
-        or {item.path for item in manifest.files} != REQUIRED_PAYLOAD_PATHS
-    ):
+    if actual_paths != expected_paths or not _manifest_paths_match_profile(staging, manifest):
         raise BundleError("bundle_layout_invalid")
     checksums = _parse_checksums((staging / "checksums.sha256").read_bytes())
     expected_checksums = {
@@ -338,8 +350,50 @@ def _verify_public_assets(staging: Path, manifest: BundleManifest) -> None:
         _validate_public_profile_payload(profile_bytes, manifest)
     except (OSError, PublicProfileError) as exc:
         raise BundleError("bundle_profile_invalid") from exc
-    if not (staging / "public/character.png").read_bytes().startswith(_PNG_SIGNATURE):
-        raise BundleError("bundle_character_invalid")
+    character_bytes = (staging / "public/character.png").read_bytes()
+    try:
+        character = validate_sprite(character_bytes)
+        if character.content != character_bytes:
+            raise ValueError("public sprite is not canonical")
+    except ValueError as exc:
+        raise BundleError("bundle_character_invalid") from exc
+    document = parse_public_profile_bytes(profile_bytes)
+    scene = document.character.scene
+    scene_paths = [
+        path for path in (item.path for item in manifest.files) if path.startswith("public/scene/")
+    ]
+    if scene is None or scene.background_url is None:
+        if scene_paths:
+            raise BundleError("bundle_scene_layout_invalid")
+    else:
+        if len(scene_paths) != 1:
+            raise BundleError("bundle_scene_layout_invalid")
+        path = scene_paths[0]
+        match = _SCENE_PATH_RE.fullmatch(path)
+        if match is None:
+            raise BundleError("bundle_scene_layout_invalid")
+        try:
+            canonical = validate_scene_image(
+                (staging / path).read_bytes(), filename=f"background.{match.group(2)}"
+            )
+        except SceneImageError as exc:
+            raise BundleError("bundle_scene_invalid") from exc
+        if (
+            canonical.sha256 != match.group(1)
+            or canonical.format != match.group(2)
+            or canonical.content != (staging / path).read_bytes()
+        ):
+            raise BundleError("bundle_scene_invalid")
+    try:
+        with Image.open(io.BytesIO(character_bytes)) as image:
+            edge = _average_edge_color(image.convert("RGBA"))
+        if scene is not None and any(
+            contrast_ratio(edge, getattr(scene.themes, variant).stage) < 3.0
+            for variant in ("light", "dark")
+        ):
+            raise BundleError("bundle_scene_stage_invalid")
+    except (OSError, ValueError) as exc:
+        raise BundleError("bundle_character_invalid") from exc
     for path in _CARD_VARIANTS:
         payload = (staging / path).read_bytes()
         if not payload:
@@ -360,6 +414,49 @@ def _validate_public_profile_payload(payload: bytes, manifest: BundleManifest) -
         )
     except (KeyError, PublicProfileError) as exc:
         raise BundleError("bundle_profile_invalid") from exc
+
+
+def _scene_file_matches_profile(payload: bytes, public_files: dict[str, bytes]) -> bool:
+    try:
+        scene = parse_public_profile_bytes(payload).character.scene
+    except PublicProfileError:
+        return False
+    names = [path for path in public_files if path.startswith("public/scene/")]
+    if scene is None or scene.background_url is None:
+        return not names
+    if len(names) != 1:
+        return False
+    match = _SCENE_PATH_RE.fullmatch(names[0])
+    if match is None:
+        return False
+    try:
+        canonical = validate_scene_image(
+            public_files[names[0]], filename=f"background.{match.group(2)}"
+        )
+    except SceneImageError:
+        return False
+    return (
+        canonical.sha256 == match.group(1)
+        and canonical.format == match.group(2)
+        and canonical.content == public_files[names[0]]
+    )
+
+
+def _manifest_paths_match_profile(staging: Path, manifest: BundleManifest) -> bool:
+    paths = {item.path for item in manifest.files}
+    base = set(REQUIRED_PAYLOAD_PATHS)
+    if not base.issubset(paths):
+        return False
+    scene_paths = paths - base
+    if len(scene_paths) > 1 or any(_SCENE_PATH_RE.fullmatch(path) is None for path in scene_paths):
+        return False
+    try:
+        scene = parse_public_profile_bytes(
+            (staging / "public/profile.json").read_bytes()
+        ).character.scene
+    except (OSError, PublicProfileError):
+        return False
+    return bool(scene is not None and scene.background_url is not None) == bool(scene_paths)
 
 
 def _safe_member_name(name: str) -> bool:

@@ -1,127 +1,68 @@
 # RepoNPC
 
-**訪客專用公開入口（A1，本機完成）：**規格 0.4.6 / ADR-053 的第二個 loopback listener、封閉公共 API、私人管理入口與雙語管理控制已完成本機實作及審核。預設關閉，擁有者可設定、啟動並記錄外網檢查；尚未啟用 Funnel 或取得外網驗收。完整契約、驗證結果與後續 A5／A12 範圍見 [A1 gateway 契約](docs/A1_FUNNEL_GATEWAY_CONTRACT.md)。
+> 讓懂你程式碼的 NPC，替你介紹作品。<br>
+> Meet the NPC who knows your code.
 
-**涵蓋檢查與 FAQ（A4，本機已實作）：**「預覽、試聊與分享」可明確使用模型檢查六個標準問題；缺口不會阻擋發布。FAQ 可核准、拒絕、重產或改寫成作者自述；自述保存後會先更新索引再生成，仍需審核。只有目前版本已核准的回答會提供給訪客或下載為 JSON。換版本須重新生成與確認；訪客問題按鈕直接顯示已核准回答，不呼叫模型。完整 Pages 靜態匯出與離線比對仍屬 A5。詳見 [A4 契約與驗證範圍](docs/A4_COVERAGE_FAQ_IMPLEMENTATION.md)。
+RepoNPC 是自託管的 GitHub 作品集。你選擇公開專案、確認自己的貢獻，NPC 便能依據作品內容回答訪客，並附上可核對的程式碼引用。GitHub 個人頁上的卡片會連到你的作品集網站。
 
-> Meet the NPC who knows your code.<br>
-> 讓懂你程式碼的 NPC，替你介紹作品。
+**目前是開發／評估候選版，尚未完成正式 v1 驗收。** Windows 安裝候選已有本機測試；乾淨 Windows、完整無障礙、素材權利與真實外網等發布檢查仍未完成。最新範圍見 [UX 優化與驗證紀錄](docs/OPTIMIZATION_PLAN_2026-10-11.md)，發布缺口見 [專案記憶](docs/PROJECT_CONTEXT.md)。
 
-RepoNPC 是一個開源、自託管的互動式 GitHub 作品集。你挑選想展示的公開儲存庫，補上自己確認過的角色與貢獻，RepoNPC 就會把它們整理成一個能回答訪客問題的像素 RPG 角色。
+## 先選你要走的路
 
-回答不只「聽起來合理」：重要內容會連回固定 commit、檔案與行號，讓訪客可以直接核對原始證據。
+| 你現在的情況 | 從這裡開始 | 可以完成什麼 |
+| --- | --- | --- |
+| 還沒有模型，想先整理作品 | 開啟管理頁 →「先手動建立作品集」 | 選專案、撰寫雙語貢獻、預覽、儲存本機草稿、下載設定備份 |
+| 已有 Ollama 或相容 API 服務，想讓 AI 協助 | 「設定 AI 並開始」 | 新增並測試兩種模型、確認選用，再選專案與分析 |
+| 內容已完成，想試聊或分享 | 「預覽與分享」 | 準備 NPC → 本機試聊 → 訪客連線 → Pages 上傳與核對 → GitHub 卡片 |
 
-> [!IMPORTANT]
-> RepoNPC 0.2.1 已完成 GitHub OAuth／公開讀取 PAT 退場與匿名 REST resolver；clean-host Docker、真實 provider、完整瀏覽器與無障礙驗證仍待執行，因此目前適合開發與評估，尚非正式 v1 發布版。
-> Phase 5 remains the release-hardening boundary.
+**手動建立內容不需要模型。準備 NPC、AI 分析與實際聊天需要已測試並選用的回答模型及資料查找模型。** 目前推薦回答模型清單為空；你需要自行準備回答模型服務。裝置容量檢查不會安裝模型，也不代表模型品質已通過驗證。資料查找可明確選擇下載內建 bge-m3（約 2.29 GB，CPU 執行），或設定自己的服務。
 
-最後檢閱：2026-09-14
+RepoNPC 不會自動切換模型或替你下載、開啟公開連線。一般預覽不呼叫模型；明確測試、分析和試聊會使用所選服務，雲端服務可能產生費用。
 
-模型連線、回答模型與資料查找模型（技術上為 embedding model）的服務管理、測試與模型優先設定引導已整合至目前 working tree。**規格 0.2.5 / ADR-032** 讓服務網址／協定／金鑰更新同時重綁可安全修改的候選模型，清除舊測試結果並要求明確重測，不再要求使用者另外編輯儲存每個模型；公開使用中、上一個可用版本、重建中與已執行的分析仍保留原 revision。規格 0.2.4 / ADR-031 允許直接覆寫或刪除環境預設連線（例如改用非 11434 的 Ollama port），並讓選擇在重啟後保留；環境網址與 API key 仍不會被讀回。規格 0.2.3 / ADR-030 的「先設定兩種模型，再選專案並分析」與立即手動建立作品集路線維持不變。修正交接請讀 [模型優先引導實作交接](docs/ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md)，前一版連線／秘密設計見 [模型設定實作交接](docs/MODEL_SETUP_IMPLEMENTATION_HANDOFF.md)。Figma 暫不處理；GGUF／Hugging Face 本地 runtime 仍是後續研究。
+## 開啟 RepoNPC
 
-## 30 秒了解 RepoNPC
+**已有 Windows 安裝候選：**從開始功能表開啟 RepoNPC，依管理頁引導操作。安裝候選的建置、校驗與未完成驗收見 [Windows 指南](packaging/windows/README.md)；目前不宣稱已有正式穩定安裝版。
 
-一般 GitHub Profile 告訴訪客「有哪些 repository」，卻常常無法快速回答：
+**從原始碼在 Windows 評估：**先安裝 Git、PowerShell、[uv](https://docs.astral.sh/uv/) 與 Node.js／Corepack，使用專案鎖定的 pnpm 版本，然後執行：
 
-- 這些專案解決了什麼問題？
-- 為什麼採用這個架構？
-- 作品擁有者實際負責了什麼？
-- 哪一段程式碼可以證明這項說法？
+```powershell
+git clone https://github.com/xu-0306/RepoNPC.git
+Set-Location RepoNPC
+.\start-reponpc.cmd
+```
 
-RepoNPC 把這些資訊變成一段可對話、可驗證的作品集體驗：
+啟動器會準備依賴與前端，開啟只供本機使用的管理頁。不必先設定模型、GitHub token、帳號或密碼。重新整理可延續有效登入；若工作階段過期，重新開啟 RepoNPC。既有 `.env` 設定會保留。
 
-[![RepoNPC 運作流程：使用者選擇公開 GitHub repository 並補充個人貢獻，系統建立證據索引，訪客向 NPC 提問，模型依證據回答並附上固定 commit、檔案與行號引用](reponpc-how-it-works.png)](reponpc-how-it-works.png)
+Linux／自行管理 HTTPS 的部署與備份操作，請讀 [操作手冊](docs/OPERATIONS.md) 和下方進階整合。
 
-最後你會得到兩個入口：
+## 從草稿到分享
 
-1. 放在 GitHub Profile README 的靜態 NPC 卡片。
-2. 一個真正提供作品瀏覽、雙語問答與引用連結的 RepoNPC 網站。
+1. **建立內容：**選 AI 或手動路線，挑選公開專案，填寫並確認自己的雙語貢獻與個人介紹。不會從程式碼推定你的職位或成果。
+2. **本機預覽：**進入「預覽與分享」，預覽作品集與卡片、儲存草稿。角色可使用內建素材；自訂角色與外觀都是選填。
+3. **準備並試聊：**兩種模型都已測試且選用後，按「準備 NPC 並套用」。缺少模型時按「前往設定模型」，草稿會保留；完成後返回準備。成功後開啟目前版本試聊。
+4. **設定訪客連線：**準備 Tailscale Funnel 聊天入口與 GitHub Pages 網域，儲存後明確啟動訪客連線，並在 Tailscale 完成 Funnel 設定。管理頁及模型服務保持私人連線。
+5. **上傳網站：**填 Pages 完整網址（例如 `https://account.github.io/project/`），下載、解壓縮靜態網站，依 [雙語分享指南](docs/PAGES_SHARING_GUIDE.md)手動上傳。發布後返回「核對已上傳網站」。
+6. **分享卡片：**依畫面指示，把卡片圖片上傳到與帳號同名的公開儲存庫，在 README 貼入連結，再從 GitHub 點開確認。外觀、涵蓋檢查及 FAQ 可在選填區調整。
 
-GitHub README 不允許執行互動式 JavaScript，所以卡片負責吸引訪客並連到網站；聊天功能則在你自己架設的 RepoNPC 服務中執行。
+**Pages 網域與完整網址不同：**訪客連線欄位只填 `https://account.github.io`；網站上傳欄位要包含 `/project/` 等路徑。Pages 核對與外網聊天檢查各自記錄；儲存網址或本機準備成功，都不代表已經公開上線。
 
-## 它和一般 AI 聊天機器人有什麼不同？
+沒有公開網址仍能完成本機內容與試聊。主機和模型關閉時，已上傳的靜態網站可顯示公開內容及匯出時核准的 FAQ；即時問答需要主機、模型和公開連線可用。RepoNPC 不會自動上傳 GitHub。
 
-RepoNPC 不讓模型自由搜尋、執行程式或自行拼湊 GitHub 連結。它先由後端找出允許使用的證據，再讓模型以證據 ID 回答，最後由後端驗證並產生引用。
+聊天等待時間預設 **180 秒，最高 300 秒**，既有明確較低設定保留。畫面顯示實際處理階段並可停止；輸出仍須通過引用與內容驗證。兩種生成預算各自預設／最高 16,384 token，包含推理與答案，不等於 16k 個可見字元。
 
-系統也會分清楚三種內容：
+設定 YAML 僅供公開內容備份；自訂角色需連同 PNG 保存。完整還原另需私人資料目錄、模型及加密金鑰，請依 [備份說明](docs/OPERATIONS.md#11-backup-and-recovery)操作。
 
-| 類型 | 白話說明 |
-| --- | --- |
-| `OWNER_ASSERTION` | 你親自確認的角色、責任、成果或背景。 |
-| `REPOSITORY_FACT` | 從指定 commit 的程式碼、文件或公開 metadata 直接看到的事實。 |
-| `MODEL_INFERENCE` | 模型根據證據做出的推論，必須明確標示為推論。 |
+## English quick start
 
-「repository 裡有這段程式碼」不等於「你一定親自完成這段程式碼」。如果證據不足，RepoNPC 應該說明無法判定，而不是猜測。
+Open RepoNPC and choose **Build manually first** to write, preview, save and back up content without a model. For AI analysis or live chat, bring your own Ollama or compatible API service, test both the answer and content finder models, then confirm the selection. The verified answer-model catalog is currently empty; the optional built-in bge-m3 content finder requires an explicit download.
 
-## 主要功能
+In **Preview & share**, prepare and try locally, configure visitor access, download and manually upload the Pages site, verify it, then add the card to your GitHub profile. Use the domain without a path for visitor access and the full project URL for Pages. Follow the [bilingual sharing guide](docs/PAGES_SHARING_GUIDE.md). This is an evaluation candidate, not an accepted v1 release; no public connection or GitHub upload happens automatically.
 
-- 像素 RPG 風格的作品集網站與 GitHub Profile 卡片。
-- 繁體中文（`zh-TW`）與英文（`en`）訪客／管理介面。
-- 關鍵字搜尋、向量搜尋與 RRF 組成的混合檢索。
-- 固定到 exact commit、檔案和行號的 GitHub 引用。
-- Ollama、vLLM 與通用 OpenAI-compatible 聊天／embedding 服務。
-- 引導式 repository 選擇、貢獻撰寫、預覽與設定匯出。
-- 單一擁有者管理介面：本機啟動免註冊／免密碼，遠端部署保留密碼；公開 repository 的讀取不要求 OAuth 或 PAT。
-- 版本化、物種中立的內建角色包，以及可容納任意物種／造型的自訂 sprite sheet；核心不以固定物種清單限制使用者設計。
-- 不可變索引包、校驗、原子切換、保留上一個可用版本與 rollback。
-
-## 建立前需要準備什麼？
-
-要看到管理介面，Windows 本機評估只需要開發工具與一個可連線的模型服務。本機即可建立完整作品集並試聊；對外分享時再準備公開 HTTPS 訪客入口。
-
-| 用途 | 需要準備 |
-| --- | --- |
-| Windows 本機評估 | Git、PowerShell、[uv](https://docs.astral.sh/uv/)、Node.js 24／Corepack，以及正在執行的 Ollama 或其他已設定 provider。 |
-| 完整作品集 | 一個公開 GitHub 帳號、你要展示的公開 repositories、已測試的回答與資料查找模型。內容可由管理介面建立，Ollama 可在本機運行。 |
-| 正式部署 | x86_64 Linux、Docker Engine、Compose v2、持久化磁碟、公開網域、HTTPS reverse proxy。參考主機為 4 CPU、8 GB RAM，另加模型所需資源。 |
-
-RepoNPC 的 Compose 檔只啟動應用程式，不會順便啟動 Ollama 或 vLLM。模型服務必須由你另外部署，而且必須能從 `app` container 連線。
-
-## 最快試跑：Windows 本機評估
-
-這條路徑用來看看管理介面與設定流程，不代表完整的 production 部署。
-
-1. 下載專案：
-
-   ```powershell
-   git clone https://github.com/xu-0306/RepoNPC.git
-   Set-Location RepoNPC
-   ```
-
-2. 如果使用 Ollama，先啟動 Ollama 並準備聊天與 embedding 模型：
-
-   ```powershell
-   ollama pull qwen3.5:9b
-   ollama pull qwen3-embedding:0.6b
-   ```
-
-3. 啟動 RepoNPC：
-
-   ```powershell
-   .\start-reponpc.cmd
-   ```
-
-啟動器會在需要時安裝鎖定的 Python／Web 依賴、建立前端、只監聽 `localhost:8090`，並以兩分鐘、僅能使用一次的本機授權開啟 `/admin`。瀏覽器會把它交換成受保護的管理 session 並立即清除網址片段；之後重新整理會恢復仍有效的 session，不需要再次執行啟動器。本機評估不需要註冊、帳號、密碼或 GitHub OAuth。若直接開啟 `/admin` 而沒有有效 session，重新執行啟動器即可。
-
-如果你已建立 `.env`，本機 provider URL 必須能從 Windows 主機連線，例如 Ollama 通常是 `http://127.0.0.1:11434`。若服務使用其他 port，可在管理介面直接編輯環境預設連線並輸入完整新網址；可安全修改的關聯模型會一起更新為新 revision，之後只需明確按一次「測試模型」，不必再編輯儲存模型。轉為使用者管理後，重啟也不會再用 `.env` 的模型名稱覆寫已編輯的模型設定。也可在沒有模型引用後刪除該預設，兩種選擇都會跨重啟保留。管理介面的「預覽與分享 → 準備 NPC 並套用」會在本機建立並啟用相符索引；完成後即可試聊。
-
-## 建立自己的 RepoNPC
-
-1. 在管理介面選好並測試回答／資料查找模型，選擇公開專案，確認要展示的貢獻與雙語介紹。
-2. 在「角色與動畫」匯入素材、檢查動畫，按「套用到作品集」。
-3. 在「預覽與分享」檢查介紹、專案、角色與卡片，儲存本機草稿，再按「準備 NPC 並套用」。分析及索引都在你的主機完成，不需要 GitHub token、Actions 或 Release。
-4. 準備完成後按「開啟目前版本並試聊」。更新專案時再按更新；相同內容的有效向量快取會重用，新問題仍需要查詢 embedding。
-5. 要讓卡片出現在 GitHub 個人頁，先確認或建立與帳號同名的公開 repository（例如 `帳號/帳號`）；GitHub 帳號本身不等於這個 repository，也不需要另建卡片專用 repository。依頁內三步驟將下載的 `reponpc-card.gif` 上傳到同名 repository 根目錄，再把卡片 Markdown 貼進該 repository 的 `README.md`，保留原文並預覽、儲存。引導使用實際預設分支，不能連線時會顯示尚未確認。
-
-沒有公開網址也能完成前四步。分享需要可對外連線的 HTTPS **訪客頁**網址；localhost 只供本機試用。公開入口只開放訪客頁與 API，管理頁及模型服務保持私人連線。GitHub 卡片不會執行模型，也不會替你啟動主機。
-
-免購買網域的公開入口使用 Tailscale Funnel 的 `*.ts.net` HTTPS 網址；[部署計劃](docs/TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md)的 A1 訪客 gateway 已完成本機實作，真實外網驗收另屬 A12。本機啟動器與 Compose 不會自動建立 Funnel。擁有者依官方流程自行啟用 Funnel，目標必須是訪客 gateway。下方正式部署條件仍是既有自行管理 HTTPS 參考路徑。
-
-YAML 只供備份或搬移，不需上傳到 GitHub 才能使用 NPC。自訂角色要連同角色 PNG 備份；完整恢復請在停止服務後備份資料目錄（包含本機草稿、模型加密設定與已驗證 bundle），不要公開該目錄。詳見 [本機發布契約](docs/LOCAL_PUBLICATION_CONTRACT_2026-09-22.md)。
+## 給開發者與自行部署者
 
 ## 進階：既有 CLI／GitHub Release 整合
 
-下列手動發布方式保留給既有部署；一般本機流程不需完成这些步驟。啟用本機模式後 Release 自動輪詢會停止，切回方式見 Operations。
+下列手動發布方式保留給既有部署；一般本機流程不需完成這些步驟。啟用本機模式後 Release 自動輪詢會停止，切回方式見 Operations。
 
 ### 1. 寫下你想展示的內容
 
@@ -148,7 +89,7 @@ cp reponpc.example.yml reponpc.yml
 
 RepoNPC 將聊天模型與 embedding 模型視為兩個獨立能力。兩者可以來自同一台 Ollama，也可以分別使用 vLLM 或 OpenAI-compatible API。
 
-選擇 Ollama 後，可參考 `qwen3-embedding:0.6b` 等模型；它不是規格 0.2.2–0.2.4 的預設服務或預選模型。正式環境仍使用外部 embedding profile；內建 sentence-transformers adapter 只供隔離測試與 benchmark。管理頁已有連線／模型面板，但一般引導與乾淨啟動後的首次分析仍在修正，因此目前可使用明確環境設定或進階管理面板評估，不能把引導畫面視為完成的首次使用流程。
+選擇 Ollama 後，可參考 `qwen3-embedding:0.6b` 等模型；它不是規格 0.2.2–0.2.4 的預設服務或預選模型。可選明確下載並驗證的內建 bge-m3（ONNX CPU）或外部資料查找模型；sentence-transformers adapter 僅供隔離測試。引導設定會要求分別測試兩種模型並確認選用，完整實機及發布驗收仍另行追蹤。
 
 先建立部署環境檔與 secret 目錄：
 
@@ -229,6 +170,13 @@ docker compose exec app reponpc admin setup-code
 
 完整的 HTTPS、GitHub 寫回權限、匿名讀取額度、備份、更新、rollback 與故障排除方式請參閱 [操作手冊](docs/OPERATIONS.md)。
 
+管理工作區的「維護」可建立密碼加密的 `.reponpc-backup`，檢查並確認還原、
+回復保留的前一份網站資料，以及停止訪客 gateway。備份密碼每次輸入，送出後清除。
+這只還原同一原資料目錄的 SQLite 設定；請另外保留密鑰、bundles、模型與圖片／
+本機作品集檔案。還原前會自動保存目前狀態的加密備份，完成後須重新登入，gateway
+保持關閉。完整搬移與災難復原依 [備份操作說明](docs/OPERATIONS.md#11-backup-and-recovery)。
+Windows 安裝包建置與仍待驗收項目見 [Windows packaging 指南](packaging/windows/README.md)。
+
 ### Linux：訪客 gateway 與主機 Tailscale
 
 A1 使用 `production` 部署模式。私人管理主機名稱須和 Funnel、Pages 的主機名稱不同，並明確設定 `REPONPC_ADMIN_ORIGINS`；訪客 gateway 固定綁定 `127.0.0.1`，`REPONPC_VISITOR_GATEWAY_PORT` 預設為 `8001`。`REPONPC_VISITOR_TRUSTED_PROXY_CIDRS` 預設留空，保留共用每日額度與同時工作上限；要使用個別 IP 限制，必須另行確認實際 Funnel 的來源位址覆寫行為與外網測試。
@@ -247,7 +195,7 @@ tailscale funnel --bg --https=443 http://127.0.0.1:<visitor-port>
 tailscale funnel --https=443 off
 ```
 
-RepoNPC 只顯示操作說明；關閉 gateway 不代表 Funnel 已停用。管理頁分開顯示本機就緒、入口已設定與擁有者確認過的外網檢查；重啟、停止、版本或設定改變後須重新確認。真實 Tailscale／Pages／模型與乾淨主機驗收尚未執行，Windows 安裝版與 Pages 靜態匯出分屬 A8、A5。
+RepoNPC 只顯示操作說明；關閉 gateway 不代表 Funnel 已停用。管理頁分開顯示本機就緒、入口已設定與擁有者確認過的外網檢查；重啟、停止或來源設定改變會清除外網確認；版本變更不會清除原本的時間紀錄，仍應依實際更新重新檢查。真實 Tailscale／Pages／模型與乾淨主機驗收尚未執行，Windows 安裝版與 Pages 靜態匯出分屬 A8、A5。
 
 ## 常見疑問
 
@@ -273,16 +221,16 @@ RepoNPC 只顯示操作說明；關閉 gateway 不代表 Funnel 已停用。管�
 
 ## 文件導覽
 
-| 想了解… | 請閱讀 |
-| --- | --- |
-| 完整安裝、HTTPS、備份、恢復與 rollback | [操作手冊](docs/OPERATIONS.md) |
-| API、資料結構與功能契約 | [技術規格](docs/TECHNICAL_SPEC.md) |
-| 先設定模型再分析的引導修正 | [模型優先引導實作交接](docs/ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md) |
-| 中立模型設定、API 金鑰安全與前置引導改版 | [實作交接](docs/MODEL_SETUP_IMPLEMENTATION_HANDOFF.md) |
-| 每項需求如何判定完成 | [驗收標準](docs/ACCEPTANCE_CRITERIA.md) |
-| 威脅、秘密管理與管理介面限制 | [安全模型](docs/SECURITY.md) |
-| 重要架構選擇及其理由 | [架構決策](docs/DECISIONS.md) |
-| 自訂 NPC 圖片格式 | [Sprite 格式](docs/SPRITE_FORMAT.md) |
+| 想了解…                                  | 請閱讀                                                                 |
+| ---------------------------------------- | ---------------------------------------------------------------------- |
+| 完整安裝、HTTPS、備份、恢復與 rollback   | [操作手冊](docs/OPERATIONS.md)                                         |
+| API、資料結構與功能契約                  | [技術規格](docs/TECHNICAL_SPEC.md)                                     |
+| 先設定模型再分析的引導修正               | [模型優先引導實作交接](docs/ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md) |
+| 中立模型設定、API 金鑰安全與前置引導改版 | [實作交接](docs/MODEL_SETUP_IMPLEMENTATION_HANDOFF.md)                 |
+| 每項需求如何判定完成                     | [驗收標準](docs/ACCEPTANCE_CRITERIA.md)                                |
+| 威脅、秘密管理與管理介面限制             | [安全模型](docs/SECURITY.md)                                           |
+| 重要架構選擇及其理由                     | [架構決策](docs/DECISIONS.md)                                          |
+| 自訂 NPC 圖片格式                        | [Sprite 格式](docs/SPRITE_FORMAT.md)                                   |
 
 要修改程式碼前，請先閱讀技術規格、驗收標準、安全模型與架構決策。公開文件發生衝突時，以已批准的技術規格與明確記錄的架構決策為準。
 
@@ -324,7 +272,7 @@ pnpm run web:check
 
 ## 授權
 
-`pyproject.toml` 目前宣告為 MIT。正式對外發布前仍應以 repository 根目錄中的 `LICENSE` 檔案為準。
+程式碼採用 [MIT 授權](LICENSE)。第三方程式與素材另見 [授權聲明](THIRD_PARTY_NOTICES.md)。
 
 ## 新手模型設定修復（2026-09-12）
 
@@ -332,7 +280,7 @@ pnpm run web:check
 
 Repository AI 分析會同時使用兩個已選角色：Embedding 模型負責將來源與問題轉成向量並找出證據，Chat 模型再根據證據產生雙語分析。空白 include 會套用目錄、manifest 與常見程式碼副檔名的預設規則，因此只有根目錄檔案的平坦 repository 也能進入分析；秘密、二進位、產物與大小限制仍會先行排除。
 
-規格 0.3.0 / ADR-037 將大型 repository 分析改為彈性 active-work 配置：每 repository 預設 1,800 秒、provider 無活動預設 300 秒、GitHub I/O 預設 60 秒，暫時性錯誤最多使用同一凍結 provider/model 三次；archive、index 與 provider 容量等待不消耗有效執行時間。管理分析輸出維持 `REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS=8192`、最高 `16384`，訪客聊天改為 4,096／最高 8,192。Archive/source 限制可由 `.env` 調整；超過單檔 materialization 門檻會安全跳過並回報，只有不安全結構或總量天花板才終止。Migration 25 保留舊批次並擴大 durable budget。完整設定與安全界線見 `.env.example`、`docs/OPERATIONS.md` 與 ADR-037。
+規格 0.3.0 / ADR-037 將大型 repository 分析改為彈性 active-work 配置：每 repository 預設 1,800 秒、provider 無活動預設 300 秒、GitHub I/O 預設 60 秒，暫時性錯誤最多使用同一凍結 provider/model 三次；archive、index 與 provider 容量等待不消耗有效執行時間。目前管理分析與訪客聊天各自預設／最高 16,384 token（ADR-055），明確較低設定保留。Archive/source 限制可由 `.env` 調整；超過單檔 materialization 門檻會安全跳過並回報，只有不安全結構或總量天花板才終止。Migration 25 保留舊批次並擴大 durable budget。完整設定與安全界線見 `.env.example`、`docs/OPERATIONS.md` 與 ADR-037。
 
 規格 0.3.1 / ADR-038 將「同輪重試」與「建立後繼分析輪次」分開：同輪重試只有在模型嘗試次數與有效執行時間都未用盡時可用；用盡後可由管理員明確選擇失敗項目重新分析。新輪次預設保留原 commit、include/exclude、凍結模型組合與來源結果，僅重設新輪次的計數；每個來源失敗項目只能建立一個直接後繼。若改用目前模型，確認會綁定畫面顯示的 selection generation，設定已變更時必須重新檢視。Migration 26 新增不含秘密的批次／項目 lineage、輪次與失敗階段；migration 27 讓來源使用標記與有界冪等綁定在一般清理後仍維持正確。
 
@@ -345,3 +293,33 @@ Runtime migration 22 會修復舊版在服務更新後仍停留於舊 revision �
 Runtime migration 23 為失敗的批次項目新增安全、封閉集合的 `error_reason`。分析頁重新整理後仍會顯示錯誤代碼、原因與建議動作；原始 repository／prompt／模型回覆、私人網址與憑證不會寫入錯誤欄位。
 
 模型測試失敗會顯示實際 HTTP 狀態碼與服務商錯誤原文，不翻譯或推測原因。原文會遮蔽已知金鑰及私人網址，並限制長度；無可顯示文字時會明確提示。舊版本未保存的原文需按「測試模型」重新取得。詳見 [錯誤原文修正紀錄](docs/PROVIDER_ERROR_MESSAGES_2026-09-12.md)。
+
+### Visitor chat processing (2026-10-04)
+
+Live chat shows expandable real processing stages, elapsed waiting time and a
+stop action. The total deadline defaults to 180 seconds (max 300; explicitly
+configured lower settings remain valid). Native Ollama thinking activity is
+visible as a phase; thinking text stays private. Generic APIs show only actual
+supported activity. Answers still receive full citation/person validation.
+See docs/CHAT_PROCESSING_CONTRACT_2026-10-04.md for the unfinished thinking-text
+request and the separate public-summary option.
+
+## Approved public summary amendment (2026-10-04)
+
+OR-032 / ADR-058 / Specification 0.4.10 adopts the [public summary contract](docs/CHAT_PUBLIC_SUMMARY_CONTRACT_2026-10-04.md). FR-040/043/044/047, NFR-005/009/014 and AC-019/023/057/062/063/064/068/071 retain their thresholds. Explicit Responses selection, legacy/revision compatibility, bounded untrusted plain text, prompt/secret negative tests, final-answer separation, cancellation and bilingual keyboard-accessible display require verification. No real provider invocation, publication, catalog admission or release acceptance is implied. Previous pending-summary notes are historical and superseded by this approval.
+
+<details>
+<summary>歷史實作紀錄（以各日期範圍為準）</summary>
+
+**2026-10-03 接續實作：**正式 builtin 檢索基準 AC-009 已通過；已補600組實際雙語／明暗browser對比與隔離已安裝版維護／資料保留證據。聊天與分析預設／最大生成預算為16,384 token，支援推理的Ollama保持推理開啟，並檢查輸入與生成額度的context空間；較低的明確舊設定保留。此日紀錄的公開聊天期限後來由 ADR-057 更新為預設 180 秒、最高 300 秒；20s 模型探測與 300s 分析 provider 期限維持。最終Python2613項通過／2項既有Windows略過，完整Windows候選已重建。擁有者批准只修正兩事實測題、保留判分；新12題重驗9/12，兩個修正案例均通過，另三題未通過，正式catalog維持空白。Man最終圖像／權利、clean Windows、完整無障礙與外部驗收仍未完成；16k包含推理與答案，不保證生成16k字。詳見[最新接續交接](docs/CONTINUATION_HANDOFF_2026-10-03.md)；下列舊進度保留原範圍。
+
+**A5 本機檢查後暫停（2026-09-30）：**ChatGPT 第六輪接受先前修補，另指出 FAQ 技術路徑與點號可錯配；Luna max 已修正，Main 以六個失敗案例重測。最終 Web 377 項、格式、lint（0 錯誤／19 警告）、型別、正式建置、來源防護及新建映像的 Docker 2 項通過；62 個未改動的後端輸入沿用 Python 1,638 通過／2 項略過。最後修補尚未交 ChatGPT 再審；靜態聊天傳送仍待明確授權，A5 尚未完成。詳見[交接指南](docs/A5_HANDOFF_2026-09-30.md)。
+
+**訪客頁與外觀（A5／R08，本機檢查中）：**共用聊天頁、五套雙版本配色、私人圖片草稿與預覽、無模型外觀套用／取消、已核准 FAQ 替代問法與離線比對，以及只包含公開內容的 Pages ZIP 已實作。管理頁保存 Pages 完整網址；匯出使用需登入且無副作用的原生下載，核對時重新建立本機 manifest 並逐位元組比對入口頁與 manifest，成功後才產生卡片連結。請依[雙語手動分享指南](docs/PAGES_SHARING_GUIDE.md)操作；[A5 契約與檢查範圍](docs/A5_VISITOR_APPEARANCE_EXPORT_CONTRACT.md)記錄進度。第六輪指出的 FAQ 技術片段碰撞已本機修正並重測；Pages 即時問答仍待明確的傳送內容／目的地授權，原生 ZIP 落盤與真正 200% zoom 未確認，A5 尚未結案。沒有公開部署。
+
+**訪客專用公開入口（A1，本機完成）：**規格 0.4.6 / ADR-053 的第二個 loopback listener、封閉公共 API、私人管理入口與雙語管理控制已完成本機實作及審核。預設關閉，擁有者可設定、啟動並記錄外網檢查；尚未啟用 Funnel 或取得外網驗收。完整契約、驗證結果與後續 A5／A12 範圍見 [A1 gateway 契約](docs/A1_FUNNEL_GATEWAY_CONTRACT.md)。
+
+**涵蓋檢查與 FAQ（A4，本機已實作）：**「預覽、試聊與分享」可明確使用模型檢查六個標準問題；缺口不會阻擋發布。FAQ 可核准、拒絕、重產或改寫成作者自述；自述保存後會先更新索引再生成，仍需審核。只有目前版本已核准的回答會提供給訪客或下載為 JSON。換版本須重新生成與確認；訪客問題按鈕直接顯示已核准回答，不呼叫模型。完整 Pages 靜態匯出與離線比對仍屬 A5。詳見 [A4 契約與驗證範圍](docs/A4_COVERAGE_FAQ_IMPLEMENTATION.md)。
+
+
+</details>

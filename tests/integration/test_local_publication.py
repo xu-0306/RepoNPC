@@ -62,7 +62,7 @@ def test_local_build_reuses_vectors_and_serves_truthful_assertion_citations(tmp_
         data_directory=tmp_path / "data",
         resolver=FixtureResolver(),
         max_bundle_bytes=10 * 1024 * 1024,
-        participation_resolver=FixtureParticipation(),
+        participation_collector=FixtureParticipation().participation,
     )
     coordinator = EmbeddingReindexCoordinator(
         registry=registry, manager=manager, builder=builder, provider_transition=transition
@@ -87,7 +87,7 @@ def test_local_build_reuses_vectors_and_serves_truthful_assertion_citations(tmp_
             data_directory=tmp_path / "data",
             resolver=FixtureResolver(),
             max_bundle_bytes=10 * 1024 * 1024,
-            participation_resolver=FixtureParticipation(),
+            participation_collector=FixtureParticipation().participation,
         )
         coordinator.queue(
             profile.profile_id,
@@ -141,40 +141,29 @@ def test_local_build_reuses_vectors_and_serves_truthful_assertion_citations(tmp_
         coordinator.shutdown()
 
 
-def test_bounded_reindex_resolver_forwards_participation_and_preserves_cancellation():
+def test_explicit_participation_collector_preserves_cancellation():
     import pytest
 
-    from reponpc.admin.embedding_reindex import ReindexCancelled, _BoundedResolver
+    from reponpc.admin.embedding_reindex import ReindexCancelled, _collect_participation
 
     stopped = [False]
 
-    class Resolver(FixtureParticipation):
+    class Collector(FixtureParticipation):
         def participation(self, **kwargs):
             result = super().participation(**kwargs)
             stopped[0] = True
             return result
 
-    bounded = _BoundedResolver(
-        Resolver(), lambda: stopped[0], time.monotonic() + 20, time.monotonic
-    )
     with pytest.raises(ReindexCancelled):
-        bounded.participation(
+        _collect_participation(
+            Collector().participation,
+            lambda: stopped[0],
+            time.monotonic() + 20,
+            time.monotonic,
             slug=_fixture_snapshot().slug,
             pinned_sha=_fixture_snapshot().commit_sha,
             github_login="fixture-owner",
         )
-    # An archive/fixture without the optional capability keeps its supplied snapshot.
-    plain = _BoundedResolver(
-        FixtureResolver(), lambda: False, time.monotonic() + 20, time.monotonic
-    )
-    assert (
-        plain.participation(
-            slug=_fixture_snapshot().slug,
-            pinned_sha=_fixture_snapshot().commit_sha,
-            github_login="fixture-owner",
-        )
-        is None
-    )
 
 
 def test_local_publication_receipt_recovers_interruption(tmp_path: Path):

@@ -4,6 +4,39 @@ import { describe, expect, it, vi } from "vitest";
 import { ModelConnectionPanel } from "./ModelConnectionPanel";
 
 describe("ModelConnectionPanel", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "shows the explicitly selected interface in %s",
+    (locale) => {
+      const markup = renderToStaticMarkup(
+        <ModelConnectionPanel
+          locale={locale}
+          pending={false}
+          error=""
+          connections={[
+            {
+              connection_id: "api",
+              display_name: "Selected service",
+              provider: "openai_compatible",
+              source: "managed",
+              revision: 2,
+              endpoint_configured: true,
+              key_configured: true,
+              status: "configured",
+              chat_api: "responses",
+            },
+          ]}
+          onRefresh={vi.fn()}
+          onCreate={vi.fn()}
+          onUpdate={vi.fn()}
+          onDelete={vi.fn()}
+        />,
+      );
+      expect(markup).toContain("<dd>Responses</dd>");
+      expect(markup).toContain(
+        locale === "en" ? "Chat API interface" : "聊天 API 接口",
+      );
+    },
+  );
   it("shows safe metadata and an explicit credential-removal path", () => {
     const markup = renderToStaticMarkup(
       <ModelConnectionPanel
@@ -39,6 +72,9 @@ describe("ModelConnectionPanel", () => {
     expect(markup).not.toContain("MODEL_API_KEY");
     expect(markup).toContain('class="model-connection-form"');
     expect(markup).toContain('class="model-connection-form__actions"');
+    expect(markup.indexOf("Add an AI service")).toBeLessThan(
+      markup.indexOf("Save a service, then choose it"),
+    );
   });
 
   it("provides connection deletion in guided setup", () => {

@@ -12,10 +12,12 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+import yaml
 from numpy.typing import NDArray
 
 from reponpc.admin.batch_resolver import (
@@ -31,6 +33,7 @@ from reponpc.admin.embedding_reindex import (
     EmbeddingReindexCoordinator,
     ReindexCandidate,
     _BoundedResolver,
+    _collect_participation,
     _raise_if_stopped,
 )
 from reponpc.admin.local_portfolio import (
@@ -38,6 +41,7 @@ from reponpc.admin.local_portfolio import (
     LocalPortfolioError,
     LocalPortfolioStore,
 )
+from reponpc.admin.scene import write_presentation_receipt
 from reponpc.bundles.archive import verify_bundle_archive
 from reponpc.bundles.manager import BundleManager
 from reponpc.config.models import parse_public_config_bytes
@@ -47,6 +51,7 @@ from reponpc.indexing.pipeline import IndexPipelineError, build_index_bundle
 from reponpc.indexing.sources import (
     EmbeddingIdentity,
     EmbeddingProvider,
+    RepositoryParticipation,
     ResolvedConfiguration,
     ResolvedRepository,
 )
@@ -114,12 +119,12 @@ class LocalPortfolioBuilder:
         data_directory: Path,
         resolver: CancellableSourceResolver,
         max_bundle_bytes: int,
-        participation_resolver: GitHubSourceResolver | None = None,
+        participation_collector: Callable[..., RepositoryParticipation] | None = None,
     ) -> None:
         self.draft = draft
         self.root = data_directory / "local-builds"
         self.resolver = resolver
-        self.participation_resolver = participation_resolver
+        self.participation_collector = participation_collector
         self.max_bundle_bytes = max_bundle_bytes
         self.cache = PassageVectorCache(data_directory / "passage-cache")
 
@@ -139,18 +144,39 @@ class LocalPortfolioBuilder:
             source_root = workspace / "source"
             source_root.mkdir()
             config_path = source_root / "reponpc.yml"
-            config_path.write_text(self.draft.content, encoding="utf-8")
+            build_content = self.draft.content
             if config.character.custom is not None:
                 if self.draft.sprite_base64 is None:
                     raise LocalPortfolioError("PORTFOLIO_ASSET_REQUIRED")
                 asset = source_root / config.character.custom.sprite_path
                 asset.parent.mkdir(parents=True, exist_ok=True)
                 asset.write_bytes(base64.b64decode(self.draft.sprite_base64, validate=True))
+            if self.draft.scene_background_base64 is not None:
+                from reponpc.scene.images import validate_scene_image
+
+                raw_background = base64.b64decode(self.draft.scene_background_base64, validate=True)
+                suffix = "webp" if raw_background.startswith(b"RIFF") else "png"
+                image = validate_scene_image(raw_background, filename=f"applied.{suffix}")
+                relative = f"assets/scene/{image.sha256}.{image.format}"
+                asset = source_root / relative
+                asset.parent.mkdir(parents=True, exist_ok=True)
+                asset.write_bytes(image.content)
+                scene = config.character.scene.model_copy(update={"background_path": relative})
+                config = config.model_copy(
+                    update={"character": config.character.model_copy(update={"scene": scene})}
+                )
+                build_content = yaml.safe_dump(
+                    config.model_dump(mode="json"),
+                    allow_unicode=True,
+                    sort_keys=False,
+                    default_flow_style=False,
+                )
+            config_path.write_text(build_content, encoding="utf-8")
             source = ResolvedConfiguration(
                 repository_slug="local/portfolio",
-                commit_sha=hashlib.sha256(self.draft.content.encode("utf-8")).hexdigest()[:40],
+                commit_sha=hashlib.sha256(build_content.encode("utf-8")).hexdigest()[:40],
                 path="reponpc.yml",
-                content=self.draft.content,
+                content=build_content,
                 github_html_url="/",
                 origin="local",
             )
@@ -162,7 +188,17 @@ class LocalPortfolioBuilder:
                     cancel_requested,
                     deadline,
                     time.monotonic,
-                    participation_resolver=self.participation_resolver,
+                ),
+                participation_collector=(
+                    partial(
+                        _collect_participation,
+                        self.participation_collector,
+                        cancel_requested,
+                        deadline,
+                        time.monotonic,
+                    )
+                    if self.participation_collector is not None
+                    else None
                 ),
                 embedding_provider=_BoundedEmbeddingProvider(provider, cancel_requested, deadline),
                 configuration_source=source,
@@ -184,6 +220,11 @@ class LocalPortfolioBuilder:
                 raise IndexPipelineError("embedding_output_invalid")
             if not verified.index.hybrid_candidates("retrieval", query_vector=query[0]):
                 raise IndexPipelineError("bundle_smoke_query_failed")
+            write_presentation_receipt(
+                data_directory=self.root.parent,
+                bundle_directory=verified.directory,
+                settings=config.character.scene,
+            )
             _raise_if_stopped(cancel_requested, deadline, time.monotonic)
             return ReindexCandidate(verified, workspace)
         except Exception:
@@ -211,6 +252,7 @@ class LocalPublication:
         ],
         stop_remote: Callable[[], None],
         source_resolver: CancellableSourceResolver | None = None,
+        participation_collector: Callable[..., RepositoryParticipation] | None = None,
     ) -> None:
         self.store, self.coordinator, self.registry, self.manager = (
             store,
@@ -220,6 +262,7 @@ class LocalPublication:
         )
         self.root, self.resolver, self.max_bundle_bytes = data_directory, resolver, max_bundle_bytes
         self.source_resolver = source_resolver or resolver
+        self.participation_collector = participation_collector
         self.transition_factory, self.stop_remote = transition_factory, stop_remote
         self.lock = threading.RLock()
         self.path = data_directory / "local-portfolio" / "publication.json"
@@ -300,7 +343,7 @@ class LocalPublication:
                         data_directory=self.root,
                         resolver=self.source_resolver,
                         max_bundle_bytes=self.max_bundle_bytes,
-                        participation_resolver=self.resolver,
+                        participation_collector=self.participation_collector,
                     ),
                     transition=transition,
                     on_finished=self._finished,

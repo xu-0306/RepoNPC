@@ -6,6 +6,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -42,6 +43,23 @@ def _write_snapshot(root: Path, *, operations_status: str = "Draft") -> None:
 
 def _normalised(records: object) -> str:
     return json.dumps(records, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+
+
+def _ledger_payload(*, last_criterion: int = 79) -> dict[str, Any]:
+    return {
+        "schema_name": "reponpc/acceptance-ledger",
+        "schema_version": 1,
+        "source_identity": "fixture commit abc123",
+        "environment": "local test",
+        "entries": [
+            {
+                "id": f"AC-{index:03d}",
+                "status": "not-run",
+                "reason": "external evidence unavailable",
+            }
+            for index in range(1, last_criterion + 1)
+        ],
+    }
 
 
 def test_release_audit_records_have_stable_shape_and_json_values(tmp_path: Path) -> None:
@@ -311,46 +329,121 @@ def test_release_audit_covers_acceptance_and_release_input_gates(tmp_path: Path)
         assert records[check_id]["status"] == "not-run"
 
 
-def test_release_audit_requires_every_accepted_criterion_through_ac_061(tmp_path: Path) -> None:
+def test_release_audit_requires_every_accepted_criterion_through_ac_079(tmp_path: Path) -> None:
     _write_snapshot(tmp_path)
     acceptance = tmp_path / "docs" / "ACCEPTANCE_CRITERIA.md"
     acceptance.write_text(
         "# Acceptance Criteria\n\n"
-        + "\n".join(f"### AC-{index:03d} — Fixture" for index in range(1, 62)),
+        + "\n".join(f"### AC-{index:03d} — Fixture" for index in range(1, 80)),
         encoding="utf-8",
     )
 
     records = {record["id"]: record for record in audit_repository(tmp_path)}
     assert records["acceptance-coverage"]["status"] == "pass"
-    assert records["acceptance-coverage"]["evidence"]["required"] == ("AC-001 through AC-061")
+    assert records["acceptance-coverage"]["evidence"] == {
+        "path": "docs/ACCEPTANCE_CRITERIA.md",
+        "required": "AC-001 through AC-079",
+    }
+    assert "does not establish acceptance" in records["acceptance-coverage"]["reason"]
+    assert all(records[check_id]["status"] == "not-run" for check_id in EXTERNAL_IDS)
 
     acceptance.write_text(
         "# Acceptance Criteria\n\n"
-        + "\n".join(f"### AC-{index:03d} — Fixture" for index in range(1, 61)),
+        + "\n".join(f"### AC-{index:03d} — Fixture" for index in range(1, 79)),
         encoding="utf-8",
     )
     records = {record["id"]: record for record in audit_repository(tmp_path)}
     assert records["acceptance-coverage"]["status"] == "blocked"
-    assert records["acceptance-coverage"]["evidence"]["missing"] == ["AC-061"]
+    assert records["acceptance-coverage"]["evidence"]["missing"] == ["AC-079"]
+
+
+def test_release_audit_blocks_the_old_ac_061_document(tmp_path: Path) -> None:
+    _write_snapshot(tmp_path)
+    (tmp_path / "docs" / "ACCEPTANCE_CRITERIA.md").write_text(
+        "# Acceptance Criteria\n\n"
+        + "\n".join(f"### AC-{index:03d} — Fixture" for index in range(1, 62)),
+        encoding="utf-8",
+    )
+    records = {record["id"]: record for record in audit_repository(tmp_path)}
+    assert records["acceptance-coverage"]["status"] == "blocked"
+    assert records["acceptance-coverage"]["evidence"]["missing"] == [
+        f"AC-{index:03d}" for index in range(62, 80)
+    ]
 
 
 def test_acceptance_ledger_validator_requires_unique_complete_safe_entries() -> None:
-    entries = [
-        {"id": f"AC-{index:03d}", "status": "not-run", "reason": "external evidence unavailable"}
-        for index in range(1, 62)
-    ]
-    payload = {
-        "schema_name": "reponpc/acceptance-ledger",
-        "schema_version": 1,
-        "source_identity": "fixture commit abc123",
-        "environment": "local test",
-        "entries": entries,
-    }
+    payload = _ledger_payload()
+    entries = payload["entries"]
     assert validate_acceptance_ledger(payload) == []
     payload["entries"] = [*entries[:-1], entries[-2]]
     errors = validate_acceptance_ledger(payload)
     assert any("duplicate" in error for error in errors)
-    assert any("missing ledger entry: AC-061" in error for error in errors)
+    assert any("missing ledger entry: AC-079" in error for error in errors)
+
+
+def test_acceptance_ledger_rejects_ac_061_history_without_new_entries() -> None:
+    assert validate_acceptance_ledger(_ledger_payload(last_criterion=61)) == [
+        f"missing ledger entry: AC-{index:03d}" for index in range(62, 80)
+    ]
+
+
+def test_acceptance_ledger_requires_ac_079_and_rejects_its_duplicate() -> None:
+    payload = _ledger_payload()
+    final_entry = payload["entries"].pop()
+    assert validate_acceptance_ledger(payload) == ["missing ledger entry: AC-079"]
+    payload["entries"].extend([final_entry, final_entry])
+    assert validate_acceptance_ledger(payload) == ["duplicate ledger entry: AC-079"]
+
+
+def test_legacy_entries_are_preserved_without_reclassifying_history() -> None:
+    payload = _ledger_payload()
+    for entry in payload["entries"]:
+        if entry["id"] in {"AC-041", "AC-042", "AC-043"}:
+            entry["status"] = "not-run"
+            entry["reason"] = "Legacy superseded criteria; historical record retained."
+    before = _normalised(payload)
+    assert validate_acceptance_ledger(payload) == []
+    assert _normalised(payload) == before
+    payload["entries"] = [
+        entry for entry in payload["entries"] if entry["id"] not in {"AC-041", "AC-042", "AC-043"}
+    ]
+    assert validate_acceptance_ledger(payload) == [
+        "missing ledger entry: AC-041",
+        "missing ledger entry: AC-042",
+        "missing ledger entry: AC-043",
+    ]
+
+
+@pytest.mark.parametrize("status", ["pass", "fail", "not-run", "blocked"])
+def test_new_criterion_accepts_existing_explicit_statuses_without_changing_them(
+    status: str,
+) -> None:
+    payload = _ledger_payload()
+    payload["entries"][-1]["status"] = status
+    before = _normalised(payload)
+    assert validate_acceptance_ledger(payload) == []
+    assert _normalised(payload) == before
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ({"status": "complete"}, "ledger status is invalid: AC-079"),
+        ({"reason": " "}, "ledger reason is missing: AC-079"),
+        ({"id": "AC-079-extra"}, "ledger entry id is invalid"),
+    ],
+)
+def test_new_criterion_keeps_existing_validation(value: dict[str, str], expected: str) -> None:
+    payload = _ledger_payload()
+    payload["entries"][-1].update(value)
+    assert expected in validate_acceptance_ledger(payload)
+
+
+@pytest.mark.parametrize("field", ["source_identity", "environment"])
+def test_complete_ledger_still_rejects_unsafe_metadata_without_echoing_it(field: str) -> None:
+    payload = _ledger_payload()
+    payload[field] = "credential=synthetic-do-not-echo"
+    assert validate_acceptance_ledger(payload) == [f"ledger {field} is missing or unsafe"]
 
 
 def test_acceptance_ledger_validator_rejects_secret_metadata() -> None:

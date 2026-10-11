@@ -23,6 +23,7 @@ from reponpc.admin.auth import (
 from reponpc.bundles.manager import BundleManager
 from reponpc.config.environment import EnvironmentValidationError, load_environment
 from reponpc.config.models import ConfigValidationError, load_public_config
+from reponpc.indexing.github import GitHubSourceResolver
 from reponpc.indexing.pipeline import (
     IndexPipelineError,
     build_index_bundle,
@@ -158,7 +159,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("configuration valid")
         elif args.command == "index":
             if args.index_command == "build":
-                built = build_index_bundle(args.config, args.output)
+                resolver = GitHubSourceResolver()
+                built = build_index_bundle(
+                    args.config,
+                    args.output,
+                    resolver=resolver,
+                    participation_collector=resolver.participation,
+                )
                 print(f"bundle built: {built.manifest.bundle_id}")
             elif args.index_command == "publish":
                 publish_index_bundle(args.bundle_dir)

@@ -3,9 +3,8 @@
 from reponpc.chat.answers import (
     AnswerEnvelope,
     Citation,
-    Inference,
     ValidatedAnswer,
-    validate_answer,
+    validate_v2_answer,
 )
 
-__all__ = ["AnswerEnvelope", "Citation", "Inference", "ValidatedAnswer", "validate_answer"]
+__all__ = ["AnswerEnvelope", "Citation", "ValidatedAnswer", "validate_v2_answer"]

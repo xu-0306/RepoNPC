@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pytest
 from fastapi.testclient import TestClient
 
 from reponpc.admin.embedding_profiles import EmbeddingProfileInput, EmbeddingProfileRegistry
@@ -24,13 +25,20 @@ from reponpc.providers import (
     OpenAICompatibleChatProvider,
     OpenAICompatibleEmbeddingProvider,
     ProviderCapabilities,
+    ProviderError,
     ProviderFailureCode,
     ProviderHealth,
     ProviderMessage,
     ProviderResult,
 )
+from reponpc.providers.ollama import OllamaChatProvider
 from reponpc.providers.runtime import ProviderRuntime
 from reponpc.runtime.database import RuntimeDatabase
+
+
+@pytest.fixture(autouse=True)
+def _no_live_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(OllamaChatProvider, "prepare", lambda self: None)
 
 
 @dataclass
@@ -128,12 +136,14 @@ def test_real_lifespan_marks_ready_only_when_index_storage_and_both_providers_ar
         assert status["model"]["provider"] == "openai_compatible"
 
 
+@pytest.mark.parametrize("context", [8192, 32768])
 def test_production_assembly_wires_only_selected_ollama_adapters_and_configured_limits(
-    tmp_path: Path, monkeypatch: object
+    tmp_path: Path, monkeypatch: object, context: int
 ) -> None:
     settings = load_environment(
         {
             "REPONPC_DATA_DIR": str(tmp_path),
+            "REPONPC_CHAT_MAX_CONTEXT_TOKENS": str(context),
             "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
             "REPONPC_CONFIG_REPOSITORY": "example/portfolio",
             "REPONPC_INDEX_MANIFEST_URL": "https://raw.githubusercontent.com/example/portfolio/main/stable-manifest.json",
@@ -174,6 +184,9 @@ def test_production_assembly_wires_only_selected_ollama_adapters_and_configured_
     assert application.state.provider_runtime.chat.__class__.__name__ == "OllamaChatProvider"
     assert (
         application.state.provider_runtime.embedding.__class__.__name__ == "OllamaEmbeddingProvider"
+    )
+    assert application.state.provider_runtime.chat.capabilities().max_output_tokens == min(
+        context, 16384
     )
     assert application.state.chat_service is None
     assert application.state.max_message_characters == 8
@@ -216,8 +229,20 @@ def test_analysis_capability_is_separate_from_public_chat_output_capability(
         capabilities=_analysis_chat_capabilities(settings),
     )
 
-    assert public.capabilities().max_output_tokens == 4096
-    assert analysis.capabilities().max_output_tokens == 8192
+    assert public.capabilities().max_output_tokens == 16384
+    assert analysis.capabilities().max_output_tokens == 16384
+    narrow_settings = replace(settings, chat_max_context_tokens=8192)
+    narrow = _chat_provider_from_connection(
+        narrow_settings,
+        settings.chat_provider,
+        settings.chat_model,
+        settings.chat_base_url,
+        None,
+    )
+    assert narrow.capabilities().max_context_tokens == 8192
+    with pytest.raises(ProviderError) as failure:
+        narrow.generate((ProviderMessage("user", "synthetic"),), {}, 16384, 45)
+    assert failure.value.code == ProviderFailureCode.CONTEXT_OVERFLOW
 
 
 def test_production_assembly_maps_vllm_to_private_openai_compatible_transport(

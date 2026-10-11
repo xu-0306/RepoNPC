@@ -46,6 +46,7 @@ class ModelConnectionInput:
     api_key: str | None = None
     credential_action: str = "retain"
     endpoint_action: str = "replace"
+    chat_api: str | None = None
 
     def validate(self, *, allow_retain: bool = False) -> None:
         if (
@@ -56,6 +57,8 @@ class ModelConnectionInput:
             or self.provider not in _PROVIDERS
             or self.credential_action not in {"retain", "replace", "remove"}
             or self.endpoint_action not in {"retain", "replace"}
+            or self.chat_api not in {None, "chat_completions", "responses"}
+            or (self.chat_api == "responses" and self.provider != "openai_compatible")
         ):
             raise ModelConnectionError("VALIDATION_ERROR")
         if self.endpoint_action == "retain":
@@ -85,6 +88,7 @@ class ModelConnection:
     status: str
     created_at: str
     updated_at: str
+    chat_api: str = "chat_completions"
 
     def safe_dict(self) -> dict[str, object]:
         return {
@@ -98,17 +102,21 @@ class ModelConnection:
             "status": self.status,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "chat_api": self.chat_api,
         }
 
 
 class ModelConnectionSecret:
     """Private decrypted material whose representation never contains values."""
 
-    __slots__ = ("_api_key", "_base_url")
+    __slots__ = ("_api_key", "_base_url", "chat_api")
 
-    def __init__(self, base_url: str, api_key: str | None) -> None:
+    def __init__(
+        self, base_url: str, api_key: str | None, chat_api: str = "chat_completions"
+    ) -> None:
         self._base_url = base_url
         self._api_key = api_key
+        self.chat_api = chat_api
 
     @property
     def base_url(self) -> str:
@@ -157,13 +165,15 @@ class ProtectedModelSecretStore:
             payload = json.loads(Fernet(self._read_key()).decrypt(ciphertext).decode("utf-8"))
             base_url = payload["base_url"]
             api_key = payload["api_key"]
+            chat_api = payload.get("chat_api", "chat_completions")
             if (
                 not isinstance(base_url, str)
                 or not base_url
                 or (api_key is not None and not isinstance(api_key, str))
+                or chat_api not in {"chat_completions", "responses"}
             ):
                 raise ValueError
-            return ModelConnectionSecret(base_url, api_key)
+            return ModelConnectionSecret(base_url, api_key, chat_api)
         except (InvalidToken, KeyError, TypeError, ValueError, json.JSONDecodeError):
             raise ModelSecretStoreError("MODEL_SECRET_STORAGE_UNAVAILABLE") from None
         except ModelSecretStoreError:
@@ -273,7 +283,9 @@ class ModelConnectionRegistry:
         now = _now()
         secret_ref = f"model-connection:{identifier}:1"
         ciphertext = self._secret_store.encrypt(
-            ModelConnectionSecret(values.base_url, values.api_key)
+            ModelConnectionSecret(
+                values.base_url, values.api_key, values.chat_api or "chat_completions"
+            )
         )
         try:
             with self._database.connection() as connection:
@@ -282,8 +294,8 @@ class ModelConnectionRegistry:
                     """
                     INSERT INTO model_connections(
                       connection_id, display_name, provider, source, revision, secret_ref,
-                      endpoint_configured, key_configured, status, created_at, updated_at
-                    ) VALUES (?, ?, ?, 'managed', 1, ?, 1, ?, 'configured', ?, ?)
+                      endpoint_configured, key_configured, status, created_at, updated_at, chat_api
+                    ) VALUES (?, ?, ?, 'managed', 1, ?, 1, ?, 'configured', ?, ?, ?)
                     """,
                     (
                         identifier,
@@ -293,6 +305,7 @@ class ModelConnectionRegistry:
                         int(bool(values.api_key)),
                         now,
                         now,
+                        values.chat_api or "chat_completions",
                     ),
                 )
                 connection.execute(
@@ -456,10 +469,16 @@ class ModelConnectionRegistry:
             if values.credential_action == "remove"
             else current_secret.api_key
         )
+        chat_api = values.chat_api or (
+            current.chat_api if values.provider == current.provider else "chat_completions"
+        )
+        if chat_api == "responses" and values.provider != "openai_compatible":
+            raise ModelConnectionError("VALIDATION_ERROR")
         if (
             values.provider == current.provider
             and base_url == current_secret.base_url
             and api_key == current_secret.api_key
+            and chat_api == current.chat_api
         ):
             # A display-label edit does not change a tested connection identity.
             try:
@@ -486,7 +505,7 @@ class ModelConnectionRegistry:
             return self.get(connection_id)
         revision = current.revision + 1
         secret_ref = f"model-connection:{connection_id}:{revision}"
-        ciphertext = self._secret_store.encrypt(ModelConnectionSecret(base_url, api_key))
+        ciphertext = self._secret_store.encrypt(ModelConnectionSecret(base_url, api_key, chat_api))
         now = _now()
         try:
             with self._database.connection() as connection:
@@ -494,7 +513,8 @@ class ModelConnectionRegistry:
                 connection.execute(
                     """
                     UPDATE model_connections SET
-                      display_name = ?, provider = ?, source = 'managed', revision = ?,
+                      display_name = ?, provider = ?, chat_api = ?,
+                      source = 'managed', revision = ?,
                       secret_ref = ?,
                       endpoint_configured = 1, key_configured = ?, status = 'configured',
                       updated_at = ? WHERE connection_id = ?
@@ -502,6 +522,7 @@ class ModelConnectionRegistry:
                     (
                         values.display_name.strip(),
                         values.provider,
+                        chat_api,
                         revision,
                         secret_ref,
                         int(bool(api_key)),
@@ -800,6 +821,7 @@ def _connection(row: sqlite3.Row) -> ModelConnection:
         status=str(row["status"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
+        chat_api=str(row["chat_api"]),
     )
 
 
@@ -824,7 +846,7 @@ def _rollback(connection: sqlite3.Connection) -> None:
 
 def _secret_payload(secret: ModelConnectionSecret) -> bytes:
     return json.dumps(
-        {"base_url": secret.base_url, "api_key": secret.api_key},
+        {"base_url": secret.base_url, "api_key": secret.api_key, "chat_api": secret.chat_api},
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")

@@ -46,12 +46,12 @@ ANALYSIS_TIMEOUT_SECONDS = 1800.0
 ANALYSIS_PROVIDER_TIMEOUT_SECONDS = 300.0
 ANALYSIS_GENERATION_ATTEMPTS = 3
 MAX_OWNER_STATEMENT_CHARACTERS = 4000
-ANALYSIS_MAX_OUTPUT_TOKENS = 8192
+ANALYSIS_MAX_OUTPUT_TOKENS = 16384
 ANALYSIS_MAX_OUTPUT_TOKENS_HARD_LIMIT = 16384
 CONTRIBUTION_MAX_OUTPUT_TOKENS = 700
 ANALYSIS_PROMPT_VERSION = "onboarding-prompt-v2"
 ANALYSIS_OUTPUT_SCHEMA_VERSION = "analysis-schema-v2"
-ANALYSIS_OUTPUT_POLICY_VERSION = "analysis-output-policy-v1"
+ANALYSIS_OUTPUT_POLICY_VERSION = "analysis-output-policy-v2-reasoning-on"
 ANALYSIS_TOKEN_ESTIMATOR_VERSION = "utf8-bytes-v1"
 ANALYSIS_TERMINATION_VALIDATION_VERSION = "finish-reason-length-reject-v1"
 _ANALYSIS_CONTEXT_SAFETY_MARGIN_TOKENS = 256
@@ -259,6 +259,12 @@ def analysis_generation_policy_identity(
             ),
             "provider_output_tokens": (
                 capabilities.max_output_tokens if capabilities is not None else unknown
+            ),
+            "reasoning_supported": (
+                capabilities.reasoning_supported if capabilities is not None else unknown
+            ),
+            "reasoning_control": (
+                capabilities.reasoning_control if capabilities is not None else unknown
             ),
             "output_policy_version": ANALYSIS_OUTPUT_POLICY_VERSION,
             "token_estimator_version": ANALYSIS_TOKEN_ESTIMATOR_VERSION,

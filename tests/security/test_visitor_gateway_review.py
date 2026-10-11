@@ -113,10 +113,11 @@ def _gateway(tmp_path, *, service=None, trusted=(), web_dist=None):
         bundle_manager_supplier=lambda: None,
         chat_service_supplier=lambda: service,
         faq_supplier=lambda: None,
-        settings_supplier=lambda: settings,
+        gateway_origin=settings["gateway_origin"],
+        pages_origin=settings["pages_origin"],
+        listener_ready_supplier=lambda: settings["enabled"] and settings["listener_ready"],
         web_dist=web_dist,
         gateway_port=8001,
-        admin_origins=(ORIGIN,),
         trusted_proxy_cidrs=trusted,
         max_message_characters=2000,
         max_history_messages=6,
@@ -671,7 +672,7 @@ def test_gateway_resume_failure_preserves_primary_service_and_cleanup():
     assert gateway.stopped
 
 
-def test_private_gateway_routes_drive_real_listener_with_auth_csrf_and_stale_report_rules(tmp_path):
+def test_private_gateway_routes_drive_real_listener_with_auth_csrf_and_dated_report(tmp_path):
     primary = _application_without_github(tmp_path)
     with socket.socket() as available:
         available.bind(("127.0.0.1", 0))
@@ -739,16 +740,13 @@ def test_private_gateway_routes_drive_real_listener_with_auth_csrf_and_stale_rep
         assert status.status_code == 200 and "model" not in status.json()
         proof = {
             "revision": revision,
-            "gateway_origin": body["gateway_origin"],
-            "pages_origin": body["pages_origin"],
-            "bundle_id": "fixture-index",
             "external_checks_confirmed": True,
         }
         assert (
             client.post(
-                base + "/verify", json={**proof, "bundle_id": "stale-index"}, headers=headers
+                base + "/verify", json={**proof, "bundle_id": "removed-field"}, headers=headers
             ).status_code
-            == 409
+            == 400
         )
         assert (
             client.post(
@@ -767,15 +765,47 @@ def test_private_gateway_routes_drive_real_listener_with_auth_csrf_and_stale_rep
         primary.state.reponpc = SetupState(
             index_ready=True, model_ready=False, index_version="fixture-index"
         )
-        gateway.observe_state()
         primary.state.reponpc = SetupState(
             index_ready=True, model_ready=True, index_version="fixture-index"
         )
-        gateway.observe_state()
         observed = client.get(base)
-        assert not observed.json()["external_verified"] and observed.json()["verified_at"]
+        assert observed.json()["external_verified"] and observed.json()["verified_at"]
+        with pytest.MonkeyPatch.context() as patches:
+
+            def owner_database_read_forbidden(*_args, **_kwargs):
+                raise AssertionError("visitor request touched owner gateway settings")
+
+            patches.setattr(gateway._store, "get", owner_database_read_forbidden)
+            patches.setattr(gateway._store, "clear_verification", owner_database_read_forbidden)
+            assert (
+                httpx.get(
+                    f"http://127.0.0.1:{port}/api/public/status",
+                    headers={"Host": "fixture.ts.net", "Origin": "https://fixture.github.io"},
+                ).status_code
+                == 200
+            )
+            unavailable = httpx.post(
+                f"http://127.0.0.1:{port}/api/public/chat/stream",
+                headers={"Host": "fixture.ts.net"},
+                json={"message": "Question", "locale": "en"},
+            )
+            assert (
+                unavailable.status_code == 503
+                and unavailable.json()["error"]["code"] == "SERVICE_NOT_READY"
+            )
+        assert client.post(base + "/verify", json=proof, headers=headers).status_code == 409
         stopped = client.post(base + "/stop", json={"revision": revision}, headers=headers)
         assert stopped.status_code == 200 and not stopped.json()["listener_ready"]
+        assert stopped.json()["verified_at"] is None
+        unavailable = client.post(
+            base + "/verify",
+            headers=headers,
+            json={"revision": stopped.json()["revision"], "external_checks_confirmed": True},
+        )
+        assert (
+            unavailable.status_code == 503
+            and unavailable.json()["error"]["code"] == "GATEWAY_UNAVAILABLE"
+        )
         cleared = client.put(
             base,
             json={

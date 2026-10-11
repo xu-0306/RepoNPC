@@ -13,6 +13,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Protocol
 
@@ -341,6 +342,7 @@ class ProductionFrozenProfileBuilder:
         github_api_url: str,
         max_bundle_bytes: int,
         source_resolver: GitHubSourceResolver | None = None,
+        participation_collector: Callable[..., RepositoryParticipation] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._root = Path(data_directory) / "embedding-reindex"
@@ -348,6 +350,7 @@ class ProductionFrozenProfileBuilder:
         self._config_repository = config_repository
         self._config_branch = config_branch
         self._resolver = source_resolver or GitHubSourceResolver(api_base_url=github_api_url)
+        self._participation_collector = participation_collector
         self._max_bundle_bytes = max_bundle_bytes
         self._monotonic = monotonic
 
@@ -411,6 +414,17 @@ class ProductionFrozenProfileBuilder:
                 config_path,
                 workspace / "build",
                 resolver=bounded,
+                participation_collector=(
+                    partial(
+                        _collect_participation,
+                        self._participation_collector,
+                        cancel_requested,
+                        deadline,
+                        self._monotonic,
+                    )
+                    if self._participation_collector is not None
+                    else None
+                ),
                 embedding_provider=provider,
                 configuration_source=source,
                 built_at=datetime.now(UTC),
@@ -449,7 +463,6 @@ class _BoundedResolver:
     cancel_requested: Callable[[], bool]
     deadline: float
     monotonic: Callable[[], float]
-    participation_resolver: GitHubSourceResolver | None = None
 
     def resolve(self, *, slug: str, ref: str | None) -> ResolvedRepository:
         _raise_if_stopped(self.cancel_requested, self.deadline, self.monotonic)
@@ -460,24 +473,27 @@ class _BoundedResolver:
             deadline=self.deadline,
         )
 
-    def participation(
-        self, *, slug: str, pinned_sha: str, github_login: str
-    ) -> RepositoryParticipation | None:
-        _raise_if_stopped(self.cancel_requested, self.deadline, self.monotonic)
-        collect = getattr(self.participation_resolver or self.delegate, "participation", None)
-        if not callable(collect):
-            return None
-        result = collect(
-            slug=slug,
-            pinned_sha=pinned_sha,
-            github_login=github_login,
-            cancel_requested=self.cancel_requested,
-            deadline=self.deadline,
-        )
-        _raise_if_stopped(self.cancel_requested, self.deadline, self.monotonic)
-        if result is not None and not isinstance(result, RepositoryParticipation):
-            raise IndexPipelineError("participation_invalid")
-        return result
+
+def _collect_participation(
+    collector: Callable[..., RepositoryParticipation],
+    cancel_requested: Callable[[], bool],
+    deadline: float,
+    monotonic: Callable[[], float],
+    *,
+    slug: str,
+    pinned_sha: str,
+    github_login: str,
+) -> RepositoryParticipation:
+    _raise_if_stopped(cancel_requested, deadline, monotonic)
+    result = collector(
+        slug=slug,
+        pinned_sha=pinned_sha,
+        github_login=github_login,
+        cancel_requested=cancel_requested,
+        deadline=deadline,
+    )
+    _raise_if_stopped(cancel_requested, deadline, monotonic)
+    return result
 
 
 def _raise_if_stopped(

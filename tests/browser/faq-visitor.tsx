@@ -21,16 +21,16 @@ window.fetch = async (input) => {
   let value;
   if (url.pathname === "/api/public/status") value = { chat_available: false };
   else if (url.pathname === "/api/public/profile") value = {
-    index: { version: bundle },
+    schema_version: 1, locale, index: { version: bundle, built_at: "2026-09-28T00:00:00Z", repository_count: 0 },
     profile: { display_name: "Synthetic owner", headline: "Fixture portfolio", bio: "Safe fixture", greeting: "Hello", location: null, avatar_url: null, links: [] },
     repositories: [], suggested_questions: [],
-    character: { mode: "builtin", asset_url: "/character.png", revision: 1, frame_duration_ms: 160, movement: "none" },
+    character: { mode: "builtin", asset_url: "/api/public/character.png", revision: 1, frame_duration_ms: 160, movement: "none" },
   };
   else if (url.pathname === "/api/public/faq") {
     calls++;
     value = { bundle_id: bundle, locale, entries: approved ? [{
       question: locale === "en" ? "Approved question" : "已核准的問題",
-      answer_markdown: locale === "en" ? "APPROVED_EN_ANSWER" : "APPROVED_ZH_ANSWER",
+      variants: [], answer_markdown: locale === "en" ? "APPROVED_EN_ANSWER" : "APPROVED_ZH_ANSWER",
       citations: [{ id: "S1", evidence_class: "REPOSITORY_FACT", repository: "owner/demo", commit_sha: "a".repeat(40), path: "README.md", start_line: 1, end_line: 1, title: "Synthetic evidence", excerpt: "Fixture evidence", url: "https://github.com/owner/demo/blob/" + "a".repeat(40) + "/README.md#L1" }],
     }] : [] };
     if (delay) {

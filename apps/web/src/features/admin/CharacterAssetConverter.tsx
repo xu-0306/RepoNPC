@@ -34,6 +34,7 @@ export interface CharacterAssetBody {
   width: number;
   height: number;
   png_base64: string;
+  png_url?: string;
 }
 
 interface CharacterConversionBody {
@@ -700,6 +701,7 @@ export function CharacterAssetConverter({
         : baseAsset
       : null;
   const previewAsset = alignedAsset?.png_base64 ?? baseAsset?.png_base64 ?? "";
+  const previewAssetUrl = alignedAsset ? undefined : baseAsset?.png_url;
   const previewOffsets = alignedAsset ? undefined : alignmentOffsets;
   const comparisonFrame =
     result?.edge_cleanup?.affected_frames.find(
@@ -834,6 +836,7 @@ export function CharacterAssetConverter({
                   height={candidate.asset.height}
                   label={`${copy.candidates} ${index + 1}: ${candidate.source_path}`}
                   pngBase64={candidate.asset.png_base64}
+                  pngUrl={candidate.asset.png_url}
                   width={candidate.asset.width}
                 />
                 <code>{candidate.source_path}</code>
@@ -866,6 +869,7 @@ export function CharacterAssetConverter({
                 height={64}
                 label={copy.stateLabels[previewState]}
                 pngBase64={previewAsset}
+                pngUrl={previewAssetUrl}
                 state={previewState}
                 width={64}
               />
@@ -920,6 +924,7 @@ export function CharacterAssetConverter({
                           height={64}
                           label={`${label} · ${copy.stateLabels[previewState]} · ${copy.alignmentFrame} ${comparisonFrame + 1}`}
                           pngBase64={asset.png_base64}
+                          pngUrl={asset.png_url}
                           state={previewState}
                           width={64}
                         />
@@ -1138,6 +1143,7 @@ export function CharacterAssetConverter({
                 height={result.asset.height}
                 label={copy.sheetPreview}
                 pngBase64={previewAsset}
+                pngUrl={previewAssetUrl}
                 width={result.asset.width}
               />
               <h3>{copy.report}</h3>

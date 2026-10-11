@@ -106,12 +106,12 @@ retrieval:
     max_corpus_text_bytes: 104857600
     max_evidence_records: 50000
   embedding:
-    adapter: local_sentence_transformers
-    model: intfloat/multilingual-e5-small
-    dimension: 384
+    adapter: builtin_onnx
+    model: BAAI/bge-m3:5617a9f61b028005a4858fdac845db406aefb181
+    dimension: 1024
     normalized: true
-    query_prefix: 'query: '
-    passage_prefix: 'passage: '
+    query_prefix: ''
+    passage_prefix: ''
   fusion:
     rrf_k: 60
     lexical_weight: 1.0

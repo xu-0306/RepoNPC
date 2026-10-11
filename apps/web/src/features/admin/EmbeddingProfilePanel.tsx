@@ -10,14 +10,14 @@ import type { ModelConnectionView } from "./ModelConnectionPanel";
 
 export interface EmbeddingProfileView {
   profile_id: string;
-  provider: "ollama" | "openai_compatible" | "vllm";
+  provider: "ollama" | "openai_compatible" | "vllm" | "builtin_onnx";
   model_id: string;
   dimension: number | null;
   query_prefix?: string;
   passage_prefix?: string;
   connection_revision?: number;
   normalized: boolean;
-  connection_reference: string;
+  connection_reference: string | null;
   status:
     | "probe"
     | "reindex_required"
@@ -42,7 +42,7 @@ export interface EmbeddingModelCatalogEntry {
 }
 
 export interface EmbeddingProfileDraft {
-  provider: EmbeddingProfileView["provider"];
+  provider: Exclude<EmbeddingProfileView["provider"], "builtin_onnx">;
   model_id: string;
   dimension: number | null;
   normalized: true;
@@ -156,9 +156,11 @@ const COPY = {
 
 function connectionLabel(
   connections: ModelConnectionView[],
-  connectionId: string,
+  connectionId: string | null,
   locale: Locale,
 ): string {
+  if (connectionId === null)
+    return locale === "zh-TW" ? "本機內建模型" : "Built-in local model";
   const connection = connections.find(
     (candidate) => candidate.connection_id === connectionId,
   );
@@ -225,7 +227,7 @@ export function EmbeddingProfilePanel({
 
   function edit(profile: EmbeddingProfileView) {
     setEditingId(profile.profile_id);
-    setConnection(profile.connection_reference);
+    setConnection(profile.connection_reference ?? "");
     setModel(profile.model_id);
     setDimension(profile.dimension === null ? "" : String(profile.dimension));
     setQueryPrefix(profile.query_prefix ?? "");
@@ -393,9 +395,13 @@ export function EmbeddingProfilePanel({
                 <dd>
                   {profile.provider === "openai_compatible"
                     ? "OpenAI-compatible"
-                    : profile.provider === "vllm"
-                      ? "vLLM"
-                      : "Ollama"}
+                    : profile.provider === "builtin_onnx"
+                      ? locale === "zh-TW"
+                        ? "本機 ONNX · CPU"
+                        : "Local ONNX · CPU"
+                      : profile.provider === "vllm"
+                        ? "vLLM"
+                        : "Ollama"}
                 </dd>
                 <dt>{copy.connection}</dt>
                 <dd>
@@ -422,6 +428,7 @@ export function EmbeddingProfilePanel({
                 </p>
               )}
               {onUpdate &&
+                profile.provider !== "builtin_onnx" &&
                 !profile.active &&
                 profile.status !== "reindexing" && (
                   <button
@@ -456,7 +463,16 @@ export function EmbeddingProfilePanel({
                       Boolean(profile.last_error_code) ||
                       !["ready", "reindex_required"].includes(profile.status)
                     }
-                    onClick={() => onActivate(profile.profile_id)}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          locale === "zh-TW"
+                            ? "更換資料查找模型需要完整重建索引。重建完成前會保留目前公開資料。確認重建並啟用？"
+                            : "Changing the content finder model requires a full reindex. Current public data remains available until it finishes. Rebuild and activate?",
+                        )
+                      )
+                        onActivate(profile.profile_id);
+                    }}
                     type="button"
                   >
                     {profile.status === "reindex_required"

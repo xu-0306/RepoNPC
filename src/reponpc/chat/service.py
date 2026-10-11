@@ -18,6 +18,7 @@ from reponpc.chat.limits import ChatLimits, ProviderLane
 from reponpc.indexing.public_profile import PublicProfileError, parse_public_profile_bytes
 from reponpc.observability import get_safe_logger
 from reponpc.providers import ProviderMessage, ProviderUsage
+from reponpc.providers.response_diagnostics import ProviderResponseError, ResponseIssue
 from reponpc.providers.runtime import ProviderRuntime
 
 _LOGGER = get_safe_logger(__name__)
@@ -51,6 +52,9 @@ class ChatCancelledError(RuntimeError):
 class GroundedChatService:
     """Run bounded retrieval and publish only a fully validated answer."""
 
+    supports_progress = True
+    supports_public_summary = True
+
     def __init__(
         self,
         *,
@@ -78,6 +82,8 @@ class GroundedChatService:
         cancel_requested: threading.Event | None = None,
         timeout_seconds: float | None = None,
         allow_retry: bool = True,
+        on_progress: Callable[[str], None] | None = None,
+        on_summary: Callable[[str], None] | None = None,
     ) -> ChatDelivery:
         """Admit the request before retrieval; reserve provider only for calls."""
 
@@ -90,6 +96,8 @@ class GroundedChatService:
             lane=ProviderLane.PUBLIC_CHAT,
             timeout_seconds=timeout_seconds,
             allow_retry=allow_retry,
+            on_progress=on_progress,
+            on_summary=on_summary,
         )
 
     def answer_for_review(
@@ -97,8 +105,6 @@ class GroundedChatService:
         *,
         message: str,
         locale: Literal["zh-TW", "en"],
-        required_claim: tuple[str, str, dict[str, str]] | None = None,
-        excluded_bundle_id: str | None = None,
     ) -> ChatDelivery:
         """Use the normal validator and retrieval under owner provider admission."""
 
@@ -109,8 +115,6 @@ class GroundedChatService:
             client_ip="",
             cancel_requested=None,
             lane=ProviderLane.ADMIN_SINGLE,
-            required_claim=required_claim,
-            excluded_bundle_id=excluded_bundle_id,
         )
 
     def _answer(
@@ -122,10 +126,10 @@ class GroundedChatService:
         client_ip: str | None,
         cancel_requested: threading.Event | None,
         lane: ProviderLane,
-        required_claim: tuple[str, str, dict[str, str]] | None = None,
-        excluded_bundle_id: str | None = None,
         timeout_seconds: float | None = None,
         allow_retry: bool = True,
+        on_progress: Callable[[str], None] | None = None,
+        on_summary: Callable[[str], None] | None = None,
     ) -> ChatDelivery:
         duration = self._timeout_seconds if timeout_seconds is None else timeout_seconds
         if isinstance(duration, bool) or not math.isfinite(duration) or duration <= 0:
@@ -145,13 +149,8 @@ class GroundedChatService:
             admission_context = self._limits.acquire(client_ip)
         with admission_context, _bundle_snapshot(self._bundles) as (index, bundle_id, directory):
             _raise_if_cancelled(cancel_requested)
-            required_id = None
-            if required_claim is not None:
-                from reponpc.bundles.manager import BundleActivationError
-
-                required_id = index.owner_claim_evidence(*required_claim)
-                if bundle_id == excluded_bundle_id or required_id is None:
-                    raise BundleActivationError("FAQ_REWRITE_NOT_INDEXED")
+            if on_progress:
+                on_progress("searching")
             owner_name, suggested_questions, contact_link = self._answer_profile(
                 index, locale, directory=directory
             )
@@ -164,26 +163,6 @@ class GroundedChatService:
                 )[0]
             _raise_if_cancelled(cancel_requested)
             evidence_ids = index.hybrid_candidates(message, query_vector=query_vector)
-            if required_id is not None:
-                evidence_ids = [
-                    required_id,
-                    *(item for item in evidence_ids if item != required_id),
-                ]
-                policy = index.retrieval_policy["fusion"]
-                counts: dict[str, int] = {}
-                bounded: list[str] = []
-                for evidence_id in evidence_ids:
-                    evidence = index.evidence(evidence_id)
-                    if evidence is None:
-                        continue
-                    slug = evidence.repository_slug
-                    if counts.get(slug, 0) >= policy["max_records_per_repository"]:
-                        continue
-                    counts[slug] = counts.get(slug, 0) + 1
-                    bounded.append(evidence_id)
-                    if len(bounded) >= policy["final_context_records"]:
-                        break
-                evidence_ids = bounded
             capabilities = self._providers.chat.capabilities()
             fixed_messages = _provider_messages(
                 message,
@@ -199,10 +178,6 @@ class GroundedChatService:
                 capabilities.max_context_tokens - self._max_output_tokens - prompt_overhead
             )
             if evidence_budget <= 0:
-                if required_id is not None:
-                    from reponpc.bundles.manager import BundleActivationError
-
-                    raise BundleActivationError("FAQ_CONTEXT_INSUFFICIENT")
                 _raise_if_cancelled(cancel_requested)
                 validated = validate_v2_answer(
                     {}, {}, locale, suggested_questions=suggested_questions
@@ -224,10 +199,6 @@ class GroundedChatService:
                 max_context_tokens=evidence_budget,
                 token_counter=_conservative_token_count,
             )
-            if required_id is not None and required_id not in packed.evidence_ids:
-                from reponpc.bundles.manager import BundleActivationError
-
-                raise BundleActivationError("FAQ_CONTEXT_INSUFFICIENT")
             selected = {
                 f"S{ordinal}": evidence
                 for ordinal, evidence_id in enumerate(packed.evidence_ids, start=1)
@@ -240,17 +211,55 @@ class GroundedChatService:
                 packed.text,
                 system_role=capabilities.system_role,
             )
+            if on_progress:
+                on_progress("evidence_ready")
+
+            def observe(stage: str) -> None:
+                _raise_if_cancelled(cancel_requested)
+                self._remaining(deadline)
+                if on_progress and stage in {"thinking", "generating"}:
+                    on_progress(stage)
+
+            def summary(text: str) -> None:
+                # The selected Responses adapter has already applied its privacy
+                # projection; cancellation/deadline still govern publication.
+                _raise_if_cancelled(cancel_requested)
+                self._remaining(deadline)
+                if on_summary:
+                    on_summary(text)
+
             with _provider_permit(self._limits, lane):
-                generate = (
-                    self._providers.generate if allow_retry else self._providers.generate_once
-                )
-                result = generate(
-                    provider_messages,
-                    _ANSWER_SCHEMA,
-                    self._max_output_tokens,
-                    self._remaining(deadline),
-                )
+                if on_progress:
+                    on_progress("waiting_model")
+                    try:
+                        result = self._providers.generate_with_progress(
+                            provider_messages,
+                            _ANSWER_SCHEMA,
+                            self._max_output_tokens,
+                            self._remaining(deadline),
+                            on_progress=observe,
+                            on_summary=summary if on_summary else None,
+                            cancelled=lambda: (
+                                cancel_requested is not None and cancel_requested.is_set()
+                            ),
+                        )
+                    except InterruptedError:
+                        raise ChatCancelledError("chat request cancelled") from None
+                else:
+                    generate = (
+                        self._providers.generate if allow_retry else self._providers.generate_once
+                    )
+                    result = generate(
+                        provider_messages,
+                        _ANSWER_SCHEMA,
+                        self._max_output_tokens,
+                        self._remaining(deadline),
+                    )
             _raise_if_cancelled(cancel_requested)
+            if result.finish_reason == "length":
+                raise ProviderResponseError(ResponseIssue.OUTPUT_LIMIT)
+            if on_progress:
+                on_progress("validating")
             validated = validate_v2_answer(
                 result.content,
                 selected,

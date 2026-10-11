@@ -116,7 +116,7 @@ def test_success_stream_has_exact_order_headers_and_server_owned_citation() -> N
     assert service.calls == 1
 
 
-def test_prestream_limit_failure_is_safe_json_and_has_no_sse_events() -> None:
+def test_worker_limit_failure_is_one_safe_terminal_sse_event() -> None:
     service = FixtureChatService(error=ChatLimitError("DAILY_BUDGET_EXHAUSTED", 3600))
     application = create_app(
         setup_state=ready_state(),
@@ -128,10 +128,11 @@ def test_prestream_limit_failure_is_safe_json_and_has_no_sse_events() -> None:
             "/api/public/chat/stream", json={"message": "Question", "locale": "zh-TW"}
         )
 
-    assert response.status_code == 429
-    assert response.json()["error"]["code"] == "DAILY_BUDGET_EXHAUSTED"
-    assert response.json()["error"]["retry_after_seconds"] == 3600
-    assert "event:" not in response.text
+    assert response.status_code == 200
+    payload = json.loads(response.text.split("event: error\ndata: ", 1)[1].split("\n", 1)[0])
+    assert payload["error"]["code"] == "DAILY_BUDGET_EXHAUSTED"
+    assert payload["error"]["retry_after_seconds"] == 3600
+    assert response.text.count("event: error") == 1 and "event: complete" not in response.text
 
 
 def test_unready_rejection_occurs_before_chat_service_call() -> None:
@@ -147,7 +148,7 @@ def test_unready_rejection_occurs_before_chat_service_call() -> None:
         )
 
     assert response.status_code == 503
-    assert response.json()["error"]["code"] == "INDEX_UNAVAILABLE"
+    assert response.json()["error"]["code"] == "SERVICE_NOT_READY"
     assert service.calls == 0
 
 
@@ -307,7 +308,7 @@ def test_midstream_internal_failure_emits_one_common_terminal_error(
     ]
     assert events == ["metadata", "error"]
     error_data = json.loads(response.text.split("event: error\ndata: ", 1)[1].split("\n", 1)[0])
-    assert error_data["error"]["code"] == "PROVIDER_ERROR"
+    assert error_data["error"]["code"] == "REQUEST_FAILED"
     correlation_id = response.headers["x-request-id"]
     assert error_data["error"]["request_id"] == correlation_id
     assert "MIDSTREAM_SECRET_CANARY_782dc2" not in response.text
@@ -375,19 +376,21 @@ def test_public_boundary_enforces_overall_timeout_for_noncooperative_service() -
             "/api/public/chat/stream", json={"message": "Question", "locale": "en"}
         )
 
-    assert response.status_code == 504
-    assert response.json()["error"]["code"] == "PROVIDER_TIMEOUT"
-    assert "event:" not in response.text
+    assert response.status_code == 200
+    assert '"code":"REQUEST_TIMEOUT"' in response.text
+    assert response.text.count("event: error") == 1 and "event: complete" not in response.text
 
 
-def test_client_disconnect_stops_http_request_without_sending_a_response() -> None:
+def test_client_disconnect_cancels_worker_without_answer_events() -> None:
     started = threading.Event()
     release = threading.Event()
+    cancellations: list[threading.Event] = []
 
     class BlockingService(FixtureChatService):
         timeout_seconds = 2.0
 
         def answer(self, **kwargs: object) -> ChatDelivery:
+            cancellations.append(kwargs["cancel_requested"])  # type: ignore[arg-type]
             started.set()
             release.wait(1.0)
             return ChatDelivery("fixture-index", "en", 0, "Late answer.", (), "stop", None, False)
@@ -440,4 +443,47 @@ def test_client_disconnect_stops_http_request_without_sending_a_response() -> No
         await asyncio.sleep(0.05)
 
     asyncio.run(exercise())
-    assert sent == []
+    assert cancellations and cancellations[0].is_set()
+    assert not any(b"event: token" in frame.get("body", b"") for frame in sent)
+
+
+def test_local_chat_asgi_heartbeat_identity_and_usage_before_validated_answer() -> None:
+    from tests.security.test_visitor_gateway_review import _HeldVisitorAnswer, _raw_asgi_request
+
+    service = _HeldVisitorAnswer()
+    application = create_app(setup_state=ready_state(), chat_service=service)  # type: ignore[arg-type]
+    application.state.sse_keepalive_seconds = 0.01
+
+    async def exercise() -> None:
+        observed = asyncio.Event()
+        captured: list[dict] = []
+
+        def inspect(frame: dict) -> None:
+            captured.append(frame)
+            if frame.get("body", b"").startswith(b": keepalive"):
+                observed.set()
+
+        task = asyncio.create_task(
+            _raw_asgi_request(
+                application,
+                raw_path=b"/api/public/chat/stream",
+                method="POST",
+                peer="203.0.113.9",
+                headers=[(b"content-type", b"application/json")],
+                body=b'{"message":"Question","locale":"en"}',
+                on_send=inspect,
+            )
+        )
+        try:
+            await asyncio.wait_for(observed.wait(), 1)
+            assert captured[0]["status"] == 200 and not service.finished.is_set()
+            assert not any(b"event: token" in frame.get("body", b"") for frame in captured)
+        finally:
+            service.release.set()
+        frames = await asyncio.wait_for(task, 1)
+        payload = b"".join(frame.get("body", b"") for frame in frames)
+        assert payload.count(b"event: complete") == 1 and b'"input_tokens":41' in payload
+        assert service.calls[0]["client_ip"] == "203.0.113.9"
+        assert service.calls[0]["allow_retry"] is True
+
+    asyncio.run(exercise())

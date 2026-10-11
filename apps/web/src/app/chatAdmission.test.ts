@@ -111,4 +111,43 @@ describe("configured chat history admission", () => {
     );
     expect(send).toHaveBeenCalledTimes(1);
   });
+
+  it("sends Pages share site chat to the gateway without credentials, including the retry", async () => {
+    const gateway = "https://fixture.ts.net";
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce(rejected())
+      .mockResolvedValueOnce(new Response("ok"));
+    await requestPortfolioChat(
+      "Next",
+      "en",
+      exchanges,
+      new AbortController().signal,
+      send,
+      gateway,
+    );
+    expect(send).toHaveBeenCalledTimes(2);
+    for (const [url, init] of send.mock.calls) {
+      expect(url).toBe(`${gateway}/api/public/chat/stream`);
+      expect(init.credentials).toBe("omit");
+      expect(Object.keys(JSON.parse(init.body)).sort()).toEqual([
+        "history",
+        "locale",
+        "message",
+      ]);
+    }
+  });
+
+  it("keeps local chat same-origin with default credentials", async () => {
+    const send = vi.fn().mockResolvedValue(new Response("ok"));
+    await requestPortfolioChat(
+      "Next",
+      "en",
+      [],
+      new AbortController().signal,
+      send,
+    );
+    expect(send.mock.calls[0][0]).toBe("/api/public/chat/stream");
+    expect(send.mock.calls[0][1]).not.toHaveProperty("credentials");
+  });
 });

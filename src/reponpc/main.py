@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
+import sqlite3
+import sys
 import uuid
 from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager, closing, suppress
 from dataclasses import replace
 from pathlib import Path
+from threading import Lock
+from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -21,6 +26,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from reponpc.admin.analysis_selection import AnalysisModelPair, AnalysisSelectionRegistry
 from reponpc.admin.auth import AdminSessionService
+from reponpc.admin.backup_resources import validate_restore_resources
 from reponpc.admin.batch_execution import PinnedBatchItemRunner
 from reponpc.admin.batch_resolver import (
     ArchiveSafetyLimits,
@@ -52,6 +58,8 @@ from reponpc.admin.faq import ReviewedFaq
 from reponpc.admin.github import GitHubAdminClient, UrllibGitHubAdminTransport
 from reponpc.admin.local_portfolio import LocalPortfolioError, LocalPortfolioStore
 from reponpc.admin.local_publication import LocalArchiveResolver, LocalPublication
+from reponpc.admin.maintenance import MaintenanceError, MaintenanceService
+from reponpc.admin.maintenance_host import MaintenanceHost
 from reponpc.admin.model_connections import (
     ModelConnectionError,
     ModelConnectionRegistry,
@@ -64,22 +72,27 @@ from reponpc.admin.onboarding import (
     analysis_generation_policy_identity,
 )
 from reponpc.admin.operations import AdminOperations
-from reponpc.api.admin import _normalized_origin, create_admin_router
+from reponpc.admin.preview_assets import PreviewAssetStore
+from reponpc.admin.scene import AdminSceneService, SceneServiceError
+from reponpc.api.admin import create_admin_router
 from reponpc.api.public import SetupState, create_public_router, error_response
 from reponpc.api.visitor_gateway import VisitorGateway
-from reponpc.bundles.manager import BundleManager
+from reponpc.api.visitor_ingress import VisitorChatWorkers
+from reponpc.bundles.manager import BundleActivationError, BundleManager
 from reponpc.bundles.updater import BundleUpdater, UrllibBundleTransport
 from reponpc.chat.limits import ChatLimits
 from reponpc.chat.service import GroundedChatService
 from reponpc.config.environment import (
     EnvironmentSettings,
     EnvironmentValidationError,
+    _canonical_origin,
     load_environment,
 )
 from reponpc.i18n.catalog import translate
 from reponpc.indexing.github import GitHubSourceResolver
 from reponpc.indexing.sources import EmbeddingIdentity, EmbeddingProvider
 from reponpc.providers import (
+    BuiltinOnnxEmbeddingProvider,
     ChatProvider,
     OllamaChatProvider,
     OllamaEmbeddingProvider,
@@ -89,8 +102,18 @@ from reponpc.providers import (
     ProviderError,
     RuntimeEmbeddingProvider,
 )
+from reponpc.providers.builtin_artifacts import (
+    BuiltinArtifactError,
+    builtin_embedding_identity,
+    load_builtin_manifest,
+    verify_builtin_artifacts,
+)
+from reponpc.providers.builtin_download import download_builtin_model
+from reponpc.providers.builtin_http import PinnedBuiltinHttpTransport
+from reponpc.providers.openai_responses import OpenAIResponsesChatProvider
 from reponpc.providers.runtime import ProviderRuntime
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
+from reponpc.scene.registry import default_scene_registry
 
 
 class PublicBoundaryMiddleware:
@@ -142,24 +165,62 @@ class _BuiltWebFiles(StaticFiles):
         if getattr(state, "deployment_profile", None) == "production":
             hosts = Headers(scope=scope).getlist("host")
             authority = (
-                _normalized_origin(f"{scope['scheme']}://{hosts[0]}") if len(hosts) == 1 else ""
+                _canonical_origin(f"{scope['scheme']}://{hosts[0]}") if len(hosts) == 1 else ""
             )
             if not authority or authority not in state.admin_origins:
                 return Response(status_code=404)
         request_path = str(scope.get("path", path))
         if request_path == "/api" or request_path.startswith("/api/"):
             return await super().get_response(path, scope)
-        if not self._is_spa_route(path):
-            return await super().get_response(path, scope)
+        if (
+            request_path in {"/", "/index.html"}
+            and (Path(self.directory or "") / "visitor.html").is_file()
+        ):
+            visitor_response = FileResponse(Path(self.directory or "") / "visitor.html")
+            return await asyncio.to_thread(
+                self._document_response, state, visitor_response, scope["method"]
+            )
         try:
             response = await super().get_response(path, scope)
         except StarletteHTTPException as exc:
-            if exc.status_code != 404:
+            if exc.status_code != 404 or not self._is_spa_route(path):
                 raise
-            return FileResponse(Path(self.directory or "") / "index.html")
-        if response.status_code != 404:
+            response = FileResponse(Path(self.directory or "") / "index.html")
+        if response.status_code == 404 and self._is_spa_route(path):
+            response = FileResponse(Path(self.directory or "") / "index.html")
+        if request_path == "/admin" or request_path.startswith("/admin/"):
             return response
-        return FileResponse(Path(self.directory or "") / "index.html")
+        if isinstance(response, FileResponse) and Path(response.path).suffix == ".html":
+            return await asyncio.to_thread(
+                self._document_response, state, response, scope["method"]
+            )
+        return response
+
+    def _document_response(self, state: Any, original: FileResponse, method: str) -> Response:
+        from reponpc.api.visitor_document import render_published_visitor_document
+        from reponpc.api.visitor_ingress import _regular_build_file
+
+        try:
+            root = Path(self.directory or "").absolute()
+            file = _regular_build_file(
+                root, Path(original.path).absolute().relative_to(root).as_posix()
+            )
+            if file.stat().st_size > 1024 * 1024:
+                return Response(status_code=503)
+            document = file.read_bytes()
+            if b"data-owner-mode" not in document and b"data-visitor-toggle" not in document:
+                return original
+            document = render_published_visitor_document(
+                document,
+                bundle_manager=getattr(state, "bundle_manager", None),
+                scene_supplier=getattr(state, "scene_supplier", lambda: None),
+            )
+        except (OSError, ValueError, BundleActivationError):
+            return Response(status_code=503)
+        response = Response(document, media_type="text/html", headers={"Cache-Control": "no-store"})
+        if method == "HEAD":
+            response.body = b""
+        return response
 
     @staticmethod
     def _is_spa_route(path: str) -> bool:
@@ -174,6 +235,8 @@ class _BuiltWebFiles(StaticFiles):
 
 
 def _default_web_dist() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "web_dist"  # type: ignore[attr-defined]
     return Path(__file__).resolve().parents[2] / "apps" / "web" / "dist"
 
 
@@ -210,6 +273,7 @@ def create_app(
 ) -> FastAPI:
     """Construct the real application and its optional immutable-bundle lifecycle."""
 
+    default_scene_registry()
     if analysis_cleanup_seconds <= 0:
         raise ValueError("analysis cleanup interval must be positive")
     state = setup_state or SetupState()
@@ -249,7 +313,6 @@ def create_app(
                 model_provider=application.state.provider_adapter,
                 model_last_checked_at=provider_status.checked_at,
             )
-            _observe_visitor_gateway(application)
 
         async def provider_lifecycle() -> None:
             while not stopped.is_set():
@@ -265,6 +328,17 @@ def create_app(
                 except TimeoutError:
                     await asyncio.to_thread(poll_and_publish_provider_state)
 
+        def cleanup_runtime_state() -> None:
+            batch_service = application.state.analysis_batch_service
+            if batch_service is not None:
+                batch_service.cleanup_expired()
+            scene = application.state.scene_supplier()
+            if scene is not None and scene.database is not None and runtime_storage_usable:
+                try:
+                    scene.cleanup_expired_background_drafts()
+                except (SceneServiceError, RuntimeDatabaseError):
+                    logging.getLogger(__name__).warning("Scene draft cleanup unavailable")
+
         async def analysis_cleanup_lifecycle() -> None:
             while not stopped.is_set():
                 try:
@@ -277,18 +351,10 @@ def create_app(
                         ),
                     )
                 except TimeoutError:
-                    batch_service = application.state.analysis_batch_service
-                    if batch_service is not None:
-                        await asyncio.to_thread(batch_service.cleanup_expired)
+                    await asyncio.to_thread(cleanup_runtime_state)
 
         polling_tasks: list[asyncio.Task[None]] = []
-        if provider is not None:
-            await asyncio.to_thread(poll_and_publish_provider_state)
-        polling_tasks.append(asyncio.create_task(provider_lifecycle()))
         batch_service = application.state.analysis_batch_service
-        if batch_service is not None:
-            await asyncio.to_thread(batch_service.cleanup_expired)
-            polling_tasks.append(asyncio.create_task(analysis_cleanup_lifecycle()))
 
         updater = application.state.bundle_updater
         manager = application.state.bundle_manager
@@ -318,7 +384,6 @@ def create_app(
                 ),
                 public_directory=getattr(manager, "active_public_directory", lambda: None)(),
             )
-            _observe_visitor_gateway(application)
 
         async def polling_lifecycle() -> None:
             while not stopped.is_set():
@@ -332,32 +397,64 @@ def create_app(
                 except TimeoutError:
                     await asyncio.to_thread(poll_and_publish_state)
 
-        if manager is not None:
-            await asyncio.to_thread(poll_and_publish_state)
-            if updater is not None:
-                polling_tasks.append(asyncio.create_task(polling_lifecycle()))
         gateway = getattr(application.state, "visitor_gateway", None)
         try:
+            if provider is not None:
+                await asyncio.to_thread(poll_and_publish_provider_state)
+            polling_tasks.append(asyncio.create_task(provider_lifecycle()))
+            if batch_service is not None or (
+                configured_database is not None and runtime_storage_usable
+            ):
+                await asyncio.to_thread(cleanup_runtime_state)
+                polling_tasks.append(asyncio.create_task(analysis_cleanup_lifecycle()))
+            if manager is not None:
+                await asyncio.to_thread(poll_and_publish_state)
+                if updater is not None:
+                    polling_tasks.append(asyncio.create_task(polling_lifecycle()))
             if gateway is not None and runtime_storage_usable:
                 with suppress(Exception):
                     await gateway.resume()
             yield
         finally:
+            shutdown_failed = False
             if gateway is not None:
-                with suppress(Exception):
+                try:
                     await gateway.shutdown()
+                except Exception:
+                    shutdown_failed = True
             stopped.set()
-            for polling_task in polling_tasks:
-                polling_task.cancel()
-            for polling_task in polling_tasks:
-                with suppress(asyncio.CancelledError):
-                    await polling_task
+            # Wait for to_thread work to finish: cancellation would leave its writer alive.
+            results = await asyncio.gather(*polling_tasks, return_exceptions=True)
+            shutdown_failed = shutdown_failed or any(
+                isinstance(item, BaseException) for item in results
+            )
+            public_workers = application.state.public_chat_workers
+            public_workers.cancel_all()
+            deadline = asyncio.get_running_loop().time() + 30
+            while public_workers.active_count and asyncio.get_running_loop().time() < deadline:
+                await asyncio.sleep(0.01)
+            if public_workers.active_count or shutdown_failed:
+                maintenance = getattr(application.state, "maintenance_service", None)
+                if maintenance is not None:
+                    await asyncio.to_thread(maintenance.close, abort_restore=True)
+                raise MaintenanceError("MAINTENANCE_STOP_FAILED")
             reindex = getattr(application.state, "embedding_reindex_coordinator", None)
             if reindex is not None:
                 await asyncio.to_thread(reindex.shutdown)
             model_operations = getattr(application.state, "ollama_model_operations", None)
             if model_operations is not None:
                 await asyncio.to_thread(model_operations.shutdown)
+            builtin = getattr(application.state, "builtin_embedding_provider", None)
+            if builtin is not None:
+                await asyncio.to_thread(builtin.close)
+            maintenance = getattr(application.state, "maintenance_service", None)
+            if maintenance is not None:
+                await asyncio.to_thread(maintenance.close)
+            if (
+                manager is not None
+                and getattr(application.state, "maintenance_host", None) is not None
+            ):
+                await asyncio.to_thread(manager.close)
 
     application = FastAPI(
         title="RepoNPC",
@@ -411,6 +508,8 @@ def create_app(
     application.state.deployment_profile = None
     application.state.visitor_gateway = None
     application.state.admin_operations = admin_operations
+    application.state.scene_service = None
+    application.state.preview_asset_store = PreviewAssetStore()
     application.state.analysis_batch_service = analysis_batch_service
     application.state.analysis_cleanup_seconds = analysis_cleanup_seconds
     application.state.chat_profile_registry = (
@@ -421,9 +520,36 @@ def create_app(
     application.state.ollama_model_operations = (
         admin_operations.ollama_model_operations if admin_operations is not None else None
     )
+    # Track detached synchronous chat writers; ChatLimits still owns admission policy.
+    application.state.public_chat_workers = VisitorChatWorkers(None)
+
+    def scene_service_supplier() -> AdminSceneService | None:
+        manager = application.state.bundle_manager
+        if not isinstance(manager, BundleManager):
+            return None
+        database = application.state.runtime_database
+        operations = application.state.admin_operations
+        portfolio = operations.local_portfolio if operations is not None else None
+        current = application.state.scene_service
+        if (
+            isinstance(current, AdminSceneService)
+            and current.manager is manager
+            and current.database is database
+            and current.portfolio is portfolio
+        ):
+            return current
+        current = AdminSceneService(
+            manager=manager,
+            database=database if isinstance(database, RuntimeDatabase) else None,
+            data_directory=manager.data_directory,
+            portfolio=portfolio,
+        )
+        application.state.scene_service = current
+        return current
+
+    application.state.scene_supplier = scene_service_supplier
 
     def faq_service() -> ReviewedFaq | None:
-        operations = application.state.admin_operations
         manager = application.state.bundle_manager
         database = application.state.runtime_database
         if manager is None or database is None:
@@ -432,7 +558,6 @@ def create_app(
             database=database,
             bundles=manager,
             chat_supplier=lambda: application.state.chat_service,
-            store=operations.local_portfolio if operations else None,
         )
 
     application.state.faq_supplier = faq_service
@@ -440,6 +565,7 @@ def create_app(
     application.include_router(
         create_public_router(
             state,
+            chat_workers=application.state.public_chat_workers,
             state_supplier=lambda: application.state.reponpc,
             bundle_manager_supplier=lambda: application.state.bundle_manager,
             chat_service_supplier=lambda: application.state.chat_service,
@@ -447,11 +573,15 @@ def create_app(
             max_message_characters=max_message_characters,
             max_history_messages=max_history_messages,
             max_history_characters=max_history_characters,
+            keepalive_seconds_supplier=lambda: getattr(
+                application.state, "sse_keepalive_seconds", 15
+            ),
             chat_request_limits_supplier=lambda: (
                 application.state.max_message_characters,
                 application.state.max_history_messages,
                 application.state.max_history_characters,
             ),
+            scene_supplier=scene_service_supplier,
         )
     )
     application.include_router(
@@ -461,6 +591,8 @@ def create_app(
             operations_supplier=lambda: application.state.admin_operations,
             faq_supplier=faq_service,
             gateway_supplier=lambda: application.state.visitor_gateway,
+            scene_supplier=scene_service_supplier,
+            preview_assets_supplier=lambda: application.state.preview_asset_store,
         )
     )
     build_dir = web_dist or _default_web_dist()
@@ -479,6 +611,20 @@ def run() -> None:
         settings = load_environment()
     except EnvironmentValidationError as exc:
         raise SystemExit("deployment environment is invalid") from exc
+    application = prepare_application(settings)
+    uvicorn.run(
+        getattr(application.state, "maintenance_host", application),
+        host=settings.host,
+        port=settings.port,
+        factory=False,
+        proxy_headers=settings.deployment_profile != "loopback_evaluation",
+        forwarded_allow_ips=",".join(getattr(settings, "trusted_proxy_cidrs", ())),
+    )
+
+
+def prepare_application(settings: EnvironmentSettings, *, owned_host: bool = True) -> FastAPI:
+    """Prepare the existing runtime for either ASGI or the owned desktop server."""
+
     app.state.deployment_profile = settings.deployment_profile
     app.state.admin_origins = getattr(settings, "admin_origins", ())
     try:
@@ -507,18 +653,79 @@ def run() -> None:
                 chat_service_supplier=lambda: app.state.chat_service,
                 faq_supplier=app.state.faq_supplier,
                 web_dist=_default_web_dist(),
+                scene_supplier=app.state.scene_supplier,
             )
+            _configure_maintenance(settings, runtime_database, owned_host=owned_host)
     except RuntimeDatabaseError:
         app.state.runtime_database = None
         app.state.runtime_storage_usable = False
-    uvicorn.run(
-        "reponpc.main:app",
-        host=settings.host,
-        port=settings.port,
-        factory=False,
-        proxy_headers=settings.deployment_profile != "loopback_evaluation",
-        forwarded_allow_ips=",".join(getattr(settings, "trusted_proxy_cidrs", ())),
+    return app
+
+
+def _configure_maintenance(
+    settings: EnvironmentSettings, runtime_database: RuntimeDatabase, *, owned_host: bool
+) -> None:
+    configured = app
+
+    def idle_check() -> None:
+        public_workers = configured.state.public_chat_workers
+        gateway = getattr(configured.state, "visitor_gateway", None)
+        if public_workers.active_count or (gateway is not None and gateway.workers.active_count):
+            raise MaintenanceError("MAINTENANCE_BUSY")
+        batches = getattr(configured.state, "analysis_batch_service", None)
+        if batches is not None and batches.has_live_workers():
+            raise MaintenanceError("MAINTENANCE_BUSY")
+        model_operations = getattr(configured.state, "ollama_model_operations", None)
+        if model_operations is not None and model_operations.busy():
+            raise MaintenanceError("MAINTENANCE_BUSY")
+        with runtime_database.connection() as connection:
+            queued = connection.execute(
+                "SELECT 1 FROM analysis_batches "
+                "WHERE state IN ('queued','running','paused','cancelling') LIMIT 1"
+            ).fetchone()
+            reindexing = connection.execute(
+                "SELECT 1 FROM embedding_profiles WHERE status='reindexing' LIMIT 1"
+            ).fetchone()
+        if queued or reindexing:
+            raise MaintenanceError("MAINTENANCE_BUSY")
+
+    def fresh_application() -> FastAPI:
+        global app
+        app = create_app()
+        result = prepare_application(settings, owned_host=False)
+        if not result.state.runtime_storage_usable or result.state.runtime_database is None:
+            raise MaintenanceError("RESTORE_FAILED")
+        return result
+
+    def resource_check(path: Path) -> None:
+        validate_restore_resources(path, runtime_database, settings.data_dir)
+        with closing(
+            sqlite3.connect(path.as_uri() + "?mode=ro&immutable=1", uri=True)
+        ) as connection:
+            builtin = connection.execute(
+                """SELECT 1 FROM embedding_profiles WHERE provider='builtin_onnx' AND
+                (active=1 OR profile_id IN
+                  (SELECT embedding_profile_id FROM analysis_model_selection)) LIMIT 1"""
+            ).fetchone()
+        if builtin is not None:
+            manifest = load_builtin_manifest()
+            try:
+                verify_builtin_artifacts(
+                    settings.data_dir / "models" / f"bge-m3-{manifest.revision}"
+                )
+            except BuiltinArtifactError:
+                raise MaintenanceError("RESTORE_MODEL_UNAVAILABLE") from None
+
+    configured.state.maintenance_service = MaintenanceService(
+        runtime_database,
+        resource_check=resource_check,
+        application_factory=fresh_application,
+        idle_check=idle_check,
     )
+    if owned_host:
+        configured.state.maintenance_host = MaintenanceHost(
+            configured, restart_old=fresh_application
+        )
 
 
 def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDatabase) -> None:
@@ -657,13 +864,51 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
     app.state.analysis_batch_service = analysis_batches
     embedding_identity = _configured_embedding_identity(settings)
 
+    builtin_directory = (
+        settings.data_dir / "models" / ("bge-m3-" + load_builtin_manifest().revision)
+    )
+    builtin_lock = Lock()
+    app.state.builtin_embedding_provider = None
+
+    def resolve_builtin(identity: EmbeddingIdentity) -> RuntimeEmbeddingProvider | None:
+        if identity != builtin_embedding_identity() or not any(
+            profile.provider == "builtin_onnx" and profile.identity == identity
+            for profile in embedding_profiles.list()
+        ):
+            return None
+        # Creating the adapter does not load weights. Its first inference
+        # verifies every artifact; a missing/corrupt installation fails closed.
+        with builtin_lock:
+            if app.state.builtin_embedding_provider is None:
+                app.state.builtin_embedding_provider = BuiltinOnnxEmbeddingProvider(
+                    builtin_directory
+                )
+            return app.state.builtin_embedding_provider
+
+    def install_builtin(
+        *, cancelled: Callable[[], bool], on_progress: Callable[[int, int], None]
+    ) -> None:
+        builtin_directory.parent.mkdir(parents=True, exist_ok=True)
+        download_builtin_model(
+            builtin_directory,
+            transport=PinnedBuiltinHttpTransport(),
+            cancelled=cancelled,
+            on_progress=on_progress,
+        )
+
     def resolve_embedding_profile(
         profile: EmbeddingProfile,
     ) -> RuntimeEmbeddingProvider | None:
+        if profile.provider == "builtin_onnx":
+            if profile.connection_reference is not None or profile.connection_revision != 0:
+                return None
+            return resolve_builtin(profile.identity)
         environment_provider = _environment_embedding_provider(settings, profile)
         if environment_provider is not None:
             return environment_provider
         if profile.connection_reference == "environment":
+            return None
+        if profile.connection_reference is None:
             return None
         try:
             revision = model_connections.revision_for(
@@ -753,6 +998,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
                 profile.model_id,
                 revision.secret.base_url,
                 revision.secret.api_key,
+                chat_api=revision.secret.chat_api,
             )
         except ModelConnectionError:
             return None
@@ -771,6 +1017,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
                 revision.secret.base_url,
                 revision.secret.api_key,
                 capabilities=_analysis_chat_capabilities(settings),
+                chat_api=revision.secret.chat_api,
             )
         except ModelConnectionError:
             return None
@@ -789,6 +1036,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
                 revision.secret.base_url,
                 revision.secret.api_key,
                 capabilities=_contribution_chat_capabilities(settings),
+                chat_api=revision.secret.chat_api,
             )
         except ModelConnectionError:
             return None
@@ -862,13 +1110,26 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
             chat_revision = model_connections.revision_for(
                 pair.chat_connection_id, pair.chat_connection_revision
             )
-            embedding_revision = model_connections.revision_for(
-                pair.embedding_connection_id, pair.embedding_connection_revision
-            )
-            if (
-                chat_revision.provider != pair.chat_provider
-                or embedding_revision.provider != pair.embedding_provider
-            ):
+            if chat_revision.provider != pair.chat_provider:
+                return None
+            if pair.embedding_provider == "builtin_onnx":
+                embedding = resolve_builtin(pair.embedding_identity)
+            elif pair.embedding_connection_id is not None:
+                embedding_revision = model_connections.revision_for(
+                    pair.embedding_connection_id, pair.embedding_connection_revision
+                )
+                if embedding_revision.provider != pair.embedding_provider:
+                    return None
+                embedding = _embedding_provider_from_connection(
+                    pair.embedding_provider,
+                    embedding_revision.secret.base_url,
+                    embedding_revision.secret.api_key,
+                    pair.embedding_identity,
+                    request_timeout_seconds=settings.analysis_provider_timeout_seconds,
+                )
+            else:
+                return None
+            if embedding is None:
                 return None
             return ProviderRuntime(
                 chat=_chat_provider_from_connection(
@@ -878,14 +1139,9 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
                     chat_revision.secret.base_url,
                     chat_revision.secret.api_key,
                     capabilities=_analysis_chat_capabilities(settings),
+                    chat_api=chat_revision.secret.chat_api,
                 ),
-                embedding=_embedding_provider_from_connection(
-                    pair.embedding_provider,
-                    embedding_revision.secret.base_url,
-                    embedding_revision.secret.api_key,
-                    pair.embedding_identity,
-                    request_timeout_seconds=settings.analysis_provider_timeout_seconds,
-                ),
+                embedding=embedding,
                 max_attempts=settings.analysis_generation_attempts,
                 retry_base_seconds=5.0,
             )
@@ -898,7 +1154,9 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
     app.state.analysis_selection_registry = analysis_selection
     app.state.embedding_profile_registry = embedding_profiles
     app.state.chat_profile_registry = chat_profiles
-    model_operations = OllamaModelOperationCoordinator(embedding_profiles)
+    model_operations = OllamaModelOperationCoordinator(
+        embedding_profiles, builtin_download=install_builtin
+    )
     app.state.ollama_model_operations = model_operations
 
     def list_connection_models(connection_id: str) -> tuple[str, ...]:
@@ -1002,7 +1260,7 @@ def _configure_provider_lifecycle(
         usage_reporting=True,
         health_check=True,
         max_context_tokens=settings.chat_max_context_tokens,
-        max_output_tokens=settings.chat_max_output_tokens,
+        max_output_tokens=min(settings.chat_max_output_tokens, settings.chat_max_context_tokens),
     )
     chat: ChatProvider | None = None
     selected_chat_provider = settings.chat_provider
@@ -1045,6 +1303,7 @@ def _configure_provider_lifecycle(
             else None
         )
     app.state.provider_health_seconds = settings.provider_health_seconds
+    app.state.sse_keepalive_seconds = settings.sse_keepalive_seconds
     app.state.max_message_characters = settings.max_message_characters
     app.state.max_history_messages = settings.max_history_messages
     app.state.max_history_characters = settings.max_history_characters
@@ -1077,6 +1336,7 @@ def _configure_provider_lifecycle(
         else None
     )
     app.state.provider_health_seconds = settings.provider_health_seconds
+    app.state.sse_keepalive_seconds = settings.sse_keepalive_seconds
     app.state.max_message_characters = settings.max_message_characters
     app.state.max_history_messages = settings.max_history_messages
     app.state.max_history_characters = settings.max_history_characters
@@ -1146,8 +1406,10 @@ def _configure_embedding_reindex(settings: EnvironmentSettings) -> None:
             model_ready=(provider_status.ready and registry.active_matches(profile.identity)),
             model_last_checked_at=provider_status.checked_at,
         )
-        _observe_visitor_gateway(app)
 
+    github_sources = GitHubSourceResolver(
+        api_base_url=settings.github_api_url, rate_limiter=rate_limiter
+    )
     coordinator = EmbeddingReindexCoordinator(
         registry=registry,
         manager=manager,
@@ -1157,10 +1419,8 @@ def _configure_embedding_reindex(settings: EnvironmentSettings) -> None:
             config_branch=settings.config_branch,
             github_api_url=settings.github_api_url,
             max_bundle_bytes=settings.max_bundle_bytes,
-            source_resolver=GitHubSourceResolver(
-                api_base_url=settings.github_api_url,
-                rate_limiter=rate_limiter,
-            ),
+            source_resolver=github_sources,
+            participation_collector=github_sources.participation,
         ),
         provider_transition=provider_transition,
         on_activated=publish_activation,
@@ -1245,15 +1505,17 @@ def _configure_local_publication(settings: EnvironmentSettings) -> None:
 
         return transition
 
+    github_sources = GitHubSourceResolver(
+        api_base_url=settings.github_api_url, rate_limiter=app.state.github_rate_limiter
+    )
     publication = LocalPublication(
         store=store,
         data_directory=settings.data_dir,
         coordinator=coordinator,
         registry=app.state.embedding_profile_registry,
         manager=manager,
-        resolver=GitHubSourceResolver(
-            api_base_url=settings.github_api_url, rate_limiter=app.state.github_rate_limiter
-        ),
+        resolver=github_sources,
+        participation_collector=github_sources.participation,
         max_bundle_bytes=settings.max_bundle_bytes,
         transition_factory=transition_factory,
         stop_remote=stop_remote,
@@ -1360,7 +1622,12 @@ def _chat_provider_from_connection(
     api_key: str | None,
     *,
     capabilities: ProviderCapabilities | None = None,
+    chat_api: str = "chat_completions",
 ) -> ChatProvider:
+    if chat_api not in {"chat_completions", "responses"} or (
+        chat_api == "responses" and provider != "openai_compatible"
+    ):
+        raise ValueError("unsupported chat interface")
     selected_capabilities = capabilities or ProviderCapabilities(
         streaming=False,
         system_role=True,
@@ -1368,12 +1635,20 @@ def _chat_provider_from_connection(
         usage_reporting=True,
         health_check=True,
         max_context_tokens=settings.chat_max_context_tokens,
-        max_output_tokens=settings.chat_max_output_tokens,
+        max_output_tokens=min(settings.chat_max_output_tokens, settings.chat_max_context_tokens),
     )
     if provider == "ollama":
-        return OllamaChatProvider(base_url, model, selected_capabilities)
+        adapter = OllamaChatProvider(base_url, model, selected_capabilities)
+        with suppress(ProviderError):
+            adapter.prepare()
+        # Manual/non-AI startup remains available; the adapter fails closed
+        # with its preparation code before any generation request.
+        return adapter
     if provider in {"openai_compatible", "vllm"}:
-        return OpenAICompatibleChatProvider(
+        adapter_type = (
+            OpenAIResponsesChatProvider if chat_api == "responses" else OpenAICompatibleChatProvider
+        )
+        return adapter_type(
             base_url,
             model,
             selected_capabilities,
@@ -1454,12 +1729,6 @@ def _provider_contract_adapter(provider: str) -> str:
     """Map a named transport preset to the stable public/bundle adapter contract."""
 
     return "openai_compatible" if provider == "vllm" else provider
-
-
-def _observe_visitor_gateway(application: FastAPI) -> None:
-    gateway = getattr(application.state, "visitor_gateway", None)
-    if gateway is not None:
-        gateway.observe_state()
 
 
 def _replace_runtime_chat(provider: ChatProvider) -> Callable[[], None] | None:

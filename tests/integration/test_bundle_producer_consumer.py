@@ -11,10 +11,12 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from reponpc.api.public import SetupState
 from reponpc.bundles.archive import BundleError, build_bundle, verify_bundle_archive
 from reponpc.bundles.manifest import bundle_id_for
+from reponpc.cards.assets import validate_sprite
 from reponpc.config.models import load_public_config
 from reponpc.indexing.public_profile import build_public_profile_bytes
 from reponpc.main import create_app
@@ -27,6 +29,18 @@ from tests.integration.test_index_build import (
 )
 
 
+def _canonical_fixture_sprite() -> bytes:
+    image = Image.new("RGBA", (256, 448), (0, 0, 0, 0))
+    for row in range(7):
+        for column in range(4):
+            x = column * 64 + 12
+            y = row * 64 + 12
+            image.putpixel((x, y), (20 + row * 20, 40 + column * 30, 100, 255))
+    output = io.BytesIO()
+    image.save(output, format="PNG", optimize=False, compress_level=9)
+    return validate_sprite(output.getvalue()).content
+
+
 def _public_files(
     *, bundle_id: str, built_at: datetime, repository_count: int = 1
 ) -> dict[str, bytes]:
@@ -37,7 +51,7 @@ def _public_files(
             built_at=built_at,
             repository_count=repository_count,
         ),
-        "public/character.png": b"\x89PNG\r\n\x1a\nfixture",
+        "public/character.png": _canonical_fixture_sprite(),
     }
     for theme in ("light", "dark"):
         for locale in ("zh-TW", "en"):
@@ -340,7 +354,13 @@ def test_internal_checksum_tampering_is_rejected_even_when_outer_digest_matches(
             assert payload is not None
             content = payload.read()
             if member.name == "public/profile.json":
-                content = b'{"tampered":true}'
+                marker = b'"headline":"'
+                offset = content.find(marker)
+                assert offset >= 0
+                offset += len(marker)
+                assert offset < len(content) and content[offset] < 128
+                changed = b"X" if content[offset : offset + 1] != b"X" else b"Y"
+                content = content[:offset] + changed + content[offset + 1 :]
             copied = tarfile.TarInfo(member.name)
             copied.size = len(content)
             destination.addfile(copied, io.BytesIO(content))

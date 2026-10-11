@@ -10,13 +10,13 @@ Answers use the same retrieval, envelope-v2 prompt/schema and validator as ordin
 
 The gap shortcut selects an enabled repository and opens the existing contribution editor with a new bilingual owner statement and its claim kind selected. Responsibility and built work map to responsibility; duration/team/technologies map to context; outcomes map to achievement. Existing claims and editable contribution text remain available. Manual contribution editing supports adding/removing owner statements.
 
-FAQ actions are approve, reject, regenerate and rewrite as an owner statement. Generated answer text has no edit endpoint or editable answer control. A consciously reviewed generated no-match reply may be approved. Ungenerated, failed and rewrite-pending candidates cannot be approved.
+FAQ actions are approve, reject, regenerate and rewrite as an owner statement. Generated answer text has no edit endpoint or editable answer control. A consciously reviewed generated no-match reply may be approved. Ungenerated and failed candidates cannot be approved.
 
-Rewrite saves the owner's bilingual text as a uniquely identified claim in the public local draft using the existing revision-checked store, then explicitly invokes existing local preparation with the selected model-pair generation and confirmation. Once the real new index is ready, generation verifies the exact saved claim ID, repository and bilingual content in the leased index, and packs that evidence within existing record/per-repository/token limits. The source bundle cannot satisfy this step. Missing evidence or inadequate context fails explicitly and preserves the saved rewrite association for a **Continue** action after interruption/reload. Successful regeneration remains pending review. Brief runtime/draft mutations use one sole-owner process lock; provider work runs outside it.
+Rewrite opens the same contribution editor as the gap shortcut, with repository and claim kind selected. The owner saves the bilingual claim in the revision-checked local draft, prepares the NPC using the ordinary publication action, then regenerates and reviews the FAQ. New bundle activation marks earlier entries as needing reconfirmation. Normal retrieval does not guarantee citation of the new statement; the owner must review the generated answer. FAQ writes use SQLite transactions and conditional revision updates; provider work stays outside these transactions.
 
 ## Runtime and bundle identity
 
-Migration **29**, `bundle_bound_reviewed_faq`, adds `faq_entries` to the existing runtime SQLite database. Bundle index/public bytes are never edited by review. Normal SQLite backup/reopen includes the FAQ rows and pending rewrite association.
+Migration **29**, `bundle_bound_reviewed_faq`, adds `faq_entries` to the existing runtime SQLite database. Bundle index/public bytes are never edited by review. Normal SQLite backup/reopen includes the FAQ rows. The shipped `rewrite_json` column remains unused: new writes clear it to NULL and reads ignore old values; the migration is unchanged.
 
 Each locale/question key retains one latest candidate, with an optimistic revision and exact generated bundle ID. Reinitializing a queue preserves candidates and approvals. A changed/removed suggested question does not delete earlier owner work; earlier rows remain visible. Regeneration replaces the candidate and withdraws its approval before generation starts, including when generation fails. This is intentionally not an approval history: rollback only serves a candidate if its current stored approval is for the rolled-back bundle; regeneration of a newer bundle cannot restore an older approval automatically.
 
@@ -24,27 +24,26 @@ The bundle manager captures reader, manifest bundle ID and public directory atom
 
 ## HTTP contract
 
-All owner routes use the existing authenticated same-origin boundary; writes require CSRF. Responses use `Cache-Control: no-store`. IDs are opaque lowercase UUID hex32; revisions are positive integers; draft revisions are lowercase SHA-256 hex64. Locale is `zh-TW` or `en`.
+All owner routes use the existing authenticated same-origin boundary; writes require CSRF. Responses use `Cache-Control: no-store`. IDs are opaque lowercase UUID hex32; revisions are positive integers. Locale is `zh-TW` or `en`.
 
 | Method and route | Request / result |
 | --- | --- |
-| `GET /api/admin/portfolio/faq?locale=…` | Current bundle and owner queue, including coverage/review state, fixed diagnostics, revision and resumable rewrite association |
+| `GET /api/admin/portfolio/faq?locale=…` | Current bundle and owner queue, including coverage/review state, fixed diagnostics and revision |
 | `POST /api/admin/portfolio/faq/check` | `{locale}`; initializes all candidates without an implicit provider call |
-| `POST /api/admin/portfolio/faq/{id}/regenerate` | `{revision}`; runs the normal validated answer pipeline, requires matching new indexed claim when a rewrite is pending |
-| `POST /api/admin/portfolio/faq/{id}/review` | `{revision,bundle_id,action:"approve"|"reject"}`; exact revision/current bundle binding |
-| `POST /api/admin/portfolio/faq/{id}/rewrite` | `{revision,expected_draft_revision,repository,kind,statement:{"zh-TW":…,en:…}}`; returns saved local draft and pending entry |
+| `POST /api/admin/portfolio/faq/{id}/regenerate` | `{revision}`; runs the normal validated answer pipeline |
+| `POST /api/admin/portfolio/faq/{id}/review` | `{revision,action:"approve"|"reject"}`; server compares the stored row's bundle with the active bundle |
 | `GET /api/admin/portfolio/faq/export?locale=…` | Downloads `faq-{locale}.json` using the same public allowlist as visitor delivery |
 | `GET /api/public/faq?locale=…` | Credential-free approved-current payload below; unavailable index returns the existing safe index error |
 
-Public/export payload: `{bundle_id,locale,entries:[{question,answer_markdown,citations}]}`. Citation fields are explicitly allowlisted: `id,evidence_id,evidence_class,repository,commit_sha,path,start_line,end_line,title,excerpt,url`. There are no review states/reasons, drafts, rewrite associations, prompts, usage, provider metadata or secrets. Empty approved sets export a concrete empty `entries` array.
+Public/export payload: `{bundle_id,locale,entries:[{question,variants,answer_markdown,citations}]}`. Variants are owner-approved under the A5 contract; no separate matcher configuration is returned. Citation fields are explicitly allowlisted: `id,evidence_id,evidence_class,repository,commit_sha,path,start_line,end_line,title,excerpt,url`. There are no review states/reasons, drafts, rewrite associations, prompts, usage, provider metadata or secrets. Empty approved sets export a concrete empty `entries` array.
 
-Owner conflicts/staleness/not-ready/not-indexed/context-capacity failure return 409 with `FAQ_CONFLICT`, `FAQ_STALE`, `FAQ_NOT_READY`, `FAQ_REWRITE_NOT_INDEXED` or `FAQ_CONTEXT_INSUFFICIENT`. The context failure advises shortening the owner statement or adjusting the answer model. Missing service/generation failure returns safe 503; invalid repository returns 422 `FAQ_REPOSITORY_INVALID`; unknown entry returns 422 `FAQ_NOT_FOUND`. Existing portfolio/configuration/auth validation errors remain in use. Raw exception/provider text is never reflected or stored by these routes.
+Owner conflicts/staleness/not-ready return 409 with `FAQ_CONFLICT`, `FAQ_STALE` or `FAQ_NOT_READY`. Missing service/generation failure returns safe 503; unknown entry returns 422 `FAQ_NOT_FOUND`. Existing portfolio/configuration/auth validation errors remain in use. Raw exception/provider text is never reflected or stored by these routes.
 
 ## Visitor use and verification boundary
 
-Approved-current entries appear as suggestion chips in the existing visitor page. Selecting one rechecks current approval through the public FAQ route and displays its validated answer/citations without a model call. Request identity/cancellation protects language switches and duplicate clicks. Bundle mismatch refreshes the profile instead of displaying stale content; rejected entries disappear from the refreshed chips.
+Approved-current entries load with the profile and appear as suggestion chips in the existing visitor page. Chips and offline question matching use this cached FAQ without another request or model call. The local FAQ bundle must match the profile version, and a known status bundle mismatch disables offline answers. Initial request cancellation protects language switches. Mid-session withdrawals remain visible until the visitor reloads the FAQ/profile; refreshed responses omit rejected entries.
 
-Local synthetic verification covers actual build/save/new-index/validator regeneration in both locales, all four API actions, fixed dropped indexes/reasons, failures, zero-budget rewrite, activation during generation, immutable bytes, migration rollback/backup/reopen, a concurrent rewrite/save/review regression, authenticated boundaries, approved-only export and real browser controls. Full Python/Web, 19 browser checks and Docker results are recorded in [local verification](../release-evidence/a4/local-checks.md). No live provider/GitHub/Funnel call or public deployment was made. A5 owns the full static site/Pages export, offline question matching and gateway/public-layout work.
+Local synthetic verification covers actual draft-save/new-index/normal validator regeneration in both locales, FAQ API actions, fixed dropped indexes/reasons, failures, activation during generation, immutable bytes, migration rollback/backup/reopen, concurrent review/regenerate, authenticated boundaries, approved-only export and real browser controls. Historical pre-simplification Python/Web and browser results are recorded in [local verification](../release-evidence/a4/local-checks.md). B4 evidence records the simplified flow. No live provider/GitHub/Funnel call or public deployment was made. A5 owns the full static site/Pages export, offline question matching and gateway/public-layout work.
 
 Engineering note: natural-language coverage is open-world input decided by validated generation structure, never a keyword classifier. Only six closed product topics and finite claim/status/error controls are registry data. Bilingual text variants, missing evidence, rejected claims and injected unsafe outputs are exercised by tests.
 

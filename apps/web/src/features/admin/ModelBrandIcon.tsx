@@ -15,7 +15,7 @@ export function ModelBrandIcon({
   provider,
   modelId,
 }: {
-  provider: ModelProvider | null | undefined;
+  provider: ModelProvider | "builtin_onnx" | null | undefined;
   modelId?: string | null;
 }) {
   const normalizedModel = modelId?.toLowerCase() ?? "";
@@ -23,7 +23,7 @@ export function ModelBrandIcon({
     ? qwenIcon
     : normalizedModel.includes("gpt")
       ? openAiIcon
-      : provider
+      : provider && provider !== "builtin_onnx"
         ? PROVIDER_ICONS[provider]
         : null;
 

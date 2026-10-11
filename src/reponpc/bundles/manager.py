@@ -81,6 +81,12 @@ class BundleManager:
         self._bundles.mkdir(parents=True, exist_ok=True)
         self._restore_persisted_bundles(state)
 
+    @property
+    def data_directory(self) -> Path:
+        """Return the shared artifact root used by local bundle producers."""
+
+        return self._root.parent
+
     @contextmanager
     def acquire(self) -> Iterator[ReadOnlyIndex]:
         """Lease the current reader so an activation cannot close it in flight."""
@@ -103,6 +109,15 @@ class BundleManager:
             with self._lock:
                 current.leases -= 1
                 self._close_if_retired(current)
+
+    @contextmanager
+    def guard_active_bundle(self, bundle_id: str) -> Iterator[None]:
+        """Keep the source active through a short coordinated runtime commit."""
+
+        with self._lock:
+            if self._active is None or self._active.manifest.bundle_id != bundle_id:
+                raise BundleActivationError("bundle_snapshot_stale")
+            yield
 
     def activate(
         self,
@@ -202,10 +217,14 @@ class BundleManager:
             self._cleanup_unreferenced()
             return self.status()
 
-    def pin(self, bundle_id: str) -> BundleStatus:
+    def pin(self, bundle_id: str, *, require_previous: bool = False) -> BundleStatus:
         """Select a retained compatible local bundle as the active bundle."""
 
         with self._lock:
+            if require_previous and (
+                self._previous is None or self._previous.manifest.bundle_id != bundle_id
+            ):
+                raise BundleActivationError("bundle_pin_target_unknown")
             if not bundle_id or bundle_id not in self._retained_ids():
                 raise BundleActivationError("bundle_pin_target_unknown")
             previous_pin = self._pinned
@@ -272,6 +291,16 @@ class BundleManager:
                 previous_bundle_id=self._previous.manifest.bundle_id if self._previous else None,
                 pinned_bundle_id=self._pinned,
             )
+
+    def close(self) -> None:
+        """Release immutable readers only after the owning application's requests drain."""
+        with self._lock:
+            live = [item for item in (self._active, self._previous) if item is not None]
+            if any(item.leases for item in live):
+                raise BundleActivationError("bundle_readers_busy")
+            for item in live:
+                item.index.close()
+            self._active = self._previous = None
 
     def active_embedding_identity(self) -> EmbeddingIdentity | None:
         """Return the verified identity of the active immutable bundle."""

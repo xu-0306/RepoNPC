@@ -341,9 +341,9 @@ input {
 .admin-workspace__header {
   align-items: center;
   display: grid;
-  gap: 1rem clamp(1.25rem, 3vw, 3rem);
-  grid-template-columns: minmax(18rem, 1fr) auto auto;
-  padding: 0.25rem 0 1.15rem;
+  gap: 0.5rem 1rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: 0 0 0.65rem;
 }
 .admin-workspace input:is([type="checkbox"], [type="radio"]) {
   accent-color: var(--admin-primary);
@@ -397,21 +397,22 @@ input {
 }
 .admin-workspace__title {
   margin: 0;
-  font-size: clamp(1.8rem, 3.2vw, 2.6rem);
+  font-size: clamp(1.15rem, 2vw, 1.6rem);
   letter-spacing: -0.035em;
   line-height: 1.18;
   max-width: none;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .admin-workspace__subtitle {
-  color: var(--admin-muted);
-  line-height: 1.55;
-  margin: 0.4rem 0 0;
+  display: none;
 }
 .admin-workspace__guide {
   align-items: center;
   display: flex;
   gap: 0.65rem;
+}
+.admin-workspace__speech {
+  display: none;
 }
 .admin-workspace__npc {
   background: #2d2759;
@@ -606,13 +607,12 @@ input {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-  margin: 0 0 1rem auto;
-  max-width: 52rem;
+  margin: 0 0 0.65rem;
   padding: 0.25rem;
 }
 .admin-workspace__mode-switch button {
   border-color: transparent;
-  flex: 1 1 10rem;
+  flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -620,6 +620,36 @@ input {
   display: grid;
   gap: 0.75rem;
   grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.admin-status-overview > summary,
+.model-setup-workspace__guidance > summary,
+.guided-onboarding__navigation-actions summary,
+.publication-optional > summary {
+  cursor: pointer;
+  min-height: 2.75rem;
+  padding: 0.6rem 0;
+  font-weight: 750;
+}
+.admin-status-overview[open] > summary {
+  margin-bottom: 0.5rem;
+}
+.model-setup-workspace__guidance {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.local-publication > nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.local-publication > nav a {
+  min-height: 2.75rem;
+  padding-block: 0.6rem;
+}
+.local-publication h2,
+#guided-onboarding-heading {
+  scroll-margin-top: 1rem;
 }
 .admin-status-card {
   align-items: center;
@@ -728,6 +758,12 @@ input {
   margin: 0;
   max-width: none;
 }
+.guided-onboarding__navigation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 0.5rem;
+}
 .guided-onboarding__step > h2 {
   font-size: clamp(1.45rem, 2.6vw, 2rem);
   line-height: 1.25;
@@ -749,9 +785,6 @@ input {
   overflow: hidden;
   padding: 0.65rem 0.9rem;
 }
-.onboarding-stepper__summary {
-  display: none;
-}
 .onboarding-stepper progress {
   height: 0.2rem;
   opacity: 0;
@@ -759,7 +792,13 @@ input {
   width: 1px;
 }
 .onboarding-stepper__details {
-  display: none;
+  display: block;
+}
+.onboarding-stepper__details summary {
+  cursor: pointer;
+  font-weight: 750;
+  min-height: 2.75rem;
+  padding-block: 0.6rem;
 }
 .onboarding-stepper ol {
   display: grid;
@@ -1091,6 +1130,13 @@ input {
   min-width: 0;
   padding: 0.8rem;
 }
+.model-guidance {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+.model-guidance > .model-card-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
 .model-card__heading {
   align-items: center;
   display: grid;
@@ -1304,8 +1350,85 @@ input {
 }
 .guided-onboarding__evidence-groups {
   display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  min-width: 0;
+}
+.guided-onboarding__results > ul,
+.guided-onboarding__evidence-groups ul {
+  display: grid;
+  gap: 1rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.guided-onboarding__interpretation {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: 0.85rem;
+  overflow-wrap: anywhere;
+  padding: 1rem;
+}
+.guided-onboarding__interpretation-badge {
+  background: var(--admin-panel-subtle, #f8f7ff);
+  border-radius: 0.45rem;
+  color: var(--admin-primary-dark);
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  padding: 0.4rem 0.6rem;
+}
+.guided-onboarding__interpretation-text > p {
+  font-size: 1.05rem;
+  line-height: 1.7;
+  margin: 0 0 1rem;
+  white-space: pre-wrap;
+}
+.guided-onboarding__interpretation-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.guided-onboarding__interpretation-text:has(details[open]) > p {
+  display: none;
+}
+.guided-onboarding__interpretation-text details p {
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+.guided-onboarding__sources {
+  background: var(--admin-panel-subtle, #f8f7ff);
+  border: 1px solid var(--admin-border);
+  border-radius: 0.55rem;
+  padding: 0.25rem 0.75rem;
+}
+.guided-onboarding__evidence-groups summary {
+  cursor: pointer;
+  line-height: 1.5;
+  min-height: 44px;
+  padding-block: 0.65rem;
+}
+.guided-onboarding__source {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: 0.5rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 0.75rem;
+}
+.guided-onboarding__source pre {
+  font-size: 0.85rem;
+  line-height: 1.65;
+  margin-block: 0.75rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.guided-onboarding__analysis-version {
+  color: var(--admin-muted);
+  font-size: 0.85rem;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 .admin-workspace .guided-onboarding__evidence {
   border: 1px solid var(--admin-border);
@@ -1801,12 +1924,6 @@ form button {
   background: var(--ui-control-border);
   color: white;
 }
-.character-renderer {
-  image-rendering: pixelated;
-  transform: scale(2);
-  transform-origin: center;
-  margin: 3rem;
-}
 @media (max-width: 72rem) {
   .admin-workspace__header {
     grid-template-columns: minmax(18rem, 1fr) auto;
@@ -1832,9 +1949,6 @@ form button {
     left: 0;
     max-width: 100%;
     right: auto;
-  }
-  .model-setup-workspace__roles {
-    order: 1;
   }
   .admin-workspace__header {
     align-items: start;
@@ -1862,26 +1976,6 @@ form button {
   .model-card__provider {
     grid-column: 2;
     justify-self: start;
-  }
-  .onboarding-stepper__desktop {
-    display: none;
-  }
-  .onboarding-stepper__summary {
-    align-items: center;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem 0.75rem;
-    justify-content: space-between;
-    margin-bottom: 0.45rem;
-  }
-  .onboarding-stepper__details {
-    display: block;
-  }
-  .onboarding-stepper__details summary {
-    cursor: pointer;
-    font-weight: 750;
-    min-height: 2.75rem;
-    padding-block: 0.75rem 0.25rem;
   }
   .onboarding-stepper ol {
     grid-template-columns: 1fr;
@@ -1911,9 +2005,6 @@ form button {
   .hero {
     grid-template-columns: 1fr;
   }
-  .character-renderer {
-    justify-self: center;
-  }
   .turn--user,
   .turn--assistant {
     margin-inline: 0;
@@ -1932,7 +2023,7 @@ form button {
     grid-template-columns: 1fr;
   }
   .admin-workspace__title {
-    font-size: clamp(1.7rem, 8vw, 2.35rem);
+    font-size: 1.25rem;
     white-space: normal;
     word-break: keep-all;
   }

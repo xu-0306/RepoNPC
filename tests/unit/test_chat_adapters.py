@@ -172,7 +172,7 @@ def test_ollama_adapter_uses_only_private_origin_and_supported_fields() -> None:
             {"content": "question", "role": "user"},
         ],
         "model": "fixture-chat",
-        "options": {"num_predict": 100},
+        "options": {"num_predict": 100, "num_ctx": 8192},
         "stream": False,
     }
     assert result.usage is not None and result.usage.input_tokens == 6

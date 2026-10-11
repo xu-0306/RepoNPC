@@ -49,6 +49,7 @@ class VisitorGateway:
         bundle_manager_supplier: Callable[[], Any],
         chat_service_supplier: Callable[[], Any],
         faq_supplier: Callable[[], Any],
+        scene_supplier: Callable[[], Any] = lambda: None,
         web_dist: Path,
     ) -> None:
         self._store = VisitorGatewayStore(database)
@@ -57,6 +58,7 @@ class VisitorGateway:
         self._bundles = bundle_manager_supplier
         self._chat = chat_service_supplier
         self._faq = faq_supplier
+        self._scene = scene_supplier
         self._web_dist = web_dist
         self.workers = VisitorChatWorkers(environment.global_chat_concurrency)
         self._server: _LoopbackServer | None = None
@@ -65,57 +67,24 @@ class VisitorGateway:
         self._accepting = False
         self._starting = False
         self._error_code: str | None = None
-        self._start_generation = 0
-        self._verified_generation: int | None = None
-        self._verified_bundle: str | None = None
-        self._observed_ready: bool | None = None
-        self._observed_bundle: str | None = None
-        self._observation_epoch = 0
+        self._started_gateway_origin: str | None = None
+        self._started_pages_origin: str | None = None
         self._operation_lock = asyncio.Lock()
 
     def snapshot(self) -> dict[str, Any]:
         local_ready, bundle_id = self._read_local_state()
+        if self._server_task is not None and self._server_task.done() and self._accepting:
+            self._accepting = False
+            self._error_code = "GATEWAY_UNAVAILABLE"
+            self._clear_verification()
         listener_ready = self._listener_ready()
-        self._observe(local_ready, bundle_id, listener_ready)
         try:
             settings = self._store.get()
         except Exception:
             self._accepting = False
             self._error_code = "GATEWAY_UNAVAILABLE"
-            return {
-                "revision": 1,
-                "gateway_origin": None,
-                "pages_origin": None,
-                "enabled": False,
-                "listener_ready": False,
-                "error_code": self._error_code,
-                "local_ready": local_ready,
-                "entry_configured": False,
-                "external_verified": False,
-                "verified_at": None,
-                "verification_method": None,
-                "active_bundle_id": bundle_id,
-                "client_identity_mode": (
-                    "trusted_proxy"
-                    if self._environment.visitor_trusted_proxy_cidrs
-                    else "aggregate"
-                ),
-            }
-        matching_report = (
-            settings.verification_gateway_origin == settings.gateway_origin
-            and settings.verification_pages_origin == settings.pages_origin
-            and settings.verification_bundle_id == bundle_id
-            and settings.verification_method == "owner_reported"
-            and settings.verified_at is not None
-        )
-        external_verified = bool(
-            matching_report
-            and settings.enabled
-            and listener_ready
-            and local_ready
-            and self._verified_generation == self._start_generation
-            and self._verified_bundle == bundle_id
-        )
+            listener_ready = False
+            settings = VisitorGatewaySettings(1, False, None, None, None)
         return {
             "revision": settings.revision,
             "gateway_origin": settings.gateway_origin,
@@ -127,26 +96,21 @@ class VisitorGateway:
             "entry_configured": bool(
                 settings.gateway_origin and settings.pages_origin and listener_ready
             ),
-            "external_verified": external_verified,
+            "external_verified": settings.verified_at is not None and listener_ready,
             "verified_at": settings.verified_at,
-            "verification_method": settings.verification_method,
+            "verification_method": "owner_reported" if settings.verified_at else None,
             "active_bundle_id": bundle_id,
             "client_identity_mode": (
                 "trusted_proxy" if self._environment.visitor_trusted_proxy_cidrs else "aggregate"
             ),
         }
 
-    def observe_state(self) -> None:
-        """Invalidate an owner report when a primary readiness poll sees a change."""
-
-        local_ready, bundle_id = self._read_local_state()
-        self._observe(local_ready, bundle_id, self._listener_ready())
-
     async def resume(self) -> dict[str, Any]:
         """Resume only persisted owner intent after the primary lifespan is ready."""
 
         async with self._operation_lock:
             try:
+                self._store.clear_verification()
                 settings = self._store.get()
                 if not settings.enabled:
                     return self.snapshot()
@@ -191,7 +155,6 @@ class VisitorGateway:
             )
         except VisitorGatewayStoreError as exc:
             raise VisitorGatewayError(exc.code) from None
-        self._invalidate_verification()
         self._error_code = None
         return self.snapshot()
 
@@ -203,10 +166,14 @@ class VisitorGateway:
         settings = self._store.get()
         self._expect_revision(settings, revision)
         self._validate_configuration(settings.gateway_origin, settings.pages_origin)
-        if self._listener_ready() and self._started_origins() == (
+        if self._listener_ready() and (
+            self._started_gateway_origin,
+            self._started_pages_origin,
+        ) == (
             settings.gateway_origin,
             settings.pages_origin,
         ):
+            self._store.set_enabled(revision=revision, enabled=True)
             return self.snapshot()
         if self._starting:
             raise VisitorGatewayError("GATEWAY_UNAVAILABLE")
@@ -214,7 +181,6 @@ class VisitorGateway:
             settings = self._store.set_enabled(revision=revision, enabled=True)
         except VisitorGatewayStoreError as exc:
             raise VisitorGatewayError(exc.code) from None
-        self._invalidate_verification()
         try:
             await self._listen(settings)
         except VisitorGatewayError:
@@ -232,7 +198,6 @@ class VisitorGateway:
             self._store.set_enabled(revision=revision, enabled=False)
         except VisitorGatewayStoreError as exc:
             raise VisitorGatewayError(exc.code) from None
-        self._invalidate_verification()
         stopped = await self._stop_listener()
         if not stopped:
             self._error_code = "GATEWAY_UNAVAILABLE"
@@ -240,71 +205,36 @@ class VisitorGateway:
         self._error_code = None
         return self.snapshot()
 
-    async def verify(
-        self,
-        *,
-        revision: int,
-        gateway_origin: str,
-        pages_origin: str,
-        bundle_id: str,
-        external_checks_confirmed: bool,
-    ) -> dict[str, Any]:
+    async def verify(self, *, revision: int, external_checks_confirmed: bool) -> dict[str, Any]:
         async with self._operation_lock:
-            return await self._verify(
-                revision=revision,
-                gateway_origin=gateway_origin,
-                pages_origin=pages_origin,
-                bundle_id=bundle_id,
-                external_checks_confirmed=external_checks_confirmed,
-            )
-
-    async def _verify(
-        self,
-        *,
-        revision: int,
-        gateway_origin: str,
-        pages_origin: str,
-        bundle_id: str,
-        external_checks_confirmed: bool,
-    ) -> dict[str, Any]:
-        settings_before = self._store.get()
-        self._expect_revision(settings_before, revision)
-        current = self.snapshot()
-        if (
-            external_checks_confirmed is not True
-            or not current["enabled"]
-            or not current["listener_ready"]
-            or not current["local_ready"]
-            or not bundle_id
-            or bundle_id != current["active_bundle_id"]
-            or gateway_origin != current["gateway_origin"]
-            or pages_origin != current["pages_origin"]
-        ):
-            raise VisitorGatewayError("GATEWAY_VERIFICATION_STALE")
-        observation_epoch = self._observation_epoch
-        timestamp = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-        try:
-            settings = self._store.verify(
-                revision=revision,
-                gateway_origin=gateway_origin,
-                pages_origin=pages_origin,
-                bundle_id=bundle_id,
-                verified_at=timestamp,
-            )
-        except VisitorGatewayStoreError as exc:
-            raise VisitorGatewayError(exc.code) from None
-        self.observe_state()
-        if observation_epoch != self._observation_epoch:
-            self._invalidate_verification()
-            raise VisitorGatewayError("GATEWAY_VERIFICATION_STALE")
-        self._verified_generation = self._start_generation
-        self._verified_bundle = settings.verification_bundle_id
-        return self.snapshot()
+            settings = self._store.get()
+            self._expect_revision(settings, revision)
+            _, bundle_id = self._read_local_state()
+            if external_checks_confirmed is not True or not self._listener_ready() or not bundle_id:
+                raise VisitorGatewayError("GATEWAY_UNAVAILABLE")
+            assert settings.gateway_origin is not None and settings.pages_origin is not None
+            timestamp = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+            try:
+                self._store.verify(
+                    revision=revision,
+                    gateway_origin=settings.gateway_origin,
+                    pages_origin=settings.pages_origin,
+                    bundle_id=bundle_id,
+                    verified_at=timestamp,
+                )
+            except VisitorGatewayStoreError as exc:
+                raise VisitorGatewayError(exc.code) from None
+            return self.snapshot()
 
     async def shutdown(self) -> None:
         async with self._operation_lock:
-            self._invalidate_verification()
-            await self._stop_listener()
+            self._clear_verification()
+            stopped = await self._stop_listener()
+            deadline = time.monotonic() + self._environment.shutdown_grace_seconds
+            while self.workers.active_count and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            if not stopped or self.workers.active_count:
+                raise VisitorGatewayError("GATEWAY_UNAVAILABLE")
 
     async def _listen(self, settings: VisitorGatewaySettings) -> None:
         self._starting = True
@@ -327,10 +257,12 @@ class VisitorGateway:
                 bundle_manager_supplier=self._bundles,
                 chat_service_supplier=self._chat,
                 faq_supplier=self._faq,
-                settings_supplier=self.snapshot,
+                scene_supplier=self._scene,
+                gateway_origin=settings.gateway_origin or "",
+                pages_origin=settings.pages_origin or "",
+                listener_ready_supplier=self._listener_ready,
                 web_dist=self._web_dist,
                 gateway_port=self._environment.visitor_gateway_port,
-                admin_origins=self._environment.admin_origins,
                 trusted_proxy_cidrs=self._environment.visitor_trusted_proxy_cidrs,
                 max_message_characters=self._environment.max_message_characters,
                 max_history_messages=self._environment.max_history_messages,
@@ -363,7 +295,6 @@ class VisitorGateway:
             self._server_task = task
             self._accepting = True
             self._error_code = None
-            self._start_generation += 1
             self._started_gateway_origin = settings.gateway_origin
             self._started_pages_origin = settings.pages_origin
         except VisitorGatewayError:
@@ -452,10 +383,6 @@ class VisitorGateway:
     def _listener_ready(self) -> bool:
         task = self._server_task
         server = self._server
-        if task is not None and task.done() and self._accepting:
-            self._accepting = False
-            self._error_code = "GATEWAY_UNAVAILABLE"
-            self._invalidate_verification()
         return bool(
             self._accepting
             and server is not None
@@ -478,29 +405,12 @@ class VisitorGateway:
         bundle_id = getattr(state, "index_version", None)
         return bool(getattr(state, "ready", False)), bundle_id
 
-    def _observe(self, local_ready: bool, bundle_id: str | None, listener_ready: bool) -> None:
-        invalidating_observation = (
-            not local_ready
-            or not listener_ready
-            or (self._observed_ready is False and local_ready)
-            or (self._observed_bundle is not None and bundle_id != self._observed_bundle)
-        )
-        if invalidating_observation:
-            self._observation_epoch += 1
-        if self._verified_generation is not None and invalidating_observation:
-            self._invalidate_verification()
-        self._observed_ready = local_ready
-        self._observed_bundle = bundle_id
-
-    def _invalidate_verification(self) -> None:
-        self._verified_generation = None
-        self._verified_bundle = None
-
-    def _started_origins(self) -> tuple[str | None, str | None]:
-        return (
-            getattr(self, "_started_gateway_origin", None),
-            getattr(self, "_started_pages_origin", None),
-        )
+    def _clear_verification(self) -> None:
+        try:
+            self._store.clear_verification()
+        except Exception:
+            self._accepting = False
+            self._error_code = "GATEWAY_UNAVAILABLE"
 
     def _validate_configuration(
         self, gateway_origin: str | None, pages_origin: str | None
@@ -512,9 +422,9 @@ class VisitorGateway:
             or pages_origin is None
         ):
             raise VisitorGatewayError("GATEWAY_CONFIGURATION_INVALID")
-        gateway = _https_origin(gateway_origin)
+        gateway = _canonical_origin(gateway_origin, https_only=True)
         pages = _pages_origin(pages_origin)
-        if gateway is None or pages is None:
+        if gateway is None or not gateway.startswith("https://") or pages is None:
             raise VisitorGatewayError("GATEWAY_CONFIGURATION_INVALID")
         admin_hosts = {_host(origin) for origin in self._environment.admin_origins}
         if (
@@ -535,18 +445,13 @@ def _host(origin: str) -> str:
     return (urlsplit(origin).hostname or "").casefold()
 
 
-def _https_origin(value: str) -> str | None:
-    parsed = _strict_url_origin(value)
-    return parsed if parsed is not None and parsed.startswith("https://") else None
-
-
 def _pages_origin(value: str) -> str | None:
     try:
         if urlsplit(value).port is not None:
             return None
     except (TypeError, ValueError):
         return None
-    parsed = _strict_url_origin(value)
+    parsed = _canonical_origin(value, https_only=True)
     if parsed is None or not parsed.startswith("https://"):
         return None
     host = urlsplit(parsed).hostname or ""
@@ -562,10 +467,3 @@ def _pages_origin(value: str) -> str | None:
     ):
         return None
     return parsed
-
-
-def _strict_url_origin(value: str) -> str | None:
-    if not isinstance(value, str) or not value or len(value) > 2048:
-        return None
-    origin = _canonical_origin(value)
-    return origin if origin is not None and origin.startswith("https://") else None

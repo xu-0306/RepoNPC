@@ -18,6 +18,7 @@ import numpy as np
 from reponpc.admin.model_probe_errors import provider_probe_error_code
 from reponpc.bundles.manager import ActivationTransition
 from reponpc.indexing.sources import EmbeddingIdentity
+from reponpc.providers.builtin_artifacts import builtin_embedding_identity
 from reponpc.providers.contracts import ProviderError
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 
@@ -25,7 +26,7 @@ _PROFILE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _CONNECTION_REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,255}$")
 _SAFE_ERROR_CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
-_PROVIDERS = frozenset({"ollama", "openai_compatible", "vllm"})
+_PROVIDERS = frozenset({"ollama", "openai_compatible", "vllm", "builtin_onnx"})
 _CURATED_OLLAMA_MODELS = frozenset({"qwen3-embedding:0.6b", "bge-m3", "embeddinggemma:300m"})
 
 
@@ -85,7 +86,7 @@ class EmbeddingProfileInput:
     normalized: bool
     query_prefix: str
     passage_prefix: str
-    connection_reference: str
+    connection_reference: str | None
     connection_revision: int = 0
 
     def validate(self) -> None:
@@ -99,9 +100,22 @@ class EmbeddingProfileInput:
             )
             or len(self.query_prefix) > 128
             or len(self.passage_prefix) > 128
-            or not _CONNECTION_REFERENCE.fullmatch(self.connection_reference)
+            or (
+                self.provider != "builtin_onnx"
+                and (
+                    self.connection_reference is None
+                    or not _CONNECTION_REFERENCE.fullmatch(self.connection_reference)
+                )
+            )
             or not isinstance(self.connection_revision, int)
             or self.connection_revision < 0
+        ):
+            raise EmbeddingProfileError("VALIDATION_ERROR")
+        if self.provider == "builtin_onnx" and (
+            self.connection_reference is not None
+            or self.connection_revision != 0
+            or self.dimension is None
+            or self.identity != builtin_embedding_identity()
         ):
             raise EmbeddingProfileError("VALIDATION_ERROR")
 
@@ -128,7 +142,7 @@ class EmbeddingProfile:
     normalized: bool
     query_prefix: str
     passage_prefix: str
-    connection_reference: str
+    connection_reference: str | None
     connection_revision: int
     status: str
     active: bool
@@ -875,7 +889,9 @@ def _profile(row: sqlite3.Row) -> EmbeddingProfile:
         normalized=bool(row["normalized"]),
         query_prefix=str(row["query_prefix"]),
         passage_prefix=str(row["passage_prefix"]),
-        connection_reference=str(row["connection_reference"]),
+        connection_reference=(
+            str(row["connection_reference"]) if row["connection_reference"] is not None else None
+        ),
         connection_revision=int(row["connection_revision"]),
         status=str(row["status"]),
         active=bool(row["active"]),

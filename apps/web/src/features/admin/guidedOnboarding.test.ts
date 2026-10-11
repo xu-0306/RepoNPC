@@ -694,3 +694,124 @@ describe("guided onboarding resume data", () => {
     ).toBeNull();
   });
 });
+
+it("tracks manual/model origin without bypassing confirmation or persisting model drafts", () => {
+  let current: GuidedOnboardingState = {
+    ...guidedOnboardingReducer(selectedState(), { type: "CONFIRM_SELECTION" }),
+    step: "contributions" as const,
+  };
+  current = guidedOnboardingReducer(current, {
+    type: "SET_OWNER_STATEMENT",
+    slug: metadata.slug,
+    statement: "Original owner statement",
+  });
+  current = guidedOnboardingReducer(current, {
+    type: "BEGIN_MANUAL_CONTRIBUTION",
+    slug: metadata.slug,
+  });
+  expect(current.repositories[0].proposalSource).toBe("manual");
+  expect(current.repositories[0].confirmedContribution).toBeNull();
+  current = guidedOnboardingReducer(current, {
+    type: "SET_CONTRIBUTION_PROPOSAL",
+    slug: metadata.slug,
+    originalStatement: "Original owner statement",
+    proposal,
+  });
+  expect(current.repositories[0].proposalSource).toBe("model");
+  expect(current.repositories[0].confirmedContribution).toBeNull();
+  expect(serializeGuidedOnboarding(current)).not.toContain("proposalSource");
+  current = guidedOnboardingReducer(current, {
+    type: "CONFIRM_CONTRIBUTION",
+    slug: metadata.slug,
+    contribution: proposal,
+  });
+  current = guidedOnboardingReducer(current, {
+    type: "EDIT_CONFIRMED_CONTRIBUTION",
+    slug: metadata.slug,
+  });
+  expect(current.repositories[0].proposalSource).toBe("manual");
+  expect(current.repositories[0].confirmedContribution).toBeNull();
+});
+
+it.each(["COMPLETE_MODEL_SETUP", "GO_BACK", "START_MANUAL"] as const)(
+  "preserves the prepared draft state through model setup %s",
+  (type) => {
+    const original: GuidedOnboardingState = {
+      ...selectedState(),
+      step: "draft",
+      route: "manual",
+      profile,
+      profileConfirmed: true,
+    };
+    const editing = guidedOnboardingReducer(original, {
+      type: "OPEN_PUBLICATION_MODEL_SETUP",
+    });
+    expect(editing.step).toBe("models");
+    expect(editing.route).toBe("ai");
+    expect(editing.repositories).toBe(original.repositories);
+    expect(editing.profile).toBe(original.profile);
+    expect(serializeGuidedOnboarding(editing)).not.toContain(
+      "modelSetupReturn",
+    );
+    expect(
+      parseGuidedOnboarding(serializeGuidedOnboarding(editing))?.step,
+    ).toBe("draft");
+    expect(
+      parseGuidedOnboarding(serializeGuidedOnboarding(editing))?.route,
+    ).toBe("manual");
+    expect(() =>
+      guidedOnboardingReducer(editing, { type: "COMPLETE_MODEL_SETUP" }),
+    ).toThrow("ONBOARDING_MODELS_REQUIRED");
+    const configured = guidedOnboardingReducer(editing, {
+      type: "SET_MODELS_CONFIGURED",
+      value: true,
+    });
+    const returned = guidedOnboardingReducer(configured, { type });
+    expect(returned).toEqual({
+      ...original,
+      modelsConfigured: true,
+      modelSetupReturn: undefined,
+    });
+  },
+);
+
+describe("guided draft recovery", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "distinguishes service, input and connection failures in %s",
+    (locale) => {
+      const zh = locale === "zh-TW";
+      const service = guidedErrorMessage(locale, "SERVICE_NOT_READY", "review");
+      expect(service).toContain(
+        zh ? "草稿建立服務尚未就緒" : "draft creation service is not ready",
+      );
+      expect(service).toContain(zh ? "維護" : "Maintenance");
+      expect(service).not.toContain(zh ? "回報" : "report");
+      expect(service).toContain(
+        zh ? "重試建立草稿" : "retry creating the draft",
+      );
+      expect(service).not.toContain(zh ? "設定模型" : "Set up models");
+      for (const code of ["VALIDATION_ERROR", "CONFIG_INVALID"]) {
+        const message = guidedErrorMessage(locale, code, "review");
+        expect(message).toContain(zh ? "確認狀態" : "confirmations");
+        expect(message).toContain(zh ? "輸入仍保留" : "input is kept");
+        expect(message).not.toContain("https://github.com/username");
+      }
+      expect(
+        guidedErrorMessage(locale, "VALIDATION_ERROR", "repositories"),
+      ).toContain("https://github.com/username");
+      expect(guidedErrorMessage(locale, "REQUEST_FAILED", "review")).toContain(
+        zh ? "網路連線" : "network connection",
+      );
+      const unknown = guidedErrorMessage(
+        locale,
+        "private-response-canary",
+        "review",
+      );
+      expect(unknown).toContain(zh ? "無法確認原因" : "cause is unknown");
+      expect(unknown).not.toContain("private-response-canary");
+      expect(unknown).toContain(zh ? "維護" : "Maintenance");
+      expect(unknown).not.toContain(zh ? "回報" : "report");
+      expect(unknown).not.toContain(zh ? "請檢查內容" : "Review it");
+    },
+  );
+});

@@ -444,7 +444,9 @@ def _archive_entries(content: bytes) -> tuple[MaterialEntry, ...]:
         total_size = 0
         entries: list[MaterialEntry] = []
         for info in infos:
-            name = info.filename.rstrip("/") if info.is_dir() else info.filename
+            # zipfile may normalize backslashes or truncate at NUL. Validate
+            # the raw archive name before those changes hide a forbidden path.
+            name = info.orig_filename.rstrip("/") if info.is_dir() else info.orig_filename
             _validate_member_name(name)
             if info.filename in seen:
                 raise SpriteConversionError("PACK_UNSAFE")
@@ -503,7 +505,7 @@ def _manifest_frames(
         members: dict[str, zipfile.ZipInfo] = {}
         total_size = 0
         for info in infos:
-            name = info.filename.rstrip("/") if info.is_dir() else info.filename
+            name = info.orig_filename.rstrip("/") if info.is_dir() else info.orig_filename
             _validate_member_name(name)
             if info.filename in members:
                 raise SpriteConversionError("PACK_UNSAFE")

@@ -64,7 +64,10 @@ export function AnalysisSelectionPanel({
           ) &&
           profile.last_probed_at !== null &&
           profile.last_error_code === null &&
-          (!connections ||
+          ((profile.provider === "builtin_onnx" &&
+            profile.connection_reference === null &&
+            profile.connection_revision === 0) ||
+            !connections ||
             connections.some(
               (c) =>
                 c.connection_id === profile.connection_reference &&

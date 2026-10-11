@@ -1,5 +1,61 @@
 # RepoNPC v1 Operations Guide
 
+**2026-10-03 built-in setup:** migration 34 adds `builtin_onnx` with a null
+connection reference/revision zero while preserving external profile rows, active
+uniqueness, analysis selections and switch intent. Back up the private data
+directory before upgrading a real runtime; use matching frontend/backend. No real
+owner runtime was migrated in this development run. In AI setup, explicitly choose
+the built-in download, an external service or manual continuation. The manifest
+shows 2,289,765,790 bytes and MIT/source information. Downloading uses the private
+`models/bge-m3-<full-revision>` directory; cancellation retains verified partial
+work in its sibling `.download` directory for explicit resume. Do not delete or
+edit these files while an operation runs. Each complete file is verified before
+publication; downloaded files alone do not select/activate a model. Test it and
+confirm the analysis role, or explicitly rebuild and activate through the existing
+model card. Invalid final artifacts fail closed and require operator review;
+RepoNPC never overwrites a preexisting invalid final directory automatically.
+
+Device checks run only when requested. Unknown RAM/GPU values stay unknown. The
+verified chat catalog currently has no entries, and speed estimates are unavailable;
+no hardware guarantees or live model compatibility are claimed. The canirun.ai link
+does not automatically transmit device information.
+
+Individual catalog cards show the existing resource grade, reasons, unknown
+readings, source/license and dated bilingual answer-format evidence. Choose a
+card to open the Chat form, then explicitly fill its model name, confirm the
+service, add, test and select. An in-progress edit must be completed or cancelled
+before filling a new catalog model. No download, service choice or activation is
+automatic; the CPU estimate does not imply GPU offload. See the
+[A7 card contract](A7_MODEL_CARDS_IMPLEMENTATION_2026-10-03.md).
+
+**2026-09-29 A5 runtime upgrade (implementation in progress):** Migration 31 adds
+bound appearance state and session-owned background drafts to runtime SQLite.
+It preserves existing migrations, bundles, model selections and saved portfolio
+content. Use the matching rebuilt frontend/backend and the normal stopped-service
+private data-directory backup before an actual upgrade. Appearance artifacts and
+private source receipts live under `scene-appearance`; draft images live under
+`scene-background-drafts`, beside the retained bundles. Back up these directories
+together with runtime SQLite and `local-portfolio`, so applied settings and image
+identities remain consistent. A portable public YAML backup needs its configured
+canonical character and applied `assets/scene/<hash>.png|webp` file. Session draft
+URLs and transient preview IDs are not portable. This development run uses fresh
+synthetic runtimes only; it has not migrated or restarted the owner's service.
+Expired background URLs stop serving immediately; draft-file collection runs at
+startup and in the existing runtime cleanup cycle (60 seconds by default). A
+stopped host performs collection on its next startup.
+Migration 32 preserves existing reviewed FAQ and adds approval-bound question
+variants. Migration 33 adds the private Pages settings and verification row;
+normal runtime backup includes it. Rebuilt frontend and backend must agree on
+all three migrations. The read-only export GET rebuilds the public ZIP without
+changing state. Upload the public ZIP manually, then use the owner-triggered
+check against the exact configured Pages entrance and manifest. Verification
+rebuilds the expected manifest locally and stores only the URL, digest and time
+of a successful match; changing local bundle, appearance, FAQ or gateway
+origins does not automatically clear that state. This is distinct from A1's
+owner-reported gateway external check. No upload or public activation has been
+performed. Follow the [A5 contract](A5_VISITOR_APPEARANCE_EXPORT_CONTRACT.md)
+and [bilingual Pages guide](PAGES_SHARING_GUIDE.md); final local gates remain open.
+
 **2026-09-28 approved A1 operations (OR-027 / ADR-053):** Follow [the frozen gateway contract](A1_FUNNEL_GATEWAY_CONTRACT.md) for `REPONPC_ADMIN_ORIGINS`, visitor port/proxy settings, migration 30, private configure/start/stop/check endpoints and backup/restore. Production uses a separate visitor loopback listener (8001 by default); the full application/evaluation launcher must never be a Funnel target. Local gateway stop is distinct from official Funnel off. Tailscale login/authorization/commands remain owner-operated; RepoNPC stores no Tailscale credentials. A dated owner report from a non-tailnet network is separate from local readiness and configuration. Restart/restore requires new external confirmation. The opt-in Linux `compose.funnel.yml` uses host networking, removes inherited published ports and binds both application and gateway to host loopback; Compose baseline is 2.24.4+. Implementation and local verification are in progress; no real Funnel or external acceptance is claimed.
 
 Before the opt-in Linux recipe, run `python scripts/funnel_compose_preflight.py`; an unavailable, prerelease, malformed or older Compose version stops this preflight. Then resolve `docker compose -f compose.yml -f compose.funnel.yml config --quiet` and use the same files for `up`. Preserve existing `.env` and runtime backups; RepoNPC does not enable Funnel through this recipe.
@@ -182,9 +238,9 @@ No-model startup must still reach health and protected administration. Manual dr
 
 Set `REPONPC_CHAT_PROVIDER=ollama`, its private base URL, model name, and honest context/output limits. Do not publish Ollama's port to the Internet. If Ollama runs on the Docker host, use the platform's documented private host gateway rather than a public address.
 
-RepoNPC uses Ollama's native `GET /api/tags`, `POST /api/chat`, and `POST /api/embed` routes. Chat requests set `stream: false`, structured requests use `format`, and output limits use `options.num_predict`.
+RepoNPC uses Ollama's native `GET /api/tags`, bounded selected-model `POST /api/show`, `POST /api/chat`, and `POST /api/embed` routes. Buffered admin/probe chat sets `stream: false`; ADR-057 public chat uses `stream: true`. Structured requests use `format`, and generation limits use `options.num_predict`. ADR-055 preserves reasoning ON for supported controls: boolean `think: true`, an exact advertised named reasoning default, or the backend default when support is unknown. It never silently disables reasoning or infers support from a model name. Each request sends bounded `options.num_ctx`, reduced by a smaller verified native context; metadata preparation consumes the outer operation budget rather than adding repeated calls or retries. Trace content is discarded; only the final answer is validated and returned.
 
-Official references: [Ollama API introduction](https://docs.ollama.com/api/introduction), [chat](https://docs.ollama.com/api/chat), [embeddings](https://docs.ollama.com/api/embed), and [structured outputs](https://docs.ollama.com/capabilities/structured-outputs).
+Official references: [Ollama API introduction](https://docs.ollama.com/api/introduction), [chat](https://docs.ollama.com/api/chat), [embeddings](https://docs.ollama.com/api/embed), [structured outputs](https://docs.ollama.com/capabilities/structured-outputs), [thinking](https://docs.ollama.com/capabilities/thinking), [context](https://docs.ollama.com/context-length) and [parameter meanings](https://docs.ollama.com/modelfile).
 
 The embedding profile/model used to build the bundle must exactly match runtime. After choosing Ollama, an optional recommendation is `qwen3-embedding:0.6b`; other curated choices include `bge-m3` and `embeddinggemma:300m`. None is a product default under 0.2.2. The local sentence-transformers adapter is benchmark/build-fixture-only. Model load or encode failure is explicit and never falls back to another provider/model.
 
@@ -335,6 +391,52 @@ Implementation must require explicit bundle IDs and refuse unknown/incompatible 
 
 ## 11. Backup and recovery
 
+### Web maintenance: encrypted SQLite restoration in the original data directory
+
+Under ADR-054, authenticated 「維護 / Maintenance」 provides **Create backup**,
+**Restore from backup**, retained-bundle rollback and gateway stop. Enter and
+confirm a backup password of 12–1024 characters. The download is a
+`.reponpc-backup` encrypted file; passwords are cleared after submission and are
+not saved. Keep the password separately from the file. RepoNPC retains an
+additional ciphertext copy under `data/private/maintenance/`. After creating it,
+press **Download the encrypted backup** to save the already-created file using
+your current owner session. Verify the file in your downloads; the creation
+message does not itself prove that the browser saved it.
+
+This file restores SQLite settings to the **same original data directory**.
+It does not include model weights, host keys, retained bundle files, appearance
+or local-portfolio assets. Keep these resources and their permissions separately.
+For full disaster recovery or moving hosts, use the protected stopped-service
+data-directory procedure below. Initial Web restoration requires the exact
+application version shown in the backup and a recognized runtime schema.
+
+To restore, choose the encrypted file and enter its password, then **Inspect
+backup**. Inspecting changes no current runtime state. A successful inspection
+shows creation time, application/schema version and a ten-minute expiry. Verify
+the original keys/resources remain, stop outstanding analysis/model work, and
+check the explicit restore confirmation. Cancellation/expiry clears the preview;
+repeat inspection if it expires or the session changes.
+
+Restore first drains writers and stops the old service, then automatically saves
+the current state as another encrypted backup using the uploaded backup's
+password. It normalizes trusted SQLite rows, replaces the database/pointer and
+starts fresh services. Failures preserve or restore the previous database and
+bundle pointer; unsafe stop/rollback leaves management temporarily unavailable
+instead of admitting writes. `202` means accepted, not finished. Reopen management
+after completion: all old sessions and launch grants are revoked, so sign in
+again or reopen with the loopback launcher. The visitor gateway stays off and
+requires deliberate restart and a new external check. Gateway stop does not
+turn Tailscale Funnel off; follow the linked official Tailscale flow separately.
+
+After a crash, stop RepoNPC and all its owned workers before examining
+`data/private/maintenance/preview-*`. These are protected decrypted staging, not
+downloadable backups. Remove only identified abandoned RepoNPC preview directories
+after saving the required encrypted recovery copies; never remove host keys,
+bundles or unrelated data. Review retained encrypted backups manually under your
+normal storage/retention policy. RepoNPC does not silently delete recovery copies.
+
+### Host-only full backup and recovery
+
 Back up:
 
 - `reponpc.yml` and character assets through Git (already versioned);
@@ -353,6 +455,13 @@ docker compose exec app reponpc runtime check
 Recovery order: restore secrets with correct permissions, restore/verify runtime database, start the pinned application version, validate local bundles, fetch manifest if necessary, and check health/readiness/admin access/card/chat plus the active embedding profile. Since configuration and immutable releases are in GitHub, runtime conversation data does not need recovery. Loopback evaluation restores access by minting a new launcher grant. Production uses host-only `reponpc admin set-password --data-dir <dir> [--username <owner>]`; it does not reopen setup or alter GitHub connections. Recovery readiness is established by clean-host tests for both profile paths.
 
 ## 12. Upgrades
+
+The Windows onedir build and Inno Setup recipe are documented in
+[the Windows packaging guide](../packaging/windows/README.md). Run the newer
+installer explicitly; normal upgrade/uninstall preserves the data directory
+outside the installation. This is a recipe contract, not completed clean-Windows
+acceptance. Actual installer compilation, upgrade/uninstall, SmartScreen and
+data-preservation checks remain release gates. No in-app installer download occurs.
 
 1. Read release notes for application/index/runtime schema compatibility.
 2. Back up runtime state and record current image/bundle IDs.
@@ -373,11 +482,11 @@ If the application fails before a migration commits, restore the old image. Runt
 
 ## 14. Capacity and cost controls
 
-Start with `.env.example` public-chat defaults: 10 requests/minute/IP, two concurrent generations, 200 accepted chats/UTC day, 2,000-character questions, six history messages, and 4,096 output tokens (maximum 8,192). Lower them for expensive providers or small hardware.
+Start with `.env.example` public-chat defaults: 10 requests/minute/IP, two concurrent generations, 200 accepted chats/UTC day, 2,000-character questions, six history messages, and a 16,384-token generation ceiling (maximum 16,384, ADR-055). Lower them for expensive providers or small hardware.
 
-Admin repository analysis separately uses `REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS=8192`; accepted values are positive integers up to `16384` (16k). `REPONPC_ANALYSIS_REPOSITORY_TIMEOUT_SECONDS=1800`, `REPONPC_ANALYSIS_PROVIDER_TIMEOUT_SECONDS=300`, `REPONPC_ANALYSIS_GENERATION_ATTEMPTS=3` and `REPONPC_ANALYSIS_GITHUB_TIMEOUT_SECONDS=60` control execution without inheriting the public 45-second request deadline. Archive/source byte and entry settings are listed in `.env.example`; invalid relationships fail startup. The Windows launcher loads these `REPONPC_*` values from `.env`, and Compose passes them to the app. Full prompt/evidence/schema plus output must fit `REPONPC_CHAT_MAX_CONTEXT_TOKENS` and the selected provider's capability. A smaller provider cap wins; insufficient input room rejects analysis rather than overfilling context. The cap is a ceiling, not a requirement to generate/bill all tokens. Context estimates are not actual usage. Complete buffered provider adapters use socket inactivity as an approximation and cannot emit first-token/token-idle progress.
+Admin repository analysis separately uses `REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS=16384`; accepted values are positive integers up to `16384` (16k). `REPONPC_ANALYSIS_REPOSITORY_TIMEOUT_SECONDS=1800`, `REPONPC_ANALYSIS_PROVIDER_TIMEOUT_SECONDS=300`, `REPONPC_ANALYSIS_GENERATION_ATTEMPTS=3` and `REPONPC_ANALYSIS_GITHUB_TIMEOUT_SECONDS=60` control execution without inheriting the public 180-second request deadline (ADR-057). Archive/source byte and entry settings are listed in `.env.example`; invalid relationships fail startup. The Windows launcher loads these `REPONPC_*` values from `.env`, and Compose passes them to the app. Full prompt/evidence/schema plus output must fit `REPONPC_CHAT_MAX_CONTEXT_TOKENS` and the selected provider's capability. A smaller provider cap wins; insufficient input room rejects analysis rather than overfilling context. The cap is a ceiling, not a requirement to generate/bill all tokens. Explicit lower values remain valid. For Ollama it bounds reasoning and final answer together, not two separate allowances or 16k visible answer tokens. Context estimates are not actual usage. `prompt_eval_count` and `eval_count` are provider-reported token counts, not visible character counts. The configured total context defaults to 32,768 and is distinct from output; reserve complete UTF-8 messages/schema plus 256 framing tokens and output before generation. The official Qwen3.5-9B card documents thinking enabled by default, 262,144 native context and recommends 128k for complex reasoning; these are model facts, not guarantees for this bounded local setting. See [the official card](https://huggingface.co/Qwen/Qwen3.5-9B). No fixed Chinese-character ratio is assumed. Complete buffered provider adapters use socket inactivity as an approximation and cannot emit first-token/token-idle progress.
 
-After changing the deployment value, load the new backend through the normal restart procedure; it is not a hot setting or a public YAML field. Existing provider and 120-second active-item deadlines remain, so slower models may still time out. `PROVIDER_OUTPUT_LIMIT_REACHED` identifies an observed output-limit stop and is distinct from malformed/schema-invalid output. Incomplete content is discarded and no automatic repair/retry/model fallback occurs. Review the setting/model and explicitly retry or continue manually. Changed analysis budget/policy misses incompatible result caches without deleting confirmed contribution text.
+After changing the deployment value, load the new backend through the normal restart procedure; it is not a hot setting or a public YAML field. The existing stage-specific deadlines remain, so slower reasoning models may still time out even with a larger generation ceiling. `PROVIDER_OUTPUT_LIMIT_REACHED` identifies an observed output-limit stop and is distinct from malformed/schema-invalid output. Incomplete content is discarded and no automatic repair/retry/model fallback occurs. Review the setting/model and explicitly retry or continue manually. Changed analysis budget/policy misses incompatible result caches without deleting confirmed contribution text.
 
 ADR-034 includes runtime migration 24 to extend the closed reason constraint while preserving existing batch data/events/indexes. Follow the stopped-service backup procedure, deploy matching frontend/backend, then start once to migrate. On migration failure the transaction rolls back; use the prior matching application and protected runtime backup if a downgrade is needed. Older stored schema-error rows do not acquire a guessed truncation reason.
 
@@ -385,18 +494,18 @@ Monitor safe aggregate accepted/rejected counts, retrieval/model latency, provid
 
 ## 15. Troubleshooting matrix
 
-| Symptom | Check | Safe action |
-| --- | --- | --- |
-| `setup_required` | manifest URL/host, first workflow, bundle state | publish/fix a new bundle; do not bypass validation |
-| `readyz` 503, profile works | model/embedding status and compatibility | fix configured provider/model; no cloud fallback |
-| Update failed | checksum/schema/model/SQLite/smoke safe error | keep active bundle, republish corrected immutable bundle |
-| GitHub save 409 | current blob SHA and recent Git change | reload/reapply manually; never force overwrite |
-| Card seems stale | bundle/card revision, GitHub image proxy | confirm new asset, increment revision, use fallback |
-| Chat 429 | IP bucket/concurrency/daily budget | wait or deliberately adjust operator limit |
-| Citation opens old code | inspect commit in URL | expected: citations are immutable; publish new index for new code |
-| Ollama unreachable | private network/DNS/model availability | restore private route; do not expose it publicly |
-| vLLM unavailable/model absent | private route, `/v1/models`, served model, chat template or embedding model | restore the selected instance/model; do not switch providers silently |
-| Model service URL save fails | read the focused Web Admin alert and safe diagnostic ID; compare provider, scheme, host and effective port | same-origin path edits such as `/v1` may retain the key; for a changed provider/origin, re-enter the new key or explicitly remove it; existing settings remain until save succeeds |
+| Symptom                       | Check                                                                                                      | Safe action                                                                                                                                                                        |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setup_required`              | manifest URL/host, first workflow, bundle state                                                            | publish/fix a new bundle; do not bypass validation                                                                                                                                 |
+| `readyz` 503, profile works   | model/embedding status and compatibility                                                                   | fix configured provider/model; no cloud fallback                                                                                                                                   |
+| Update failed                 | checksum/schema/model/SQLite/smoke safe error                                                              | keep active bundle, republish corrected immutable bundle                                                                                                                           |
+| GitHub save 409               | current blob SHA and recent Git change                                                                     | reload/reapply manually; never force overwrite                                                                                                                                     |
+| Card seems stale              | bundle/card revision, GitHub image proxy                                                                   | confirm new asset, increment revision, use fallback                                                                                                                                |
+| Chat 429                      | IP bucket/concurrency/daily budget                                                                         | wait or deliberately adjust operator limit                                                                                                                                         |
+| Citation opens old code       | inspect commit in URL                                                                                      | expected: citations are immutable; publish new index for new code                                                                                                                  |
+| Ollama unreachable            | private network/DNS/model availability                                                                     | restore private route; do not expose it publicly                                                                                                                                   |
+| vLLM unavailable/model absent | private route, `/v1/models`, served model, chat template or embedding model                                | restore the selected instance/model; do not switch providers silently                                                                                                              |
+| Model service URL save fails  | read the focused Web Admin alert and safe diagnostic ID; compare provider, scheme, host and effective port | same-origin path edits such as `/v1` may retain the key; for a changed provider/origin, re-enter the new key or explicitly remove it; existing settings remain until save succeeds |
 
 ## 16. Release completion items
 
@@ -406,15 +515,15 @@ The Phase 5 gate also requires every P0 item in `SPEC_AND_ENGINEERING_REMEDIATIO
 
 ### 16.1 Current Milestone D–F verification record (2026-08-16)
 
-| Check | Result | Release meaning |
-| --- | --- | --- |
-| Python format, lint, type, contract, integration, security, migration, cache, batch, and retrieval suites | Pass — `607 passed, 2 skipped` with Compose smoke excluded | D–E local automated evidence is complete; two skips remain part of the suite result. |
-| Web format, lint, type, unit, and production build | Pass — Prettier/typecheck/build and `53` Vitest tests; ESLint exits zero with 8 existing Fast Refresh warnings | D–E frontend implementation has local build/test evidence. |
-| Current-source browser smoke | Historical pass for the superseded 0.1.9 first-owner/login/admin flow | Must be rerun for the 0.2.0 local-launch, production-password, authenticated GitHub-connection, full viewport, and assistive-technology paths. |
-| Docker image, Compose smoke, runtime-volume restart, and clean host | Blocked | Docker configuration and engine named-pipe access were denied on this host. |
-| Windows launcher smoke | Partial / blocked | Launcher contract passed 5 tests; the stale `reponpc.exe` lock was cleared and frozen dependency sync plus environment validation completed. Full health smoke remains blocked by host-denied Hugging Face network access during embedding startup. |
-| Ollama, vLLM, and generic OpenAI-compatible live capacity/timeout matrix | Not run | No owner-authorized live provider endpoints/models were available. |
-| Real anonymous GitHub public-repository resolution, rate exhaustion, and exact-SHA archive run | Not run | Required by 0.2.1 after the anonymous REST resolver lands; OAuth/reconnect evidence is no longer a release gate. |
+| Check                                                                                                     | Result                                                                                                         | Release meaning                                                                                                                                                                                                                                     |
+| --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Python format, lint, type, contract, integration, security, migration, cache, batch, and retrieval suites | Pass — `607 passed, 2 skipped` with Compose smoke excluded                                                     | D–E local automated evidence is complete; two skips remain part of the suite result.                                                                                                                                                                |
+| Web format, lint, type, unit, and production build                                                        | Pass — Prettier/typecheck/build and `53` Vitest tests; ESLint exits zero with 8 existing Fast Refresh warnings | D–E frontend implementation has local build/test evidence.                                                                                                                                                                                          |
+| Current-source browser smoke                                                                              | Historical pass for the superseded 0.1.9 first-owner/login/admin flow                                          | Must be rerun for the 0.2.0 local-launch, production-password, authenticated GitHub-connection, full viewport, and assistive-technology paths.                                                                                                      |
+| Docker image, Compose smoke, runtime-volume restart, and clean host                                       | Blocked                                                                                                        | Docker configuration and engine named-pipe access were denied on this host.                                                                                                                                                                         |
+| Windows launcher smoke                                                                                    | Partial / blocked                                                                                              | Launcher contract passed 5 tests; the stale `reponpc.exe` lock was cleared and frozen dependency sync plus environment validation completed. Full health smoke remains blocked by host-denied Hugging Face network access during embedding startup. |
+| Ollama, vLLM, and generic OpenAI-compatible live capacity/timeout matrix                                  | Not run                                                                                                        | No owner-authorized live provider endpoints/models were available.                                                                                                                                                                                  |
+| Real anonymous GitHub public-repository resolution, rate exhaustion, and exact-SHA archive run            | Not run                                                                                                        | Required by 0.2.1 after the anonymous REST resolver lands; OAuth/reconnect evidence is no longer a release gate.                                                                                                                                    |
 
 These results deliberately do **not** complete Milestone F. Keep the operations status Draft until every blocked or not-run release item has dated, safe evidence. AC-036's clean x86_64 Linux host gate is explicitly owner-directed deferred/not-run in this Windows worktree; the Windows launcher smoke and local test suite are not substitutes for that evidence and must remain a release blocker until a clean Linux run is attached.
 
@@ -442,8 +551,7 @@ Compatibility: embedding create/update may omit dimension; old clients supplying
 
 Independent novice-setup fault evaluation additionally repaired model-key rotation error recovery: rollback runs while the database connection is live; failed BEGIN/UPDATE/COMMIT restores the old master key and preserves decryptable historical revisions. Tests use only synthetic keys in temporary stores. Process-kill atomicity across the key file and database remains outside this fault-path verification.
 
-Chat probe parser follow-up (2026-09-12, amended 2026-09-14): load the matching rebuilt frontend/backend and explicitly retest old failures to obtain parser evidence. Tests use the configured chat output cap (current default 4,096, configuration maximum 8,192) rather than 32; actual billed generation depends on the provider. A probe keeps the 10-second baseline and automatically adds one 10-second grace window to the same bounded request. The provider receives one 20-second deadline; no second request, activation or fallback occurs. Runtime migration 25 belongs to the separate ADR-037 analysis-budget amendment, not probe behavior.
-
+Chat probe parser follow-up (2026-09-12, amended 2026-09-14): load the matching rebuilt frontend/backend and explicitly retest old failures to obtain parser evidence. Tests use the configured chat output cap (current default and configuration maximum 16,384 under ADR-055) rather than 32; actual billed generation depends on the provider. A probe keeps the 10-second baseline and automatically adds one 10-second grace window to the same bounded request. Capability preparation consumes the same 20-second outer deadline; generation receives only its remaining time. No second generation request, activation or fallback occurs. Runtime migration 25 belongs to the separate ADR-037 analysis-budget amendment, not probe behavior.
 
 ## Local portfolio operation (ADR-046)
 
@@ -456,3 +564,22 @@ ADR-052 R12-B work-count tests show that a failed analysis and a restarted servi
 Stop the service before a full data-directory backup, which includes runtime database, secret encryption material and retained immutable bundles. Keep this backup private. A portable YAML backup must include the canonical custom PNG at its configured relative path. To return to legacy Release polling, stop the service, back up the directory, explicitly restore legacy transport configuration, remove only `local-portfolio/source-local`, then restart. Do not run two writers against the same data directory.
 
 The Windows launcher remains loopback-only. The owner currently has no public HTTPS destination (2026-09-23); retain the sharing setup and complete local tests first. Public deployment later requires the existing visitor-only HTTPS reverse-proxy recipe; the admin API and direct model ports remain private. Creating or updating Profile README files is a separate explicit GitHub action by the owner.
+
+## Visitor waiting experience — ADR-057 (2026-10-04)
+
+REPONPC_CHAT_TIMEOUT_SECONDS now defaults to 180 seconds, accepts 1–300; existing
+explicit settings (including 45) remain valid. Restart/re-export normal artifacts
+to load updated code; no real owner runtime was changed by local verification.
+Do not buffer SSE; proxy timeouts must exceed configured total plus margin.
+Public chat uses native Ollama NDJSON or Chat Completions SSE with closed phase
+events; final text remains buffered until validation. Admin/probe generation
+stays buffered. Thinking text is private. New streamed public generation is one
+request without retries or provider fallback. Read cancellation and total deadline
+close blocked sockets; keepalive is not model activity and never resets time.
+The thinking-text request remains unfinished; see the processing contract.
+
+## Approved public summary amendment (2026-10-04)
+
+To enable public summaries, explicitly select Responses in the existing OpenAI-compatible service form, save, then probe/select the model through the existing workflow. Existing active/frozen profiles retain their previous connection revision. No startup variable changes are required. The provider/model must accept the summary option; no automatic parameter or protocol retry occurs. [Local verification](../release-evidence/a7/waiting-ux-20261004/PUBLIC_SUMMARY_RESULT.zh-TW.md) used a synthetic upstream, not a real service. Back up through the existing protected workflow before upgrading runtime schema 35; old encrypted payloads retain Chat Completions semantics.
+
+OR-032 / ADR-058 / Specification 0.4.10 adopts the [public summary contract](CHAT_PUBLIC_SUMMARY_CONTRACT_2026-10-04.md). FR-040/043/044/047, NFR-005/009/014 and AC-019/023/057/062/063/064/068/071 retain their thresholds. Explicit Responses selection, legacy/revision compatibility, bounded untrusted plain text, prompt/secret negative tests, final-answer separation, cancellation and bilingual keyboard-accessible display require verification. No real provider invocation, publication, catalog admission or release acceptance is implied. Previous pending-summary notes are historical and superseded by this approval.

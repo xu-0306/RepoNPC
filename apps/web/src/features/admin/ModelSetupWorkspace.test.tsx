@@ -7,6 +7,7 @@ describe("ModelSetupWorkspace", () => {
   it("keeps model selection and both complete role setup areas visible together", () => {
     const markup = renderToStaticMarkup(
       <ModelSetupWorkspace
+        guidanceView={<p>DEVICE CHECK AND MODEL GUIDANCE</p>}
         chatConnectionView={<p>CHAT SERVICE FORM</p>}
         chatView={<p>CHAT MODEL FORM</p>}
         embeddingConnectionView={<p>FINDER SERVICE FORM</p>}
@@ -17,6 +18,12 @@ describe("ModelSetupWorkspace", () => {
     );
 
     expect(markup).toContain("確認分析模型");
+    expect(markup.indexOf("DEVICE CHECK AND MODEL GUIDANCE")).toBeGreaterThan(
+      markup.indexOf("MODEL SELECTION"),
+    );
+    expect(markup).toContain(
+      '<details class="model-setup-workspace__guidance">',
+    );
     expect(markup).not.toContain("步驟 1");
     expect(markup).not.toContain("右側");
     expect(markup.indexOf("FINDER MODEL FORM")).toBeLessThan(

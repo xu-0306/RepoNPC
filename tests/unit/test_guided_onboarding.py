@@ -390,11 +390,15 @@ def test_analysis_reuses_exclusions_returns_distinct_evidence_and_cleans_staging
         assert connection.execute("SELECT COUNT(*) FROM daily_usage").fetchone()[0] == 0
 
 
-def test_analysis_budget_is_8192_for_compatibility_and_batch_paths(
+@pytest.mark.parametrize("budget", [8192, 16384])
+def test_analysis_budget_for_compatibility_and_batch_paths(
     tmp_path: Path,
+    budget: int,
 ) -> None:
     chat = LargeCapacityFakeChat()
-    service, _database, resolver, _chat = _service(tmp_path, chat=chat)
+    service, _database, resolver, _chat = _service(
+        tmp_path, chat=chat, analysis_max_output_tokens=budget
+    )
     first = service.analyze_repository(
         session_hash="session-a",
         slug="octocat/demo",
@@ -418,7 +422,7 @@ def test_analysis_budget_is_8192_for_compatibility_and_batch_paths(
 
     assert first["repository"]["commit_sha"] == SHA  # type: ignore[index]
     assert second["repository"]["commit_sha"] == SHA  # type: ignore[index]
-    assert chat.max_output_tokens == [8192, 8192]
+    assert chat.max_output_tokens == [budget, budget]
 
 
 def test_contribution_suggestion_keeps_700_token_cap_with_analysis_provider(

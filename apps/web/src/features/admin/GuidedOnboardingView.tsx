@@ -48,9 +48,14 @@ type Copy = {
   start: string;
   startAi: string;
   startManual: string;
+  startAiHelp: string;
+  startManualHelp: string;
   modelsHeading: string;
   modelsDescription: string;
   confirmModels: string;
+  returnToPreparation: string;
+  returnWithoutSetup: string;
+  modelReturnHelp: string;
   modelsRequired: string;
   advanced: string;
   advancedDescription: string;
@@ -87,6 +92,7 @@ type Copy = {
   selectionRequired: string;
   selectionLocked: string;
   analysisHeading: string;
+  analysisResultsHeading: string;
   analysisDescription: string;
   providerHeading: string;
   providerReady: (provider: string) => string;
@@ -121,6 +127,13 @@ type Copy = {
   inferenceHeading: string;
   inferenceDescription: string;
   noInferences: string;
+  inferenceBadge: string;
+  sourcesLabel: (count: number) => string;
+  otherFacts: string;
+  missingSources: string;
+  technicalDetails: string;
+  fullInterpretation: string;
+  analysisVersion: string;
   skipped: (count: number) => string;
   contributionsHeading: string;
   contributionsDescription: string;
@@ -132,6 +145,9 @@ type Copy = {
   manualEntryHelp: string;
   statementRequired: string;
   proposalHeading: string;
+  manualProposalHeading: string;
+  manualProposalDescription: string;
+  confirmManualSelection: string;
   proposalDescription: string;
   originalStatement: string;
   proposedAssertionsHeading: string;
@@ -204,10 +220,17 @@ const COPY: Record<Locale, Copy> = {
     start: "開始引導設定",
     startAi: "設定 AI 並開始",
     startManual: "先手動建立作品集",
+    startAiHelp:
+      "先設定、測試並確認選用回答／分析模型與資料查找模型，再選專案進行 AI 分析。進入設定不會自動下載或呼叫模型，也不會發布作品集。",
+    startManualHelp:
+      "不需模型即可手動填寫、確認、預覽、儲存及備份草稿。之後準備 NPC 與即時聊天仍需模型；建立草稿不等於公開分享。",
     modelsHeading: "設定 AI 模型",
     modelsDescription:
-      "先分別測試分析與回答模型、資料查找模型，再選擇要用於分析。資料查找模型會整理作品內容，協助找到回答的參考依據。這不會改變公開網站使用的模型。",
+      "依序設定下方的回答模型與資料查找模型，才能準備 NPC 並聊天。還沒準備好服務時，也能先手動填寫、預覽及儲存內容。",
     confirmModels: "完成模型設定並選擇專案",
+    returnToPreparation: "完成設定並返回準備 NPC",
+    returnWithoutSetup: "返回準備 NPC",
+    modelReturnHelp: "內容草稿已保留。完成模型設定後可返回準備 NPC。",
     modelsRequired:
       "請先測試回答模型與資料查找模型，再於選擇區按「確認用於分析」。",
     advanced: "使用進階 raw YAML",
@@ -254,6 +277,7 @@ const COPY: Record<Locale, Copy> = {
     selectionRequired: "至少勾選一個專案後才能繼續。",
     selectionLocked: "選取已確認；你可以在後續步驟返回編輯。",
     analysisHeading: "分析已選專案",
+    analysisResultsHeading: "先看專案內容，再描述你的貢獻",
     analysisDescription:
       "分析你已確認的公開專案；完成後檢視專案中可確認的資訊與 AI 推論，再填寫自己的貢獻。",
     providerHeading: "模型連線",
@@ -278,7 +302,7 @@ const COPY: Record<Locale, Copy> = {
     createBatch: "開始批次分析",
     batchPreflightRequired: "請先完成可用的分析前檢查。",
     batchCreationPending: "正在建立批次分析。",
-    continueContributions: "檢視專案中可確認的資訊並填寫貢獻",
+    continueContributions: "下一步：描述我的貢獻",
     continueManually: "略過分析，手動填寫貢獻",
     back: "返回",
     editSelection: "編輯專案選擇",
@@ -293,6 +317,13 @@ const COPY: Record<Locale, Copy> = {
     inferenceDescription:
       "AI 根據參考依據提出的推論；不會自動成為你已確認的個人貢獻。",
     noInferences: "沒有 AI 推論。",
+    inferenceBadge: "AI 整理・尚未確認",
+    sourcesLabel: (count) => `查看專案依據（${count} 個來源）`,
+    otherFacts: "其他可核對的專案內容",
+    missingSources: "部分參考依據未包含在這份結果中，請勿視為已核對。",
+    technicalDetails: "技術識別資訊",
+    fullInterpretation: "閱讀完整解讀",
+    analysisVersion: "分析版本（commit）",
     skipped: (count) => `已略過 ${count} 個不符合安全規則的項目`,
     contributionsHeading: "你對這個專案的貢獻",
     contributionsDescription:
@@ -306,6 +337,10 @@ const COPY: Record<Locale, Copy> = {
     manualEntryHelp: "模型不可用時，你仍可直接填寫雙語角色、摘要與貢獻描述。",
     statementRequired: "先填寫你的貢獻說明才能請求建議。",
     proposalHeading: "AI 建議（尚未確認）",
+    manualProposalHeading: "手動填寫的貢獻",
+    manualProposalDescription:
+      "編輯雙語內容後，請明確確認。修改已確認內容後需要重新確認。",
+    confirmManualSelection: "確認專案並填寫貢獻",
     proposalDescription:
       "以下欄位可以編輯；只有你明確確認或編輯後接受，才會成為你已確認的個人貢獻。",
     originalStatement: "你的原始貢獻說明",
@@ -390,10 +425,18 @@ const COPY: Record<Locale, Copy> = {
     start: "Start guided setup",
     startAi: "Set up AI and begin",
     startManual: "Build manually first",
+    startAiHelp:
+      "Set up, test and explicitly select both an answer/analysis model and a content-finder model before choosing projects for AI analysis. Entering setup does not download, call a model or publish your portfolio.",
+    startManualHelp:
+      "No model is needed to write, confirm, preview, save or back up a draft manually. Preparing the NPC and live chat still need models later; creating a draft does not publish it.",
     modelsHeading: "Set up AI models",
     modelsDescription:
-      "Test the analysis/chat model and content finder separately, then choose them for analysis. The content finder organizes project content and locates supporting information for answers. This does not change the model used by the public website.",
+      "Set up an answer model and a content finder below to prepare the NPC and chat. You can also write, preview and save content manually before adding models.",
     confirmModels: "Finish model setup and choose projects",
+    returnToPreparation: "Finish setup and return to prepare NPC",
+    returnWithoutSetup: "Return to prepare NPC",
+    modelReturnHelp:
+      "Your content draft is kept. Return to prepare the NPC after model setup.",
     modelsRequired:
       "Test both models, then select them and choose Use for analysis in the selection panel.",
     advanced: "Use advanced raw YAML",
@@ -445,6 +488,8 @@ const COPY: Record<Locale, Copy> = {
     selectionLocked:
       "Selection is confirmed. You can return and edit it from later steps.",
     analysisHeading: "Analyze selected projects",
+    analysisResultsHeading:
+      "Review the projects, then describe your contribution",
     analysisDescription:
       "Analyze confirmed public projects, then review information you can verify from each project and AI inferences before describing your contribution.",
     providerHeading: "Model connection",
@@ -470,8 +515,7 @@ const COPY: Record<Locale, Copy> = {
     createBatch: "Start batch analysis",
     batchPreflightRequired: "Complete an available preflight before starting.",
     batchCreationPending: "Creating the analysis batch.",
-    continueContributions:
-      "Review information you can verify and describe contribution",
+    continueContributions: "Next: describe my contribution",
     continueManually: "Skip analysis and enter contribution manually",
     back: "Back",
     editSelection: "Edit project selection",
@@ -488,6 +532,15 @@ const COPY: Record<Locale, Copy> = {
     inferenceDescription:
       "AI suggestions grounded in supporting information; they never become your confirmed contribution automatically.",
     noInferences: "No AI inferences.",
+    inferenceBadge: "AI interpretation · unconfirmed",
+    sourcesLabel: (count) =>
+      `View project evidence (${count} ${count === 1 ? "source" : "sources"})`,
+    otherFacts: "Other verifiable project content",
+    missingSources:
+      "Some supporting evidence is missing from this result. It has not been verified here.",
+    technicalDetails: "Technical identifiers",
+    fullInterpretation: "Read the full interpretation",
+    analysisVersion: "Analyzed version (commit)",
     skipped: (count) => `${count} items were skipped by safety rules`,
     contributionsHeading: "Your contribution to this project",
     contributionsDescription:
@@ -503,6 +556,10 @@ const COPY: Record<Locale, Copy> = {
     statementRequired:
       "Enter your contribution description before requesting a suggestion.",
     proposalHeading: "AI suggestion (unconfirmed)",
+    manualProposalHeading: "Manually entered contribution",
+    manualProposalDescription:
+      "Edit both languages, then explicitly confirm. Changes to confirmed content require confirmation again.",
+    confirmManualSelection: "Confirm projects and enter contributions",
     proposalDescription:
       "Edit these fields, then explicitly confirm the suggestion. Only explicit confirmation makes this your confirmed contribution.",
     originalStatement: "Your original contribution description",
@@ -722,7 +779,7 @@ function providerDisplayName(
   return locale === "zh-TW" ? "尚未設定" : "Not configured";
 }
 
-function EvidenceFact({ fact }: { fact: RepositoryFact }) {
+function EvidenceFact({ fact, copy }: { fact: RepositoryFact; copy: Copy }) {
   const location =
     fact.start_line === null
       ? fact.path
@@ -732,10 +789,16 @@ function EvidenceFact({ fact }: { fact: RepositoryFact }) {
             : ""
         }`;
   return (
-    <li>
+    <li
+      className="guided-onboarding__source"
+      data-evidence-class="REPOSITORY_FACT"
+    >
       <strong>{location}</strong>
-      <span>{fact.excerpt}</span>
-      <code>{fact.evidence_id}</code>
+      <pre>{fact.excerpt}</pre>
+      <details>
+        <summary>{copy.technicalDetails}</summary>
+        <code>{fact.evidence_id}</code>
+      </details>
     </li>
   );
 }
@@ -743,18 +806,58 @@ function EvidenceFact({ fact }: { fact: RepositoryFact }) {
 function EvidenceInference({
   inference,
   locale,
+  facts,
+  copy,
 }: {
   inference: ModelInference;
   locale: Locale;
+  facts: RepositoryFact[];
+  copy: Copy;
 }) {
+  const statement = localized(inference.statement, locale);
+  const longStatement = statement.length > 240;
+  const missingSources = inference.supporting_evidence_ids.some(
+    (id) => !facts.some((fact) => fact.evidence_id === id),
+  );
   return (
-    <li>
-      <span>{localized(inference.statement, locale)}</span>
-      <small>
-        {inference.supporting_evidence_ids.length > 0
-          ? inference.supporting_evidence_ids.join(", ")
-          : "—"}
-      </small>
+    <li
+      className="guided-onboarding__interpretation"
+      data-evidence-class="MODEL_INFERENCE"
+    >
+      <p className="guided-onboarding__interpretation-badge">
+        {copy.inferenceBadge}
+      </p>
+      <div className="guided-onboarding__interpretation-text">
+        <p
+          className={
+            longStatement
+              ? "guided-onboarding__interpretation-preview"
+              : undefined
+          }
+        >
+          {statement}
+        </p>
+        {longStatement && (
+          <details>
+            <summary>{copy.fullInterpretation}</summary>
+            <p>{statement}</p>
+          </details>
+        )}
+      </div>
+      <details className="guided-onboarding__sources">
+        <summary>{copy.sourcesLabel(facts.length)}</summary>
+        <p>{copy.factsDescription}</p>
+        {facts.length > 0 ? (
+          <ul>
+            {facts.map((fact) => (
+              <EvidenceFact fact={fact} copy={copy} key={fact.evidence_id} />
+            ))}
+          </ul>
+        ) : (
+          <p>{copy.noFacts}</p>
+        )}
+        {missingSources && <p>{copy.missingSources}</p>}
+      </details>
     </li>
   );
 }
@@ -770,36 +873,25 @@ function EvidenceGroups({
 }) {
   const analysis = repository.analysis;
   if (!analysis) return null;
+  const citedIds = new Set(
+    analysis.inferences.flatMap(
+      (inference) => inference.supporting_evidence_ids,
+    ),
+  );
+  const otherFacts = analysis.facts.filter(
+    (fact) => !citedIds.has(fact.evidence_id),
+  );
   return (
     <div className="guided-onboarding__evidence-groups">
-      <section
-        aria-labelledby={`guided-facts-${repository.metadata.slug}`}
-        className="guided-onboarding__evidence guided-onboarding__evidence--facts"
-        data-evidence-class="REPOSITORY_FACT"
-      >
-        <h5 id={`guided-facts-${repository.metadata.slug}`}>
-          {copy.factsHeading}
-        </h5>
-        <p>{copy.factsDescription}</p>
-        {analysis.facts.length > 0 ? (
-          <ul>
-            {analysis.facts.map((fact) => (
-              <EvidenceFact fact={fact} key={fact.evidence_id} />
-            ))}
-          </ul>
-        ) : (
-          <p>{copy.noFacts}</p>
-        )}
-      </section>
-
+      <p className="guided-onboarding__analysis-version">
+        {copy.analysisVersion}: <code>{analysis.repository.commit_sha}</code>
+      </p>
       <section
         aria-labelledby={`guided-inferences-${repository.metadata.slug}`}
-        className="guided-onboarding__evidence guided-onboarding__evidence--inferences"
-        data-evidence-class="MODEL_INFERENCE"
       >
-        <h5 id={`guided-inferences-${repository.metadata.slug}`}>
+        <h4 id={`guided-inferences-${repository.metadata.slug}`}>
           {copy.inferenceHeading}
-        </h5>
+        </h4>
         <p>{copy.inferenceDescription}</p>
         {analysis.inferences.length > 0 ? (
           <ul>
@@ -808,6 +900,10 @@ function EvidenceGroups({
                 inference={inference}
                 key={`${repository.metadata.slug}-inference-${index}`}
                 locale={locale}
+                copy={copy}
+                facts={analysis.facts.filter((fact) =>
+                  inference.supporting_evidence_ids.includes(fact.evidence_id),
+                )}
               />
             ))}
           </ul>
@@ -815,6 +911,22 @@ function EvidenceGroups({
           <p>{copy.noInferences}</p>
         )}
       </section>
+      {otherFacts.length > 0 && (
+        <details className="guided-onboarding__sources">
+          <summary>
+            {copy.otherFacts} ({otherFacts.length})
+          </summary>
+          <p>{copy.factsDescription}</p>
+          <ul>
+            {otherFacts.map((fact) => (
+              <EvidenceFact fact={fact} copy={copy} key={fact.evidence_id} />
+            ))}
+          </ul>
+        </details>
+      )}
+      {analysis.facts.length === 0 && analysis.inferences.length === 0 && (
+        <p>{copy.noFacts}</p>
+      )}
     </div>
   );
 }
@@ -831,7 +943,10 @@ function BatchAnalysisResults({
   const completed = repositories.filter(analysisReady);
   if (completed.length === 0) return null;
   return (
-    <section aria-label={copy.factsHeading}>
+    <section
+      aria-label={copy.factsHeading}
+      className="guided-onboarding__results"
+    >
       <ul>
         {completed.map((repository) => (
           <li
@@ -1174,8 +1289,18 @@ function ContributionEditor({
           data-evidence-class="OWNER_ASSERTION"
           data-confirmed={repository.confirmedContribution ? "true" : "false"}
         >
-          <h5 id={`guided-proposal-${slugId}`}>{copy.proposalHeading}</h5>
-          <p>{copy.proposalDescription}</p>
+          <h5 id={`guided-proposal-${slugId}`}>
+            {repository.confirmedContribution
+              ? copy.assertionConfirmed
+              : repository.proposalSource === "model"
+                ? copy.proposalHeading
+                : copy.manualProposalHeading}
+          </h5>
+          <p>
+            {repository.proposalSource === "model"
+              ? copy.proposalDescription
+              : copy.manualProposalDescription}
+          </p>
           <p>
             <strong>{copy.originalStatement}:</strong>{" "}
             {repository.ownerStatement}
@@ -1185,9 +1310,9 @@ function ContributionEditor({
             className="guided-onboarding__evidence guided-onboarding__evidence--proposed-assertions"
           >
             <h6 id={`guided-proposed-assertions-${slugId}`}>
-              {copy.proposedAssertionsHeading}
+              {proposalLocked ? copy.confirmed : copy.proposedAssertionsHeading}
             </h6>
-            <p>{copy.proposedAssertionsDescription}</p>
+            {!proposalLocked && <p>{copy.proposedAssertionsDescription}</p>}
             {(["zh-TW", "en"] as const).map((proposalLocale) => (
               <label
                 htmlFor={`guided-role-${slugId}-${proposalLocale}`}
@@ -1399,27 +1524,33 @@ function IntroStep({
     >
       <h2 id="guided-intro-heading">{copy.introTitle}</h2>
       <p>{copy.introBody}</p>
-      <h3>{copy.outcome}</h3>
-      <ul>
-        {copy.outcomeItems.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
       <button
+        aria-describedby="guided-start-ai-help"
         disabled={busy}
         onClick={() => onAction({ type: "START_AI" })}
         type="button"
       >
         {copy.startAi}
       </button>
+      <p id="guided-start-ai-help">{copy.startAiHelp}</p>
       <button
+        aria-describedby="guided-start-manual-help"
         disabled={busy}
         onClick={() => onAction({ type: "START_MANUAL" })}
         type="button"
       >
         {copy.startManual}
       </button>
+      <p id="guided-start-manual-help">{copy.startManualHelp}</p>
       {disabledReason(busy ? copy.disabledBusy : null, "guided-start-reason")}
+      <details>
+        <summary>{copy.outcome}</summary>
+        <ul>
+          {copy.outcomeItems.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </details>
       <button
         className="guided-onboarding__advanced-link"
         disabled={busy}
@@ -1441,12 +1572,14 @@ function ModelsStep({
   copy,
   busy,
   modelSetupView,
+  modelSetupReturn,
   onAction,
 }: {
   state: GuidedOnboardingState;
   copy: Copy;
   busy: boolean;
   modelSetupView?: ReactNode;
+  modelSetupReturn?: boolean;
   onAction: GuidedOnboardingViewProps["onAction"];
 }) {
   const reason = busy
@@ -1459,8 +1592,10 @@ function ModelsStep({
       aria-labelledby="guided-models-heading"
       className="guided-onboarding__step"
     >
-      <h2 id="guided-models-heading">{copy.modelsHeading}</h2>
-      <p>{copy.modelsDescription}</p>
+      <h2 className="visually-hidden" id="guided-models-heading">
+        {copy.modelsHeading}
+      </h2>
+      <p>{modelSetupReturn ? copy.modelReturnHelp : copy.modelsDescription}</p>
       {modelSetupView ?? <p>{copy.providerUnknown}</p>}
       <button
         aria-describedby={reason ? "guided-models-reason" : undefined}
@@ -1469,7 +1604,7 @@ function ModelsStep({
         className="ux-primary"
         type="button"
       >
-        {copy.confirmModels}
+        {modelSetupReturn ? copy.returnToPreparation : copy.confirmModels}
       </button>
       {disabledReason(reason, "guided-models-reason")}
       <button
@@ -1477,7 +1612,7 @@ function ModelsStep({
         onClick={() => onAction({ type: "START_MANUAL" })}
         type="button"
       >
-        {copy.startManual}
+        {modelSetupReturn ? copy.returnWithoutSetup : copy.startManual}
       </button>
     </section>
   );
@@ -1635,7 +1770,9 @@ function RepositoriesStep({
         onClick={() => onAction({ type: "CONFIRM_SELECTION" })}
         type="button"
       >
-        {copy.confirmSelection}
+        {state.route === "manual"
+          ? copy.confirmManualSelection
+          : copy.confirmSelection}
       </button>
       {disabledReason(selectionReason, "guided-selection-reason")}
     </section>
@@ -1748,7 +1885,11 @@ function AnalysisStep({
       aria-labelledby="guided-analysis-heading"
       className="guided-onboarding__step"
     >
-      <h2 id="guided-analysis-heading">{copy.analysisHeading}</h2>
+      <h2 id="guided-analysis-heading">
+        {allTerminal && !hasActiveBatch && repositories.some(analysisReady)
+          ? copy.analysisResultsHeading
+          : copy.analysisHeading}
+      </h2>
       <p>{copy.analysisDescription}</p>
       {hasBatchAnalysis ? (
         <>
@@ -2342,6 +2483,7 @@ export function GuidedOnboardingView({
   batchCanCreate,
   batchCreatePending,
   modelSetupView,
+  modelSetupReturn,
   providerStatus,
   providerStatusPending,
   onAction,
@@ -2358,18 +2500,17 @@ export function GuidedOnboardingView({
 }: GuidedOnboardingViewProps & { workspaceStatus?: AdminWorkspaceStatus }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
-  const previousStep = useRef(state.step);
   useEffect(() => {
-    if (previousStep.current !== state.step) {
-      headingRef.current?.focus();
-      previousStep.current = state.step;
-    }
+    headingRef.current?.focus({ preventScroll: true });
+    headingRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
   }, [state.step]);
   useEffect(() => {
     if (errorCode) errorRef.current?.focus();
   }, [errorCode]);
   const copy = COPY[locale];
-  const error = errorCode ? guidedErrorMessage(locale, errorCode) : "";
+  const error = errorCode
+    ? guidedErrorMessage(locale, errorCode, state.step)
+    : "";
   const navigationBatchActive =
     batchAnalysisActive ??
     (batchAnalysisView !== undefined && !batchAnalysisTerminal);
@@ -2383,15 +2524,10 @@ export function GuidedOnboardingView({
       data-step={state.step}
       lang={locale}
     >
-      <AdminStatusCards
-        locale={locale}
-        state={state}
-        status={workspaceStatus ?? EMPTY_WORKSPACE_STATUS}
-      />
       <header className="guided-onboarding__header">
-        <p className="guided-onboarding__eyebrow">{copy.product}</p>
         <h2 id="guided-onboarding-heading" ref={headingRef} tabIndex={-1}>
-          {copy.title} · {copy.steps[state.step]}
+          <span className="visually-hidden">{copy.title} · </span>
+          {copy.steps[state.step]}
         </h2>
         {state.mode === "guided" && (
           <OnboardingStepper copy={copy} locale={locale} state={state} />
@@ -2410,7 +2546,24 @@ export function GuidedOnboardingView({
             >
               {copy.back}
             </button>
-            {state.step !== "repositories" && state.step !== "analysis" && (
+            <details>
+              <summary>
+                {locale === "zh-TW" ? "編輯或重新開始" : "Edit or start over"}
+              </summary>
+              {state.step !== "repositories" && state.step !== "analysis" && (
+                <button
+                  aria-describedby={
+                    navigationBatchActive
+                      ? "guided-navigation-batch-reason"
+                      : undefined
+                  }
+                  disabled={busy || navigationBatchActive}
+                  onClick={() => onAction({ type: "EDIT_SELECTION" })}
+                  type="button"
+                >
+                  {copy.editSelection}
+                </button>
+              )}
               <button
                 aria-describedby={
                   navigationBatchActive
@@ -2418,28 +2571,16 @@ export function GuidedOnboardingView({
                     : undefined
                 }
                 disabled={busy || navigationBatchActive}
-                onClick={() => onAction({ type: "EDIT_SELECTION" })}
+                onClick={() => {
+                  if (window.confirm(copy.startOverConfirm)) {
+                    onAction({ type: "RESET" });
+                  }
+                }}
                 type="button"
               >
-                {copy.editSelection}
+                {copy.startOver}
               </button>
-            )}
-            <button
-              aria-describedby={
-                navigationBatchActive
-                  ? "guided-navigation-batch-reason"
-                  : undefined
-              }
-              disabled={busy || navigationBatchActive}
-              onClick={() => {
-                if (window.confirm(copy.startOverConfirm)) {
-                  onAction({ type: "RESET" });
-                }
-              }}
-              type="button"
-            >
-              {copy.startOver}
-            </button>
+            </details>
             {navigationBatchActive && (
               <p
                 className="guided-onboarding__disabled-reason"
@@ -2503,6 +2644,7 @@ export function GuidedOnboardingView({
               busy={busy}
               copy={copy}
               modelSetupView={modelSetupView}
+              modelSetupReturn={modelSetupReturn}
               onAction={onAction}
               state={state}
             />
@@ -2577,6 +2719,11 @@ export function GuidedOnboardingView({
           )}
         </>
       )}
+      <AdminStatusCards
+        locale={locale}
+        state={state}
+        status={workspaceStatus ?? EMPTY_WORKSPACE_STATUS}
+      />
     </section>
   );
 }

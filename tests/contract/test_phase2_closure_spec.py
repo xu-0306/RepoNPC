@@ -14,7 +14,12 @@ def _read(path: str) -> str:
 def test_technical_spec_freezes_phase2_closure_contracts() -> None:
     specification = _read("docs/TECHNICAL_SPEC.md")
 
-    assert "| Status | **Approved** |" in specification
+    status_rows = [
+        [cell.strip() for cell in line.split("|")[1:-1]]
+        for line in specification.splitlines()
+        if line.lstrip().startswith("|") and line.split("|")[1].strip() == "Status"
+    ]
+    assert status_rows == [["Status", "**Approved**"]]
     assert "Version 0.3.9 / ADR-046 approves the local-first portfolio" in specification
     assert "LOCAL_PUBLICATION_CONTRACT_2026-09-22.md" in specification
     assert "ADR-044" in specification

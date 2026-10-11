@@ -30,7 +30,11 @@ from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from reponpc.indexing.exclusions import SourceEntryKind
-from reponpc.indexing.sources import RepositoryBlob
+from reponpc.indexing.sources import (
+    RepositoryBlob,
+    optional_repository_count,
+    optional_repository_language,
+)
 from reponpc.indexing.sources import ResolvedRepository as IndexedRepository
 
 GITHUB_REST_API_URL: Final = "https://api.github.com"
@@ -85,6 +89,9 @@ class ResolvedRepository:
     commit_sha: str
     is_archived: bool
     archive_url: str
+    language: str | None = None
+    stars: int | None = None
+    forks: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +100,9 @@ class RepositoryMetadataHint:
     node_id: str
     default_branch: str
     is_archived: bool
+    language: str | None = None
+    stars: int | None = None
+    forks: int | None = None
 
 
 class GitHubResolutionCache(Protocol):
@@ -585,7 +595,13 @@ class GitHubRESTMetadataResolver:
                     ):
                         raise BatchResolverError("NOT_FOUND")
                     hint = RepositoryMetadataHint(
-                        selection.slug, str(node_id), default_branch, archived
+                        selection.slug,
+                        str(node_id),
+                        default_branch,
+                        archived,
+                        optional_repository_language(metadata.get("language")),
+                        optional_repository_count(metadata.get("stargazers_count")),
+                        optional_repository_count(metadata.get("forks_count")),
                     )
                     if self._cache is not None:
                         self._cache.save_metadata(hint)
@@ -602,13 +618,18 @@ class GitHubRESTMetadataResolver:
                     continue
                 repositories.append(
                     ResolvedRepository(
-                        selection.slug,
-                        hint.node_id,
-                        hint.default_branch,
-                        sha,
-                        hint.is_archived,
-                        f"{self._api_url}/repos/{quote(owner, safe='')}"
-                        f"/{quote(name, safe='')}/tarball/{sha}",
+                        slug=selection.slug,
+                        node_id=hint.node_id,
+                        default_branch=hint.default_branch,
+                        commit_sha=sha,
+                        is_archived=hint.is_archived,
+                        archive_url=(
+                            f"{self._api_url}/repos/{quote(owner, safe='')}"
+                            f"/{quote(name, safe='')}/tarball/{sha}"
+                        ),
+                        language=hint.language,
+                        stars=hint.stars,
+                        forks=hint.forks,
                     )
                 )
                 if self._cache is not None:
@@ -875,6 +896,9 @@ class GitHubArchiveSource:
                 default_branch=repository.default_branch,
                 github_html_url=f"https://github.com/{repository.slug}",
                 blobs=blobs,
+                language=repository.language,
+                stars=repository.stars,
+                forks=repository.forks,
             )
         finally:
             cleanup_staged_archive(staged, staging_root=self._staging_root)

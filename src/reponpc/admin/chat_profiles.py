@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import time
 import uuid
 from collections.abc import Callable
 from contextlib import suppress
@@ -16,6 +17,7 @@ from reponpc.admin.model_probe_errors import provider_probe_error_code
 from reponpc.providers.contracts import (
     ChatProvider,
     ProviderError,
+    ProviderFailureCode,
     ProviderMessage,
     ProviderResult,
 )
@@ -186,10 +188,14 @@ class ChatProfileRegistry:
         profile = self.get(profile_id)
         error_code: str | None = None
         error_message: str | None = None
+        deadline = time.monotonic() + _PROBE_TIMEOUT_SECONDS
         try:
             provider = self._provider_resolver(profile)
             if provider is None:
                 raise ChatProfileError("CHAT_CONNECTION_REQUIRED")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ProviderError(ProviderFailureCode.TIMEOUT)
             result = provider.generate(
                 (ProviderMessage("user", 'Reply only with JSON: {"ok":true}.'),),
                 {
@@ -201,8 +207,10 @@ class ChatProfileRegistry:
                 max_output_tokens=provider.capabilities().max_output_tokens,
                 # Preserve the 10-second baseline, then allow one 10-second
                 # grace window without issuing a second billable request.
-                timeout=_PROBE_TIMEOUT_SECONDS,
+                timeout=remaining,
             )
+            if time.monotonic() >= deadline:
+                raise ProviderError(ProviderFailureCode.TIMEOUT)
             if result.finish_reason == "length":
                 raise ProviderResponseError(ResponseIssue.OUTPUT_LIMIT)
             payload = _result_object(result)

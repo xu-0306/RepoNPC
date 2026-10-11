@@ -1238,6 +1238,210 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             """,
         ),
     ),
+    Migration(
+        version=31,
+        name="bound_scene_appearance",
+        statements=(
+            """
+            CREATE TABLE scene_appearance_state (
+                singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                issued_revision INTEGER NOT NULL DEFAULT 0 CHECK (issued_revision >= 0),
+                source_bundle_id TEXT CHECK (
+                    source_bundle_id IS NULL OR length(source_bundle_id) BETWEEN 1 AND 128
+                ),
+                sprite_sha256 TEXT CHECK (
+                    sprite_sha256 IS NULL OR
+                    (length(sprite_sha256) = 64 AND sprite_sha256 NOT GLOB '*[^0-9a-f]*')
+                ),
+                character_revision INTEGER CHECK (
+                    character_revision IS NULL OR character_revision >= 0
+                ),
+                appearance_revision INTEGER CHECK (
+                    appearance_revision IS NULL OR
+                    (appearance_revision > 0 AND appearance_revision <= issued_revision)
+                ),
+                scene_json TEXT CHECK (
+                    scene_json IS NULL OR length(scene_json) BETWEEN 2 AND 65536
+                ),
+                background_sha256 TEXT CHECK (
+                    background_sha256 IS NULL OR
+                    (length(background_sha256) = 64 AND
+                     background_sha256 NOT GLOB '*[^0-9a-f]*')
+                ),
+                background_extension TEXT CHECK (
+                    background_extension IS NULL OR background_extension IN ('png', 'webp')
+                ),
+                journal_json TEXT CHECK (
+                    journal_json IS NULL OR length(journal_json) BETWEEN 2 AND 65536
+                ),
+                CHECK ((background_sha256 IS NULL) = (background_extension IS NULL)),
+                CHECK (
+                    (source_bundle_id IS NULL AND sprite_sha256 IS NULL AND
+                     character_revision IS NULL AND appearance_revision IS NULL AND
+                     scene_json IS NULL AND background_sha256 IS NULL AND
+                     background_extension IS NULL)
+                    OR
+                    (source_bundle_id IS NOT NULL AND sprite_sha256 IS NOT NULL AND
+                     character_revision IS NOT NULL AND appearance_revision IS NOT NULL AND
+                     scene_json IS NOT NULL)
+                )
+            )
+            """,
+            """
+            INSERT INTO scene_appearance_state(singleton, issued_revision) VALUES (1, 0)
+            """,
+            """
+            CREATE TABLE scene_background_drafts (
+                draft_id_hash TEXT PRIMARY KEY CHECK (
+                    length(draft_id_hash) = 64 AND draft_id_hash NOT GLOB '*[^0-9a-f]*'
+                ),
+                session_hash TEXT NOT NULL UNIQUE REFERENCES admin_sessions(session_hash)
+                    ON DELETE CASCADE,
+                content_sha256 TEXT NOT NULL CHECK (
+                    length(content_sha256) = 64 AND content_sha256 NOT GLOB '*[^0-9a-f]*'
+                ),
+                extension TEXT NOT NULL CHECK (extension IN ('png', 'webp')),
+                created_at TEXT NOT NULL CHECK (length(created_at) BETWEEN 1 AND 32),
+                expires_at TEXT NOT NULL CHECK (length(expires_at) BETWEEN 1 AND 32)
+            )
+            """,
+            """
+            CREATE INDEX scene_background_drafts_expiry_idx
+            ON scene_background_drafts(expires_at)
+            """,
+        ),
+    ),
+    Migration(
+        version=32,
+        name="reviewed_faq_question_variants",
+        statements=(
+            """
+            ALTER TABLE faq_entries ADD COLUMN variants_json TEXT NOT NULL DEFAULT '[]'
+                CHECK (
+                    length(variants_json) BETWEEN 2 AND 8192
+                    AND json_valid(variants_json)
+                    AND json_type(variants_json) = 'array'
+                    AND json_array_length(variants_json) <= 8
+                )
+            """,
+        ),
+    ),
+    Migration(
+        version=33,
+        name="pages_sharing_state",
+        statements=(
+            """
+            CREATE TABLE pages_sharing_state (
+                singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+                pages_url TEXT CHECK(pages_url IS NULL OR length(pages_url) BETWEEN 1 AND 2048),
+                verified_pages_url TEXT CHECK(
+                    verified_pages_url IS NULL OR length(verified_pages_url) BETWEEN 1 AND 2048
+                ),
+                verified_content_sha256 TEXT CHECK(
+                    verified_content_sha256 IS NULL OR (
+                        length(verified_content_sha256) = 64
+                        AND verified_content_sha256 NOT GLOB '*[^0-9a-f]*'
+                    )
+                ),
+                verified_at TEXT CHECK(verified_at IS NULL OR length(verified_at) BETWEEN 1 AND 64),
+                CHECK(
+                    (verified_pages_url IS NULL) = (verified_content_sha256 IS NULL)
+                    AND (verified_pages_url IS NULL) = (verified_at IS NULL)
+                )
+            )
+            """,
+            "INSERT INTO pages_sharing_state(singleton_id) VALUES (1)",
+        ),
+    ),
+    Migration(
+        version=34,
+        name="builtin-embedding-profile",
+        statements=(
+            # Rebuild the parent and its two referencing tables in the same
+            # migration transaction. Preserve references instead of allowing
+            # ON DELETE SET NULL to erase the selected pair during the rebuild.
+            "CREATE TABLE embedding_switch_intent_saved AS SELECT * FROM embedding_switch_intent",
+            "CREATE TABLE analysis_model_selection_saved AS SELECT * FROM analysis_model_selection",
+            "DROP TABLE embedding_switch_intent",
+            "DROP TABLE analysis_model_selection",
+            """
+            CREATE TABLE embedding_profiles_new (
+                profile_id TEXT PRIMARY KEY CHECK(length(profile_id) BETWEEN 1 AND 64),
+                provider TEXT NOT NULL CHECK(provider IN (
+                    'ollama', 'openai_compatible', 'vllm', 'builtin_onnx'
+                )),
+                model_id TEXT NOT NULL CHECK(length(model_id) BETWEEN 1 AND 256),
+                dimension INTEGER CHECK(dimension IS NULL OR dimension BETWEEN 1 AND 65536),
+                normalized INTEGER NOT NULL CHECK(normalized IN (0, 1)),
+                query_prefix TEXT NOT NULL CHECK(length(query_prefix) <= 128),
+                passage_prefix TEXT NOT NULL CHECK(length(passage_prefix) <= 128),
+                connection_reference TEXT CHECK(
+                    (provider = 'builtin_onnx' AND connection_reference IS NULL)
+                    OR (provider != 'builtin_onnx' AND connection_reference IS NOT NULL
+                        AND length(connection_reference) BETWEEN 1 AND 64)
+                ),
+                status TEXT NOT NULL CHECK(status IN (
+                    'probe', 'reindex_required', 'reindexing', 'ready',
+                    'last_known_good', 'probe_failed'
+                )),
+                active INTEGER NOT NULL CHECK(active IN (0, 1))
+                    CHECK(active = 0 OR dimension IS NOT NULL),
+                observed_adapter TEXT, observed_model_id TEXT, observed_dimension INTEGER,
+                last_error_code TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                last_probed_at TEXT,
+                reindex_generation INTEGER NOT NULL DEFAULT 0,
+                reindex_started_at TEXT, reindex_completed_at TEXT, bundle_id TEXT,
+                connection_revision INTEGER NOT NULL DEFAULT 0 CHECK(connection_revision >= 0)
+                    CHECK(provider != 'builtin_onnx' OR connection_revision = 0),
+                last_error_message TEXT
+                    CHECK(last_error_message IS NULL OR length(last_error_message) <= 2000)
+            )
+            """,
+            "INSERT INTO embedding_profiles_new SELECT * FROM embedding_profiles",
+            "DROP TABLE embedding_profiles",
+            "ALTER TABLE embedding_profiles_new RENAME TO embedding_profiles",
+            "CREATE UNIQUE INDEX embedding_profiles_one_active_idx "
+            "ON embedding_profiles(active) WHERE active = 1",
+            """
+            CREATE TABLE embedding_switch_intent (
+                state_key TEXT PRIMARY KEY CHECK(state_key = 'current'),
+                generation INTEGER NOT NULL CHECK(generation >= 1),
+                from_profile_id TEXT REFERENCES embedding_profiles(profile_id),
+                from_bundle_id TEXT,
+                to_profile_id TEXT NOT NULL REFERENCES embedding_profiles(profile_id),
+                to_bundle_id TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """,
+            "INSERT INTO embedding_switch_intent SELECT * FROM embedding_switch_intent_saved",
+            """
+            CREATE TABLE analysis_model_selection (
+                selection_key TEXT PRIMARY KEY CHECK(selection_key = 'current'),
+                chat_profile_id TEXT REFERENCES chat_profiles(profile_id) ON DELETE SET NULL,
+                chat_connection_revision INTEGER
+                    CHECK(chat_connection_revision IS NULL OR chat_connection_revision >= 1),
+                embedding_profile_id TEXT
+                    REFERENCES embedding_profiles(profile_id) ON DELETE SET NULL,
+                embedding_connection_revision INTEGER
+                    CHECK(embedding_connection_revision IS NULL
+                          OR embedding_connection_revision >= 0),
+                selection_generation INTEGER NOT NULL DEFAULT 0 CHECK(selection_generation >= 0),
+                updated_at TEXT NOT NULL
+            )
+            """,
+            "INSERT INTO analysis_model_selection SELECT * FROM analysis_model_selection_saved",
+            "DROP TABLE embedding_switch_intent_saved",
+            "DROP TABLE analysis_model_selection_saved",
+        ),
+    ),
+    Migration(
+        version=35,
+        name="explicit_chat_interface",
+        statements=(
+            "ALTER TABLE model_connections ADD COLUMN chat_api TEXT NOT NULL "
+            "DEFAULT 'chat_completions' CHECK(chat_api IN ('chat_completions', 'responses'))",
+        ),
+    ),
 )
 
 

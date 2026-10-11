@@ -8,7 +8,8 @@
     "web:lint": "pnpm --dir apps/web run lint",
     "web:typecheck": "pnpm --dir apps/web run typecheck",
     "web:test": "pnpm --dir apps/web run test",
-    "web:build": "pnpm --dir apps/web run build",
+    "web:guard": "node scripts/check_visitor_source.mjs --self-test && node scripts/check_visitor_source.mjs",
+    "web:build": "uv run --locked python scripts/build_scene_assets.py --check && pnpm --dir apps/web run build",
     "web:check": "pnpm run web:format && pnpm run web:lint && pnpm run web:typecheck && pnpm run web:test && pnpm run web:build"
   }
 }

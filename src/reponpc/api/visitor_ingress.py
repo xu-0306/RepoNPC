@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import logging
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections import deque
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import urlsplit
@@ -22,6 +24,7 @@ from starlette.requests import ClientDisconnect
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from reponpc.api.public import (
+    _LOGGER,
     PublicChatRequest,
     SetupState,
     _DisconnectedResponse,
@@ -47,6 +50,7 @@ _PUBLIC_READS = frozenset(
         "/api/public/profile",
         "/api/public/faq",
         "/api/public/character.png",
+        "/api/public/scene-background",
         "/api/public/card.svg",
         "/api/public/card.gif",
         "/api/public/card.png",
@@ -57,8 +61,8 @@ _PUBLIC_READS = frozenset(
 class VisitorChatWorkers:
     """Retain admissions until the synchronous worker actually exits, across restarts."""
 
-    def __init__(self, capacity: int) -> None:
-        if isinstance(capacity, bool) or capacity < 1:
+    def __init__(self, capacity: int | None) -> None:
+        if capacity is not None and (isinstance(capacity, bool) or capacity < 1):
             raise ValueError("visitor worker capacity must be positive")
         self._capacity = capacity
         self._lock = threading.Lock()
@@ -66,7 +70,7 @@ class VisitorChatWorkers:
 
     def reserve(self) -> threading.Event | None:
         with self._lock:
-            if len(self._active) >= self._capacity:
+            if self._capacity is not None and len(self._active) >= self._capacity:
                 return None
             cancelled = threading.Event()
             self._active.add(cancelled)
@@ -125,10 +129,11 @@ def _visitor_files(root: Path | None) -> dict[str, Path]:
         manifest = json.loads(manifest_path.read_bytes())
         if not isinstance(manifest, dict) or len(manifest) > 1024:
             return {}
-        entry = manifest.get("index.html")
+        entry_key = "visitor.html" if "visitor.html" in manifest else "index.html"
+        entry = manifest.get(entry_key)
         if not isinstance(entry, dict) or entry.get("isEntry") is not True:
             return {}
-        files = {"/": _regular_build_file(root, "index.html")}
+        files = {"/": _regular_build_file(root, entry_key)}
         visited: set[str] = set()
 
         def visit(key: str) -> None:
@@ -158,7 +163,18 @@ def _visitor_files(root: Path | None) -> dict[str, Path]:
                     raise ValueError("invalid visitor build")
                 visit(dependency)
 
-        visit("index.html")
+        visit(entry_key)
+        entrance = files["/"]
+        if entrance.stat().st_size > 1024 * 1024:
+            raise ValueError("invalid visitor build")
+        document = entrance.read_bytes()
+        if b"data-owner-mode" in document or b"data-visitor-toggle" in document:
+            from reponpc.api.visitor_document import render_visitor_document
+
+            render_visitor_document(document, color_mode="system", visitor_mode_toggle=True)
+            if document.count(b'<script src="./scene-mode.js"></script>') != 1:
+                raise ValueError("invalid visitor build")
+            files["/scene-mode.js"] = _regular_build_file(root, "scene-mode.js")
         return files
     except (OSError, ValueError, KeyError, TypeError, RecursionError):
         return {}
@@ -202,12 +218,16 @@ class _VisitorBoundary:
         self,
         app: ASGIApp,
         *,
-        settings_supplier: Callable[[], Mapping[str, Any]],
+        gateway_origin: str,
+        pages_origin: str,
+        listener_ready_supplier: Callable[[], bool],
         paths: frozenset[str],
         gateway_port: int,
     ) -> None:
         self._app = app
-        self._settings = settings_supplier
+        self._gateway_origin = gateway_origin
+        self._pages_origin = pages_origin
+        self._ready = listener_ready_supplier
         self._paths = paths
         self._port = gateway_port
 
@@ -220,20 +240,7 @@ class _VisitorBoundary:
         headers = request.headers
         path = scope["path"]
         raw = scope.get("raw_path", path.encode("utf-8"))
-        try:
-            settings = self._settings()
-        except Exception:
-            response = error_response(
-                request,
-                status_code=503,
-                code="SERVICE_NOT_READY",
-                message=_message("en", "SERVICE_NOT_READY"),
-            )
-            if scope["method"] == "HEAD":
-                response.body = b""
-            await response(scope, receive, send)
-            return
-        origin = settings.get("gateway_origin")
+        origin = self._gateway_origin
         hosts = headers.getlist("host")
         allowed_hosts = {f"127.0.0.1:{self._port}"}
         if isinstance(origin, str):
@@ -259,7 +266,7 @@ class _VisitorBoundary:
             await Response(status_code=404)(scope, receive, send)
             return
         origins = headers.getlist("origin")
-        cors = public_api and len(origins) == 1 and origins[0] == settings.get("pages_origin")
+        cors = public_api and len(origins) == 1 and origins[0] == self._pages_origin
         started = False
 
         async def safe_send(message: Message) -> None:
@@ -280,7 +287,7 @@ class _VisitorBoundary:
                 message = {**message, "body": b""}
             await send(message)
 
-        if not settings.get("enabled") or not settings.get("listener_ready"):
+        if not self._ready():
             await error_response(
                 request,
                 status_code=503,
@@ -326,16 +333,244 @@ class _VisitorBoundary:
             )(scope, receive, safe_send)
 
 
+async def _chat_response(
+    request: Request,
+    body: PublicChatRequest,
+    service: Any,
+    *,
+    identity: str | None,
+    active_workers: VisitorChatWorkers | None,
+    deadline: float,
+    keepalive_seconds: float,
+    project_event: Callable[[str, dict[str, Any]], dict[str, Any]],
+    stream_error: Callable[[Exception], tuple[str, int | None]],
+    events: Callable[..., Any] = delivery_events,
+    allow_retry: bool = False,
+) -> Response:
+    if time.monotonic() >= deadline:
+        return error_response(
+            request,
+            status_code=504,
+            code="REQUEST_TIMEOUT",
+            message=_message(body.locale, "REQUEST_TIMEOUT"),
+        )
+    cancelled = active_workers.reserve() if active_workers else threading.Event()
+    if cancelled is None:
+        return error_response(
+            request,
+            status_code=429,
+            code="CONCURRENCY_LIMIT",
+            message=_message(body.locale, "CONCURRENCY_LIMIT"),
+            retry_after_seconds=1,
+        )
+
+    started = time.monotonic()
+    progress: deque[tuple[str, dict[str, Any]]] = deque(maxlen=16)
+    progress_lock = threading.Lock()
+    summary_characters = 0
+    summary_paragraphs = 0
+
+    def report(stage: str) -> None:
+        # Closed server-owned labels only. No provider text or free-form fields
+        # are accepted at this public boundary.
+        if cancelled.is_set() or stage not in {
+            "searching",
+            "evidence_ready",
+            "waiting_model",
+            "generating",
+            "thinking",
+            "validating",
+        }:
+            return
+        payload: dict[str, Any] = {
+            "stage": stage,
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+        }
+        with progress_lock:
+            if progress and progress[-1][0] == "progress" and progress[-1][1]["stage"] == stage:
+                progress[-1] = ("progress", payload)
+            else:
+                progress.append(("progress", payload))
+
+    def report_summary(text: str) -> None:
+        nonlocal summary_characters, summary_paragraphs
+        # Only the service's privacy-checked public-summary capability reaches
+        # this path. Final answers and raw provider extensions use other paths.
+        if cancelled.is_set() or not isinstance(text, str) or not text.strip():
+            return
+        with progress_lock:
+            if summary_paragraphs >= 8 or summary_characters + len(text) > 4096:
+                return
+            summary_characters += len(text)
+            summary_paragraphs += 1
+            progress.append(
+                (
+                    "reasoning_summary",
+                    {
+                        "text": text,
+                        "elapsed_ms": int((time.monotonic() - started) * 1000),
+                    },
+                )
+            )
+
+    def drain() -> list[tuple[str, dict[str, Any]]]:
+        with progress_lock:
+            pending = list(progress)
+            progress.clear()
+        return pending
+
+    def answer() -> Any:
+        try:
+            return service.answer(
+                message=body.message,
+                locale=body.locale,
+                history=tuple(ChatHistoryMessage(item.role, item.content) for item in body.history),
+                client_ip=identity,
+                cancel_requested=cancelled,
+                timeout_seconds=deadline - time.monotonic(),
+                allow_retry=allow_retry,
+                **({"on_progress": report} if getattr(service, "supports_progress", False) else {}),
+                **(
+                    {"on_summary": report_summary}
+                    if getattr(service, "supports_public_summary", False)
+                    else {}
+                ),
+            )
+        finally:
+            if active_workers:
+                active_workers.release(cancelled)
+
+    task = asyncio.create_task(asyncio.to_thread(answer))
+    task.add_done_callback(lambda finished: None if finished.cancelled() else finished.exception())
+
+    async def stream():
+        next_heartbeat = time.monotonic() + keepalive_seconds
+        try:
+            yield ": connected\n\n"
+            while not task.done():
+                if await request.is_disconnected():
+                    return
+                if cancelled.is_set():
+                    raise ChatCancelledError("visitor work cancelled")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError
+                for name, payload in drain():
+                    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+                    yield f"event: {name}\ndata: {serialized}\n\n"
+                await asyncio.wait(
+                    {task},
+                    timeout=min(0.05, remaining, max(0, next_heartbeat - time.monotonic())),
+                )
+                if time.monotonic() >= next_heartbeat and not task.done():
+                    yield ": keepalive\n\n"
+                    next_heartbeat = time.monotonic() + keepalive_seconds
+            if time.monotonic() >= deadline:
+                raise TimeoutError
+            for name, payload in drain():
+                serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+                yield f"event: {name}\ndata: {serialized}\n\n"
+            for event, event_payload in events(task.result(), request_id(request)):
+                if cancelled.is_set():
+                    raise ChatCancelledError("visitor work cancelled")
+                event_payload = project_event(event, event_payload)
+                if event == "complete":
+                    event_payload = {
+                        **event_payload,
+                        "elapsed_ms": int((time.monotonic() - started) * 1000),
+                    }
+                    _LOGGER.emit(
+                        logging.INFO,
+                        "chat.stream.complete",
+                        request_id=request_id(request),
+                        route_template="/api/public/chat/stream",
+                        status=200,
+                        retrieval_count=task.result().evidence_count,
+                    )
+                serialized = json.dumps(event_payload, ensure_ascii=False, separators=(",", ":"))
+                yield f"event: {event}\ndata: {serialized}\n\n"
+        except (Exception, asyncio.CancelledError) as exc:
+            if isinstance(exc, asyncio.CancelledError):
+                raise
+            code, retry = stream_error(exc)
+            envelope = json.loads(
+                error_response(
+                    request,
+                    status_code=200,
+                    code=code,
+                    message=_message(body.locale, code),
+                    retry_after_seconds=retry,
+                ).body
+            )
+            serialized = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
+            yield f"event: error\ndata: {serialized}\n\n"
+            _LOGGER.emit(
+                logging.ERROR,
+                "chat.stream.error",
+                request_id=request_id(request),
+                route_template="/api/public/chat/stream",
+                status=502,
+                error_category="internal",
+            )
+        finally:
+            cancelled.set()
+
+    response = _VisitorStream(
+        stream(),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"},
+    )
+    response.cancelled = cancelled
+    return response
+
+
+def _stream_error(exc: Exception) -> tuple[str, int | None]:
+    if isinstance(exc, ChatLimitError) and exc.code in {
+        "RATE_LIMITED",
+        "DAILY_BUDGET_EXHAUSTED",
+        "CONCURRENCY_LIMIT",
+    }:
+        code = exc.code
+        retry = exc.retry_after_seconds
+    else:
+        retry = None
+        if isinstance(exc, TimeoutError) or (
+            isinstance(exc, ProviderError) and exc.code is ProviderFailureCode.TIMEOUT
+        ):
+            code = "REQUEST_TIMEOUT"
+        elif isinstance(exc, (BundleActivationError, ChatCancelledError)) or (
+            isinstance(exc, ProviderError) and exc.code is ProviderFailureCode.UNAVAILABLE
+        ):
+            code = "SERVICE_NOT_READY"
+        else:
+            code = "REQUEST_FAILED"
+    return code, retry
+
+
+def _visitor_event(event: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if event != "complete":
+        return payload
+    return {
+        **payload,
+        "usage": None,
+        "finish_reason": payload["finish_reason"]
+        if payload["finish_reason"] in {"stop", "length", "insufficient_context"}
+        else "stop",
+    }
+
+
 def create_visitor_gateway_app(
     *,
     state_supplier: Callable[[], SetupState],
     bundle_manager_supplier: Callable[[], Any],
     chat_service_supplier: Callable[[], Any],
     faq_supplier: Callable[[], Any],
-    settings_supplier: Callable[[], Mapping[str, Any]],
+    scene_supplier: Callable[[], Any] = lambda: None,
+    gateway_origin: str,
+    pages_origin: str,
+    listener_ready_supplier: Callable[[], bool],
     web_dist: Path | None,
     gateway_port: int,
-    admin_origins: tuple[str, ...],
     trusted_proxy_cidrs: tuple[str, ...],
     max_message_characters: int,
     max_history_messages: int,
@@ -347,12 +582,12 @@ def create_visitor_gateway_app(
     """Build a closed subapp; no private routes, SPA mount or second service lifespan."""
     from reponpc.main import PublicBoundaryMiddleware
 
-    del admin_origins  # The owner configuration boundary validates hostname separation.
     if keepalive_seconds <= 0:
         raise ValueError("visitor keepalive must be positive")
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, redirect_slashes=False)
     active_workers = workers or VisitorChatWorkers(global_concurrency)
     app.state.visitor_workers = active_workers
+    app.state.scene_supplier = scene_supplier
     networks = tuple(ipaddress.ip_network(value) for value in trusted_proxy_cidrs)
     files = _visitor_files(web_dist)
     router = create_public_router(
@@ -360,6 +595,7 @@ def create_visitor_gateway_app(
         state_supplier=state_supplier,
         bundle_manager_supplier=bundle_manager_supplier,
         faq_supplier=faq_supplier,
+        scene_supplier=scene_supplier,
     )
     router.routes = [
         route
@@ -394,15 +630,34 @@ def create_visitor_gateway_app(
             },
         }
 
-    def bind_file(file: Path) -> Callable[[], Response]:
+    def bind_file(file: Path) -> Callable[[Request], Response]:
         # Bind without a query parameter that could override the selected file.
-        def serve() -> Response:
+        def serve(request: Request) -> Response:
             try:
                 assert web_dist is not None
                 checked = _regular_build_file(web_dist, file.relative_to(web_dist).as_posix())
             except (OSError, ValueError):
                 return Response(status_code=404)
-            return FileResponse(checked)
+            if checked.suffix != ".html":
+                return FileResponse(checked)
+            from reponpc.api.visitor_document import render_published_visitor_document
+
+            try:
+                if checked.stat().st_size > 1024 * 1024:
+                    raise ValueError("invalid visitor build")
+                document = render_published_visitor_document(
+                    checked.read_bytes(),
+                    bundle_manager=bundle_manager_supplier(),
+                    scene_supplier=getattr(app.state, "scene_supplier", lambda: None),
+                )
+            except (OSError, ValueError, BundleActivationError):
+                return Response(status_code=503)
+            response = Response(
+                document, media_type="text/html", headers={"Cache-Control": "no-store"}
+            )
+            if request.method == "HEAD":
+                response.body = b""
+            return response
 
         return serve
 
@@ -427,7 +682,7 @@ def create_visitor_gateway_app(
     @app.post(_CHAT_PATH)
     async def chat(request: Request) -> Response:
         service = chat_service_supplier()
-        deadline = request.state.gateway_started_at + getattr(service, "timeout_seconds", 45.0)
+        deadline = request.state.gateway_started_at + getattr(service, "timeout_seconds", 180.0)
         try:
             identity = public_identity(request)
         except ChatLimitError:
@@ -477,142 +732,30 @@ def create_visitor_gateway_app(
                 code="PAYLOAD_TOO_LARGE",
                 message=_message(body.locale, "PAYLOAD_TOO_LARGE"),
             )
-        current = settings_supplier()
-        if (
-            not current.get("enabled")
-            or not current.get("listener_ready")
-            or not state_supplier().ready
-            or service is None
-        ):
+        if not listener_ready_supplier() or not state_supplier().ready or service is None:
             return error_response(
                 request,
                 status_code=503,
                 code="SERVICE_NOT_READY",
                 message=_message(body.locale, "SERVICE_NOT_READY"),
             )
-        if time.monotonic() >= deadline:
-            return error_response(
-                request,
-                status_code=504,
-                code="REQUEST_TIMEOUT",
-                message=_message(body.locale, "REQUEST_TIMEOUT"),
-            )
-        cancelled = active_workers.reserve()
-        if cancelled is None:
-            return error_response(
-                request,
-                status_code=429,
-                code="CONCURRENCY_LIMIT",
-                message=_message(body.locale, "CONCURRENCY_LIMIT"),
-                retry_after_seconds=1,
-            )
-
-        def answer() -> Any:
-            try:
-                return service.answer(
-                    message=body.message,
-                    locale=body.locale,
-                    history=tuple(
-                        ChatHistoryMessage(item.role, item.content) for item in body.history
-                    ),
-                    client_ip=identity,
-                    cancel_requested=cancelled,
-                    timeout_seconds=deadline - time.monotonic(),
-                    allow_retry=False,
-                )
-            finally:
-                active_workers.release(cancelled)
-
-        task = asyncio.create_task(asyncio.to_thread(answer))
-        task.add_done_callback(
-            lambda finished: None if finished.cancelled() else finished.exception()
+        return await _chat_response(
+            request,
+            body,
+            service,
+            identity=identity,
+            active_workers=active_workers,
+            deadline=deadline,
+            keepalive_seconds=keepalive_seconds,
+            project_event=_visitor_event,
+            stream_error=_stream_error,
         )
-
-        async def stream():
-            next_heartbeat = time.monotonic() + keepalive_seconds
-            try:
-                yield ": connected\n\n"
-                while not task.done():
-                    if await request.is_disconnected():
-                        return
-                    if cancelled.is_set():
-                        raise ChatCancelledError("visitor work cancelled")
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
-                        raise TimeoutError
-                    await asyncio.wait(
-                        {task},
-                        timeout=min(0.05, remaining, max(0, next_heartbeat - time.monotonic())),
-                    )
-                    if time.monotonic() >= next_heartbeat and not task.done():
-                        yield ": keepalive\n\n"
-                        next_heartbeat = time.monotonic() + keepalive_seconds
-                if time.monotonic() >= deadline:
-                    raise TimeoutError
-                for event, event_payload in delivery_events(task.result(), request_id(request)):
-                    if cancelled.is_set():
-                        raise ChatCancelledError("visitor work cancelled")
-                    if event == "complete":
-                        event_payload = {
-                            **event_payload,
-                            "usage": None,
-                            "finish_reason": event_payload["finish_reason"]
-                            if event_payload["finish_reason"]
-                            in {"stop", "length", "insufficient_context"}
-                            else "stop",
-                        }
-                    serialized = json.dumps(
-                        event_payload, ensure_ascii=False, separators=(",", ":")
-                    )
-                    yield f"event: {event}\ndata: {serialized}\n\n"
-            except (Exception, asyncio.CancelledError) as exc:
-                if isinstance(exc, asyncio.CancelledError):
-                    raise
-                if isinstance(exc, ChatLimitError) and exc.code in {
-                    "RATE_LIMITED",
-                    "DAILY_BUDGET_EXHAUSTED",
-                    "CONCURRENCY_LIMIT",
-                }:
-                    code = exc.code
-                    retry = exc.retry_after_seconds
-                else:
-                    retry = None
-                    if isinstance(exc, TimeoutError) or (
-                        isinstance(exc, ProviderError) and exc.code is ProviderFailureCode.TIMEOUT
-                    ):
-                        code = "REQUEST_TIMEOUT"
-                    elif isinstance(exc, (BundleActivationError, ChatCancelledError)) or (
-                        isinstance(exc, ProviderError)
-                        and exc.code is ProviderFailureCode.UNAVAILABLE
-                    ):
-                        code = "SERVICE_NOT_READY"
-                    else:
-                        code = "REQUEST_FAILED"
-                envelope = json.loads(
-                    error_response(
-                        request,
-                        status_code=200,
-                        code=code,
-                        message=_message(body.locale, code),
-                        retry_after_seconds=retry,
-                    ).body
-                )
-                serialized = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
-                yield f"event: error\ndata: {serialized}\n\n"
-            finally:
-                cancelled.set()
-
-        response = _VisitorStream(
-            stream(),
-            media_type="text/event-stream",
-            headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"},
-        )
-        response.cancelled = cancelled
-        return response
 
     app.add_middleware(
         _VisitorBoundary,
-        settings_supplier=settings_supplier,
+        gateway_origin=gateway_origin,
+        pages_origin=pages_origin,
+        listener_ready_supplier=listener_ready_supplier,
         paths=frozenset(files),
         gateway_port=gateway_port,
     )

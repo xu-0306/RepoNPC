@@ -13,6 +13,7 @@ import { drawAlignedFrame, type FrameOffset } from "./characterFrameAlignment";
 
 interface Base64PngCanvasProps {
   pngBase64: string;
+  pngUrl?: string;
   width: number;
   height: number;
   label: string;
@@ -26,6 +27,7 @@ interface Base64PngCanvasProps {
 /** Draws API-provided PNG bytes without a data/blob image URL, preserving img-src 'self'. */
 export function Base64PngCanvas({
   pngBase64,
+  pngUrl,
   width,
   height,
   label,
@@ -37,7 +39,8 @@ export function Base64PngCanvas({
 }: Base64PngCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [failedSource, setFailedSource] = useState<string | null>(null);
-  const failed = failedSource === pngBase64;
+  const sourceKey = pngUrl ?? pngBase64;
+  const failed = failedSource === sourceKey;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -108,12 +111,27 @@ export function Base64PngCanvas({
 
     motion.addEventListener("change", updateMotion);
     const decode = async () => {
-      const bytes = Uint8Array.from(window.atob(pngBase64), (character) =>
-        character.charCodeAt(0),
-      );
-      const decoded = await createImageBitmap(
-        new Blob([bytes], { type: "image/png" }),
-      );
+      let blob: Blob;
+      if (pngUrl) {
+        const parsed = new URL(pngUrl, window.location.href);
+        if (
+          parsed.origin !== window.location.origin ||
+          !parsed.pathname.startsWith("/api/admin/assets/previews/")
+        )
+          throw new Error("Unexpected preview URL");
+        const response = await fetch(parsed.href, {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error("Preview asset is unavailable");
+        blob = await response.blob();
+      } else {
+        const bytes = Uint8Array.from(window.atob(pngBase64), (character) =>
+          character.charCodeAt(0),
+        );
+        blob = new Blob([bytes], { type: "image/png" });
+      }
+      const decoded = await createImageBitmap(blob);
       if (cancelled) {
         decoded.close();
         return;
@@ -129,7 +147,7 @@ export function Base64PngCanvas({
       updateMotion();
     };
     void decode().catch(() => {
-      if (!cancelled) setFailedSource(pngBase64);
+      if (!cancelled) setFailedSource(sourceKey);
     });
 
     return () => {
@@ -138,7 +156,7 @@ export function Base64PngCanvas({
       motion.removeEventListener("change", updateMotion);
       bitmap?.close();
     };
-  }, [pngBase64, width, height, state, frame, frameOffsets]);
+  }, [pngBase64, pngUrl, sourceKey, width, height, state, frame, frameOffsets]);
 
   return (
     <>

@@ -23,6 +23,8 @@ from reponpc.indexing.sources import (
     RepositoryBlob,
     RepositoryParticipation,
     ResolvedRepository,
+    optional_repository_count,
+    optional_repository_language,
 )
 
 
@@ -224,6 +226,9 @@ class GitHubSourceResolver:
             default_branch=default_branch,
             github_html_url=html_url,
             blobs=blobs,
+            language=optional_repository_language(metadata.get("language")),
+            stars=optional_repository_count(metadata.get("stargazers_count")),
+            forks=optional_repository_count(metadata.get("forks_count")),
         )
 
     def participation(

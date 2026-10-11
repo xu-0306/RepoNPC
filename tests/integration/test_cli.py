@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import io
+import json
 import re
 import secrets
 import sqlite3
@@ -13,10 +15,12 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from PIL import Image
 
 import reponpc.main as runtime_main
 from reponpc import cli
 from reponpc.admin.auth import AdminSessionService
+from reponpc.cards.assets import validate_sprite
 from reponpc.indexing.github import GitHubSourceResolver
 from reponpc.indexing.pipeline import (
     PENDING_MANIFEST_NAME,
@@ -73,10 +77,23 @@ class RecordingPublisher:
         self.stable_content = content
 
 
+def _canonical_fixture_sprite() -> bytes:
+    image = Image.new("RGBA", (256, 448), (0, 0, 0, 0))
+    for row in range(7):
+        for column in range(4):
+            image.putpixel(
+                (column * 64 + 12, row * 64 + 12),
+                (20 + row * 20, 40 + column * 30, 100, 255),
+            )
+    output = io.BytesIO()
+    image.save(output, format="PNG", optimize=False, compress_level=9)
+    return validate_sprite(output.getvalue()).content
+
+
 def _write_public_assets(directory: Path) -> Path:
     public = directory / "public"
     public.mkdir()
-    (public / "character.png").write_bytes(b"\x89PNG\r\n\x1a\nfixture")
+    (public / "character.png").write_bytes(_canonical_fixture_sprite())
     for theme in ("light", "dark"):
         for locale in ("zh-TW", "en"):
             (public / f"card-{theme}-{locale}.svg").write_bytes(
@@ -130,7 +147,12 @@ def test_real_pipeline_builds_verifies_then_splits_pending_pointer_publication(
     assert publisher.stable_content == pending_path.read_bytes()
 
 
-def test_production_resolver_adds_participation_at_the_pinned_sha(tmp_path: Path) -> None:
+@pytest.mark.parametrize("collection", ["none", "unavailable", "collected"])
+def test_explicit_collector_adds_participation_at_the_pinned_sha(
+    tmp_path: Path, collection: str
+) -> None:
+    calls = []
+
     class FixtureGitHubResolver(GitHubSourceResolver):
         def resolve(self, *, slug: str, ref: str | None):
             return _fixture_snapshot()
@@ -141,6 +163,9 @@ def test_production_resolver_adds_participation_at_the_pinned_sha(tmp_path: Path
                 "a" * 40,
                 "fixture-owner",
             )
+            calls.append((slug, pinned_sha, github_login))
+            if collection == "unavailable":
+                return RepositoryParticipation(True, None, None, None, None)
             commit = ParticipationCommit("b" * 40, "2025-03")
             return RepositoryParticipation(True, True, commit, commit, False)
 
@@ -151,6 +176,9 @@ def test_production_resolver_adds_participation_at_the_pinned_sha(tmp_path: Path
         config_path,
         tmp_path / "dist",
         resolver=FixtureGitHubResolver(),
+        participation_collector=(
+            FixtureGitHubResolver().participation if collection != "none" else None
+        ),
         embedding_provider=DeterministicEmbeddingProvider(),
         configuration_source=ResolvedConfiguration(
             repository_slug="fixture-owner/reponpc-demo",
@@ -165,7 +193,15 @@ def test_production_resolver_adds_participation_at_the_pinned_sha(tmp_path: Path
     with sqlite3.connect(tmp_path / "dist" / "index.sqlite") as connection:
         assert connection.execute(
             "SELECT COUNT(*) FROM evidence WHERE evidence_class = 'PARTICIPATION'"
-        ).fetchone() == (2,)
+        ).fetchone() == ({"none": 0, "unavailable": 1, "collected": 2}[collection],)
+        assert bool(calls) == (collection != "none")
+        if collection == "unavailable":
+            content, metadata = connection.execute(
+                "SELECT content, metadata_json FROM evidence WHERE evidence_class = 'PARTICIPATION'"
+            ).fetchone()
+            assert "No linked commits" not in content
+            assert json.loads(metadata)["has_visible_commits"] is None
+            assert json.loads(metadata)["other_contributors_visible"] is None
 
 
 def test_entrypoint_mapping_and_no_argument_serve_dispatch(monkeypatch) -> None:
@@ -187,7 +223,7 @@ def test_config_and_index_commands_do_not_start_server(tmp_path: Path, monkeypat
     monkeypatch.setattr(
         cli,
         "build_index_bundle",
-        lambda config, output: (
+        lambda config, output, **kwargs: (
             command_calls.append(("build", Path(output)))
             or SimpleNamespace(manifest=SimpleNamespace(bundle_id="fixture-bundle"))
         ),

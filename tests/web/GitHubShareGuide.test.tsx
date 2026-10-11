@@ -14,6 +14,7 @@ function props(
     locale: "en",
     account: "octo-lab",
     publicUrl: "https://npc.example.test/visitor",
+    verifiedPagesUrl: null,
     profileStatus: "ready",
     imageStatus: "ready",
     repositoryUrl: "https://github.com/octo-lab/octo-lab",
@@ -71,7 +72,10 @@ describe("GitHubShareGuide", () => {
     expect(markup).toContain('aria-labelledby="github-share-profile-heading"');
     expect(markup).toContain('aria-labelledby="github-share-card-heading"');
     expect(markup).toContain('aria-labelledby="github-share-readme-heading"');
-    expect(markup.match(/<summary/g)).toHaveLength(3);
+    expect(markup.match(/<summary/g)).toHaveLength(4);
+    expect(markup).toContain(
+      "<details><summary>Optional advanced route: use a legacy deployment URL</summary>",
+    );
     expect(markup).toContain("octo-lab/octo-lab");
     expect(markup).toContain("You do not need a separate card repository.");
     expect(markup).not.toContain("localStorage");

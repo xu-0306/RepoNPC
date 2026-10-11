@@ -82,6 +82,12 @@ import {
 } from "./modelSetupRequests";
 import { TransientNotice } from "./TransientNotice";
 import { ModelSetupWorkspace } from "./ModelSetupWorkspace";
+import { LocalModelSetup } from "./LocalModelSetup";
+import {
+  ModelGuidanceSetup,
+  type ModelGuidanceEntry,
+} from "./ModelGuidancePanel";
+import { MaintenanceSetup } from "./MaintenanceSetup";
 import { GuidedOnboardingView } from "./GuidedOnboardingView";
 import { LocalLaunchAccessPanel } from "./LocalLaunchAccessPanel";
 import { modelConnectionFailureMessage } from "./modelConnectionFeedback";
@@ -106,6 +112,8 @@ import {
   type RepositoryMetadata,
 } from "./guidedOnboarding";
 import type { Locale } from "../../i18n/messages";
+import type { PublicProfile } from "../../app/publicTypes";
+import type { SceneAppearanceState } from "./AppearancePanel";
 
 interface SetupStatusBody {
   setup_required: boolean;
@@ -235,6 +243,7 @@ interface BatchEventBody {
 }
 
 class AdminRequestError extends Error {
+  readonly code: string;
   readonly retryAfterSeconds: number | undefined;
   readonly requestId: string | undefined;
   readonly status: number;
@@ -246,6 +255,7 @@ class AdminRequestError extends Error {
     requestId?: string,
   ) {
     super(code);
+    this.code = code;
     this.name = "AdminRequestError";
     this.status = status;
     this.retryAfterSeconds = retryAfterSeconds;
@@ -1109,9 +1119,18 @@ export function AdminPage({
   const [localRevision, setLocalRevision] = useState<string | null>(null);
   const [characterSprite, setCharacterSprite] = useState<string | null>(null);
   const [publicationOpen, setPublicationOpen] = useState(false);
+  const [maintenanceOpen, setMaintenanceOpen] = useState(false);
   const [validation, setValidation] = useState<AdminValidation | null>(null);
   const [preview, setPreview] = useState<AdminPreview | null>(null);
   const [status, setStatus] = useState<AdminStatus | null>(null);
+  const [activeCharacter, setActiveCharacter] = useState<
+    PublicProfile["character"] | null
+  >(null);
+  const activeCharacterGeneration = useRef(0);
+  const storedDraft = useRef({
+    content: "",
+    sprite_base64: null as string | null,
+  });
   const [providerStatus, setProviderStatus] =
     useState<GuidedProviderStatus | null>(null);
   const [providerStatusPending, setProviderStatusPending] = useState(true);
@@ -1187,6 +1206,9 @@ export function AdminPage({
   const [modelConnectionsError, setModelConnectionsError] =
     useState<ModelConnectionFeedback | null>(null);
   const [chatProfiles, setChatProfiles] = useState<ChatProfileView[]>([]);
+  const [catalogChoice, setCatalogChoice] = useState<ModelGuidanceEntry | null>(
+    null,
+  );
   const [chatProfilesPending, setChatProfilesPending] = useState(false);
   const [chatProfilesError, setChatProfilesError] = useState("");
   const [analysisSelection, setAnalysisSelection] =
@@ -1212,6 +1234,8 @@ export function AdminPage({
   const [guidedResumeReady, setGuidedResumeReady] = useState(false);
   const guidedResumeFound = useRef(false);
   const draftHydrated = useRef(false);
+  const currentLocale = useRef(locale);
+  currentLocale.current = locale;
   const currentDraft = useRef(draft);
   currentDraft.current = draft;
   const localHydrationGeneration = useRef(0);
@@ -1279,8 +1303,11 @@ export function AdminPage({
     [invalidateContributionRequest],
   );
 
-  const request = useCallback(
-    async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const sendAdminRequest = useCallback(
+    async function sendAdminRequest(
+      path: string,
+      init?: RequestInit,
+    ): Promise<Response> {
       const response = await fetch(path, {
         credentials: "same-origin",
         ...init,
@@ -1294,18 +1321,15 @@ export function AdminPage({
           ...init?.headers,
         },
       });
-      const body = (await response.json().catch(() => null)) as
-        | T
-        | {
-            error?: {
-              code?: string;
-              details?: { reason?: string };
-              retry_after_seconds?: number;
-              request_id?: string;
-            };
-          }
-        | null;
       if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as {
+          error?: {
+            code?: string;
+            details?: { reason?: string };
+            retry_after_seconds?: number;
+            request_id?: string;
+          };
+        } | null;
         if (response.status === 409 && path.startsWith("/api/admin/config")) {
           setConflict(true);
         }
@@ -1330,9 +1354,64 @@ export function AdminPage({
             undefined,
         );
       }
-      return body as T;
+      return response;
     },
     [csrfToken],
+  );
+
+  const request = useCallback(
+    async function request<T>(path: string, init?: RequestInit): Promise<T> {
+      const response = await sendAdminRequest(path, init);
+      return (await response.json().catch(() => null)) as T;
+    },
+    [sendAdminRequest],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const generation = ++activeCharacterGeneration.current;
+    if (!authenticated) {
+      setActiveCharacter(null);
+      return;
+    }
+    void request<PublicProfile>(
+      `/api/public/profile?locale=${encodeURIComponent(locale)}`,
+      { signal: controller.signal },
+    )
+      .then((profile) => {
+        if (
+          !controller.signal.aborted &&
+          activeCharacterGeneration.current === generation
+        )
+          setActiveCharacter(profile.character);
+      })
+      .catch(() => {
+        if (
+          !controller.signal.aborted &&
+          activeCharacterGeneration.current === generation
+        )
+          setActiveCharacter(null);
+      });
+    return () => controller.abort();
+  }, [authenticated, locale, request]);
+
+  const onActiveSceneChange = useCallback(
+    (scene: SceneAppearanceState | null) => {
+      activeCharacterGeneration.current += 1;
+      setActiveCharacter((current) =>
+        scene
+          ? {
+              mode: current?.mode ?? "builtin",
+              frame_duration_ms: current?.frame_duration_ms ?? 160,
+              movement: current?.movement ?? "none",
+              asset_url: `/api/public/character.png?rev=${scene.character_revision}`,
+              revision: scene.character_revision,
+              scene: scene.scene,
+            }
+          : null,
+      );
+    },
+    [],
   );
 
   const requestIdempotentMutation = useCallback(
@@ -1998,6 +2077,10 @@ export function AdminPage({
       ]);
       if (configResult.status === "fulfilled") {
         const local = configResult.value;
+        storedDraft.current = {
+          content: local.content,
+          sprite_base64: local.sprite_base64,
+        };
         const resumedDraft = safeDraftForSessionStorage(
           window.sessionStorage.getItem(GUIDED_DRAFT_STORAGE_KEY) ?? "",
         );
@@ -2028,7 +2111,10 @@ export function AdminPage({
       } else {
         dispatchAdminError({
           type: "SET_GLOBAL_ERROR",
-          message: adminDataErrorMessage(locale, configResult.reason),
+          message: adminDataErrorMessage(
+            currentLocale.current,
+            configResult.reason,
+          ),
         });
       }
       if (statusResult.status === "fulfilled") {
@@ -2047,7 +2133,7 @@ export function AdminPage({
       }
       setBusy(false);
     })();
-  }, [authenticated, locale, request]);
+  }, [authenticated, request]);
 
   async function login(event: React.FormEvent) {
     event.preventDefault();
@@ -2415,6 +2501,14 @@ export function AdminPage({
         setBatchPreflight({ status: "idle" });
         setBatchActions({ pending: null, error: null });
       }
+      if (
+        guidedState.modelSetupReturn &&
+        !nextState.modelSetupReturn &&
+        action.type !== "RESET"
+      )
+        setPublicationOpen(true);
+      if (action.type === "OPEN_PUBLICATION_MODEL_SETUP")
+        setPublicationOpen(false);
       setGuidedState(nextState);
       if (action.type === "SET_MODE") setCharacterWorkspaceOpen(false);
       dispatchAdminError({ type: "CLEAR_GUIDED_ERROR" });
@@ -3101,7 +3195,11 @@ export function AdminPage({
       await operation();
     } catch (guidedError) {
       const code =
-        guidedError instanceof Error ? guidedError.message : "REQUEST_FAILED";
+        guidedError instanceof TypeError
+          ? "REQUEST_FAILED"
+          : guidedError instanceof Error
+            ? guidedError.message
+            : "REQUEST_FAILED";
       dispatchAdminError({ type: "SET_GUIDED_ERROR", code });
     } finally {
       setBusy(false);
@@ -3243,6 +3341,7 @@ export function AdminPage({
   }
 
   function clearSensitiveState() {
+    setCatalogChoice(null);
     setCsrfToken("");
     setPassword("");
     setSetupCode("");
@@ -3250,6 +3349,9 @@ export function AdminPage({
     setSetupPasswordConfirmation("");
     setDraft("");
     setLocalRevision(null);
+    storedDraft.current = { content: "", sprite_base64: null };
+    activeCharacterGeneration.current += 1;
+    setActiveCharacter(null);
     setCharacterSprite(null);
     setPublicationOpen(false);
     try {
@@ -3396,6 +3498,7 @@ export function AdminPage({
   };
   const chatPanel = (managementActions: boolean) => (
     <ChatProfilePanel
+      catalogChoice={catalogChoice}
       connections={connectionsForPurpose("chat")}
       error={chatProfilesError}
       locale={locale}
@@ -3448,7 +3551,17 @@ export function AdminPage({
   );
   const modelPanels = (
     <div className="admin-model-management">
-      {connectionPanel(true)}
+      <ModelGuidanceSetup
+        locale={locale}
+        request={request}
+        onChoose={(model) => setCatalogChoice({ ...model })}
+      />
+      <LocalModelSetup
+        locale={locale}
+        request={request}
+        onProfilesChanged={refreshEmbeddingProfiles}
+      />
+      <div id="embedding-external-setup">{connectionPanel(true)}</div>
       {chatPanel(true)}
       {embeddingPanel(true)}
     </div>
@@ -3513,7 +3626,12 @@ export function AdminPage({
     },
     embedding: {
       model: displayedEmbedding?.model_id ?? null,
-      connection: connectionName(displayedEmbedding?.connection_reference),
+      connection:
+        displayedEmbedding?.provider === "builtin_onnx"
+          ? locale === "zh-TW"
+            ? "這台主機（CPU）"
+            : "This host (CPU)"
+          : connectionName(displayedEmbedding?.connection_reference),
       provider: displayedEmbedding?.provider ?? null,
       state: modelState(
         displayedEmbedding?.profile_id === selectedEmbeddingId,
@@ -3525,6 +3643,21 @@ export function AdminPage({
   };
   const guidedModelSetup = (
     <ModelSetupWorkspace
+      guidanceView={
+        <ModelGuidanceSetup
+          locale={locale}
+          request={request}
+          onChoose={(model) => setCatalogChoice({ ...model })}
+        />
+      }
+      localModelView={
+        <LocalModelSetup
+          locale={locale}
+          request={request}
+          onProfilesChanged={refreshEmbeddingProfiles}
+          onLater={() => applyGuidedAction({ type: "START_MANUAL" })}
+        />
+      }
       chatConnectionView={connectionPanel(false, "chat")}
       chatView={chatPanel(false)}
       embeddingConnectionView={connectionPanel(false, "embedding")}
@@ -3547,17 +3680,23 @@ export function AdminPage({
     />
   );
 
-  const workspaceMode: AdminWorkspaceMode = characterWorkspaceOpen
-    ? "character"
-    : publicationOpen
-      ? "publish"
-      : guidedState.mode;
+  const workspaceMode: AdminWorkspaceMode = maintenanceOpen
+    ? "maintenance"
+    : characterWorkspaceOpen
+      ? "character"
+      : publicationOpen
+        ? "publish"
+        : guidedState.mode;
 
   return (
     <>
       <AdminWorkspace
         authenticated
+        activeCharacter={activeCharacter}
         busy={busy}
+        maintenanceView={
+          <MaintenanceSetup locale={locale} sendRequest={sendAdminRequest} />
+        }
         publicationView={
           <LocalPublishingWorkspace
             locale={locale}
@@ -3567,6 +3706,14 @@ export function AdminPage({
             initialAccount={guidedState.githubAccount}
             selection={analysisSelection}
             request={request}
+            onActiveSceneChange={onActiveSceneChange}
+            draftUnsaved={
+              draft !== storedDraft.current.content ||
+              characterSprite !== storedDraft.current.sprite_base64
+            }
+            onConfigureModels={() =>
+              applyGuidedAction({ type: "OPEN_PUBLICATION_MODEL_SETUP" })
+            }
             onCreateDraft={() => void createGuidedDraft()}
             repositories={selectedRepositories(guidedState).map(
               (repository) => repository.metadata.slug,
@@ -3618,6 +3765,10 @@ export function AdminPage({
               });
             }}
             onStored={(body) => {
+              storedDraft.current = {
+                content: body.content,
+                sprite_base64: body.sprite_base64,
+              };
               const contentChanged = currentDraft.current !== body.content;
               const hydrationGeneration = ++localHydrationGeneration.current;
               setLocalRevision(body.revision);
@@ -3737,6 +3888,7 @@ export function AdminPage({
             }
             batchCreatePending={batchCreatePending}
             modelSetupView={guidedModelSetup}
+            modelSetupReturn={Boolean(guidedState.modelSetupReturn)}
             busy={busy}
             errorCode={adminErrors.guidedCode}
             locale={locale}
@@ -3786,6 +3938,12 @@ export function AdminPage({
         }}
         onLogout={() => void logout()}
         onWorkspaceModeChange={(mode) => {
+          setMaintenanceOpen(mode === "maintenance");
+          if (mode === "maintenance") {
+            setCharacterWorkspaceOpen(false);
+            setPublicationOpen(false);
+            return;
+          }
           if (mode === "character") {
             setCharacterWorkspaceOpen(true);
             dispatchAdminError({ type: "CLEAR_GUIDED_ERROR" });

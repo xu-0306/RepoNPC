@@ -1,4 +1,3 @@
-version: 1
 references:
   - owner
   - maintainer
@@ -10,15 +9,9 @@ references:
   - me
   - my
   - mine
-  - we
-  - our
-  - us
   - he
   - him
   - his
   - she
   - her
-  - they
-  - them
-  - their
 exclusions: []

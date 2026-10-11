@@ -16,6 +16,7 @@ export interface ModelConnectionView {
   endpoint_configured: boolean;
   key_configured: boolean;
   status: string;
+  chat_api?: "chat_completions" | "responses";
 }
 
 export interface ModelConnectionDraft {
@@ -25,6 +26,7 @@ export interface ModelConnectionDraft {
   endpoint_action?: "retain" | "replace";
   api_key?: string;
   credential_action: "retain" | "replace" | "remove";
+  chat_api?: "chat_completions" | "responses";
 }
 
 interface Props {
@@ -66,6 +68,7 @@ const COPY = {
     editService: "編輯 AI 服務",
     name: "服務名稱（方便自己辨認）",
     provider: "連線方式",
+    chatInterface: "聊天 API 接口",
     address: "服務網址（API 位址）",
     key: "服務金鑰（API key，可選）",
     create: "儲存服務",
@@ -106,6 +109,7 @@ const COPY = {
     editService: "Edit AI service",
     name: "Service name (for your reference)",
     provider: "Connection type",
+    chatInterface: "Chat API interface",
     address: "Service URL (API address)",
     key: "Service key (API key, optional)",
     create: "Save service",
@@ -153,6 +157,9 @@ export function ModelConnectionPanel({
     "" | ModelConnectionView["provider"]
   >("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [chatApi, setChatApi] = useState<"chat_completions" | "responses">(
+    "chat_completions",
+  );
   const [apiKey, setApiKey] = useState("");
   const [replaceAddress, setReplaceAddress] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -183,6 +190,7 @@ export function ModelConnectionPanel({
     setEditingId(null);
     setDisplayName("");
     setProvider("");
+    setChatApi("chat_completions");
     setBaseUrl("");
     setApiKey("");
     setReplaceAddress(true);
@@ -289,6 +297,9 @@ export function ModelConnectionPanel({
     const draft = {
       display_name: displayName.trim(),
       provider,
+      ...(chatApi === "responses" || editingConnection?.chat_api === "responses"
+        ? { chat_api: chatApi }
+        : {}),
       base_url: replaceAddress ? baseUrl.trim() : undefined,
       endpoint_action: replaceAddress ? "replace" : "retain",
       api_key: removeKey || !apiKey ? undefined : apiKey,
@@ -310,6 +321,7 @@ export function ModelConnectionPanel({
     setEditingId(connection.connection_id);
     setDisplayName(connection.display_name);
     setProvider(connection.provider);
+    setChatApi(connection.chat_api ?? "chat_completions");
     setBaseUrl("");
     setApiKey("");
     setReplaceAddress(connection.source === "host-managed");
@@ -323,71 +335,6 @@ export function ModelConnectionPanel({
       className="model-panel model-panel--connection"
     >
       <Heading id={headingId}>{heading}</Heading>
-      <p>{purpose ? copy.guidedDescription : copy.description}</p>
-      <button disabled={pending} onClick={onRefresh} type="button">
-        {copy.refresh}
-      </button>
-      {pending && <p role="status">{copy.pending}</p>}
-      {error && !editorOpen && (
-        <OperationError
-          copy={copy}
-          error={error}
-          errorId={errorId}
-          errorRef={errorRef}
-          secretCleared={false}
-        />
-      )}
-      {notice && <p role="alert">{notice}</p>}
-      {visibleConnections.length === 0 ? (
-        <p>{copy.empty}</p>
-      ) : (
-        <ul className="model-card-list">
-          {visibleConnections.map((connection) => (
-            <li className="model-card" key={connection.connection_id}>
-              <div className="model-card__heading">
-                <ProviderBrandIcon provider={connection.provider} />
-                <strong>{connectionTitle(connection)}</strong>
-                <span className="model-card__provider">
-                  {connection.provider === "openai_compatible"
-                    ? "OpenAI-compatible"
-                    : connection.provider === "vllm"
-                      ? "vLLM"
-                      : "Ollama"}
-                </span>
-              </div>
-              {connection.source === "host-managed" ? (
-                <>
-                  <p className="model-card__note">{copy.hostManaged}</p>
-                  <details className="model-card__technical">
-                    <summary>{copy.connectionDetails}</summary>
-                    <ConnectionMetadata connection={connection} copy={copy} />
-                  </details>
-                </>
-              ) : (
-                <details className="model-card__technical">
-                  <summary>{copy.connectionDetails}</summary>
-                  <ConnectionMetadata connection={connection} copy={copy} />
-                </details>
-              )}
-              <button
-                aria-label={`${copy.edit} ${connectionTitle(connection)}`}
-                disabled={pending}
-                onClick={() => edit(connection)}
-                type="button"
-              >
-                {copy.edit}
-              </button>
-              <DeleteSettingButton
-                locale={locale}
-                name={connectionTitle(connection)}
-                kind="connection"
-                pending={pending}
-                onDelete={() => onDelete(connection.connection_id)}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
       <ModelEditor
         label={editingId ? copy.editService : copy.addService}
         cancel={copy.cancel}
@@ -431,6 +378,7 @@ export function ModelConnectionPanel({
                 setProvider(
                   event.target.value as ModelConnectionView["provider"],
                 );
+                setChatApi("chat_completions");
               }}
               required
               value={provider}
@@ -441,6 +389,27 @@ export function ModelConnectionPanel({
               <option value="openai_compatible">OpenAI-compatible</option>
             </select>
           </label>
+          {provider === "openai_compatible" && purpose !== "embedding" && (
+            <label htmlFor={`model-connection-chat-api${idSuffix}`}>
+              {locale === "zh-TW" ? "聊天 API 接口" : "Chat API interface"}
+              <select
+                id={`model-connection-chat-api${idSuffix}`}
+                disabled={pending}
+                value={chatApi}
+                onChange={(event) =>
+                  setChatApi(event.target.value as typeof chatApi)
+                }
+              >
+                <option value="chat_completions">Chat Completions</option>
+                <option value="responses">Responses</option>
+              </select>
+              <span>
+                {locale === "zh-TW"
+                  ? "請依服務商支援選擇。Responses 可顯示服務商提供的公開摘要；模型不一定提供摘要。變更後需重新測試模型。"
+                  : "Choose the interface supported by your service. Responses can show provider public summaries when the model supplies them. Test the model again after a change."}
+              </span>
+            </label>
+          )}
           {editingId && !editingHostConnection && (
             <CheckboxField
               id={`model-connection-replace-address${idSuffix}`}
@@ -586,6 +555,71 @@ export function ModelConnectionPanel({
           )}
         </form>
       </ModelEditor>
+      <p>{purpose ? copy.guidedDescription : copy.description}</p>
+      <button disabled={pending} onClick={onRefresh} type="button">
+        {copy.refresh}
+      </button>
+      {pending && <p role="status">{copy.pending}</p>}
+      {error && !editorOpen && (
+        <OperationError
+          copy={copy}
+          error={error}
+          errorId={errorId}
+          errorRef={errorRef}
+          secretCleared={false}
+        />
+      )}
+      {notice && <p role="alert">{notice}</p>}
+      {visibleConnections.length === 0 ? (
+        <p>{copy.empty}</p>
+      ) : (
+        <ul className="model-card-list">
+          {visibleConnections.map((connection) => (
+            <li className="model-card" key={connection.connection_id}>
+              <div className="model-card__heading">
+                <ProviderBrandIcon provider={connection.provider} />
+                <strong>{connectionTitle(connection)}</strong>
+                <span className="model-card__provider">
+                  {connection.provider === "openai_compatible"
+                    ? "OpenAI-compatible"
+                    : connection.provider === "vllm"
+                      ? "vLLM"
+                      : "Ollama"}
+                </span>
+              </div>
+              {connection.source === "host-managed" ? (
+                <>
+                  <p className="model-card__note">{copy.hostManaged}</p>
+                  <details className="model-card__technical">
+                    <summary>{copy.connectionDetails}</summary>
+                    <ConnectionMetadata connection={connection} copy={copy} />
+                  </details>
+                </>
+              ) : (
+                <details className="model-card__technical">
+                  <summary>{copy.connectionDetails}</summary>
+                  <ConnectionMetadata connection={connection} copy={copy} />
+                </details>
+              )}
+              <button
+                aria-label={`${copy.edit} ${connectionTitle(connection)}`}
+                disabled={pending}
+                onClick={() => edit(connection)}
+                type="button"
+              >
+                {copy.edit}
+              </button>
+              <DeleteSettingButton
+                locale={locale}
+                name={connectionTitle(connection)}
+                kind="connection"
+                pending={pending}
+                onDelete={() => onDelete(connection.connection_id)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -630,6 +664,16 @@ function ConnectionMetadata({
     <dl>
       <dt>{copy.provider}</dt>
       <dd>{connection.provider}</dd>
+      {connection.provider === "openai_compatible" && (
+        <>
+          <dt>{copy.chatInterface}</dt>
+          <dd>
+            {connection.chat_api === "responses"
+              ? "Responses"
+              : "Chat Completions"}
+          </dd>
+        </>
+      )}
       <dt>{copy.revision}</dt>
       <dd>{connection.revision}</dd>
       <dt>{copy.address}</dt>

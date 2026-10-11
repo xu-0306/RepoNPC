@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "vite build"
+    "build": "node ../../scripts/check_visitor_source.mjs && vite build"
   },
   "dependencies": {
     "@lobehub/icons-static-svg": "1.91.0",

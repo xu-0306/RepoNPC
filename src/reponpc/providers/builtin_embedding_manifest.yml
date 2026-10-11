@@ -1,0 +1,33 @@
+# Owner-approved source from completion direction contract section 6.2.
+# This is a trusted application resource, never an owner-supplied URL registry.
+schema_version: 1
+model_id: BAAI/bge-m3
+revision: 5617a9f61b028005a4858fdac845db406aefb181
+license: MIT
+dimension: 1024
+context_tokens: 8192
+files:
+  - name: model.onnx
+    bytes: 724923
+    sha256: f84251230831afb359ab26d9fd37d5936d4d9bb5d1d5410e66442f630f24435b
+  - name: model.onnx_data
+    bytes: 2266820608
+    sha256: 1eebfb28493f67bba03ce0ef64bfdc7fc5a3bd9d7493f818bb1d78cd798416b4
+  - name: Constant_7_attr__value
+    bytes: 65552
+    sha256: cdf16f72c5d07b36484056e601ed9687f78477e5d85cee85a34f2406b7fb5906
+  - name: sentencepiece.bpe.model
+    bytes: 5069051
+    sha256: cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865
+  - name: tokenizer.json
+    bytes: 17082821
+    sha256: 6710678b12670bc442b99edc952c4d996ae309a7020c1fa0096dd245c2faf790
+  - name: tokenizer_config.json
+    bytes: 1173
+    sha256: 7e4c1cc848840aeccdd763458c18dd525eb0f795c992e00ebe9c28554e7db2d4
+  - name: special_tokens_map.json
+    bytes: 964
+    sha256: 8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835
+  - name: config.json
+    bytes: 698
+    sha256: f24afd5de914fba8c668426c43d208a1a54022500c63b2c160be20891686fce8

@@ -1,10 +1,68 @@
 # RepoNPC Security Model
 
-**2026-09-28 approved gateway freeze (OR-027 / ADR-053, Specification 0.4.6):** [A1/F0](A1_FUNNEL_GATEWAY_CONTRACT.md) is normative. The production-only visitor listener binds loopback, shares existing services and admits only canonical exact routes and validated visitor build dependencies. Admin/unknown/model routes and credential-bearing requests are 404; no admin dynamic chunk, SPA fallback or Set-Cookie is allowed. Pages CORS is exact, credential-free and public-API-only. Explicit private admin origins bind to request scheme/Host and use a different hostname from Pages/Funnel even across ports. Proxy trust is separate for private/main and visitor listeners; visitor identity defaults to aggregate daily/provider/in-flight protection. Explicit verified loopback-proxy trust requires one strict XFF IP and rejects missing/invalid identities before admission. Actual body bytes and shared intake/generation deadline are bounded; worker slots survive cancellation until actual completion. Visitor status/errors/SSE reveal no provider/model/usage diagnostics. Owner-reported external checks are dated, process/start/config/bundle-bound and never reinstated after restart/restore. This closes the former pending F0 contract gate; implementation/tests are in progress and public activation remains unauthorized.
+**2026-10-03 A11 approval (ADR-054 / OR-028):** Web maintenance downloads are
+password-encrypted ciphertext, not an exception permitting browser access to
+admin hashes or raw SQLite. See §23 and Specification §11.7. The owner approved
+same-original-data-directory restoration; real runtime/external activation is
+outside the verification work.
 
-**A4 FAQ boundary (2026-09-28, FR-046 / AC-067 / ADR-048):** Owner queue/review/rewrite/export routes use existing authenticated same-origin authorization and CSRF for writes, with `no-store`. Runtime migration 29 holds mutable review/rewrite associations outside immutable bundles. Regeneration immediately withdraws previous approval and visible candidate bytes; failed/unchecked/stale/rewrite-pending items cannot be publicly delivered. Rewrite generation requires the saved claim ID, repository and exact bilingual text in a new leased immutable index within existing context bounds. Public FAQ and JSON export share explicit top-level/entry/citation allowlists and never expose owner diagnostics, drafts, associations, prompts, usage or provider metadata. Visitor chip selection rechecks current approval with cancellation/request-identity guards. See [A4 contract](A4_COVERAGE_FAQ_IMPLEMENTATION.md).
+**2026-10-03 built-in model boundary (FR-049 / AC-070):** private authenticated,
+same-origin/CSRF-protected download requests require exact boolean consent. Only
+the packaged eight-file official manifest is accepted. HTTPS redirects remain on
+Hugging Face/CDN hosts; every hop validates public DNS addresses, pins TLS to the
+validated destination, limits redirects/deadlines and rejects duplicate headers.
+No credential, proxy environment or arbitrary destination is used. Streaming
+size/range/hash checks, private staging, link/alias checks, cancellation and atomic
+publication precede provider loading. Failures preserve the existing active
+bundle. Signed CDN URLs, model paths and upstream bodies are never returned/logged.
+The CPU adapter loads lazily after explicit owner choice, disables ONNX telemetry,
+is shared under a lock and closes after model/reindex work on shutdown. Device
+checks return numeric nullable hardware observations and authored packaged catalog
+facts only, and make no network requests. Catalog source/license links are public
+authored data, never saved provider addresses. The owner-only model cards and form
+handoff expose no key, host identifier, prompt or raw output and cannot download,
+test, save or activate a model automatically. See the
+[A7 card contract](A7_MODEL_CARDS_IMPLEMENTATION_2026-10-03.md).
+
+The private administrator HTML is independent of published appearance parsing.
+Missing image files, invalid appearance wrappers and invalid recovery journals
+must not prevent the private admin entrance or authenticated session resume.
+Public scene/profile reads still fail closed with safe existing error codes;
+the last bundle pointer and private Host/Origin boundary remain intact.
+
+**2026-09-29 A5/R08 implementation boundary (in progress):** Character and card
+preview responses use session-scoped `/api/admin/assets/previews/{asset_id}`
+resources. Creation uses existing same-origin authorization and CSRF; reads
+require the creating live session and return `no-store`/`nosniff`. Asset IDs grant
+no authority. SVG previews retain the shared restricted SVG policy. Canonical
+bytes remain available only for explicit conversion/alignment/download/apply
+flows; displayed assets use protected URLs. Background drafts use the same
+authority boundary, one per session with a 24-hour expiry. PNG/WebP framing and
+dimensions are checked before decoding; canonical character/background pixels
+are re-encoded without source metadata. Runtime migration 31 binds the appearance
+pointer to the leased bundle, canonical sprite hash and issued revision. Public
+reads capture one complete bilingual snapshot; stale image revisions cannot
+return newer bytes. Private source receipts, recovery copies and unapplied drafts
+stay outside bundles and public exports. See the [A5 integration contract](A5_VISITOR_APPEARANCE_EXPORT_CONTRACT.md)
+and dated local checks; this partial checkpoint does not close A5 or A12.
+
+A5 public exports contain only the visitor dependency closure, bounded public
+JSON and canonical applied assets, plus actually cited immutable owner
+statements. FAQ/profile/manifest input is validated before DOM/CSS use; known
+withdrawal or mismatch survives a later disconnection. Pages verification uses
+the saved exact github.io origin/base path, public-only DNS and pinned TLS peer,
+one bounded deadline and the locally expected manifest/entrance bytes. The
+private receipt is bound to settings, export, bundle, appearance, FAQ and origins;
+it is never exported. Static chat POST implementation is stopped pending the
+explicit payload/destination authorization requested after automatic review;
+FAQ-only output does not constitute completed A5 scope.
+
+**2026-09-28 approved gateway freeze (OR-027 / ADR-053, Specification 0.4.6):** [A1/F0](A1_FUNNEL_GATEWAY_CONTRACT.md) is normative. The production-only visitor listener binds loopback, shares existing services and admits only canonical exact routes and validated visitor build dependencies. Admin/unknown/model routes and credential-bearing requests are 404; no admin dynamic chunk, SPA fallback or Set-Cookie is allowed. Pages CORS is exact, credential-free and public-API-only. Explicit private admin origins bind to request scheme/Host and use a different hostname from Pages/Funnel even across ports. Proxy trust is separate for private/main and visitor listeners; visitor identity defaults to aggregate daily/provider/in-flight protection. Explicit verified loopback-proxy trust requires one strict XFF IP and rejects missing/invalid identities before admission. Actual body bytes and shared intake/generation deadline are bounded; worker slots survive cancellation until actual completion. Visitor status/errors/SSE reveal no provider/model/usage diagnostics. Owner-reported external checks are dated. Configure/start/stop/resume/restart clear all five persisted report fields; bundle/local-readiness changes do not invalidate the observation. The badge requires verified_at and a ready listener, and is never reinstated after restart/restore. Gateway origins are captured at listener creation; visitor requests do not read or mutate owner settings. This closes the former pending F0 contract gate; implementation/tests are in progress and public activation remains unauthorized.
+
+**A4 FAQ boundary (2026-09-28, FR-046 / AC-067 / ADR-048):** Owner queue/review/export routes use existing authenticated same-origin authorization and CSRF for writes, with `no-store`. Runtime migration 29 holds mutable review rows outside immutable bundles; its unused rewrite_json column is cleared on writes and ignored on reads. Regeneration immediately withdraws previous approval and visible candidate bytes; failed/unchecked/stale items cannot be publicly delivered. Public FAQ and JSON export share explicit top-level/entry/citation allowlists and never expose owner diagnostics, drafts, associations, prompts, usage or provider metadata. Visitor chips and offline matching use the FAQ loaded with the profile, with local bundle equality and known status mismatch checks. Mid-session approval withdrawals take effect after FAQ/profile reload. See [A4 contract](A4_COVERAGE_FAQ_IMPLEMENTATION.md).
 
 **2026-09-26 character scene (ADR-049, Technical Specification 0.4.1, AC-073):** The optional owner scene background is a new untrusted upload path.
+
 - It accepts PNG or WebP only (no SVG, no animation, ≤ 2 MB, 640×360 to 2560×1600).
 - It is decoded under the existing image guards, then re-encoded server-side with metadata stripped.
 - It is stored directly below `assets/scene/` and served only through `GET /api/public/scene-background` with `nosniff`.
@@ -65,13 +123,13 @@ RepoNPC cannot make already-public repositories secret, prove the truth of owner
 
 ## 2. Data classification
 
-| Class | Examples | Allowed locations |
-| --- | --- | --- |
-| Public | profile, claims, selected repository text, card/character, immutable citations | Git, bundle, API, browser, public cache |
-| Operational | bundle status, counts, latencies, request IDs, token totals | runtime database, sanitized logs, admin status |
-| Sensitive | pseudonymous IP HMAC values, session/CSRF hashes, admin audit metadata | protected runtime database/secret mounts |
-| Secret | GitHub token, provider key, Argon2id password hash, IP HMAC key, raw setup/session/CSRF tokens | environment, protected runtime database, or secret files as specified; memory as needed; never bundle/browser/log/Git |
-| Ephemeral private | visitor question/history, provider prompt/output, uploaded draft before save | request memory only by default; not persisted/logged |
+| Class             | Examples                                                                                       | Allowed locations                                                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Public            | profile, claims, selected repository text, card/character, immutable citations                 | Git, bundle, API, browser, public cache                                                                               |
+| Operational       | bundle status, counts, latencies, request IDs, token totals                                    | runtime database, sanitized logs, admin status                                                                        |
+| Sensitive         | pseudonymous IP HMAC values, session/CSRF hashes, admin audit metadata                         | protected runtime database/secret mounts                                                                              |
+| Secret            | GitHub token, provider key, Argon2id password hash, IP HMAC key, raw setup/session/CSRF tokens | environment, protected runtime database, or secret files as specified; memory as needed; never bundle/browser/log/Git |
+| Ephemeral private | visitor question/history, provider prompt/output, uploaded draft before save                   | request memory only by default; not persisted/logged                                                                  |
 
 Owner assertions are public statements, not verified facts. The UI and answer policy must keep that label.
 
@@ -99,26 +157,26 @@ Crossing a boundary requires schema validation, size/time bounds, context-specif
 
 ## 4. Threats and required mitigations
 
-| Threat | Required controls | Acceptance evidence |
-| --- | --- | --- |
-| Repository prompt injection | Evidence delimiters; policy outside evidence; no LLM tools/network/filesystem; output/citation validation; adversarial fixtures | AC-033 |
-| Forged citations/person claims | Request-local IDs only; backend mapping; exact commit/path validation; owner-assertion rule; buffer before public output | AC-011–AC-014 |
-| Secret ingestion | Mandatory path/type exclusions; high-confidence scan; no body in skip logs; public-only repositories | AC-004 |
-| SSRF/open redirect | No fetching repository URLs; configured GitHub/provider/manifest allowlists; redirect and final-host revalidation; private provider URL never returned | AC-016, AC-030, AC-034 |
-| XSS/Markdown/SVG injection | Conservative Markdown sanitizer; DOM escaping; safe link schemes; SVG XML escaping and element/attribute allowlists; strict headers/CSP | AC-014, AC-021, AC-034 |
-| Path/archive traversal | POSIX normalization, no `..`/absolute paths; archive regular-files-only policy; exact asset path allowlist | AC-027, AC-030 |
-| Malicious image/decompression bomb | Byte/pixel/dimension caps; real decode; APNG rejection; metadata removal; safe re-encode | AC-020, AC-027 |
-| Character-pack configuration injection or unsafe fallback | Trusted in-process registry only; bounded opaque string options; exact ID/version resolution; no YAML renderer/path/URL/code hooks; canonical output validation; no fallback | AC-020 |
-| Malicious character material archive, folder, selection, or conversion bomb | Authenticated bounded preview endpoint; strict manifest when present, otherwise structural-only discovery; normalized member paths and content-bound candidate IDs; no links/encryption/duplicates; compressed/member/expanded/path/pixel/count/candidate limits; static PNG framing/decode; no filename/species guessing; no automatic write; canonical revalidation | AC-020, AC-027 |
-| First visitor claims or exhausts an uninitialized deployment | No open registration; loopback uses a host-minted 256-bit fragment-only grant with SHA-256 at rest, two-minute expiry, strict loopback/no-proxy validation, one-use atomic owner/session creation, and relaunch recovery; production retains the 15-minute host setup code and password | AC-024, AC-049 |
-| Admin credential/session attack | Loopback host capability or production 15–128-character password; common/compromised-password blocklist and Argon2id in production; generic errors; backoff/rate limit; 256-bit sessions; HttpOnly/Secure/SameSite; CSRF + origin/host; idle/absolute expiry; rotation/revocation | AC-024, AC-049 |
-| Localhost attack, DNS rebinding, or accidental remote exposure | Validate deployment profile, bind, public base URL, peer, Host, and Origin as loopback; disable trusted-proxy interpretation; never accept forwarded headers for local launch; refuse unsafe startup; keep grant out of request URL/log/referrer and clear fragment immediately | AC-024, AC-049 |
-| OAuth state/token or GitHub connection abuse | Existing authenticated RepoNPC session; one-use hashed state; PKCE S256; connection-intent Lax transaction cookie; fixed callback; server-side exchange; numeric account metadata; encrypted credential records; no owner-session issuance | AC-041, AC-042 |
-| GitHub overreach/conflict | Fine-grained repo token; fixed branch; exact app path allowlist; expected blob SHA; no auto-merge/delete | AC-026, AC-027 |
-| Cost/availability exhaustion | input/history/output caps; per-IP bucket; concurrency; daily budget; timeouts; check before provider | AC-018 |
-| Bundle supply-chain/tampering | immutable release; SHA-256 inside/outside; schema/app/model checks; SQLite integrity/smoke; atomic activation; previous bundle | AC-029–AC-031 |
-| Dependency/build compromise | lockfiles; minimal trusted Actions; pinned action revisions for release; dependency/image/secret scans; SBOM/notice | AC-037 |
-| Privacy leakage through logs/status | request-ID diagnostics only; HMAC IP identifiers; no bodies/secrets/private URLs; safe public errors | AC-035 |
+| Threat                                                                      | Required controls                                                                                                                                                                                                                                                                                                                                                     | Acceptance evidence    |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Repository prompt injection                                                 | Evidence delimiters; policy outside evidence; no LLM tools/network/filesystem; output/citation validation; adversarial fixtures                                                                                                                                                                                                                                       | AC-033                 |
+| Forged citations/person claims                                              | Request-local IDs only; backend mapping; exact commit/path validation; owner-assertion rule; buffer before public output                                                                                                                                                                                                                                              | AC-011–AC-014          |
+| Secret ingestion                                                            | Mandatory path/type exclusions; high-confidence scan; no body in skip logs; public-only repositories                                                                                                                                                                                                                                                                  | AC-004                 |
+| SSRF/open redirect                                                          | No fetching repository URLs; configured GitHub/provider/manifest allowlists; redirect and final-host revalidation; private provider URL never returned                                                                                                                                                                                                                | AC-016, AC-030, AC-034 |
+| XSS/Markdown/SVG injection                                                  | Conservative Markdown sanitizer; DOM escaping; safe link schemes; SVG XML escaping and element/attribute allowlists; strict headers/CSP                                                                                                                                                                                                                               | AC-014, AC-021, AC-034 |
+| Path/archive traversal                                                      | POSIX normalization, no `..`/absolute paths; archive regular-files-only policy; exact asset path allowlist                                                                                                                                                                                                                                                            | AC-027, AC-030         |
+| Malicious image/decompression bomb                                          | Byte/pixel/dimension caps; real decode; APNG rejection; metadata removal; safe re-encode                                                                                                                                                                                                                                                                              | AC-020, AC-027         |
+| Character-pack configuration injection or unsafe fallback                   | Trusted in-process registry only; bounded opaque string options; exact ID/version resolution; no YAML renderer/path/URL/code hooks; canonical output validation; no fallback                                                                                                                                                                                          | AC-020                 |
+| Malicious character material archive, folder, selection, or conversion bomb | Authenticated bounded preview endpoint; strict manifest when present, otherwise structural-only discovery; normalized member paths and content-bound candidate IDs; no links/encryption/duplicates; compressed/member/expanded/path/pixel/count/candidate limits; static PNG framing/decode; no filename/species guessing; no automatic write; canonical revalidation | AC-020, AC-027         |
+| First visitor claims or exhausts an uninitialized deployment                | No open registration; loopback uses a host-minted 256-bit fragment-only grant with SHA-256 at rest, two-minute expiry, strict loopback/no-proxy validation, one-use atomic owner/session creation, and relaunch recovery; production retains the 15-minute host setup code and password                                                                               | AC-024, AC-049         |
+| Admin credential/session attack                                             | Loopback host capability or production 15–128-character password; common/compromised-password blocklist and Argon2id in production; generic errors; backoff/rate limit; 256-bit sessions; HttpOnly/Secure/SameSite; CSRF + origin/host; idle/absolute expiry; rotation/revocation                                                                                     | AC-024, AC-049         |
+| Localhost attack, DNS rebinding, or accidental remote exposure              | Validate deployment profile, bind, public base URL, peer, Host, and Origin as loopback; disable trusted-proxy interpretation; never accept forwarded headers for local launch; refuse unsafe startup; keep grant out of request URL/log/referrer and clear fragment immediately                                                                                       | AC-024, AC-049         |
+| OAuth state/token or GitHub connection abuse                                | Existing authenticated RepoNPC session; one-use hashed state; PKCE S256; connection-intent Lax transaction cookie; fixed callback; server-side exchange; numeric account metadata; encrypted credential records; no owner-session issuance                                                                                                                            | AC-041, AC-042         |
+| GitHub overreach/conflict                                                   | Fine-grained repo token; fixed branch; exact app path allowlist; expected blob SHA; no auto-merge/delete                                                                                                                                                                                                                                                              | AC-026, AC-027         |
+| Cost/availability exhaustion                                                | input/history/output caps; per-IP bucket; concurrency; daily budget; timeouts; check before provider                                                                                                                                                                                                                                                                  | AC-018                 |
+| Bundle supply-chain/tampering                                               | immutable release; SHA-256 inside/outside; schema/app/model checks; SQLite integrity/smoke; atomic activation; previous bundle                                                                                                                                                                                                                                        | AC-029–AC-031          |
+| Dependency/build compromise                                                 | lockfiles; minimal trusted Actions; pinned action revisions for release; dependency/image/secret scans; SBOM/notice                                                                                                                                                                                                                                                   | AC-037                 |
+| Privacy leakage through logs/status                                         | request-ID diagnostics only; HMAC IP identifiers; no bodies/secrets/private URLs; safe public errors                                                                                                                                                                                                                                                                  | AC-035                 |
 
 ## 5. Model isolation and prompt construction
 
@@ -224,7 +282,7 @@ On suspected compromise: disable public chat, revoke/rotate GitHub and provider 
 - [ ] Deployment profile is explicit: loopback evaluation has only loopback bind/base URL/peer/Host/origin and no trusted proxy; production/non-loopback setup enforces the 15-character minimum and blocklist.
 - [ ] IP-HMAC key generated uniquely; profile-appropriate grant/setup issuance, replacement, expiry, replay denial, and atomic sole-owner behavior verified.
 - [ ] GitHub/provider secrets supplied through protected files and least privilege reviewed.
-- [ ] At least one external embedding profile is probed and active; bundle identity matches; no local embedding runtime or arbitrary model downloader is relied on.
+- [ ] The explicitly chosen external or pinned built-in embedding profile is probed and active; bundle identity matches; no arbitrary model downloader or provider fallback is relied on.
 - [ ] Ollama/private services are not publicly published.
 - [ ] vLLM is private; any proxy denies non-allowlisted operational routes and chat/embedding models are independently verified.
 - [ ] Same-origin/CSP/security headers verified.
@@ -246,7 +304,8 @@ ADR-021 and Technical Specification 0.1.7 supersede only this section's original
 - Metadata listing is not consent to fetch source. Only exact checkbox-confirmed slug/ref/include/exclude identities may cross into source resolution. A batch contains 1–50 confirmed repositories; the legacy compatibility route accepts one and delegates it to a one-item batch.
 - Each item creates unique bounded staging, reuses mandatory exclusions/secret detection/symlink and binary rules, and removes staging after every terminal or recovery path. Runtime SQLite stores no archive, repository body/tree, prompt, provider body, incomplete output, or staging path. It may store only the bounded safe batch metadata/events/cache identities and validated normalized terminal results defined by section 16.
 - Failed batch items may additionally retain one application-owned reason from the closed set `NO_ELIGIBLE_CONTENT`, `PROVIDER_OUTPUT_SCHEMA_INVALID`, `PROVIDER_EVIDENCE_ID_INVALID`, `PROVIDER_PERSONAL_INFERENCE_REJECTED`, or `PROVIDER_OUTPUT_LIMIT_REACHED`. These values interpolate no provider text or repository data. Unknown reasons are dropped before persistence; the authenticated no-store snapshot and UI expose only allowlisted code/reason values and fixed bilingual explanations. ADR-034 / migration 24 adds only the fixed output-limit reason, not raw termination metadata or provider text.
-- Authenticated repository analysis uses its own positive output policy (default 8,192, hard maximum 16,384), configurable active-work/provider/archive/source ceilings, and shared provider admission. Capacity waits do not spend active work. Transient rate-limit/timeout/unavailable failures may retry only the same frozen provider/model up to three total attempts; authentication, context, validation and output-limit failures do not retry, and fallback remains forbidden. Reserve complete prompt/evidence/ID/schema/framing input together with output before generation. Context shortage fails safely. Visitor chat/probe output is independently bounded at 4,096-default / 8,192-maximum. Reject output-limit termination before parsing and never publish/cache truncated content, even when it forms valid JSON. Analysis cache identity includes the budget and generation/validation policy, preserving incompatible old results only under their old identity. Oversized individual archive files remain body-free and become `FILE_TOO_LARGE` skips; total archive limits, path/type validation and decompression-bomb defenses remain fail-closed.
+- Authenticated repository analysis uses its own positive output policy (default and hard maximum 16,384 under ADR-055), configurable active-work/provider/archive/source ceilings, and shared provider admission. Capacity waits do not spend active work. Transient rate-limit/timeout/unavailable failures may retry only the same frozen provider/model up to three total attempts; authentication, context, validation and output-limit failures do not retry, and fallback remains forbidden. Reserve complete prompt/evidence/ID/schema/framing input together with output before generation. Context shortage fails safely. Visitor chat/probe output is independently bounded at 16,384-default / 16,384-maximum; explicit lower settings remain valid. Reject output-limit termination before parsing and never publish/cache truncated content, even when it forms valid JSON. Analysis cache identity includes the budget, reasoning controls and generation/validation policy, preserving incompatible old results only under their old identity. Oversized individual archive files remain body-free and become `FILE_TOO_LARGE` skips; total archive limits, path/type validation and decompression-bomb defenses remain fail-closed.
+- ADR-055 keeps supported Ollama reasoning ON and combines reasoning plus answer within one finite generation ceiling. Unknown controls retain the backend default without a guessed capability or silent reasoning disable. Native context is a capability upper bound, not permission to allocate it in full: the configured context (default 32,768), any smaller verified native cap, complete UTF-8 input/schema, framing reserve and output govern admission. Context estimation without the model tokenizer is not measured usage. `message.thinking` is untrusted private provider material and is discarded; it MUST NOT enter answers, SSE, diagnostics, logs, caches, runtime rows, browser storage, bundles or exports. Only final content crosses the existing envelope/evidence validation boundary. Existing deadlines and no output-limit retry/fallback rules remain mandatory.
 - Repository content remains delimited untrusted evidence. The model still has no tools, GitHub/network/filesystem access, credentials, or arbitrary URLs. Only the configured provider/model may run; failure never triggers fallback.
 - Provider-consuming analysis and contribution suggestion require authenticated same-origin intent plus CSRF and share the global generation semaphore. The UI must identify the action as capacity/provider-consuming before the request.
 - Contribution suggestion keeps its fixed 700-token output policy independently of visitor and analysis request budgets. Before generation, admission reserves the complete bilingual messages, exact contribution schema, effective output allowance and framing margin; insufficient context fails before any provider call. Output-limit termination is rejected before parsing with the closed safe reason `PROVIDER_OUTPUT_LIMIT_REACHED`, including syntactically valid partial JSON, while a complete invalid shape uses `PROVIDER_OUTPUT_SCHEMA_INVALID`. Neither path retries, falls back, records raw output or promotes partial content.
@@ -284,7 +343,7 @@ This historical section is retained only to explain migration scope. OAuth setup
 
 ## 18. External embedding and private-admin extension (0.1.9)
 
-- At least one external embedding provider is required for a ready deployment. Chat and embedding identities are independent; a chat model or `/v1/models` response alone does not prove embedding capability. Probe must include a bounded sample embedding and verify dimension, normalization, prefixes, and model identity before activation.
+- ADR-048/052 supersede the former external-only requirement: a ready deployment may use the explicitly chosen checksum-verified built-in CPU embedding profile or an external embedding provider. Chat and embedding identities are independent; a chat model or `/v1/models` response alone does not prove embedding capability. Probe must include a bounded sample embedding and verify dimension, normalization, prefixes, and model identity before activation.
 - Only one profile may be active. Profile changes trigger an explicit reindex state and atomic last-known-good switch; a failed/cancelled probe or reindex cannot deactivate the known-good bundle.
 - Ollama model operations are constrained to a curated model-ID catalog and native provider endpoints. vLLM/OpenAI-compatible profiles are connect/probe-only. Arbitrary URL/local-path downloads and provider-supplied shell commands are forbidden.
 - Admin routes are private-management routes. Loopback plus SSH tunnel or a firewall-restricted VPN/LAN is the default; a non-standard port does not reduce exposure. Public reverse proxies must deny `/admin` and `/api/admin/*` to Internet clients.
@@ -342,3 +401,65 @@ ADR-030 permits an explicitly selected tested chat/embedding pair to power authe
 - Security regression adds AC-058 through AC-060: clean no-model/no-bundle first analysis, existing-public-A versus analysis-B isolation, stale-plan and rotation races, duplicate Start/reload, old guided-state recovery, secret canaries, and absence of temporary index/provider bodies from runtime rows, logs, exports and bundles.
 
 Chat parse follow-up (2026-09-12): the authenticated `last_error_message` exception also permits fixed application-owned `RepoNPC response check:` diagnostics. `ResponseIssue` is a closed set of parser checks; no response content, reasoning, unknown field name, header, request id value, URL or key is interpolated. They retain the same no-store/authenticated boundaries and clear-on-success semantics. HTTP provider error quotations remain separate and redacted. No public diagnostic or logging expansion is authorized.
+
+## 23. Password-encrypted maintenance backups (0.4.7)
+
+- The same-origin private admin boundary authenticates before bounded JSON or
+  multipart parsing. State changes require the existing session-bound CSRF;
+  confirmation is strict boolean true. Reject ambiguous length/transfer headers,
+  excessive actual bytes, duplicate multipart fields and unknown fields.
+- Only version-one Scrypt/AES-256-GCM ciphertext crosses the download boundary.
+  KDF cost is application-fixed; random salts/nonces and authenticated headers
+  protect format/metadata. The complete format and limits are in Specification
+  §11.7. The host-only raw backup command retains its existing restrictions.
+- Native encrypted-file download uses an owner-authenticated GET with the same
+  private Host and same-origin Origin/Referer check. Its timestamp/random file ID
+  is not a bearer credential; knowing it cannot bypass authentication. A validated
+  relative Content-Location connects backup creation to that existing saved
+  ciphertext. Native GET is read-only and never generates another snapshot.
+- Newly entered backup passwords exist only in UI input memory until submission
+  and in the host's one session-bound ten-minute preview. Never persist them to
+  SQLite, browser storage, logs, exported content or snapshots. Clear UI inputs
+  after submit; clear private decrypted staging/password on cancellation, expiry,
+  replacement, normal shutdown and failed preparation. A process crash can leave
+  protected staging; operators follow the stopped-service cleanup procedure.
+- Treat decrypted SQLite as hostile. Use read-only immutable input, trusted
+  schema/migration inventory, bounded query progress, integrity/FK validation and
+  parameterized row copying into a trusted new schema. Never execute uploaded
+  triggers, views, migration SQL or extensions. Clear sessions, grants, setup
+  proofs, audit session digests and transient jobs before activation.
+- Restore requires matching owner identity and the original host resources.
+  Verify stored connection ciphertext with the retained master key and validate
+  referenced bundles, active/selected built-in artifacts, appearance and local
+  portfolio assets. Reject links/junctions, non-regular or hard-linked database
+  resources. Do not create replacement keys, download resources or fall back.
+- Drain real admitted writers, including work detached from a cancelled HTTP
+  request; stop listeners/pollers/provider/model jobs and close index resources
+  before replacement. Save an encrypted current-state backup first, retain a
+  private rollback copy until fresh startup, and keep service unavailable if a
+  stop or rollback cannot be made safe. The replacement cannot revive closed
+  provider instances. Successful restore disables the gateway and empties its
+  external observation; reopening requires new admin authentication.
+- Private staging and local ciphertext inherit the protected data-directory
+  boundary. POSIX directories/files require 0700/0600; Windows deployments must
+  keep that directory restricted to the owner and required system accounts.
+  Clean-Windows permissions and installer walkthrough remain release gates.
+- Backup verification covers wrong password, tampering, malformed/foreign
+  schema, retained-resource failure, preview expiry/session binding, unsafe
+  request cancellation, partial write/fsync, startup failure and pointer rollback.
+  API success or local ciphertext retention cannot stand in for a completed
+  browser file download or a clean installed-deployment restore.
+
+## ADR-057 visitor progress (2026-10-04)
+
+The processing contract permits only closed stage and nonnegative elapsed_ms
+before final answer validation. Native thinking presence may select a fixed
+thinking label; text itself remains discarded under ADR-055. All unknown generic
+API reasoning fields remain private. No public raw-text exception, model tools,
+endpoint/model detail, provider prompt, credential or diagnostics is authorized.
+Sockets close on cancellation or absolute deadline; activity never extends it.
+No progress data persists in runtime/cache/logs/browser storage/bundles/exports.
+
+## Approved public summary amendment (2026-10-04)
+
+OR-032 / ADR-058 / Specification 0.4.10 adopts the [public summary contract](CHAT_PUBLIC_SUMMARY_CONTRACT_2026-10-04.md). FR-040/043/044/047, NFR-005/009/014 and AC-019/023/057/062/063/064/068/071 retain their thresholds. Explicit Responses selection, legacy/revision compatibility, bounded untrusted plain text, prompt/secret negative tests, final-answer separation, cancellation and bilingual keyboard-accessible display require verification. No real provider invocation, publication, catalog admission or release acceptance is implied. Previous pending-summary notes are historical and superseded by this approval.

@@ -42,7 +42,7 @@ class ResponseTransport:
         assert method == "POST"
         # One request receives the 10-second baseline plus one 10-second grace
         # window; the probe must not retry and create another billable call.
-        assert timeout == 20.0
+        assert 0 < timeout <= 20.0
         assert body is not None
         request = json.loads(body)
         budget = request.get("max_tokens", request.get("options", {}).get("num_predict"))

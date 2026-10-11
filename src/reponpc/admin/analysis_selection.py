@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Protocol
 
 from reponpc.indexing.sources import EmbeddingIdentity
+from reponpc.providers.builtin_artifacts import builtin_embedding_identity
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 
 
@@ -24,7 +25,7 @@ class _ChatProfile(Protocol):
 
 class _EmbeddingProfile(Protocol):
     profile_id: str
-    connection_reference: str
+    connection_reference: str | None
     connection_revision: int
     model_id: str
     status: str
@@ -89,10 +90,21 @@ class AnalysisModelPair:
     chat_provider: str
     chat_model_id: str
     embedding_profile_id: str
-    embedding_connection_id: str
+    embedding_connection_id: str | None
     embedding_connection_revision: int
     embedding_provider: str
     embedding_identity: EmbeddingIdentity
+
+    def __post_init__(self) -> None:
+        if self.embedding_provider == "builtin_onnx":
+            if (
+                self.embedding_connection_id is not None
+                or self.embedding_connection_revision != 0
+                or self.embedding_identity != builtin_embedding_identity()
+            ):
+                raise ValueError("invalid built-in model identity")
+        elif self.embedding_connection_id is None:
+            raise ValueError("embedding connection is required")
 
     def safe_dict(self) -> dict[str, object]:
         return {
@@ -124,7 +136,7 @@ class AnalysisModelPair:
         identity = self.embedding_identity
         return "\x1f".join(
             (
-                self.embedding_connection_id,
+                self.embedding_connection_id or "",
                 str(self.embedding_connection_revision),
                 self.embedding_provider,
                 identity.adapter,
@@ -164,7 +176,11 @@ class AnalysisModelPair:
                 chat_provider=_required_text(chat["provider"]),
                 chat_model_id=_required_text(chat["model_id"]),
                 embedding_profile_id=_required_text(embedding["profile_id"]),
-                embedding_connection_id=_required_text(embedding["connection_id"]),
+                embedding_connection_id=(
+                    None
+                    if embedding["connection_id"] is None
+                    else _required_text(embedding["connection_id"])
+                ),
                 embedding_connection_revision=_required_int(embedding["connection_revision"]),
                 embedding_provider=_required_text(embedding["provider"]),
                 embedding_identity=EmbeddingIdentity(
@@ -256,13 +272,7 @@ class AnalysisSelectionRegistry:
                 embedding_profile = self._get(
                     self._embedding_profiles, selection.embedding_profile_id, "embedding"
                 )
-                embedding_connection = self._connections.get(  # type: ignore[attr-defined]
-                    embedding_profile.connection_reference
-                )
-                if (
-                    embedding_connection.revision != embedding_profile.connection_revision
-                    or embedding_connection.provider != embedding_profile.provider
-                ):
+                if not self._embedding_connection_current(embedding_profile):
                     return AnalysisSelectionView(
                         selection, False, "SEARCH_MODEL_REVISION_STALE", chat, embedding
                     )
@@ -347,13 +357,7 @@ class AnalysisSelectionRegistry:
             connection = self._connections.get(chat.connection_id)  # type: ignore[attr-defined]
             if connection.revision != chat.connection_revision:
                 return None
-            embedding_connection = self._connections.get(  # type: ignore[attr-defined]
-                embedding.connection_reference
-            )
-            if (
-                embedding_connection.revision != embedding.connection_revision
-                or embedding_connection.provider != embedding.provider
-            ):
+            if not self._embedding_connection_current(embedding):
                 return None
             return AnalysisModelPair(
                 selection_generation=selection.generation,
@@ -370,6 +374,21 @@ class AnalysisSelectionRegistry:
             )
         except (AnalysisSelectionError, AttributeError):
             return None
+
+    def _embedding_connection_current(self, profile: _EmbeddingProfile) -> bool:
+        if profile.provider == "builtin_onnx":  # type: ignore[attr-defined]
+            return (
+                profile.connection_reference is None  # type: ignore[attr-defined]
+                and profile.connection_revision == 0  # type: ignore[attr-defined]
+                and profile.identity == builtin_embedding_identity()  # type: ignore[attr-defined]
+            )
+        if self._connections is None:
+            return False
+        connection = self._connections.get(profile.connection_reference)  # type: ignore[attr-defined]
+        return (
+            connection.revision == profile.connection_revision  # type: ignore[attr-defined]
+            and connection.provider == profile.provider  # type: ignore[attr-defined]
+        )
 
     def clear_reference(self, profile_id: str) -> None:
         now = _time(self._now())

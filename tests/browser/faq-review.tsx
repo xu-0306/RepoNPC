@@ -42,10 +42,10 @@ function Review() {
         entry_id: (index + (language === "en" ? 100 : 1)).toString(16).padStart(32, "0"), bundle_id: bundleRef.current,
         question: `${language}: ${topic}`, topic: index < 6 ? topic : null, claim_kind: kinds[index] ?? "context",
         answer_markdown: null, citations: [], dropped_segments: [], coverage_status: "unchecked", review_state: "pending",
-        needs_reconfirmation: false, rewrite: null, error_code: null, revision: 1,
+        variants: [], needs_reconfirmation: false, error_code: null, revision: 1,
       }));
     }
-    const match = path.match(/\/faq\/([a-f0-9]+)\/(regenerate|review|rewrite)$/);
+    const match = path.match(/\/faq\/([a-f0-9]+)\/(regenerate|review)$/);
     if (match) {
       const entry = Object.values(rows.current).flat().find(row => row.entry_id === match[1] && row.question.startsWith(language));
       // Route body omits locale, so identify the currently displayed fixture locale.
@@ -61,7 +61,7 @@ function Review() {
           await new Promise<void>(resolve => { releaseDelay.current = resolve; });
         }
         setLogs(log => [...log, `generate:${target.question}:${bundleRef.current}`]);
-        target.bundle_id = bundleRef.current; target.review_state = "pending"; target.rewrite = null;
+        target.bundle_id = bundleRef.current; target.review_state = "pending";
         target.answer_markdown = `Validated answer for ${target.question}. [S1]`;
         target.citations = [{ title: "Evidence", url: "https://github.com/owner/demo", evidence_class: "REPOSITORY_FACT" }];
         target.coverage_status = target.topic === "responsibility" ? "partially_answered" : target.topic === "built_work" ? "no_relevant_content" : "answered";
@@ -69,17 +69,12 @@ function Review() {
       } else if (action === "review") {
         target.review_state = body.action === "approve" ? "approved" : "rejected";
         setLogs(log => [...log, body.action]);
-      } else {
-        target.review_state = "pending";
-        target.rewrite = { claim_id: "faq_fixture", draft_revision: "b".repeat(64), source_bundle_id: target.bundle_id };
-        setLogs(log => [...log, `save-claim:${body.kind}`]);
-        return { draft: { content: "saved bilingual owner statement", sprite_base64: null, revision: "b".repeat(64) }, entry: { ...target } } as T;
       }
       return { ...target } as T;
     }
     const entries = (rows.current[language] ?? []).map(entry => ({ ...entry, needs_reconfirmation: entry.bundle_id !== bundleRef.current }));
     if (path.includes("/faq/export")) {
-      const result = { bundle_id: bundleRef.current, locale: language, entries: entries.filter(entry => entry.bundle_id === bundleRef.current && entry.review_state === "approved" && !entry.rewrite).map(entry => ({ question: entry.question, answer_markdown: entry.answer_markdown, citations: entry.citations })) };
+      const result = { bundle_id: bundleRef.current, locale: language, entries: entries.filter(entry => entry.bundle_id === bundleRef.current && entry.review_state === "approved").map(entry => ({ question: entry.question, answer_markdown: entry.answer_markdown, citations: entry.citations })) };
       setExported(JSON.stringify(result)); return result as T;
     }
     return { bundle_id: bundleRef.current, locale: language, entries } as T;

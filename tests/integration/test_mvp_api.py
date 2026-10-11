@@ -9,8 +9,11 @@ from fastapi.testclient import TestClient
 from httpx import Response
 
 from reponpc.api.public import SetupState
+from reponpc.cards.sprite_composer import compose_builtin
+from reponpc.config.models import SceneConfig, load_public_config
 from reponpc.main import app, create_app
 from reponpc.runtime.database import RuntimeDatabase
+from reponpc.scene.resolve import resolve_scene
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 
@@ -236,7 +239,11 @@ def _active_public_directory(tmp_path: Path) -> tuple[Path, dict[str, dict[str, 
     (directory / "profile.json").write_text(
         json.dumps(internal, ensure_ascii=False), encoding="utf-8"
     )
-    (directory / "character.png").write_bytes(b"same-payload")
+    config = load_public_config(Path(__file__).parents[1] / "fixtures/phase2/reponpc.yml")
+    assert config.character.builtin is not None
+    sprite = compose_builtin(config.character.builtin)
+    (directory / "character.png").write_bytes(sprite)
+    default_scene = resolve_scene(SceneConfig(), sprite_content=sprite, revision=1).public
     for theme in ("light", "dark"):
         for locale in ("zh-TW", "en"):
             for extension in ("svg", "gif", "png"):
@@ -246,7 +253,11 @@ def _active_public_directory(tmp_path: Path) -> tuple[Path, dict[str, dict[str, 
             "schema_version": 1,
             "locale": locale,
             **payload,
-            "character": character,
+            "character": {**character, "scene": default_scene.model_dump(mode="json")},
+            "repositories": [
+                {**repository, "language": None, "stars": None, "forks": None}
+                for repository in payload["repositories"]
+            ],
             "index": index,
         }
         for locale, payload in locales.items()
@@ -276,10 +287,7 @@ def test_degraded_active_public_assets_validate_variants_and_cache_identity(tmp_
         )
         character = client.get("/api/public/character.png?rev=1")
         assert character.status_code == 200 and character.headers["content-type"] == "image/png"
-        assert (
-            character.headers["ETag"]
-            != client.get("/api/public/character.png?rev=2").headers["ETag"]
-        )
+        assert client.get("/api/public/character.png?rev=2").status_code == 404
         svg = None
         for theme in ("light", "dark"):
             for locale in ("zh-TW", "en"):
@@ -303,10 +311,12 @@ def test_degraded_active_public_assets_validate_variants_and_cache_identity(tmp_
         assert svg.headers["X-Content-Type-Options"] == "nosniff"
         assert "frame-ancestors" not in svg.headers["Content-Security-Policy"]
         assert "frame-ancestors 'none'" in character.headers["Content-Security-Policy"]
+        # Legacy revision zero is valid in configuration and existing README rendering.
+        assert client.get("/api/public/card.svg?locale=en&rev=0").status_code == 200
         for query in (
             "locale=en&locale=zh-TW",
             "locale=en&theme=bad",
-            "locale=en&rev=0",
+            "locale=en&rev=-1",
             "locale=en&rev=01",
             "locale=en&rev=1234567890",
             "locale=en&rev=x",

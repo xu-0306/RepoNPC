@@ -4,6 +4,30 @@ import type { Locale } from "../../i18n/messages";
 
 export type LocalizedText = Record<Locale, string>;
 
+const AI_STEPS: readonly GuidedStep[] = [
+  "models",
+  "repositories",
+  "analysis",
+  "contributions",
+  "profile",
+  "review",
+];
+const MANUAL_STEPS: readonly GuidedStep[] = [
+  "repositories",
+  "contributions",
+  "profile",
+  "review",
+];
+
+export function onboardingProgress(state: GuidedOnboardingState) {
+  const steps = state.route === "manual" ? MANUAL_STEPS : AI_STEPS;
+  const index = steps.indexOf(state.step);
+  const completed = state.step === "draft" ? steps.length : Math.max(0, index);
+  const current =
+    state.step === "draft" ? steps.length : Math.max(0, index + 1);
+  return { steps, completed, current, total: steps.length };
+}
+
 export interface RepositoryMetadata {
   slug: string;
   name: string;
@@ -81,6 +105,7 @@ export interface GuidedRepository {
   analysis: RepositoryAnalysis | null;
   ownerStatement: string;
   proposal: ContributionProposal | null;
+  proposalSource?: "manual" | "model";
   previousContribution: ContributionProposal | null;
   confirmedContribution: ConfirmedContribution | null;
 }
@@ -106,6 +131,11 @@ export interface GuidedOnboardingState {
   profile: GuidedProfile;
   profileConfirmed: boolean;
   modelsConfigured: boolean;
+  modelSetupReturn?: {
+    step: GuidedStep;
+    mode: "guided" | "advanced";
+    route: "ai" | "manual";
+  };
   route: "ai" | "manual";
   rawYamlHasUnmappedChanges: boolean;
 }
@@ -113,6 +143,7 @@ export interface GuidedOnboardingState {
 export type GuidedOnboardingAction =
   | { type: "START" }
   | { type: "START_AI" }
+  | { type: "OPEN_PUBLICATION_MODEL_SETUP" }
   | { type: "START_MANUAL" }
   | { type: "COMPLETE_MODEL_SETUP" }
   | { type: "SET_MODELS_CONFIGURED"; value: boolean }
@@ -175,6 +206,7 @@ export interface GuidedOnboardingViewProps {
   batchCanCreate?: boolean;
   batchCreatePending?: boolean;
   modelSetupView?: ReactNode;
+  modelSetupReturn?: boolean;
   providerStatus: GuidedProviderStatus | null;
   providerStatusPending: boolean;
   onAction: (action: GuidedOnboardingAction) => void;
@@ -300,6 +332,7 @@ export function guidedOnboardingFromConfig(
       analysis: null,
       ownerStatement: summary["zh-TW"],
       proposal: cloneProposal({ role, summary, claims }),
+      proposalSource: "manual",
       previousContribution: null,
       confirmedContribution: {
         evidence_class: "OWNER_ASSERTION",
@@ -345,7 +378,30 @@ export function guidedOnboardingReducer(
   state: GuidedOnboardingState,
   action: GuidedOnboardingAction,
 ): GuidedOnboardingState {
+  if (
+    state.modelSetupReturn &&
+    state.step === "models" &&
+    (action.type === "COMPLETE_MODEL_SETUP" ||
+      action.type === "START_MANUAL" ||
+      action.type === "GO_BACK")
+  ) {
+    if (action.type === "COMPLETE_MODEL_SETUP" && !state.modelsConfigured)
+      throw new Error("ONBOARDING_MODELS_REQUIRED");
+    return { ...state, ...state.modelSetupReturn, modelSetupReturn: undefined };
+  }
   switch (action.type) {
+    case "OPEN_PUBLICATION_MODEL_SETUP":
+      return {
+        ...state,
+        step: "models",
+        mode: "guided",
+        route: "ai",
+        modelSetupReturn: state.modelSetupReturn ?? {
+          step: state.step,
+          mode: state.mode,
+          route: state.route,
+        },
+      };
     case "START":
       requireStep(state, "intro");
       return { ...state, step: "repositories", mode: "guided", route: "ai" };
@@ -441,6 +497,7 @@ export function guidedOnboardingReducer(
             analysisStatus: "idle",
             analysis: null,
             ownerStatement: "",
+            proposalSource: "manual",
             proposal: null,
             previousContribution: null,
             confirmedContribution: null,
@@ -550,6 +607,7 @@ export function guidedOnboardingReducer(
         }
         return {
           ...repository,
+          proposalSource: "manual",
           proposal: {
             role: { "zh-TW": "", en: "" },
             summary: { "zh-TW": "", en: "" },
@@ -582,6 +640,7 @@ export function guidedOnboardingReducer(
           return {
             ...repository,
             proposal,
+            proposalSource: "manual",
             confirmedContribution: null,
             previousContribution:
               repository.confirmedContribution ??
@@ -598,6 +657,7 @@ export function guidedOnboardingReducer(
         return {
           ...repository,
           proposal: cloneProposal(repository.confirmedContribution),
+          proposalSource: "manual",
           previousContribution: cloneProposal(repository.confirmedContribution),
           confirmedContribution: null,
         };
@@ -611,6 +671,7 @@ export function guidedOnboardingReducer(
         return {
           ...repository,
           proposal: cloneProposal(action.proposal),
+          proposalSource: "model",
           previousContribution: repository.confirmedContribution
             ? cloneProposal(repository.confirmedContribution)
             : repository.previousContribution,
@@ -646,6 +707,7 @@ export function guidedOnboardingReducer(
         return {
           ...repository,
           proposal: cloneProposal(repository.previousContribution),
+          proposalSource: "manual",
           previousContribution: null,
           confirmedContribution: null,
         };
@@ -657,6 +719,7 @@ export function guidedOnboardingReducer(
           return {
             ...repository,
             proposal: cloneProposal(repository.previousContribution),
+            proposalSource: "manual",
             previousContribution: null,
             confirmedContribution: null,
           };
@@ -715,7 +778,7 @@ export function serializeGuidedOnboarding(
 ): string {
   const persisted: PersistedGuidedOnboarding = {
     version: 1,
-    step: state.step,
+    step: state.modelSetupReturn?.step ?? state.step,
     githubAccount: state.githubAccount,
     discoveryPage: state.discoveryPage,
     discoveryHasMore: state.discoveryHasMore,
@@ -723,7 +786,7 @@ export function serializeGuidedOnboarding(
     profile: cloneProfile(state.profile),
     profileConfirmed: state.profileConfirmed,
     modelsConfigured: state.modelsConfigured,
-    route: state.route,
+    route: state.modelSetupReturn?.route ?? state.route,
     repositories: selectedRepositories(state).map((repository) => ({
       slug: repository.metadata.slug,
       metadata: { ...repository.metadata },
@@ -792,6 +855,7 @@ export function parseGuidedOnboarding(
         analysisStatus: "idle",
         analysis: null,
         ownerStatement: persisted.ownerStatement,
+        proposalSource: "manual",
         proposal: persisted.confirmedContribution
           ? cloneProposal(persisted.confirmedContribution)
           : null,
@@ -818,8 +882,34 @@ export function parseGuidedOnboarding(
   }
 }
 
-export function guidedErrorMessage(locale: Locale, code: string): string {
+export function guidedErrorMessage(
+  locale: Locale,
+  code: string,
+  step?: GuidedStep,
+): string {
+  const creatingDraft = step === "review";
+  if (
+    creatingDraft &&
+    (code === "VALIDATION_ERROR" || code === "CONFIG_INVALID")
+  ) {
+    return locale === "zh-TW"
+      ? "草稿內容未通過驗證，目前輸入仍保留。請返回檢查必填欄位、繁中與英文內容，以及專案、貢獻和基本資料的確認狀態，再重試建立草稿。"
+      : "The draft did not pass validation. Your input is kept. Go back and check required fields, both languages, and project, contribution and profile confirmations, then retry creating the draft.";
+  }
   const messages: Record<string, LocalizedText> = {
+    SERVICE_NOT_READY: {
+      "zh-TW": creatingDraft
+        ? "草稿建立服務尚未就緒，目前輸入仍保留。請確認本機 RepoNPC 服務已啟動完成，再重試建立草稿；若持續失敗，先保留未儲存內容，再到「維護」查看服務狀態。"
+        : "目前所需的服務尚未就緒，輸入仍保留。請確認本機 RepoNPC 服務狀態後重試；若持續失敗，先保留未儲存內容，再到「維護」查看服務狀態。",
+      en: creatingDraft
+        ? "The draft creation service is not ready. Your input is kept. Check that the local RepoNPC service has finished starting, then retry creating the draft. If it still fails, keep a copy of unsaved content and open Maintenance to check service status."
+        : "The required service is not ready. Your input is kept. Check the local RepoNPC service and retry. If it still fails, keep a copy of unsaved content and open Maintenance to check service status.",
+    },
+    REQUEST_FAILED: {
+      "zh-TW":
+        "無法確認操作結果，目前輸入仍保留。請檢查本機 RepoNPC 服務與網路連線，恢復後再明確重試；不需要重新填寫內容。",
+      en: "The operation result could not be confirmed. Your input is kept. Check the local RepoNPC service and network connection, then retry explicitly once restored; you do not need to re-enter your content.",
+    },
     NOT_FOUND: {
       "zh-TW":
         "找不到這個公開 GitHub 帳戶或 repository。請檢查名稱，或改用 repository 網址。",
@@ -892,8 +982,8 @@ export function guidedErrorMessage(locale: Locale, code: string): string {
   return (
     messages[code]?.[locale] ??
     (locale === "zh-TW"
-      ? "操作未完成，但你的輸入已保留。請檢查內容後重試。"
-      : "The operation did not complete, but your input is preserved. Review it and try again.")
+      ? "操作未完成，目前無法確認原因，但輸入仍保留。請確認本機服務狀態後重試；若持續失敗，先保留未儲存內容，再到「維護」查看服務狀態。"
+      : "The operation did not complete and the cause is unknown. Your input is kept. Check the local service and retry; if it still fails, keep a copy of unsaved content and open Maintenance to check service status.")
   );
 }
 
@@ -909,6 +999,7 @@ function newGuidedRepository(metadata: RepositoryMetadata): GuidedRepository {
     analysis: null,
     ownerStatement: "",
     proposal: null,
+    proposalSource: "manual",
     previousContribution: null,
     confirmedContribution: null,
   };

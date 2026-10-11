@@ -171,6 +171,28 @@ def test_hybrid_overrides_default_cap_and_reject_invalid_values(
         reader.close()
 
 
+def test_lexical_recovers_unspaced_non_ascii_question_without_relaxing_paths(
+    tmp_path: Path,
+) -> None:
+    reader, _ = _controlled_reader(tmp_path)
+    try:
+        candidates = reader.lexical_candidates("請說明繁體中文", limit=8)
+        records = [reader.evidence(evidence_id) for evidence_id in candidates]
+
+        assert any(
+            record is not None and record.path == "docs/architecture.md" for record in records
+        )
+        unseen_candidates = reader.lexical_candidates("說明雙語檢索的架構", limit=8)
+        unseen_records = [reader.evidence(evidence_id) for evidence_id in unseen_candidates]
+        assert any(
+            record is not None and record.path == "docs/architecture.md"
+            for record in unseen_records
+        )
+        assert reader.lexical_candidates("請說明繁體中文 src/not-present.py", limit=8) == []
+    finally:
+        reader.close()
+
+
 def _evidence(
     evidence_id: str,
     *,

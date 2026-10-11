@@ -227,12 +227,11 @@ class IndexDatabaseBuilder:
                 evidence_count=result.evidence_count,
                 skipped_sources=result.skipped_sources,
             )
-        except IndexBuildError:
-            temporary_path.unlink(missing_ok=True)
-            raise
         except (OSError, sqlite3.Error, ValueError) as exc:
-            temporary_path.unlink(missing_ok=True)
             raise IndexBuildError("index_build_failed") from exc
+        finally:
+            # Provider failures and cancellation also leave no partial index.
+            temporary_path.unlink(missing_ok=True)
 
     def _build_temporary(
         self,
@@ -351,24 +350,10 @@ class IndexDatabaseBuilder:
                 for evidence in source.evidence:
                     self._insert_evidence(connection, source_id, evidence)
                     evidence_rows.append(evidence)
-            participation = snapshot.participation or RepositoryParticipation(
-                is_repository_owner=(
-                    snapshot.slug.split("/", 1)[0].casefold()
-                    == config.profile.github_login.casefold()
-                ),
-                has_visible_commits=None,
-                first_commit=None,
-                last_commit=None,
-                other_contributors_visible=None,
-            )
+            participation = snapshot.participation
+            if participation is None:
+                continue
             facts = _participation_evidence(snapshot, config.profile.github_login, participation)
-            connection.execute(
-                "INSERT INTO bundle_meta(key, value) VALUES (?, ?)",
-                (
-                    f"participation:{snapshot.slug}",
-                    _canonical_json(_participation_metadata(participation)),
-                ),
-            )
             if facts:
                 source_id = self._insert_source(
                     connection,

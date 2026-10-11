@@ -1,6 +1,8 @@
 # RepoNPC public configuration example.
 # Copy to reponpc.yml in the configured GitHub repository and replace examples.
 # Never put API keys, passwords, tokens, private URLs, or other secrets here.
+# Chat/analysis token ceilings and reasoning controls are deployment-only
+# (ADR-055); this public YAML neither configures them nor disables reasoning.
 # GitHub OAuth and browser-entered public-read PATs were removed in 0.2.1. The
 # independent writeback token remains deployment-only and
 # must never appear in this public YAML file.
@@ -20,8 +22,6 @@ locales:
 
 profile:
   display_name: Example Developer
-  github_login: your-github-name # Confirm the account whose linked commits may be cited.
-  aliases: [] # Optional names used to recognize references to the owner.
   github_login: your-github-name # Confirm the account whose linked commits may be cited.
   aliases: [] # Optional names used to recognize references to the owner.
   headline:
@@ -83,8 +83,8 @@ repositories:
       - apps/**
     exclude:
       - docs/generated/**
-      - '**/*.min.js'
-      - '**/fixtures/large/**'
+      - "**/*.min.js"
+      - "**/fixtures/large/**"
     claims:
       - id: project_one_role
         kind: responsibility
@@ -133,9 +133,9 @@ character:
       tone: medium
       hairstyle: short
       attire: adventurer
-      hair_color: '#2b1d14'
-      primary_color: '#6d5dfc'
-      secondary_color: '#f2c14e'
+      hair_color: "#2b1d14"
+      primary_color: "#6d5dfc"
+      secondary_color: "#f2c14e"
       accessory: glasses
   # To use a custom sheet, set mode: custom, remove builtin, and enable:
   # custom:
@@ -143,6 +143,18 @@ character:
   animation:
     frame_duration_ms: 160
     movement: subtle
+  # Visitor colours come only from the packaged registry, independently of the NPC.
+  scene:
+    color_scheme: neutral # neutral | ocean | forest | sunset | lavender
+    color_mode: system # system | light | dark
+    visitor_mode_toggle: true
+    accent: null # optional six-digit hex; preview shows any contrast adjustment
+    background_path: null # only an applied PNG/WebP directly under assets/scene/
+    background_scaling: smooth # smooth | pixelated
+    background_focus:
+      x: 50 # 0..100
+      y: 50 # 0..100
+    background_dim: auto # auto | none | low | medium | high
 
 card:
   revision: 1
@@ -155,17 +167,17 @@ card:
     frame_duration_ms: 240
   themes:
     light:
-      background: '#f7f4e9'
-      panel: '#fffdf7'
-      text: '#24202e'
-      accent: '#6d5dfc'
-      border: '#2f2842'
+      background: "#f7f4e9"
+      panel: "#fffdf7"
+      text: "#24202e"
+      accent: "#6d5dfc"
+      border: "#2f2842"
     dark:
-      background: '#171521'
-      panel: '#211e2e'
-      text: '#f8f5ff'
-      accent: '#9b8cff'
-      border: '#c8bfff'
+      background: "#171521"
+      panel: "#211e2e"
+      text: "#f8f5ff"
+      accent: "#9b8cff"
+      border: "#c8bfff"
 
 retrieval:
   enabled_sources:
@@ -198,8 +210,8 @@ retrieval:
     model: qwen3-embedding:0.6b
     dimension: 1024
     normalized: true
-    query_prefix: ''
-    passage_prefix: ''
+    query_prefix: ""
+    passage_prefix: ""
   fusion:
     rrf_k: 60
     lexical_weight: 1.0

@@ -15,6 +15,13 @@ def build_public_card_assets(config: PublicConfig, *, config_directory: Path) ->
 
     sprite = _character_sprite(config, config_directory=config_directory)
     assets: dict[str, bytes] = {"public/character.png": sprite.content}
+    background_path = config.character.scene.background_path
+    if background_path is not None:
+        from reponpc.scene.images import validate_scene_image
+
+        source_path = config_directory / Path(background_path)
+        canonical = validate_scene_image(source_path.read_bytes(), filename=source_path.name)
+        assets[f"public/scene/{canonical.sha256}.{canonical.format}"] = canonical.content
     repository_count = sum(repository.enabled for repository in config.repositories)
     for locale in config.locales.supported:
         copy = CardCopy(

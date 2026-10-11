@@ -8,7 +8,8 @@ policy; those remain server-owned orchestration concerns.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -64,6 +65,8 @@ class ProviderCapabilities:
     health_check: bool
     max_context_tokens: int
     max_output_tokens: int
+    reasoning_supported: bool | None = None
+    reasoning_control: Literal[True] | str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         for value in (self.max_context_tokens, self.max_output_tokens):
@@ -71,6 +74,20 @@ class ProviderCapabilities:
                 raise ValueError("provider token limits must be positive integers")
         if self.max_output_tokens > self.max_context_tokens:
             raise ValueError("provider output limit must not exceed context limit")
+        if self.reasoning_supported is not None and type(self.reasoning_supported) is not bool:
+            raise ValueError("provider reasoning support must be boolean or unknown")
+        control = self.reasoning_control
+        if control is not None and (
+            self.reasoning_supported is not True
+            or not (
+                control is True
+                or (
+                    isinstance(control, str)
+                    and re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,31}", control)
+                )
+            )
+        ):
+            raise ValueError("provider reasoning control must be a supported enabled value")
 
 
 @dataclass(frozen=True, slots=True)

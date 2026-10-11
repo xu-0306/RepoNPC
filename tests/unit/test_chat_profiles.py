@@ -51,6 +51,38 @@ def _connection_input(*, api_key: str = "chat-key-canary") -> ModelConnectionInp
     )
 
 
+@pytest.mark.parametrize(
+    "preparation,completion", [(5.0, 5.0), (21.0, 21.0), (5.0, 20.0), (5.0, 25.0)]
+)
+def test_probe_preparation_consumes_original_twenty_second_deadline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    preparation: float,
+    completion: float,
+) -> None:
+    connections, profiles = _registries(tmp_path)
+    connection = connections.create(_connection_input())
+    profile = profiles.create(ChatProfileInput(connection.connection_id, "arbitrary-model"))
+    budgets: list[float] = []
+
+    class PreparedProbe(_ProbeProvider):
+        def generate(self, *_args: object, **kwargs: object) -> ProviderResult:
+            budgets.append(float(kwargs["timeout"]))  # type: ignore[arg-type]
+            return super().generate()
+
+    profiles._provider_resolver = lambda _profile: PreparedProbe()
+    ticks = iter([0.0, preparation, completion])
+    monkeypatch.setattr("reponpc.admin.chat_profiles.time.monotonic", lambda: next(ticks))
+    result = profiles.probe(profile.profile_id)
+    if completion < 20:
+        assert result.status == "ready"
+        assert budgets == [15.0]
+    else:
+        assert result.status == "probe_failed"
+        assert result.last_error_code == "PROVIDER_TIMEOUT"
+        assert budgets == ([] if preparation >= 20 else [15.0])
+
+
 def test_chat_profiles_require_probe_and_freeze_the_connection_revision(tmp_path: Path) -> None:
     connections, profiles = _registries(tmp_path)
     connection = connections.create(_connection_input())

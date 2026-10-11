@@ -1,7 +1,10 @@
 import type { CSSProperties } from "react";
 
 import type { Locale } from "../../i18n/messages";
-import type { GuidedOnboardingState, GuidedStep } from "./guidedOnboarding";
+import {
+  onboardingProgress,
+  type GuidedOnboardingState,
+} from "./guidedOnboarding";
 import { ModelBrandIcon, type ModelProvider } from "./ModelBrandIcon";
 
 export type AdminModelState =
@@ -14,7 +17,7 @@ export type AdminModelState =
 export interface AdminModelSummary {
   model: string | null;
   connection: string | null;
-  provider: ModelProvider | null;
+  provider: ModelProvider | "builtin_onnx" | null;
   state: AdminModelState;
 }
 
@@ -84,43 +87,6 @@ const COPY = {
   },
 } as const;
 
-const AI_STEPS: readonly GuidedStep[] = [
-  "models",
-  "repositories",
-  "analysis",
-  "contributions",
-  "profile",
-  "review",
-];
-
-const MANUAL_STEPS: readonly GuidedStep[] = [
-  "repositories",
-  "contributions",
-  "profile",
-  "review",
-];
-
-function onboardingProgress(state: GuidedOnboardingState): {
-  completed: number;
-  current: number;
-  total: number;
-} {
-  const steps = state.route === "manual" ? MANUAL_STEPS : AI_STEPS;
-  if (state.step === "intro") {
-    return { completed: 0, current: 0, total: steps.length };
-  }
-  if (state.step === "draft") {
-    return {
-      completed: steps.length,
-      current: steps.length,
-      total: steps.length,
-    };
-  }
-  const index = steps.indexOf(state.step);
-  if (index < 0) return { completed: 0, current: 0, total: steps.length };
-  return { completed: index, current: index + 1, total: steps.length };
-}
-
 export function AdminStatusCards({ locale, state, status }: Props) {
   const copy = COPY[locale];
   const progress = onboardingProgress(state);
@@ -134,72 +100,71 @@ export function AdminStatusCards({ locale, state, status }: Props) {
   } as CSSProperties;
 
   return (
-    <section
-      aria-labelledby="admin-status-cards-heading"
-      className="admin-status-cards"
-    >
-      <h2 className="visually-hidden" id="admin-status-cards-heading">
-        {copy.heading}
-      </h2>
-      <div className="admin-status-card admin-status-card--progress">
-        <StatusIcon kind="progress" />
-        <span
-          aria-hidden="true"
-          className="admin-status-card__progress-ring"
-          style={progressStyle}
-        >
-          {progress.completed}/{progress.total}
-        </span>
-        <StatusCopy
-          detail={
-            progress.current > 0
-              ? copy.current(progress.current, progress.total)
-              : copy.notStarted
-          }
-          label={copy.progress}
-          value={copy.completed(progress.completed, progress.total)}
+    <details className="admin-status-overview">
+      <summary>
+        {copy.heading} · {copy.projectCount(selected)} ·{" "}
+        {copy.completed(progress.completed, progress.total)}
+      </summary>
+      <section
+        aria-labelledby="admin-status-cards-heading"
+        className="admin-status-cards"
+      >
+        <h2 className="visually-hidden" id="admin-status-cards-heading">
+          {copy.heading}
+        </h2>
+        <div className="admin-status-card admin-status-card--progress">
+          <StatusIcon kind="progress" />
+          <span
+            aria-hidden="true"
+            className="admin-status-card__progress-ring"
+            style={progressStyle}
+          >
+            {progress.completed}/{progress.total}
+          </span>
+          <StatusCopy
+            detail={
+              progress.current > 0
+                ? copy.current(progress.current, progress.total)
+                : copy.notStarted
+            }
+            label={copy.progress}
+            value={copy.completed(progress.completed, progress.total)}
+          />
+        </div>
+        <div className="admin-status-card">
+          <StatusIcon kind="projects" />
+          <StatusCopy
+            detail={
+              state.selectionConfirmed ? copy.confirmed : copy.unconfirmed
+            }
+            label={copy.projects}
+            value={copy.projectCount(selected)}
+          />
+        </div>
+        <ModelStatusCard
+          copy={copy}
+          icon="chat"
+          label={copy.chat}
+          summary={status.chat}
         />
-      </div>
-      <div className="admin-status-card">
-        <StatusIcon kind="projects" />
-        <StatusCopy
-          detail={state.selectionConfirmed ? copy.confirmed : copy.unconfirmed}
-          label={copy.projects}
-          value={copy.projectCount(selected)}
+        <ModelStatusCard
+          copy={copy}
+          icon="search"
+          label={copy.embedding}
+          summary={status.embedding}
         />
-      </div>
-      <ModelStatusCard
-        copy={copy}
-        icon="chat"
-        label={copy.chat}
-        summary={status.chat}
-      />
-      <ModelStatusCard
-        copy={copy}
-        icon="search"
-        label={copy.embedding}
-        summary={status.embedding}
-      />
-      <div className="admin-status-card">
-        <StatusIcon kind="public" />
-        <StatusCopy
-          detail={
-            status.publicBundleId ? status.publicBundleId : copy.publicPending
-          }
-          label={copy.publicSite}
-          value={status.publicBundleId ? copy.publicReady : copy.publicPending}
-        />
-        <span
-          className={`admin-status-card__badge admin-status-card__badge--${
-            status.publicBundleId ? "selected" : "unconfigured"
-          }`}
-        >
-          {status.publicBundleId
-            ? copy.modelStates.selected
-            : copy.publicPending}
-        </span>
-      </div>
-    </section>
+        <div className="admin-status-card">
+          <StatusIcon kind="public" />
+          <StatusCopy
+            detail={status.publicBundleId ?? ""}
+            label={copy.publicSite}
+            value={
+              status.publicBundleId ? copy.publicReady : copy.publicPending
+            }
+          />
+        </div>
+      </section>
+    </details>
   );
 }
 
@@ -222,19 +187,17 @@ function ModelStatusCard({
         <StatusIcon kind={icon} />
       )}
       <StatusCopy
-        detail={
-          summary.connection
-            ? copy.connection(summary.connection)
-            : copy.modelStates[summary.state]
-        }
+        detail={summary.connection ? copy.connection(summary.connection) : ""}
         label={label}
         value={summary.model ?? copy.modelStates[summary.state]}
       />
-      <span
-        className={`admin-status-card__badge admin-status-card__badge--${summary.state}`}
-      >
-        {copy.modelStates[summary.state]}
-      </span>
+      {summary.model && (
+        <span
+          className={`admin-status-card__badge admin-status-card__badge--${summary.state}`}
+        >
+          {copy.modelStates[summary.state]}
+        </span>
+      )}
     </div>
   );
 }
@@ -252,7 +215,7 @@ function StatusCopy({
     <span className="admin-status-card__copy">
       <span className="admin-status-card__label">{label}</span>
       <strong>{value}</strong>
-      <span className="admin-status-card__detail">{detail}</span>
+      {detail && <span className="admin-status-card__detail">{detail}</span>}
     </span>
   );
 }

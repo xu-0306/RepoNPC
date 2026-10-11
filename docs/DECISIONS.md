@@ -2,6 +2,16 @@
 
 ## ADR-053: Freeze A1 visitor gateway and private administration contracts
 
+**Owner-approved B5 amendment (2026-10-02; implemented locally 2026-10-03):**
+[Simplification plan §11.6](A5_PAGES_SHARING_SIMPLIFICATION_HANDOFF_2026-10-02.md)
+supersedes the earlier derived verification comparisons and local-chat error
+behavior: verify accepts only revision/confirmation, uses verified_at plus
+listener readiness, and clears the five report fields on configuration/lifecycle
+changes, never on bundle activation. Both chat routes share heartbeat handling
+and generic gateway chat errors, retaining their identity, admission, projection
+and retry boundaries. Migration 30 and external-operation authorization remain
+unchanged. The earlier compatibility statement below is historical for chat.
+
 - **Status:** Accepted 2026-09-28 (OR-027); implementation in progress.
 - **Authorization:** After reading the reviewed A1 design explanation, the owner approved continuing with gpt-6-luna max implementation and Main review/takeover. No public activation, provider spending or GitHub write is authorized.
 - **Decision:** Adopt [A1/F0](A1_FUNNEL_GATEWAY_CONTRACT.md) as Technical Specification 0.4.6: production-only same-process loopback visitor listener; exact API/build-asset allowlist; one github.io Pages origin without credentials; separate private admin Origin/Host/hostname; explicit independent proxy trust; aggregate or verified per-IP protection; bounded buffered-answer SSE with heartbeats and no usage disclosure; three distinct owner facts; migration 30/private controls; opt-in Linux host-network Compose.
@@ -308,7 +318,6 @@ The owner approved the novice UI/UX repair findings as one batch. Unknown embedd
 
 The owner rejected the inferred Chinese HTTP 402 billing explanation and explicitly requested original provider error text. Provider prose is open-world data, not a closed translation vocabulary. Replace the HTTP explanation lookup with adapter-bound structural message extraction and preserve the original language in both locales. The owner-authorized additive `last_error_message` admin DTO/runtime field stores only bounded redacted error text; HTTP status remains a validated protocol value. Migration 20, parsing/redaction limits, unavailable-message behavior and regression criteria are frozen in Technical Specification 11.5, Security 21 and AC-054/055/057. Existing prohibitions on full provider bodies, secret disclosure, public diagnostic expansion and implicit fallback remain.
 
-
 ### ADR-029 URL editing correction — 2026-09-12
 
 **Owner-approved URL editing exception (2026-09-12, ADR-029; FR-038/040, AC-055/057):** The owner explicitly requested that replacing a managed service URL prefill its saved value. Only `POST /api/admin/model-connections/{connection_id}/edit-endpoint`, guarded by the existing owner session, same-origin check and CSRF, may return `{connection_id, revision, base_url}` with `Cache-Control: no-store`. It accepts no arbitrary URL, reads the exact current encrypted revision, rejects host-managed/unknown connections with 404 and unavailable secret storage with 503, and makes no provider request or mutation. List/detail metadata remains URL-free; API keys, secret references and environment values are never returned. The UI fetches only on the explicit Replace URL action, keeps the result in the active form only, clears it on cancel/toggle-off/teardown, and ignores responses after a form or revision change. Loading disables URL editing/submission; failure permits retry or manual entry. No readback URL may enter browser storage, public drafts, exports, logs or snapshots. This narrow exception supersedes earlier blanket stored-URL readback prohibitions; stored-key prohibitions and destination-change credential rules remain unchanged.
@@ -402,7 +411,6 @@ The owner rejected the inferred Chinese HTTP 402 billing explanation and explici
 
 Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVALID_RESPONSE` despite a working service. Inspection found a separate 32-token probe cap and collapsed parser failures. Main corrected the internal probe budget to the configured capability and added source-labelled, closed-set parser evidence under the existing diagnostic field, without inventing provider text or model-name special cases. No claim is made about the owner's actual response, which was not retained. Details: `docs/CHAT_PROBE_RESPONSE_CHECKS_2026-09-12.md`.
 
-
 ## ADR-046: Owner-controlled local publication and guided GitHub cards
 
 - **Status:** Accepted for implementation, 2026-09-22.
@@ -477,6 +485,7 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
   - several colour schemes should be offered for the owner to choose, together with light and dark modes.
 
   The Figma file could not be fetched (it requires a login), so the layout was drafted from the kit's public description and common AI-chat layouts. The starter schemes, defaults and layout details were drafting assumptions; the owner confirmed all six the same day (「照你的建議，六點都確認」, contract §10 Q12). Exact hex values are set during implementation and reviewed with the generated contrast report.
+
 - **Context:** ADR-049 derived page colours from the sheet, and ADR-050 added hue-seed templates and an owner background behind the whole page. The owner now prefers a familiar, quiet chat interface in which the character is the only personal visual element. Deriving colours from pixels adds complexity and unpredictable results for little owner value, and full-page images compete with the conversation.
 - **Decision:** Adopt contract §4.0 and §4.4–§4.6 as revised. They become Technical Specification 0.4.4 (FR-047/050/051/052, §12.3, §16) and the revised AC-068 and AC-072–AC-075:
   - **Layout:**
@@ -520,3 +529,71 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
   - **Maintenance page (FR-053):** a 「維護」 admin page that shows local / gateway / external-verified status, the active bundle and the last backup; creates and downloads a backup; restores from a file after confirmation and an automatic backup; pins a previous bundle; stops the visitor gateway; and explains how to update (run the newer installer) and how to turn Funnel off in Tailscale. It reuses the existing `runtime backup` and `bundle pin` primitives. Gate: AC-076.
 - **Not included:** in-app installer download and verification, configurable R11 windows or R12-B cache sizes, and local model quantization. Each is added only if real use shows the need.
 - **Consequences:** Technical Specification becomes 0.4.5, adding FR-053 and AC-076–AC-079. All four start not-run.
+
+## ADR-054: Encrypt Web maintenance backups and restore in the same data directory
+
+- **Status:** Accepted 2026-10-03; local implementation and verification in progress.
+- **Authorization:** After reviewing the backup boundary and UX recommendation,
+  the owner said 「好，那採用A」. See [the concrete decision](A11_BACKUP_BOUNDARY_DECISION_2026-10-03.md), OR-028 and Technical Specification §11.7.
+- **Evidence:** The existing online SQLite backup contains the owner authentication
+  hash and encrypted connection revisions; host encryption keys and referenced
+  resources live outside SQLite. Raw Web download conflicts with the browser
+  secret invariant and cannot represent a complete migration archive.
+- **Decision:** Encrypt the online backup with an owner-entered password using
+  bounded, versioned Scrypt/AES-GCM. Browser receives ciphertext only. Inspect
+  and normalize untrusted SQLite against trusted migrations, validate retained
+  resources, then require explicit confirmation. Drain real writers and stop the
+  old lifespan; encrypt and retain the current state before atomic replacement.
+  Roll back the database and pointer if fresh startup fails. Expire and remove
+  private preview staging. Revoke sessions/grants and leave the gateway off.
+- **Scope:** SQLite restoration requires the original data directory, host keys,
+  compatible model files/bundles and referenced appearance/local assets. Missing
+  resources fail closed. Full cross-host migration remains the stopped-service
+  operations procedure. CLI host-only raw backup remains protected and unchanged.
+- **Alternatives:** Raw browser SQLite download (option B) was not selected;
+  stripping authentication or credentials would break recovery continuity.
+- **Consequences:** Approved specification 0.4.7 freezes the private routes and
+  artifact format, updates FR-053/AC-076 verification and operations/security
+  guidance. No hosted dependency, fallback, public route or Tailscale credential
+  authority is added. Formal AC-076 remains open until its complete browser and
+  installed-deployment matrix has evidence.
+
+## ADR-055: Preserve reasoning and bound combined generation at 16k
+
+- **Status:** Accepted 2026-10-03 (OR-029); implementation and verification are separate from release acceptance.
+- **Authorization:** The owner rejected default `think: false`, required reasoning ON and explicitly supported 16,384 tokens.
+- **Evidence:** ADR-034/037 were approved budget policies. Current live reasoning-model evidence showed that the legacy chat ceiling did not establish successful completion for this workload; disabling reasoning would change the owner's intended behavior. No committed question, oracle or quality threshold is changed.
+- **Decision:** Chat/probe and authenticated-analysis budgets remain independent, each with a 16,384-token default and hard maximum. Explicit lower settings remain valid. Ollama generation counts reasoning and answer within one ceiling, with a separate bounded input-plus-generation context. Supported reasoning controls remain ON; unknown support retains the backend default and is reported as unknown. No model-name heuristic establishes support. OpenAI-compatible/vLLM retain their existing provider semantics.
+- **Safety:** Reserve full input/schema/framing and output before generation; a smaller verified provider context/cap wins. Output-limit termination fails before parsing or publication, including valid partial JSON. Preserve deadlines, the one-request 20-second probe, existing transient analysis policy, no output-limit retries, no fallback and trace privacy. Analysis cache identity includes the changed budget/reasoning policy. No public schema, toggle, streaming or new provider is added.
+- **Sources (checked 2026-10-03):** [Ollama thinking controls](https://docs.ollama.com/capabilities/thinking), [chat usage fields](https://docs.ollama.com/api/chat), [generation/context parameters](https://docs.ollama.com/modelfile), [context allocation](https://docs.ollama.com/context-length), and the [official Qwen3.5-9B model card](https://huggingface.co/Qwen/Qwen3.5-9B). Qwen documents thinking enabled by default and 262,144 native context; its 128k complex-reasoning recommendation is not a measured guarantee for RepoNPC's bounded 32,768 configuration. Generated token counts and model-tokenizer context are distinct from visible characters; no fixed Chinese-character ratio is claimed.
+- **Consequences:** Approved Specification becomes 0.4.8; FR-012/027/033/038/040/041, NFR-002/003/011/012/014 and AC-023/039/054/055/057/061 gain bounded-control and privacy regressions. Earlier decisions retain their historical values; only their superseded output defaults/ceiling change. Live quality acceptance remains evidence-dependent.
+
+## ADR-056: Align the two-facts validation question with its unchanged oracle
+
+- **Status:** Accepted 2026-10-03 (OR-030); validation-fixture clarification only. Approved Specification remains 0.4.8.
+- **Authorization:** The owner explicitly approved the [two-facts correction](A7_TWO_FACTS_FIXTURE_REVIEW_2026-10-03.md), after the unchanged reasoning-ON/16k suite returned 10/12. The original question asked only about storage, while its reviewed oracle required retrieval fusion and storage.
+- **Decision:** Change only `supported_two_facts.question` in the committed answer-quality fixture to ask both parts explicitly; use the prescribed matching Traditional Chinese question in the new bilingual runner. Preserve evidence, source IDs, raw fixture answers, all expected claims/citations/refusal rules, thresholds, case count and all other questions. No production prompt, model-name branch or provider setting changes.
+- **Evidence boundary:** Retain the original fixture bytes and old 10/12 reports unchanged. The corrected fixture fingerprint identifies a separate suite revision. Run the complete fixed 12 bilingual cases once; catalog admission still requires all cases passing and the existing verified model revision/source/license/quantization provenance. Approval of the question does not predict a pass or establish release acceptance.
+- **Consequences:** Supplemental AC-057 evaluation guidance records this owner-approved semantic alignment. No FR/AC ID, schema, threshold, public API or specification-version expansion is needed; ADR-055 reasoning and budget controls remain unchanged.
+
+## ADR-057: Real visitor chat progress and a longer bounded wait
+
+- Status: Accepted 2026-10-04 for waiting UX (OR-031); thinking-text display remains pending.
+- Decision: Reuse existing chat SSE and provider transport for real service
+  phases, native Ollama thinking activity (never its text), elapsed duration,
+  native disclosure and cancellation. Default total timeout becomes 180 seconds,
+  within the existing 300 maximum; explicit settings are retained. No fake
+  timer phases, model tools, new dependencies or extra provider calls.
+- Safety: Final content is buffered and passes unchanged validation. Progress
+  contains only closed labels and elapsed_ms. Streamed calls never retry or
+  fall back. Raw thinking/unknown compatible reasoning fields stay private.
+  Automatic review rejected the proposed raw-text public callback; the owner's
+  thinking-text request remains unfinished, with separate summary/trace choices.
+- Contract: CHAT_PROCESSING_CONTRACT_2026-10-04.md. Requirements FR-043/044/047,
+  NFR-005/009/014, AC-019/023/062/063/064/068/071; no acceptance threshold changes.
+- References: native Ollama NDJSON, Chat Completions SSE, WHATWG disclosure and
+  AbortController; official-source Luna Max review retained as dated evidence.
+
+## ADR-058: Provider-defined public summaries on an explicit interface
+
+Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and encrypted revision lineage to select the chat interface explicitly. Add `chat_api` (`chat_completions` default or `responses`) to safe connection metadata and the encrypted revision payload; legacy ciphertext defaults to the old interface. Migration 35 adds one column, with no table rebuild. Responses is valid only for openai_compatible connections; embeddings retain their existing interface. Consume complete provider-defined summary paragraphs, privately check prompt copies and known credentials/endpoints before an optional bounded `reasoning_summary` SSE event. Preserve final validation, one call, deadline/cancel, ephemeral UI and no tools/fallback. [public summary contract](CHAT_PUBLIC_SUMMARY_CONTRACT_2026-10-04.md).

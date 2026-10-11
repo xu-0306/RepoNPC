@@ -56,24 +56,30 @@ function Review() {
         status.current.gateway_origin = body.gateway_origin;
         status.current.pages_origin = body.pages_origin;
         status.current.external_verified = false;
+        status.current.verified_at = null;
+        status.current.verification_method = null;
       } else if (path.endsWith("/start")) {
         status.current.enabled =
           status.current.listener_ready =
           status.current.entry_configured =
             true;
         status.current.external_verified = false;
+        status.current.verified_at = null;
+        status.current.verification_method = null;
       } else if (path.endsWith("/stop")) {
         status.current.enabled =
           status.current.listener_ready =
           status.current.entry_configured =
             false;
         status.current.external_verified = false;
+        status.current.verified_at = null;
+        status.current.verification_method = null;
       } else if (path.endsWith("/verify")) {
         if (
           !body.external_checks_confirmed ||
-          body.bundle_id !== status.current.active_bundle_id
+          !status.current.listener_ready
         )
-          throw new Error("GATEWAY_VERIFICATION_STALE");
+          throw new Error("GATEWAY_UNAVAILABLE");
         status.current.external_verified = true;
         status.current.verified_at = "2026-09-29T01:00:00Z";
         status.current.verification_method = "owner_reported";
@@ -118,7 +124,6 @@ function Review() {
         <button
           onClick={() => {
             status.current.local_ready = false;
-            status.current.external_verified = false;
           }}
         >
           Observe local failure
@@ -133,7 +138,6 @@ function Review() {
         <button
           onClick={() => {
             status.current.active_bundle_id = "fixture-bundle-two";
-            status.current.external_verified = false;
           }}
         >
           Activate next bundle

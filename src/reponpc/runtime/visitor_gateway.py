@@ -20,11 +20,7 @@ class VisitorGatewaySettings:
     enabled: bool
     gateway_origin: str | None
     pages_origin: str | None
-    verification_gateway_origin: str | None
-    verification_pages_origin: str | None
-    verification_bundle_id: str | None
     verified_at: str | None
-    verification_method: str | None
 
 
 class VisitorGatewayStore:
@@ -51,7 +47,10 @@ class VisitorGatewayStore:
                     raise VisitorGatewayStoreError("GATEWAY_CONFIGURATION_INVALID")
                 connection.execute(
                     "UPDATE visitor_gateway_settings SET gateway_origin = ?, pages_origin = ?, "
-                    "revision = revision + 1 WHERE id = 1 AND revision = ?",
+                    "revision = revision + 1, "
+                    "verification_gateway_origin = NULL, verification_pages_origin = NULL, "
+                    "verification_bundle_id = NULL, verified_at = NULL, verification_method = NULL "
+                    "WHERE id = 1 AND revision = ?",
                     (gateway_origin, pages_origin, revision),
                 )
                 connection.commit()
@@ -67,17 +66,27 @@ class VisitorGatewayStore:
                 row = _current(connection, revision)
                 if enabled and (row["gateway_origin"] is None or row["pages_origin"] is None):
                     raise VisitorGatewayStoreError("GATEWAY_CONFIGURATION_INVALID")
-                if bool(row["enabled"]) != enabled:
-                    connection.execute(
-                        "UPDATE visitor_gateway_settings SET enabled = ?, revision = revision + 1 "
-                        "WHERE id = 1 AND revision = ?",
-                        (int(enabled), revision),
-                    )
+                connection.execute(
+                    "UPDATE visitor_gateway_settings SET enabled = ?, "
+                    "revision = revision + (? != enabled), "
+                    "verification_gateway_origin = NULL, verification_pages_origin = NULL, "
+                    "verification_bundle_id = NULL, verified_at = NULL, verification_method = NULL "
+                    "WHERE id = 1 AND revision = ?",
+                    (int(enabled), int(enabled), revision),
+                )
                 connection.commit()
             except Exception:
                 connection.rollback()
                 raise
         return self.get()
+
+    def clear_verification(self) -> None:
+        with self._database.connection() as connection:
+            connection.execute(
+                "UPDATE visitor_gateway_settings SET verification_gateway_origin = NULL, "
+                "verification_pages_origin = NULL, verification_bundle_id = NULL, "
+                "verified_at = NULL, verification_method = NULL WHERE id = 1"
+            )
 
     def verify(
         self,
@@ -97,7 +106,7 @@ class VisitorGatewayStore:
                     or row["gateway_origin"] != gateway_origin
                     or row["pages_origin"] != pages_origin
                 ):
-                    raise VisitorGatewayStoreError("GATEWAY_VERIFICATION_STALE")
+                    raise VisitorGatewayStoreError("GATEWAY_UNAVAILABLE")
                 connection.execute(
                     "UPDATE visitor_gateway_settings SET revision = revision + 1, "
                     "verification_gateway_origin = ?, verification_pages_origin = ?, "
@@ -128,9 +137,5 @@ def _settings(row: sqlite3.Row) -> VisitorGatewaySettings:
         enabled=bool(row["enabled"]),
         gateway_origin=row["gateway_origin"],
         pages_origin=row["pages_origin"],
-        verification_gateway_origin=row["verification_gateway_origin"],
-        verification_pages_origin=row["verification_pages_origin"],
-        verification_bundle_id=row["verification_bundle_id"],
         verified_at=row["verified_at"],
-        verification_method=row["verification_method"],
     )

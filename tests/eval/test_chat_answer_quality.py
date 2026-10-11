@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from reponpc.bundles.index_reader import IndexedEvidence
-from reponpc.chat.answers import Citation, ValidatedAnswer, validate_answer
+from reponpc.chat.answers import Citation, ValidatedAnswer, validate_v2_answer
 
 FIXTURE_PATH = Path(__file__).parents[1] / "fixtures" / "chat" / "answer_quality_scenarios.json"
 _SOURCE_MARKER_RE = re.compile(r"\[(S[1-9][0-9]*)\]")
@@ -171,10 +171,11 @@ def test_answer_quality_gate_uses_reviewed_expectations_and_fails_closed() -> No
         reviewed_claims = expected["reviewed_claims"]
         assert len(expected_ids) == len(set(expected_ids)), scenario["id"]
         assert isinstance(reviewed_claims, list), scenario["id"]
-        result = validate_answer(
+        result = validate_v2_answer(
             scenario["raw"],
             _selected(evidence_by_source, scenario),
             scenario["locale"],
+            owner_name=fixture["owner_name"],
         )
 
         citation_score = _score_citations(result, expected_ids, evidence_by_id)
@@ -227,10 +228,11 @@ def test_quality_scorer_self_falsifies_extra_emitted_citation() -> None:
     scenario = next(
         item for item in fixture["scenarios"] if item["id"] == "supported_repository_fact"
     )
-    result = validate_answer(
+    result = validate_v2_answer(
         scenario["raw"],
         _selected(evidence_by_source, scenario),
         scenario["locale"],
+        owner_name=fixture["owner_name"],
     )
     assert result.citations
 

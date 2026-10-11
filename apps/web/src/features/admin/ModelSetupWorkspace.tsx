@@ -9,6 +9,8 @@ interface Props {
   embeddingConnectionView: ReactNode;
   chatView: ReactNode;
   embeddingView: ReactNode;
+  localModelView?: ReactNode;
+  guidanceView?: ReactNode;
 }
 
 function RoleIcon({ role }: { role: "chat" | "embedding" }) {
@@ -36,6 +38,8 @@ export function ModelSetupWorkspace({
   embeddingConnectionView,
   chatView,
   embeddingView,
+  localModelView,
+  guidanceView,
 }: Props) {
   const chinese = locale === "zh-TW";
   return (
@@ -47,8 +51,8 @@ export function ModelSetupWorkspace({
         <RoleHeading
           description={
             chinese
-              ? "負責理解專案內容並產生回答。新增服務與模型後，先測試是否能正常回應。"
-              : "Understands project content and writes answers. Add a service and model, then test that it can respond."
+              ? "先準備你自己的 Ollama 或相容 API 服務。依序新增服務 → 新增回答模型 → 測試模型，最後在「確認分析模型」選用。"
+              : "Prepare your own Ollama or compatible API service. Add the service, add an answer model, test it, then select it under Confirm models for analysis."
           }
           heading={chinese ? "分析與回答模型" : "Analysis and answer model"}
           id="chat-role-setup-heading"
@@ -66,15 +70,16 @@ export function ModelSetupWorkspace({
         <RoleHeading
           description={
             chinese
-              ? "協助從專案中找出相關資料。新增服務與模型後，先測試是否能處理文字。"
-              : "Finds relevant project information. Add a service and model, then test that it can process text."
+              ? "協助從專案中找出相關資料。選擇內建本機模型或外部服務，設定後先測試是否能處理文字。"
+              : "Finds relevant project information. Choose the built-in local model or an external service, then test that it can process text."
           }
           heading={chinese ? "資料查找模型" : "Content finder model"}
           id="embedding-role-setup-heading"
           role="embedding"
         />
         <div className="model-role-setup__flow">
-          {embeddingConnectionView}
+          {localModelView}
+          <div id="embedding-external-setup">{embeddingConnectionView}</div>
           {embeddingView}
         </div>
       </section>
@@ -92,6 +97,16 @@ export function ModelSetupWorkspace({
         </p>
         {selectionView}
       </aside>
+      {guidanceView && (
+        <details className="model-setup-workspace__guidance">
+          <summary>
+            {chinese
+              ? "選模型有困難？查看裝置、推薦清單與手動路線"
+              : "Need help choosing? Device checks, catalog and manual route"}
+          </summary>
+          {guidanceView}
+        </details>
+      )}
     </div>
   );
 }

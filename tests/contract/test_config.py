@@ -55,6 +55,73 @@ def test_builtin_character_uses_versioned_pack_contract() -> None:
     assert config.character.builtin.options["attire"] == "adventurer"
 
 
+def test_scene_defaults_and_optional_settings_match_the_approved_contract() -> None:
+    legacy = example_data()
+    legacy["character"].pop("scene", None)
+    defaults = validate_public_config(legacy).character.scene
+    assert defaults.color_scheme == "neutral"
+    assert defaults.color_mode == "system"
+    assert defaults.visitor_mode_toggle is True
+    assert defaults.accent is None
+    assert defaults.background_path is None
+    assert defaults.background_scaling == "smooth"
+    assert defaults.background_focus.model_dump() == {"x": 50, "y": 50}
+    assert defaults.background_dim == "auto"
+
+    configured = example_data()
+    configured["character"]["scene"] = {
+        "color_scheme": "ocean",
+        "color_mode": "dark",
+        "visitor_mode_toggle": False,
+        "accent": "#AABBCC",
+        "background_path": "assets/scene/hero.webp",
+        "background_scaling": "pixelated",
+        "background_focus": {"x": 0, "y": 100},
+        "background_dim": "high",
+    }
+    scene = validate_public_config(configured).character.scene
+    assert scene.color_scheme == "ocean"
+    assert scene.color_mode == "dark"
+    assert scene.visitor_mode_toggle is False
+    assert scene.accent == "#aabbcc"
+    assert scene.background_path == "assets/scene/hero.webp"
+    assert scene.background_scaling == "pixelated"
+    assert scene.background_focus.model_dump() == {"x": 0, "y": 100}
+    assert scene.background_dim == "high"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "path"),
+    [
+        ("color_scheme", "not_registered", "character.scene.color_scheme"),
+        ("color_mode", "auto", "character.scene.color_mode"),
+        ("accent", "url(CANARY)", "character.scene.accent"),
+        ("background_path", "../outside.png", "character.scene.background_path"),
+        ("background_path", "assets/scene/nested/hero.png", "character.scene.background_path"),
+        ("background_path", "assets/scene/hero.svg", "character.scene.background_path"),
+        ("background_path", "assets/scene/hero.PNG", "character.scene.background_path"),
+        ("background_dim", "maximum", "character.scene.background_dim"),
+    ],
+)
+def test_scene_config_rejects_unknown_and_unsafe_values(field: str, value: str, path: str) -> None:
+    data = example_data()
+    data["character"]["scene"] = {field: value}
+    error = assert_invalid(data, path)
+    assert "CANARY" not in str(error)
+    if field == "color_scheme":
+        assert all(scheme in error.issues[0].message for scheme in ("neutral", "ocean", "forest"))
+
+
+def test_scene_config_rejects_unknown_template_fields_and_out_of_range_focus() -> None:
+    data = example_data()
+    data["character"]["scene"] = {"template": "soft"}
+    assert_invalid(data, "character.scene")
+
+    data = example_data()
+    data["character"]["scene"] = {"background_focus": {"x": 101, "y": 50}}
+    assert_invalid(data, "character.scene.background_focus.x")
+
+
 def test_legacy_humanoid_fields_are_rejected_without_compatibility_aliases() -> None:
     data = example_data()
     data["character"]["builtin"] = {

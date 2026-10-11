@@ -1,0 +1,5 @@
+# Only entries backed by dated live-provider envelope-v2 evidence may be added.
+# The simple model probe and deterministic fixtures are not such evidence.
+# No verified entry exists yet; empty is intentional, not a failed device check.
+schema_version: 1
+models: []

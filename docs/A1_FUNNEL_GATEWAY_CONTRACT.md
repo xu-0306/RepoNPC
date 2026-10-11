@@ -29,7 +29,7 @@ The owner approved this minimal F0 realization:
 2. Explicit private admin origins and Host binding, the three new environment
    fields, runtime migration and private endpoints below.
 3. Gateway-specific public projections and buffered-answer SSE heartbeats;
-   existing private/local public-response contracts remain compatible.
+   local chat shares the heartbeat handler and generic chat errors while retaining its own identity and response projection.
 4. Aggregate abuse protection by default. Optional per-IP identity requires
    explicit loopback-proxy trust and verification of the actual deployed Funnel
    forwarding behavior; a loopback socket address is never a visitor identity.
@@ -78,6 +78,17 @@ code, password, CSRF and local-launch rules stay mandatory. The actual private
 HTTPS endpoint remains the operator's responsibility; this task does not add a
 certificate service or weaken Secure cookies for remote HTTP.
 
+### B5 origin-rule comparison (approved simplification)
+
+| Rule | Environment canonicalizer | Former admin normalizer | Shared rule |
+|---|---|---|---|
+| Scheme/host case; default ports | Normalize | Normalize | Normalize |
+| Trailing slash, path, query, fragment, userinfo | Reject | Reject | Reject |
+| Unicode IDN, trailing-dot or ambiguous numeric host | Reject | Accepted in some cases | Reject; ASCII punycode remains valid |
+| IPv6 | Validate and compress | Lowercase only | Validate and compress; reject zones |
+| HTTP | Loopback only | Any host | Loopback only for private admin; HTTPS only for gateway/export |
+| Whitespace, backslash, invalid port | Reject | Reject | Reject; maximum 2048 characters |
+
 ## 3. Runtime schema and lifecycle
 
 Migration 30 adds one singleton `visitor_gateway_settings` row:
@@ -88,15 +99,14 @@ Migration 30 adds one singleton `visitor_gateway_settings` row:
 | `revision` | INTEGER, positive optimistic mutation revision |
 | `enabled` | INTEGER, 0 or 1, default 0; persisted explicit owner intent |
 | `gateway_origin`, `pages_origin` | Nullable TEXT, normalized origins, max 2048 characters |
-| `verification_gateway_origin`, `verification_pages_origin`, `verification_bundle_id` | Nullable TEXT; exact configuration and active-bundle association; origin bounds as above, existing validated bundle ID with maximum 128 characters |
+| `verification_gateway_origin`, `verification_pages_origin`, `verification_bundle_id` | Nullable TEXT; historical write-only configuration and active-bundle association; origin bounds as above, existing validated bundle ID with maximum 128 characters |
 | `verified_at` | Nullable canonical UTC ISO-8601 timestamp, max 32 characters |
 | `verification_method` | Nullable TEXT; only `owner_reported` |
 
 The five verification fields must be all null or all present, enforced by a
 database CHECK; configuration origins must be both null or both present.
 Use existing SQLite transactions and positive-revision optimistic updates;
-validate the bundle association against BundleManager rather than a foreign key
-into immutable storage.
+write all five fields together from current configuration and BundleManager, preserving the shipped CHECK. Only verified_at determines the active report. Configure/start/stop/resume/restart clear all five fields together; bundle activation does not clear them. Migration 30 is unchanged.
 
 No source IP, Tailscale identity, account, token, prompt or model connection is
 stored. Existing runtime backup includes the table. Listener state and errors
@@ -144,7 +154,7 @@ mutations require CSRF. Strict bodies reject unknown fields. All responses use
 | `PUT /api/admin/visitor-gateway` | `{revision, gateway_origin, pages_origin}` |
 | `POST /api/admin/visitor-gateway/start` | `{revision}` |
 | `POST /api/admin/visitor-gateway/stop` | `{revision}` |
-| `POST /api/admin/visitor-gateway/verify` | `{revision, gateway_origin, pages_origin, bundle_id, external_checks_confirmed: true}` |
+| `POST /api/admin/visitor-gateway/verify` | `{revision, external_checks_confirmed: true}` |
 
 Allowlisted response schema:
 
@@ -169,27 +179,22 @@ Allowlisted response schema:
 `client_identity_mode` is `aggregate` or `trusted_proxy`. `local_ready` comes
 from actual current bundle/runtime/model readiness. `entry_configured` means
 both validated origins are stored and the listener is actually ready; it does
-not assert that Funnel is authorized or reachable. `external_verified` means a
-recorded owner report matches these exact origins and the current bundle while
-the listener and local chat are ready, and was confirmed during the current
-listener start. A nonpersistent verification flag resets on every start/restart,
-stop, configuration/bundle change or observed local listener/readiness failure. It is never restored from
-SQLite: backup restore and application restart require a new report even when
-persisted values match. Historical `verified_at` may remain visibly dated,
-but cannot light the active external-verification badge. GUI labels explicitly say external
-verification was confirmed by the owner; a URL shape, local request or automatic
-startup is never proof. It is a dated observation, not ongoing uptime monitoring.
+not assert that Funnel is authorized or reachable. `external_verified` means `verified_at is not null and listener_ready`. Configure,
+start, stop, listener recovery and process restart clear the five persisted report
+fields together. Bundle activation does not clear this dated observation. Local
+readiness is a separate fact; it does not bind or invalidate the report. The GUI
+explicitly labels an owner-reported observation, never continuous reachability.
 
 The verification action requires a native checklist: use an independent
 non-tailnet network; open the public status/profile; exercise chat and its
 citations; confirm admin/model/unknown routes are unavailable. There is no
 automatic external probe and no provider request caused by this endpoint.
-Changing configuration, stopping, or changing active bundle invalidates the
-association. Observed local listener/readiness failure makes the displayed
-verification false immediately; recovery requires a new report rather than
-reinstating the badge automatically. Unobserved Funnel or internet outages are
-not detected here. The dated owner-reported label is never an internet uptime
-monitor or a claim of continuously verified reachability.
+Configuration/start/stop/resume/restart clears the report. A failed listener
+displays external_verified false and clears the report on the next private
+snapshot; recovery requires starting the listener and a new report. Verify
+rejects an unavailable listener with GATEWAY_UNAVAILABLE and a stale mutation
+revision with GATEWAY_CONFLICT. Unobserved Funnel or internet outages are not
+detected. Bundle and local readiness changes do not invalidate this dated report.
 
 New closed admin error codes:
 
@@ -198,7 +203,6 @@ New closed admin error codes:
 | `GATEWAY_CONFLICT` | 409; optimistic revision changed |
 | `GATEWAY_CONFIGURATION_INVALID` | 422; origin, profile or running-state requirements not met |
 | `GATEWAY_UNAVAILABLE` | 503; listener unavailable/start or stop operation failed safely |
-| `GATEWAY_VERIFICATION_STALE` | 409; checklist refers to a changed origin, bundle or readiness |
 
 The public boundary adds `GATEWAY_IDENTITY_INVALID` (400) for malformed or
 missing identity in explicitly trusted mode; its message is generic and contains
@@ -228,6 +232,7 @@ closed route table is:
 | GET, HEAD | `/` and exact visitor entry dependency filenames selected from the validated Vite manifest |
 | GET, HEAD | `/api/public/status`, `/api/public/profile`, `/api/public/faq` |
 | GET, HEAD | `/api/public/character.png` |
+| GET, HEAD | `/api/public/scene-background?rev=N` (A5 integration, FR-050/052; current applied image only) |
 | GET, HEAD | `/api/public/card.svg`, `/api/public/card.gif`, `/api/public/card.png` |
 | GET, HEAD | `/api/public/owner-statements/{revision}/{evidence_id}` with existing full-SHA/evidence-ID validation |
 | POST | `/api/public/chat/stream` |
@@ -236,6 +241,9 @@ closed route table is:
 Projects are part of the existing public profile. There is no new projects API.
 HEAD handlers are registered explicitly and suppress response bodies; FastAPI
 GET decorators alone do not supply this contract.
+The A5 multi-entry build serves the dedicated `visitor.html` at `/`, with only
+that entry's closure. Legacy builds without this entry retain `index.html`;
+an invalid dedicated entry fails closed and cannot fall back to the admin entry.
 The build must produce a reproducible dependency manifest. Starting at the
 visitor entry, follow static `imports`, `css` and `assets`; exclude
 `dynamicImports` unless explicitly declared visitor dependencies. The existing
@@ -323,7 +331,7 @@ codes, but map provider failures to generic `SERVICE_NOT_READY` (503),
 with neutral bilingual service messages. These two new generic request error
 codes are part of the requested F0 approval. No private diagnostic is serialized.
 
-The gateway's chat path reuses the grounded service and validator. It may send
+Both chat paths use the same heartbeat/worker handler, grounded service and validator. The private application retains its existing socket identity and complete-event projection; the gateway retains aggregate/trusted-proxy identity, bounded worker retention and the visitor projection. Error mapping is passed explicitly and follows the generic gateway codes on both chat routes. The local FastAPI body validation and limit details remain unchanged; the gateway retains bounded streamed intake. Configured gateway/Pages origins are captured when the listener app is created; visitor boundary and chat requests never read or mutate owner settings in SQLite. It may send
 SSE headers and comment heartbeats while awaiting a buffered answer, using
 `REPONPC_SSE_KEEPALIVE_SECONDS` and the existing total chat deadline. It never
 streams unvalidated provider text or claims truthful provider first-token
@@ -332,7 +340,8 @@ progress. Successful validated events remain `metadata`, `token`, `citations`
 with the existing error-envelope schema. Pre-stream route, CORS, credential,
 body, validation, readiness and in-flight-capacity failures retain HTTP JSON.
 Daily/rate/provider failures discovered during the worker produce terminal SSE
-errors. No retry or fallback occurs.
+errors. The gateway never retries; local chat retains its bounded retry policy.
+Neither path falls back to another provider.
 
 Disable proxy buffering; reuse `no-store` and `X-Accel-Buffering: no`. Disconnect,
 total deadline or owner stop signals the existing worker cancellation flag.
@@ -341,6 +350,20 @@ heartbeats do not extend it. No additional upstream timeout configuration is
 invented. Tests must observe headers/heartbeats before the synthetic provider
 finishes and test disconnect/stop accounting; a fully buffered TestClient
 response alone cannot prove transport behavior.
+
+### B5 chat-path comparison (approved simplification)
+
+| Boundary | Former local chat | Gateway chat | Shared result |
+|---|---|---|---|
+| Intake | FastAPI parsed body; field details | Bounded streamed body and intake deadline | Retain each intake boundary |
+| Readiness/errors | INDEX/MODEL/PROVIDER errors, worker failures before headers | Generic service/request codes, terminal worker error | Both generic gateway codes; worker errors terminal SSE |
+| Events | Validated metadata/token/citations/complete; local usage | Same validated events; usage null, safe finish reason | Parameterized projection retains each |
+| Heartbeat | No comments while waiting | Connected and periodic keepalive | Both heartbeat handler; no unvalidated text |
+| Identity/admission | Socket identity and service limits | Aggregate or explicit loopback proxy; worker retention | Retain each identity/admission boundary |
+| Cancel/deadline/retry | Disconnect and total deadline; bounded provider retry | Disconnect/stop/deadline; no retry | Shared cancellation/deadline, explicit retry policy |
+
+The deadline permits a retry within the remaining time, so allow_retry remains.
+Only the gateway forbids retries. No new admission state is added to local chat.
 
 ## 8. Verification, rollback and boundaries
 
@@ -405,8 +428,8 @@ the existing chat limits and provider permits remain in use. Production private
 reads, auth/setup routes and built HTML require the configured private authority,
 including when the admin service cannot initialize.
 
-Main reviewed and corrected startup isolation, Windows exclusive port binding,
-stale readiness, verification-save races, actual worker retention and UI response
+Historical pre-B5 checkpoint: Main reviewed and corrected startup isolation, Windows exclusive port binding,
+verification lifecycle, actual worker retention and UI response
 ordering. Full Python: **1,260 passed / 2 Windows skips**; Web: **230 passed in
 30 files**; Ruff lint/format (188 files), mypy (78 source files), frontend
 format/lint/type/build and Git whitespace passed. ESLint reports 17 Fast Refresh
@@ -427,3 +450,17 @@ No Funnel activation, public deployment, live model call, GitHub write or push
 was performed. The complete Pages export/offline/layout is A5, Windows packaging
 is A8, and real external/provider/clean-host/release acceptance remains A12.
 No additional A1 owner decision is pending.
+
+## 2026-10-04 approved progress amendment — ADR-057
+
+The processing contract supersedes §7's buffered-provider-only waiting and
+45-second default: public chat may observe native NDJSON/Chat Completions SSE,
+default 180/max 300, and optional progress events before validated delivery.
+Progress contains closed stage plus elapsed_ms only, never provider text.
+Complete adds elapsed_ms; usage projection and private boundary remain intact.
+Streamed generation does not retry; buffered paths retain their existing policy.
+Raw thinking stays private and requested thinking-text display remains pending.
+
+## Approved public summary amendment (2026-10-04)
+
+OR-032 / ADR-058 / Specification 0.4.10 adopts the [public summary contract](CHAT_PUBLIC_SUMMARY_CONTRACT_2026-10-04.md). FR-040/043/044/047, NFR-005/009/014 and AC-019/023/057/062/063/064/068/071 retain their thresholds. Explicit Responses selection, legacy/revision compatibility, bounded untrusted plain text, prompt/secret negative tests, final-answer separation, cancellation and bilingual keyboard-accessible display require verification. No real provider invocation, publication, catalog admission or release acceptance is implied. Previous pending-summary notes are historical and superseded by this approval.

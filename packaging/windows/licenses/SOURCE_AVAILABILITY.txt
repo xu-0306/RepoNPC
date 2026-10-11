@@ -1,0 +1,20 @@
+Source availability for the locked Windows candidate
+
+This local build includes unmodified tqdm 4.70.0 files. Their upstream notices
+identify MPL-2.0-covered files alongside MIT contributions. The covered source
+is available under MPL-2.0 at:
+https://github.com/tqdm/tqdm/tree/v4.70.0
+https://github.com/tqdm/tqdm/archive/refs/tags/v4.70.0.tar.gz
+Upstream notices:
+https://github.com/tqdm/tqdm/blob/v4.70.0/LICENCE
+The full MPL-2.0 text is included in these third-party notices.
+No rights granted by MPL-2.0 are restricted by the RepoNPC MIT license.
+
+Source/version links apply only to this locked candidate. When changing the
+locked dependency version, update and review this source-availability record.
+Other third-party native and vendored notices are reproduced below from their
+installed distribution inputs. The release reviewer still verifies the final
+binary inventory against those notices before public redistribution.
+
+The RepoNPC software MIT license does not establish redistribution permission
+for owner-uploaded artwork, PixelNPC source material, or downloaded model weights.
