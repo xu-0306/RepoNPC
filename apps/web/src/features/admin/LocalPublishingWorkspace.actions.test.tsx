@@ -50,6 +50,135 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("local publication operation feedback", () => {
   it.each(["zh-TW", "en"] as const)(
+    "previews exact confirmed content and requests a checked README download once in %s",
+    async (locale) => {
+      const requestCalls = vi.fn();
+      const input = {
+        locale,
+        content: "unapplied draft canary",
+        spriteBase64: null,
+        revision: null,
+        initialAccount: "another-owner",
+        selection: null,
+        request: async <T,>() => {
+          requestCalls();
+          return {} as T;
+        },
+        onStored: vi.fn(),
+        onCreateDraft: vi.fn(),
+        repositories: [],
+        onAddClaim: vi.fn(),
+      };
+      const render = () => {
+        hooks.cursor = 0;
+        return elements(LocalPublishingWorkspace(input));
+      };
+      const guide = () =>
+        render().find((node) => "onDownloadReadme" in node.props)!;
+      const sharing = () =>
+        render().find((node) => "observedState" in node.props)!;
+      const state = {
+        pages_url: "https://another-owner.github.io/site/",
+        configured: true,
+        verified: true,
+        verified_at: "2026-10-12T00:00:00Z",
+        verified_content_sha256: "a".repeat(64),
+      };
+      const action = () => (guide().props.onDownloadReadme as () => void)();
+      const text =
+        "# Confirmed public owner\n\n[![NPC](https://another-owner.github.io/site/card-light-en.gif)](https://another-owner.github.io/site/)\n";
+      let finish!: (response: Response) => void;
+      const fetchReadme = vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      vi.stubGlobal("fetch", fetchReadme);
+      const link = { href: "", download: "", click: vi.fn(), remove: vi.fn() };
+      const append = vi.fn();
+      const focus = vi.fn();
+      vi.stubGlobal("document", {
+        createElement: vi.fn(() => link),
+        body: { append },
+        getElementById: vi.fn(() => ({ focus })),
+      });
+      const createUrl = vi
+        .spyOn(URL, "createObjectURL")
+        .mockReturnValue("blob:readme-fixture");
+      const revokeUrl = vi
+        .spyOn(URL, "revokeObjectURL")
+        .mockImplementation(() => undefined);
+      const response = () =>
+        new Response(text, {
+          headers: {
+            "content-type": "text/markdown; charset=utf-8",
+            "content-disposition": 'attachment; filename="README.md"',
+          },
+        });
+      try {
+        action();
+        await vi.waitFor(() => expect(guide().props.busy).toBe(false));
+        expect(fetchReadme).not.toHaveBeenCalled();
+        (sharing().props.onStateChange as (value: unknown) => void)(state);
+        (guide().props.onPreviewReadme as () => void)();
+        finish(response());
+        await vi.waitFor(() => expect(guide().props.readmePreview).toBe(text));
+        await vi.waitFor(() => expect(focus).toHaveBeenCalledOnce());
+        expect(link.click).not.toHaveBeenCalled();
+        expect(input.content).toBe("unapplied draft canary");
+        action();
+        action();
+        expect(guide().props.busy).toBe(true);
+        expect(fetchReadme).toHaveBeenCalledTimes(2);
+        finish(response());
+        await vi.waitFor(() => expect(link.click).toHaveBeenCalledOnce());
+        expect(fetchReadme).toHaveBeenLastCalledWith(
+          `/api/admin/sharing/readme?locale=${locale}`,
+          {
+            credentials: "same-origin",
+            cache: "no-store",
+          },
+        );
+        const file = createUrl.mock.calls[0][0] as Blob;
+        expect(file.type).toBe("text/markdown;charset=utf-8");
+        expect(await file.text()).toBe(text);
+        expect(link.download).toBe("README.md");
+        expect(link.href).toBe("blob:readme-fixture");
+        expect(append).toHaveBeenCalledWith(link);
+        expect(link.remove).toHaveBeenCalledOnce();
+        expect(guide().props.notice).toContain(
+          locale === "zh-TW" ? "請確認下載完成" : "Confirm it completed",
+        );
+        (sharing().props.onStateChange as (value: unknown) => void)({
+          ...state,
+          verified_content_sha256: "b".repeat(64),
+        });
+        expect(guide().props.readmePreview).toBeNull();
+        action();
+        finish(
+          new Response(
+            JSON.stringify({ error: { code: "SHARING_CONFLICT" } }),
+            { status: 409 },
+          ),
+        );
+        await vi.waitFor(() =>
+          expect(guide().props.notice).toContain(
+            locale === "zh-TW"
+              ? "README 尚未取得"
+              : "README could not be retrieved",
+          ),
+        );
+        expect(link.click).toHaveBeenCalledOnce();
+        expect(requestCalls).not.toHaveBeenCalled();
+        expect(input.onStored).not.toHaveBeenCalled();
+      } finally {
+        createUrl.mockRestore();
+        revokeUrl.mockRestore();
+      }
+    },
+  );
+  it.each(["zh-TW", "en"] as const)(
     "scopes success, failure and partial preparation to the initiating area in %s",
     async (locale) => {
       const zh = locale === "zh-TW";

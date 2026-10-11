@@ -42,7 +42,7 @@ Linux／自行管理 HTTPS 的部署與備份操作，請讀 [操作手冊](docs
 3. **準備並試聊：**兩種模型都已測試且選用後，按「準備 NPC 並套用」。缺少模型時按「前往設定模型」，草稿會保留；完成後返回準備。成功後開啟目前版本試聊。
 4. **設定訪客連線：**準備 Tailscale Funnel 聊天入口與 GitHub Pages 網域，儲存後明確啟動訪客連線，並在 Tailscale 完成 Funnel 設定。管理頁及模型服務保持私人連線。
 5. **上傳網站：**填 Pages 完整網址（例如 `https://account.github.io/project/`），下載、解壓縮靜態網站，依 [雙語分享指南](docs/PAGES_SHARING_GUIDE.md)手動上傳。發布後返回「核對已上傳網站」。
-6. **分享卡片：**依畫面指示，把卡片圖片上傳到與帳號同名的公開儲存庫，在 README 貼入連結，再從 GitHub 點開確認。外觀、涵蓋檢查及 FAQ 可在選填區調整。
+6. **下載 README.md：**核對完整 README 內容預覽，再下載包含已確認公開介紹、作品、NPC 名片與對話連結的檔案。README.md 必須放在「與 GitHub 帳號同名的公開儲存庫」根目錄，才能顯示在個人首頁。卡片使用已核對 Pages 的公開圖片，不必另上傳；已有 README 時先保留原文，也可用原有圖片上傳與複製區塊追加名片。再從 GitHub 點開網站確認。外觀、涵蓋檢查及 FAQ 可在選填區調整。
 
 **Pages 網域與完整網址不同：**訪客連線欄位只填 `https://account.github.io`；網站上傳欄位要包含 `/project/` 等路徑。Pages 核對與外網聊天檢查各自記錄；儲存網址或本機準備成功，都不代表已經公開上線。
 
@@ -56,7 +56,7 @@ Linux／自行管理 HTTPS 的部署與備份操作，請讀 [操作手冊](docs
 
 Open RepoNPC and choose **Build manually first** to write, preview, save and back up content without a model. For AI analysis or live chat, bring your own Ollama or compatible API service, test both the answer and content finder models, then confirm the selection. The verified answer-model catalog is currently empty; the optional built-in bge-m3 content finder requires an explicit download.
 
-In **Preview & share**, prepare and try locally, configure visitor access, download and manually upload the Pages site, verify it, then add the card to your GitHub profile. Use the domain without a path for visitor access and the full project URL for Pages. Follow the [bilingual sharing guide](docs/PAGES_SHARING_GUIDE.md). This is an evaluation candidate, not an accepted v1 release; no public connection or GitHub upload happens automatically.
+In **Preview & share**, prepare and try locally, configure visitor access, download and manually upload the Pages site, verify it, then preview and **Download README.md**. The complete file uses the verified site's public card image. Upload README.md to the root of a public repository with the same name as your GitHub account to display it on your profile. Preserve existing README text or append the copied card block with the manual image-upload path. Use the domain without a path for visitor access and the full project URL for Pages. Follow the [bilingual sharing guide](docs/PAGES_SHARING_GUIDE.md). This is an evaluation candidate, not an accepted v1 release; no public connection or GitHub upload happens automatically.
 
 ## 給開發者與自行部署者
 

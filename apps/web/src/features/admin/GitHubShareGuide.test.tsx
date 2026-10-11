@@ -38,11 +38,88 @@ function props(
     onCheckProfile: vi.fn(),
     onCheckImage: vi.fn(),
     onDownload: vi.fn(),
+    onDownloadReadme: vi.fn(),
+    onPreviewReadme: vi.fn(),
+    readmePreview: null,
     onCopy: vi.fn(),
   };
 }
 
 describe("Pages and legacy README routes", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "offers the complete README first with placement and preservation guidance in %s",
+    (locale) => {
+      const input = props(locale, "https://fixture.github.io/project/");
+      const markup = renderToStaticMarkup(<GitHubShareGuide {...input} />);
+      const label =
+        locale === "zh-TW" ? "下載 README.md" : "Download README.md";
+      expect(markup).toMatch(new RegExp(`<button[^>]*>${label}<\\/button>`));
+      expect(markup.indexOf(label)).toBeLessThan(
+        markup.indexOf('data-stage="profile"'),
+      );
+      expect(markup).toContain(
+        'aria-describedby="github-share-readme-placement github-share-readme-download-status"',
+      );
+      expect(markup).toContain(
+        locale === "zh-TW"
+          ? "README.md 必須放在「與 GitHub 帳號同名的公開儲存庫」根目錄"
+          : "README.md must be at the root of a public repository with the same name as your GitHub account",
+      );
+      expect(markup).toContain(
+        locale === "zh-TW" ? "不會自動覆寫" : "never overwrites",
+      );
+      const unavailable = renderToStaticMarkup(
+        <GitHubShareGuide {...props(locale, null)} />,
+      );
+      expect(unavailable).toMatch(
+        new RegExp(`<button[^>]*disabled=""[^>]*>${label}<\\/button>`),
+      );
+      expect(unavailable).toContain(
+        locale === "zh-TW"
+          ? "先到第 3 段上傳並核對"
+          : "Upload and verify your Pages site in section 3",
+      );
+      expect(unavailable).toContain('id="github-share-markdown"');
+      expect(input.onDownloadReadme).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps busy README actions focusable and blocks their handlers", () => {
+    const input = { ...props("en", "https://fixture.github.io/"), busy: true };
+    const nodes = (node: ReactNode): ReactElement<Record<string, unknown>>[] =>
+      Children.toArray(node).flatMap((child) =>
+        isValidElement<Record<string, unknown>>(child)
+          ? [child, ...nodes(child.props.children as ReactNode)]
+          : [],
+      );
+    const actions = nodes(GitHubShareGuide(input)).filter(
+      (node) =>
+        node.type === "button" &&
+        ["Download README.md", "Preview README content"].includes(
+          String(node.props.children),
+        ),
+    );
+    expect(actions).toHaveLength(2);
+    for (const button of actions) {
+      expect(button.props.disabled).toBe(false);
+      expect(button.props["aria-disabled"]).toBe(true);
+      (button.props.onClick as () => void)();
+    }
+    expect(input.onDownloadReadme).not.toHaveBeenCalled();
+    expect(input.onPreviewReadme).not.toHaveBeenCalled();
+    input.busy = false;
+    nodes(GitHubShareGuide(input))
+      .filter(
+        (node) =>
+          node.type === "button" &&
+          ["Download README.md", "Preview README content"].includes(
+            String(node.props.children),
+          ),
+      )
+      .forEach((button) => (button.props.onClick as () => void)());
+    expect(input.onDownloadReadme).toHaveBeenCalledOnce();
+    expect(input.onPreviewReadme).toHaveBeenCalledOnce();
+  });
   it.each(["zh-TW", "en"] as const)(
     "keeps an unverified Pages site separate from the usable advanced route in %s",
     (locale) => {

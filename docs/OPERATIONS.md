@@ -1,5 +1,7 @@
 # RepoNPC v1 Operations Guide
 
+**2026-10-12 sharing amendment (FR-024 / AC-028):** Follow the [README export contract](PROFILE_README_EXPORT_CONTRACT_2026-10-12.md) and bilingual [Pages guide](PAGES_SHARING_GUIDE.md). Preview/download uses the applied public snapshot and verified existing Pages image. Place README.md at the root of the public repository matching the account name; preserve existing README content and the manual copy-card path. Failed or stale verification requires export/upload/verify recovery, not a new hosting service.
+
 **2026-10-03 built-in setup:** migration 34 adds `builtin_onnx` with a null
 connection reference/revision zero while preserving external profile rows, active
 uniqueness, analysis selections and switch intent. Back up the private data
@@ -49,6 +51,9 @@ normal runtime backup includes it. Rebuilt frontend and backend must agree on
 all three migrations. The read-only export GET rebuilds the public ZIP without
 changing state. Upload the public ZIP manually, then use the owner-triggered
 check against the exact configured Pages entrance and manifest. Verification
+for README preview/download additionally checks only the fixed locale GIF under
+that verified base path against the current export bytes, without changing state.
+Pages entrance/manifest verification
 rebuilds the expected manifest locally and stores only the URL, digest and time
 of a successful match; changing local bundle, appearance, FAQ or gateway
 origins does not automatically clear that state. This is distinct from A1's

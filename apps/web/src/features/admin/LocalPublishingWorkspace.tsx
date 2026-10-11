@@ -68,6 +68,19 @@ function publicationErrorMessage(locale: AdminLocale, error: unknown): string {
       return zh
         ? "草稿版本已變更。請先保留目前編輯內容，再重新載入並核對最新草稿後儲存；不要直接覆蓋。"
         : "The draft version changed. Keep a copy of your edits, then reload and compare the latest draft before saving; do not overwrite it blindly.";
+    case "SHARING_CONFLICT":
+    case "SHARING_CONFIGURATION_INVALID":
+    case "SHARING_EXPORT_INVALID":
+    case "SHARING_EXPORT_UNAVAILABLE":
+    case "SHARING_VERIFICATION_FAILED":
+    case "SHARING_VERIFICATION_UNAVAILABLE":
+      return zh
+        ? "README 尚未取得。請到第 3 段確認 Pages 網址，重新上傳目前網站並核對；也可沿用卡片下載、上傳與複製區塊。原有 README 不會被改動。"
+        : "README could not be retrieved. Check the Pages URL in section 3, upload the current site and verify it again. You can also use the card download, upload and copy steps. Your existing README is unchanged.";
+    case "SHARING_EXPORT_TOO_LARGE":
+      return zh
+        ? "README 超過 GitHub 可顯示的 500 KiB 上限。請縮減公開介紹或作品文字，套用後重新匯出、上傳並核對 Pages 網站，再重試。原有 README 不會被改動。"
+        : "README exceeds GitHub's 500 KiB display limit. Shorten the public introduction or project text, apply it, then export, upload and verify the Pages site again before retrying. Your existing README is unchanged.";
     case "PORTFOLIO_BUSY":
     case "EMBEDDING_REINDEX_ACTIVE":
       return zh
@@ -170,6 +183,10 @@ export function LocalPublishingWorkspace({
   const [pagesSharingState, setPagesSharingState] =
     useState<PagesSharingState | null>(null);
   const [metadata, setMetadata] = useState<ShareMetadata | null>(null);
+  const [readmePreview, setReadmePreview] = useState<{
+    key: string;
+    text: string;
+  } | null>(null);
   const mounted = useRef(true);
   const operationPending = useRef(false);
   const sceneGeneration = useRef(0);
@@ -405,6 +422,53 @@ export function LocalPublishingWorkspace({
   const verifiedPagesUrl = pagesSharingState?.verified
     ? pagesSharingState.pages_url
     : null;
+  const readmeKey = `${locale}|${verifiedPagesUrl ?? ""}|${pagesSharingState?.verified_content_sha256 ?? ""}|${status?.active_bundle_id ?? ""}`;
+  const readmeKeyRef = useRef(readmeKey);
+  readmeKeyRef.current = readmeKey;
+  async function loadReadme(previewOnly: boolean) {
+    if (!verifiedPagesUrl) return;
+    const requestedKey = readmeKey;
+    const response = await fetch(`/api/admin/sharing/readme?locale=${locale}`, {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      const failure = await response.json();
+      throw new Error(failure?.error?.code ?? "SHARING_EXPORT_UNAVAILABLE");
+    }
+    if (
+      response.headers.get("content-type") !== "text/markdown; charset=utf-8" ||
+      response.headers.get("content-disposition") !==
+        'attachment; filename="README.md"'
+    )
+      throw new Error("SHARING_EXPORT_INVALID");
+    const file = await response.blob();
+    if (!mounted.current || readmeKeyRef.current !== requestedKey) return;
+    if (previewOnly) {
+      const text = await file.text();
+      if (!mounted.current || readmeKeyRef.current !== requestedKey) return;
+      setReadmePreview({ key: requestedKey, text });
+      setTimeout(() => {
+        if (mounted.current && readmeKeyRef.current === requestedKey)
+          document.getElementById("github-share-readme-preview")?.focus();
+      }, 0);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "README.md";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNotice({
+      scope: "share",
+      message: zh
+        ? "已交給瀏覽器下載 README.md；請確認下載完成，再上傳到與帳號同名的公開儲存庫根目錄。已有 README 時，先比較並保留原文。"
+        : "Browser download requested: README.md. Confirm it completed, then upload it to the root of your public matching-name repository. Compare and keep existing README text first.",
+    });
+  }
   const links = chosen
     ? {
         repository: `https://github.com/${chosen}/${chosen}`,
@@ -700,6 +764,11 @@ export function LocalPublishingWorkspace({
         onCheckProfile={() => void run("share", checkProfile)}
         onCheckImage={() => void run("share", checkProfile)}
         onDownload={() => void run("share", download)}
+        onDownloadReadme={() => void run("share", () => loadReadme(false))}
+        onPreviewReadme={() => void run("share", () => loadReadme(true))}
+        readmePreview={
+          readmePreview?.key === readmeKey ? readmePreview.text : null
+        }
         onCopy={(markdown) =>
           void run("share", async () => {
             await navigator.clipboard.writeText(markdown);

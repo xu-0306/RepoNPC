@@ -28,6 +28,9 @@ export type GitHubShareGuideProps = {
   onCheckProfile: () => void;
   onCheckImage: () => void;
   onDownload: () => void;
+  onDownloadReadme: () => void;
+  onPreviewReadme: () => void;
+  readmePreview: string | null;
   onCopy: (markdown: string) => void;
 };
 
@@ -37,6 +40,14 @@ type ImageStatus = GitHubShareGuideProps["imageStatus"];
 type GuideCopy = {
   title: string;
   subtitle: string;
+  downloadReadme: string;
+  previewReadme: string;
+  readmePreviewHelp: string;
+  readmeContents: string;
+  readmePlacement: string;
+  readmeReady: string;
+  readmeUnavailable: string;
+  existingReadme: string;
   stageProfile: string;
   stageCard: string;
   stageReadme: string;
@@ -102,7 +113,21 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
   "zh-TW": {
     title: "4. 把 RepoNPC 卡片放到 GitHub 個人頁",
     subtitle:
-      "GitHub 帳號和用來放個人介紹的儲存庫（repository）是兩回事。要在個人頁顯示卡片，請準備與帳號同名的公開儲存庫，把 README.md 和卡片圖片放在一起；不必另外建立卡片專用 repository。這裡只檢查公開資料並說明步驟，不會替你修改 GitHub。",
+      "下載完整 README.md，手動上傳到 GitHub 個人頁使用的 repository。卡片使用已核對 Pages 網站的公開圖片，不必另外上傳圖片；GitHub 只顯示名片，點擊連結才會前往 RepoNPC 網站對話。",
+    downloadReadme: "下載 README.md",
+    previewReadme: "預覽 README 內容",
+    readmePreviewHelp:
+      "這是最終 README.md 的完整檔案內容，並非 GitHub 渲染外觀；可用鍵盤捲動檢查介紹、作品與連結。下載時仍會重新核對。",
+    readmeContents:
+      "檔案包含已套用並與 Pages 核對的公開介紹、作品連結、NPC 名片與「與我的 NPC 對話」入口。尚未套用的草稿不會匯出。",
+    readmePlacement:
+      "README.md 必須放在「與 GitHub 帳號同名的公開儲存庫」根目錄，才能顯示在個人首頁。",
+    readmeReady:
+      "下載時會再次核對目前內容與公開卡片。請確認瀏覽器完成下載，再手動上傳 README.md。",
+    readmeUnavailable:
+      "先到第 3 段上傳並核對 Pages 網站，才能下載含公開卡片的 README.md；也可沿用下方的卡片下載、上傳與複製區塊。",
+    existingReadme:
+      "已有 README？請保留原文，使用下方「複製要貼進 README 的文字」追加名片。上傳完整檔案前先比較內容；RepoNPC 不會自動覆寫 GitHub README。",
     stageProfile: "確認個人頁的同名 repository",
     stageCard: "下載卡片並上傳到同一個 repository",
     stageReadme: "把卡片加入 README 並檢查結果",
@@ -211,7 +236,21 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
   en: {
     title: "4. Put your RepoNPC card on your GitHub profile",
     subtitle:
-      "Your GitHub account and the repository used for your profile are different things. To show the card on your profile, use a public repository with the same name as your account and put README.md and the card image in it. You do not need a separate card repository. This guide checks public information and explains the steps; it never edits GitHub for you.",
+      "Download a complete README.md and manually upload it to your GitHub profile repository. The card uses a public image from your verified Pages site, so no separate image upload is needed. GitHub displays the card; its link opens the RepoNPC site for conversations.",
+    downloadReadme: "Download README.md",
+    previewReadme: "Preview README content",
+    readmePreviewHelp:
+      "This is the full final README.md file content, not GitHub's rendered appearance. Use the keyboard to scroll through the introduction, projects and links. Download still rechecks it.",
+    readmeContents:
+      "The file includes the applied public introduction, project links, NPC card and Chat with my NPC link matching the verified Pages site. Unapplied drafts are excluded.",
+    readmePlacement:
+      "README.md must be at the root of a public repository with the same name as your GitHub account to appear on your profile.",
+    readmeReady:
+      "Download rechecks the current content and public card. Confirm the browser download completes, then upload README.md manually.",
+    readmeUnavailable:
+      "Upload and verify your Pages site in section 3 before downloading a README.md with a public card. You can also use the card download, upload and copy steps below.",
+    existingReadme:
+      "Already have a README? Keep its text and use Copy text for README below to append the card. Compare content before uploading a complete file; RepoNPC never overwrites your GitHub README automatically.",
     stageProfile: "Check the repository used for your profile",
     stageCard: "Download the card and upload it to the same repository",
     stageReadme: "Add the card to README and check the result",
@@ -345,6 +384,9 @@ export function GitHubShareGuide({
   onCheckProfile,
   onCheckImage,
   onDownload,
+  onDownloadReadme,
+  onPreviewReadme,
+  readmePreview,
   onCopy,
 }: GitHubShareGuideProps) {
   const copy = COPY[locale];
@@ -352,8 +394,12 @@ export function GitHubShareGuide({
   const markdownIsEmpty = markdown.trim().length === 0;
   const normalizedAccount = githubAccount(account);
   const profileOpen = profileStatus !== "ready";
-  const cardOpen = profileStatus === "ready" && imageStatus !== "ready";
-  const readmeOpen = profileStatus === "ready" && imageStatus === "ready";
+  const pagesReady =
+    !!verifiedPagesUrl && !!verifiedPagesMarkdown(verifiedPagesUrl, locale);
+  const cardOpen =
+    !pagesReady && profileStatus === "ready" && imageStatus !== "ready";
+  const readmeOpen =
+    !pagesReady && profileStatus === "ready" && imageStatus === "ready";
 
   function markdownField(value: string, id: string) {
     const empty = !value.trim();
@@ -402,6 +448,57 @@ export function GitHubShareGuide({
           {notice}
         </p>
       )}
+
+      <div className="guided-onboarding__step">
+        <p>{copy.readmeContents}</p>
+        <p id="github-share-readme-placement">{copy.readmePlacement}</p>
+        <div className="admin-workspace__actions">
+          <button
+            type="button"
+            className="ux-primary"
+            disabled={!pagesReady}
+            aria-disabled={busy || !pagesReady}
+            aria-describedby="github-share-readme-placement github-share-readme-download-status"
+            onClick={() => {
+              if (!busy && pagesReady) onDownloadReadme();
+            }}
+          >
+            {copy.downloadReadme}
+          </button>
+          <button
+            type="button"
+            disabled={!pagesReady}
+            aria-disabled={busy || !pagesReady}
+            aria-describedby="github-share-readme-download-status"
+            onClick={() => {
+              if (!busy && pagesReady) onPreviewReadme();
+            }}
+          >
+            {copy.previewReadme}
+          </button>
+        </div>
+        <p id="github-share-readme-download-status" role="status">
+          {pagesReady ? copy.readmeReady : copy.readmeUnavailable}
+        </p>
+        <p>{copy.existingReadme}</p>
+        {readmePreview !== null && (
+          <>
+            <label htmlFor="github-share-readme-preview">
+              {copy.previewReadme}
+            </label>
+            <textarea
+              id="github-share-readme-preview"
+              aria-describedby="github-share-readme-preview-help"
+              readOnly
+              rows={14}
+              value={readmePreview}
+            />
+            <p id="github-share-readme-preview-help">
+              {copy.readmePreviewHelp}
+            </p>
+          </>
+        )}
+      </div>
 
       <section
         aria-labelledby="github-share-profile-heading"

@@ -597,3 +597,20 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
 ## ADR-058: Provider-defined public summaries on an explicit interface
 
 Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and encrypted revision lineage to select the chat interface explicitly. Add `chat_api` (`chat_completions` default or `responses`) to safe connection metadata and the encrypted revision payload; legacy ciphertext defaults to the old interface. Migration 35 adds one column, with no table rebuild. Responses is valid only for openai_compatible connections; embeddings retain their existing interface. Consume complete provider-defined summary paragraphs, privately check prompt copies and known credentials/endpoints before an optional bounded `reasoning_summary` SSE event. Preserve final validation, one call, deadline/cancel, ephemeral UI and no tools/fallback. [public summary contract](CHAT_PUBLIC_SUMMARY_CONTRACT_2026-10-04.md).
+
+## ADR-059: Complete GitHub profile README as the sharing deliverable
+
+- Status: Accepted 2026-10-12 (OR-033), owner explicitly approved implementation.
+- Decision: Offer exact README content preview and **Download README.md** as the
+  primary final sharing action. Use the confirmed public snapshot and existing
+  verified GitHub Pages GIF so the owner can upload one file. Rebuild and compare
+  the existing verification digest, check the fixed public GIF bytes with the
+  existing Pages transport and recheck the source after that read.
+- Preservation: Keep the copied card block and manual image-upload route. Explain
+  the matching-account public repository root in both languages and never
+  overwrite an existing README. GitHub displays the card; chat opens the existing
+  RepoNPC website. No new hosting, provider, dependency, database state or GitHub
+  write is introduced. Escape public text/URLs and reject final output over 500 KiB.
+- Contract: [README export](PROFILE_README_EXPORT_CONTRACT_2026-10-12.md),
+  Approved Specification 0.4.11, FR-016/024, AC-028; existing manual/external gates
+  remain independent of local regression evidence.

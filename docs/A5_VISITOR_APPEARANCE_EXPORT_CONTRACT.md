@@ -422,9 +422,12 @@ the service may impose smaller limits. Redirects, non-200 responses, compressed
 or oversized responses fail closed. It sends no credentials, Cookie or
 Authorization header and returns no remote body in an error.
 
-Card image upload stays manual. A5 Markdown points to the corresponding verified
-Pages URL. Retain the explicit legacy operator-managed sharing path without
-labeling it as verified A5. No GitHub write or public activation is performed.
+The owner-approved 2026-10-12 [README export amendment](PROFILE_README_EXPORT_CONTRACT_2026-10-12.md)
+makes complete README download the final sharing primary action. It uses the
+verified snapshot and checked Pages GIF, while the manual card-image upload and
+copy-block path remains available. A5 Markdown points to the corresponding
+verified Pages URL. Retain the explicit legacy operator-managed sharing path
+without labeling it as verified A5. No GitHub write or public activation occurs.
 
 Migration 33, `pages_sharing_state`, stores the configured Pages URL and the
 three fields describing the last successful remote verification. It has no

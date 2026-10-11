@@ -310,6 +310,22 @@ Edge-spill regression: source grids of more than one previously unseen cell size
 
 ### AC-028 — README snippet generation is copy-ready
 
+**0.4.11 / ADR-059 owner-approved extension:** The final sharing primary action
+downloads complete `README.md`, with an adjacent keyboard-accessible exact content
+preview. It includes only the confirmed applied public introduction, project
+links, NPC card and existing visitor entry from the verified Pages snapshot.
+The card URL uses the actual exported locale GIF below the verified root/project
+Pages path and passes a bounded exact-byte remote check, so only README needs
+uploading. Both languages explain that README belongs at the root of a public
+repository matching the GitHub account; existing content and copy-card/manual
+upload routes remain available. Busy controls retain keyboard focus, duplicate
+requests are blocked, and changed preview keys hide old content. Normal download
+checks filename/MIME/no-store/nosniff and exact UTF-8 bytes; private access,
+unverified/stale/racing snapshots, invalid/missing/unavailable GIFs, Markdown/HTML
+injection and final escaped content above 500 KiB fail safely without a README
+attachment or GitHub/database mutation. Local automated checks do not establish
+real GitHub render, native download completion or external release acceptance.
+
 **Maps to:** FR-024, FR-016
 
 - **Given** configured public base URL and card revision,

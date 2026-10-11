@@ -1,5 +1,7 @@
 # RepoNPC Security Model
 
+**2026-10-12 README approval (OR-033 / ADR-059):** The [README export contract](PROFILE_README_EXPORT_CONTRACT_2026-10-12.md) preserves FR-016/022/024 and NFR-001/002/003/009 boundaries. The private readonly download uses the confirmed public snapshot and fixed verified Pages card URL through the existing bounded, credential-free transport. Owner text and links are escaped; stale or mismatched content and oversized output are rejected. No provider call, GitHub write, database mutation or public-release acceptance is implied.
+
 **2026-10-03 A11 approval (ADR-054 / OR-028):** Web maintenance downloads are
 password-encrypted ciphertext, not an exception permitting browser access to
 admin hashes or raw SQLite. See §23 and Specification §11.7. The owner approved
@@ -51,8 +53,10 @@ JSON and canonical applied assets, plus actually cited immutable owner
 statements. FAQ/profile/manifest input is validated before DOM/CSS use; known
 withdrawal or mismatch survives a later disconnection. Pages verification uses
 the saved exact github.io origin/base path, public-only DNS and pinned TLS peer,
-one bounded deadline and the locally expected manifest/entrance bytes. The
-private receipt is bound to settings, export, bundle, appearance, FAQ and origins;
+one bounded deadline and the locally expected manifest/entrance bytes. An
+owner-triggered README preview/download additionally reads only the fixed
+locale GIF under that verified base path and requires its exact expected bytes.
+The private receipt is bound to settings, export, bundle, appearance, FAQ and origins;
 it is never exported. Static chat POST implementation is stopped pending the
 explicit payload/destination authorization requested after automatic review;
 FAQ-only output does not constitute completed A5 scope.

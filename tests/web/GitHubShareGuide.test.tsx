@@ -32,6 +32,9 @@ function props(
     onCheckProfile: vi.fn(),
     onCheckImage: vi.fn(),
     onDownload: vi.fn(),
+    onDownloadReadme: vi.fn(),
+    onPreviewReadme: vi.fn(),
+    readmePreview: null,
     onCopy: vi.fn(),
     ...overrides,
   };
@@ -77,7 +80,7 @@ describe("GitHubShareGuide", () => {
       "<details><summary>Optional advanced route: use a legacy deployment URL</summary>",
     );
     expect(markup).toContain("octo-lab/octo-lab");
-    expect(markup).toContain("You do not need a separate card repository.");
+    expect(markup).toContain("No other repository is needed.");
     expect(markup).not.toContain("localStorage");
     expect(markup).not.toContain("fetch(");
   });
@@ -140,9 +143,9 @@ describe("GitHubShareGuide", () => {
     expect(markup).toContain("尚未檢查");
     expect(markup).toContain("目前無法查證同名 repository");
     expect(markup).toContain("還沒有可用的公開訪客連結");
-    expect(markup).toContain("不會替你修改 GitHub");
+    expect(markup).toContain("不會自動覆寫 GitHub README");
     expect(markup).toContain("保留原有介紹");
-    expect(markup).toContain("不必另外建立卡片專用 repository");
+    expect(markup).toContain("不用建立另一個 repository");
     expect(markup).not.toContain("xu-0306");
     expect(markup).not.toContain(
       "已找到同名公開 repository 和根目錄 README.md。下一步請下載並上傳卡片。",

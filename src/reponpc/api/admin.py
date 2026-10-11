@@ -2166,6 +2166,42 @@ def create_admin_router(
             background=BackgroundTask(artifact.cleanup),
         )
 
+    @router.get("/sharing/readme")
+    async def export_profile_readme(
+        request: Request,
+        locale: Literal["zh-TW", "en"] = "zh-TW",
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        faq = faq_boundary(request, session_token)
+        if isinstance(faq, JSONResponse):
+            return faq
+        sharing = pages_sharing_service(request, faq)
+        if isinstance(sharing, JSONResponse):
+            return sharing
+        web_dist = _mounted_web_directory(request)
+        if web_dist is None:
+            return error_response(
+                request,
+                status_code=503,
+                code="SHARING_EXPORT_UNAVAILABLE",
+                message="The profile README could not be created.",
+            )
+        try:
+            content = await asyncio.to_thread(sharing.readme, web_dist=web_dist, locale=locale)
+        except SiteExportError as exc:
+            return pages_sharing_error(request, exc)
+        except (BundleActivationError, SceneServiceError, FaqError):
+            return pages_sharing_error(request, SiteExportError("SHARING_CONFLICT"))
+        return Response(
+            content,
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": 'attachment; filename="README.md"',
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
     @router.get("/sharing/state")
     async def read_pages_sharing_state(
         request: Request,

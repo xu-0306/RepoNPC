@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 import time
 from collections.abc import Callable
@@ -10,11 +11,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from reponpc.admin.faq import FaqError, ReviewedFaq
 from reponpc.admin.scene import AdminSceneService, SceneServiceError
 from reponpc.api.visitor_gateway import VisitorGateway, _pages_origin
 from reponpc.bundles.manager import BundleManager
 from reponpc.config.environment import _canonical_origin
+from reponpc.config.models import Locale
+from reponpc.indexing.public_profile import LocalizedPublicProfile
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 from reponpc.sharing.export import build_site_files
 from reponpc.sharing.manifest import (
@@ -25,6 +30,7 @@ from reponpc.sharing.manifest import (
     parse_manifest,
 )
 from reponpc.sharing.pages_transport import fetch_pages_resource
+from reponpc.sharing.readme import render_profile_readme
 
 _MAX_MANIFEST_BYTES = 4 * 1024 * 1024
 _MAX_ENTRANCE_BYTES = 1024 * 1024
@@ -161,6 +167,54 @@ class PagesSharingService:
 
     def current_origins(self) -> tuple[str, str]:
         return self._current_origins()
+
+    def readme(self, *, web_dist: Path, locale: Locale) -> bytes:
+        state = self.state()
+        if not state["verified"] or not isinstance(state["pages_url"], str):
+            raise SiteExportError("SHARING_CONFLICT")
+        pages_url = state["pages_url"]
+        gateway_origin, pages_origin = self.current_origins()
+        target = _validated_target(pages_url, pages_origin)
+        arguments: dict[str, Any] = {
+            "faq": self.faq,
+            "scene_service": self.scene_service,
+            "web_dist": web_dist,
+            "pages_url": pages_url,
+            "gateway_origin": gateway_origin,
+            "pages_origin": pages_origin,
+            "origins_supplier": self.current_origins,
+        }
+        files, manifest = build_site_files(**arguments)
+        if manifest["content_sha256"] != state["verified_content_sha256"]:
+            raise SiteExportError("SHARING_CONFLICT")
+        card_path = f"card-light-{locale}.gif"
+        try:
+            card = files[card_path]
+            profile = json.loads(files[f"profile-{locale}.json"])
+            document = LocalizedPublicProfile.model_validate(
+                {
+                    field: profile[field]
+                    for field in ("profile", "repositories", "suggested_questions")
+                }
+            )
+        except (KeyError, TypeError, ValueError, ValidationError):
+            raise SiteExportError("SHARING_EXPORT_INVALID") from None
+        remote = fetch_pages_resource(
+            f"{target.url}{card_path}",
+            pages_origin=target.origin,
+            deadline=time.monotonic() + _VERIFY_DEADLINE_SECONDS,
+            max_response_bytes=len(card),
+        )
+        kind = str(remote.headers.get("content-type", "")).split(";", 1)[0].strip().casefold()
+        if remote.status != 200 or kind != "image/gif" or remote.body != card:
+            raise SiteExportError("SHARING_VERIFICATION_FAILED")
+        # Do not mix a changed local snapshot or Pages receipt with the checked image.
+        if self.state() != state:
+            raise SiteExportError("SHARING_CONFLICT")
+        _latest_files, latest_manifest = build_site_files(**arguments)
+        if latest_manifest != manifest or self.state() != state:
+            raise SiteExportError("SHARING_CONFLICT")
+        return render_profile_readme(document, pages_url=target.url, locale=locale)
 
     def _clear_verification(self) -> None:
         try:
