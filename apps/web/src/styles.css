@@ -531,6 +531,10 @@ input {
   font-weight: 800;
   gap: 0.4rem;
 }
+/* React Aria injects this rule at runtime; CSP style-src 'self' blocks it. */
+[data-react-aria-pressable] {
+  touch-action: pan-x pan-y pinch-zoom;
+}
 /* Confirmation dialog, also rendered in a portal on <body>. */
 .admin-confirm-overlay {
   align-items: center;

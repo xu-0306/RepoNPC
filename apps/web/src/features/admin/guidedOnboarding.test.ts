@@ -853,6 +853,7 @@ describe("guided draft recovery", () => {
         zh ? "網路連線" : "network connection",
       );
       const provider = guidedErrorMessage(locale, "PROVIDER_ERROR");
+      expect(provider).not.toContain(zh ? "本機服務" : "local service");
       expect(provider).toContain(
         zh ? "模型沒有回傳可用的結果" : "model did not",
       );

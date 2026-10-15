@@ -359,3 +359,11 @@ Owner 已確認下一輪的順序：先做 UI 小修與 Dockerfile 修復，再�
 - Owner 已確認完整 commit 清單，授權三個本機 commit、不 push。三批保留：A–F 與文件、UI 小修、Dockerfile；6 個重疊檔案有修改前快照，可只在 index 分開原有 A–F 與本輪改動，無須回寫或覆蓋工作樹。提交依 owner 確認的清單執行；GitHub push 不在本輪授權內。
 - 後續候選（不擴入本輪）：完成後過長的批次診斷（手機結果起點 4557px）、英文長模型名稱擠壓狀態徽章、分析前「已連線：尚未設定」文案、CSP inline-style console error 的來源定位。未放寬 CSP。G 與 client-only 授權出處審查仍另行安排。
 - 未重跑完整 Python 套件、未宣稱完整 browser/screen-reader/200% zoom/public release；實際結果未觸發缺漏來源提示，該提示由既有雙語 unit tests 驗證。
+
+## 主代理審核與中等問題修正（2026-10-15，未 commit）
+
+- 審核三個 commit（a7144a0、96da18a、50cf6d5）：範圍、斷言與驗證說法成立。重跑 `pnpm run web:check`，587 項測試通過；後端相關 5 個測試檔 124 passed，ruff format、ruff check、mypy 通過。後端測試第一次出現 63 個 setup 錯誤，原因是 pytest 預設暫存目錄 `C:\Users\xu\AppData\Local\Temp\pytest-of-xu` 無權限讀取，屬於環境問題；改用 `--basetemp` 後全部通過。
+- 修正一：`PROVIDER_ERROR` 訊息刪掉「不是本機服務問題」。這個代碼也涵蓋本機 Ollama 錯誤，以及前端未知例外的預設值，所以這句沒有根據。測試新增雙語否定斷言。
+- 修正二：React Aria 在執行時插入的 `<style>` 被 CSP `style-src 'self'` 擋下。pressable 的 `touch-action` 規則改寫在 `styles.css`；CSP 不變。ADR-061 已加註兩項殘留：每次載入 admin 頁面有一則 console CSP 訊息；iOS Safari 開啟確認框時沒有 overscroll 限制。要改變這兩項，都需要 owner 核准的 CSP 契約變更。
+- 由 Codex gpt-6.1-sol high 實作，驗證由 Haiku 5.5 在 sandbox 外執行：web:check 通過（587 tests，lint 0 error，build 正常），build 後的 CSS 含該規則，`git diff --check` 通過，換行格式不變。未做瀏覽器或 iOS 實測。
+- 低優先後續（未做）：草稿序列化仍保存 `modelsConfigured`，但還原時已不採用；重點展開後來源顯示兩次（G 輪）。

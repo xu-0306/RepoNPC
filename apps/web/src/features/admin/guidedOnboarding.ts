@@ -949,8 +949,8 @@ export function guidedErrorMessage(
     },
     PROVIDER_ERROR: {
       "zh-TW":
-        "模型沒有回傳可用的結果，不是本機服務問題。你的輸入已保留，可稍後重試或改為手動填寫。",
-      en: "The model did not return a usable result; this is not a local service problem. Your input is preserved; retry later or continue manually.",
+        "模型沒有回傳可用的結果。你的輸入已保留，可稍後重試或改為手動填寫。",
+      en: "The model did not return a usable result. Your input is preserved; retry later or continue manually.",
     },
     PROVIDER_OUTPUT_LIMIT_REACHED: {
       "zh-TW":
