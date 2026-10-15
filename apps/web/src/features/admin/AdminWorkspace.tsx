@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
+import { Button, Dialog, DialogTrigger, Popover } from "react-aria-components";
 
 import { Base64PngCanvas } from "./Base64PngCanvas";
 import { CharacterRenderer } from "../character/CharacterRenderer";
@@ -318,7 +319,6 @@ export function AdminWorkspace({
 }: AdminWorkspaceProps) {
   const copy = COPY[locale];
   const [uiScale, setUiScale] = useState<AdminUiScale>(readAdminUiScale);
-  const displaySettingsRef = useRef<HTMLDetailsElement>(null);
   const previousMode = useRef(workspaceMode);
   useEffect(() => {
     if (previousMode.current === workspaceMode) return;
@@ -330,19 +330,6 @@ export function AdminWorkspace({
       heading.scrollIntoView({ block: "start", behavior: "instant" });
     }
   }, [workspaceMode]);
-  useEffect(() => {
-    function closeOutside(event: PointerEvent) {
-      const panel = displaySettingsRef.current;
-      if (
-        panel?.open &&
-        event.target instanceof Node &&
-        !panel.contains(event.target)
-      )
-        panel.open = false;
-    }
-    document.addEventListener("pointerdown", closeOutside);
-    return () => document.removeEventListener("pointerdown", closeOutside);
-  }, []);
   const errors = issueList(validation?.errors, "error");
   const warnings = issueList(validation?.warnings, "warning");
   const hasConflict = isConflict(conflict);
@@ -417,43 +404,46 @@ export function AdminWorkspace({
               ))}
             </div>
           )}
-          <details
-            className="admin-display-settings"
-            ref={displaySettingsRef}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" && event.currentTarget.open) {
-                event.preventDefault();
-                event.currentTarget.open = false;
-                event.currentTarget.querySelector("summary")?.focus();
-              }
-            }}
-          >
-            <summary aria-label={copy.displaySettings}>
+          <DialogTrigger>
+            <Button
+              className="admin-display-settings"
+              aria-label={copy.displaySettings}
+            >
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M4 7h10M18 7h2M10 17h10M4 17h2M14 4v6M10 14v6" />
               </svg>
               <span>{copy.displaySettings}</span>
-            </summary>
-            <div className="admin-display-settings__panel">
-              <label htmlFor="admin-interface-scale">
-                {copy.interfaceSize}
-                <select
-                  disabled={busy}
-                  id="admin-interface-scale"
-                  onChange={(event) =>
-                    setUiScale(event.target.value as AdminUiScale)
-                  }
-                  value={uiScale}
-                >
-                  {ADMIN_UI_SCALES.map((scale) => (
-                    <option key={scale} value={scale}>
-                      {copy.scaleLabels[scale]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </details>
+            </Button>
+            <Popover
+              className="admin-display-settings__popover"
+              placement="bottom end"
+              offset={8}
+            >
+              <Dialog
+                className="admin-display-settings__panel"
+                aria-label={copy.displaySettings}
+                lang={locale}
+              >
+                <label htmlFor="admin-interface-scale">
+                  {copy.interfaceSize}
+                  <select
+                    disabled={busy}
+                    id="admin-interface-scale"
+                    onChange={(event) =>
+                      setUiScale(event.target.value as AdminUiScale)
+                    }
+                    value={uiScale}
+                  >
+                    {ADMIN_UI_SCALES.map((scale) => (
+                      <option key={scale} value={scale}>
+                        {copy.scaleLabels[scale]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </Dialog>
+            </Popover>
+          </DialogTrigger>
           <a
             className="admin-workspace__help"
             href={`#${WORKSPACE_HEADINGS[workspaceMode]}`}

@@ -23,12 +23,15 @@ from reponpc.admin.batch_resolver import (
 from reponpc.admin.batch_runtime import BatchRuntimeError, BatchRuntimeStore, ClaimedBatchItem
 from reponpc.admin.batches import BatchExecutionError, BatchStageGates
 from reponpc.admin.onboarding import (
+    ANALYSIS_CONTEXT_RECORDS,
     ANALYSIS_MAX_OUTPUT_TOKENS,
     ANALYSIS_OUTPUT_POLICY_VERSION,
     ANALYSIS_OUTPUT_SCHEMA_VERSION,
     ANALYSIS_PROMPT_VERSION,
     ANALYSIS_TERMINATION_VALIDATION_VERSION,
+    ANALYSIS_TITLE_MAX_CHARACTERS,
     ANALYSIS_TOKEN_ESTIMATOR_VERSION,
+    ANALYSIS_VALIDATION_VERSION,
     GuidedOnboardingError,
     GuidedOnboardingService,
     analysis_generation_policy_identity,
@@ -53,7 +56,7 @@ class PinnedBatchItemRunner:
         chat_model: str = "chat-runtime",
         prompt_version: str = ANALYSIS_PROMPT_VERSION,
         output_schema_version: str = ANALYSIS_OUTPUT_SCHEMA_VERSION,
-        validation_version: str = "validation-v1",
+        validation_version: str = ANALYSIS_VALIDATION_VERSION,
         analysis_max_output_tokens: int = ANALYSIS_MAX_OUTPUT_TOKENS,
         token_estimator_version: str = ANALYSIS_TOKEN_ESTIMATOR_VERSION,
         termination_validation_version: str = ANALYSIS_TERMINATION_VALIDATION_VERSION,
@@ -107,7 +110,7 @@ class PinnedBatchItemRunner:
                     and cached.derived_index_key == derived_key
                     and cached.metadata == self._result_cache_metadata(item, pair, runtime)
                 ):
-                    cached_result = _cached_result(cached.payload, item)
+                    cached_result = _parse_cached_payload(cached.payload, item)
                 if cached_result is not None:
                     return cached_result
                 self._store.delete_cache(result_key)
@@ -320,11 +323,12 @@ class _ExtendableDeadline:
 
 
 def _cacheable_result(result: dict[str, object], item: ClaimedBatchItem) -> dict[str, object]:
-    """Persist validated model result metadata but never repository text/excerpts."""
+    """Persist the validated result; facts carry source locations, never repository text."""
 
     cached = _parse_cached_payload(
         {
             "repository": result.get("repository"),
+            "facts": result.get("facts"),
             "inferences": result.get("inferences"),
             "skipped_summary": result.get("skipped_summary"),
         },
@@ -335,26 +339,25 @@ def _cacheable_result(result: dict[str, object], item: ClaimedBatchItem) -> dict
     return cached
 
 
-def _cached_result(payload: dict[str, object], item: ClaimedBatchItem) -> dict[str, object] | None:
-    cached = _parse_cached_payload(payload, item)
-    if cached is None:
-        return None
-    # Cached results contain no raw evidence excerpts. A later analysis may
-    # rebuild sources to refresh displayed evidence, but cache reuse is safe
-    # because outputs are already schema-validated and commit-bound.
-    return {**cached, "facts": []}
-
-
 def _parse_cached_payload(
     payload: dict[str, object], item: ClaimedBatchItem
 ) -> dict[str, object] | None:
-    if set(payload) != {"repository", "inferences", "skipped_summary"}:
+    if set(payload) != {"repository", "facts", "inferences", "skipped_summary"}:
         return None
     repository = payload.get("repository")
+    facts = payload.get("facts")
     inferences = payload.get("inferences")
     skipped = payload.get("skipped_summary")
     if not isinstance(repository, dict) or not _valid_cached_repository(repository, item):
         return None
+    if not isinstance(facts, list) or len(facts) > ANALYSIS_CONTEXT_RECORDS:
+        return None
+    normalized_facts: list[dict[str, object]] = []
+    for fact in facts:
+        normalized_fact = _valid_cached_fact(fact, item)
+        if normalized_fact is None:
+            return None
+        normalized_facts.append(normalized_fact)
     if not isinstance(inferences, list) or len(inferences) > 6:
         return None
     normalized_inferences: list[dict[str, object]] = []
@@ -368,6 +371,7 @@ def _parse_cached_payload(
         return None
     return {
         "repository": dict(repository),
+        "facts": normalized_facts,
         "inferences": normalized_inferences,
         "skipped_summary": normalized_skipped,
     }
@@ -392,20 +396,63 @@ def _valid_cached_repository(value: object, item: ClaimedBatchItem) -> bool:
     )
 
 
+def _valid_cached_fact(value: object, item: ClaimedBatchItem) -> dict[str, object] | None:
+    keys = ("evidence_id", "evidence_class", "path", "start_line", "end_line", "url")
+    if not isinstance(value, dict) or set(value) != set(keys):
+        return None
+    evidence_id = value.get("evidence_id")
+    path = value.get("path")
+    url = value.get("url")
+    permalink_prefix = f"https://github.com/{item.input.slug}/blob/{item.input.commit_sha}/"
+    if (
+        value.get("evidence_class") != "REPOSITORY_FACT"
+        or not isinstance(evidence_id, str)
+        or not EVIDENCE_ID_RE.fullmatch(evidence_id)
+        or not isinstance(path, str)
+        or not 0 < len(path) <= 4096
+        or not all(
+            line is None or (type(line) is int and line > 0)
+            for line in (value.get("start_line"), value.get("end_line"))
+        )
+        or not isinstance(url, str)
+        or len(url) > 16384
+        or not url.startswith(permalink_prefix)
+    ):
+        return None
+    return {key: value[key] for key in keys}
+
+
+def _valid_cached_localized(value: object, maximums: dict[str, int]) -> bool:
+    return (
+        isinstance(value, dict)
+        and set(value) == set(maximums)
+        and all(
+            isinstance(text, str) and 0 < len(text) <= maximums[locale]
+            for locale, text in value.items()
+        )
+    )
+
+
 def _valid_cached_inference(value: object) -> dict[str, object] | None:
     if not isinstance(value, dict) or set(value) != {
         "evidence_class",
+        "title",
         "statement",
         "supporting_evidence_ids",
     }:
         return None
+    title = value.get("title")
     statement = value.get("statement")
     evidence_ids = value.get("supporting_evidence_ids")
     if value.get("evidence_class") != "MODEL_INFERENCE":
         return None
-    if not isinstance(statement, dict) or set(statement) != {"zh-TW", "en"}:
+    if not isinstance(title, dict) or not _valid_cached_localized(
+        title, ANALYSIS_TITLE_MAX_CHARACTERS
+    ):
         return None
-    if not all(isinstance(text, str) and 0 < len(text) <= 2000 for text in statement.values()):
+    if not isinstance(statement, dict) or not _valid_cached_localized(
+        statement, {"zh-TW": 2000, "en": 2000}
+    ):
         return None
     if (
         not isinstance(evidence_ids, list)
@@ -418,6 +465,7 @@ def _valid_cached_inference(value: object) -> dict[str, object] | None:
         return None
     return {
         "evidence_class": "MODEL_INFERENCE",
+        "title": {"zh-TW": title["zh-TW"], "en": title["en"]},
         "statement": {"zh-TW": statement["zh-TW"], "en": statement["en"]},
         "supporting_evidence_ids": list(evidence_ids),
     }

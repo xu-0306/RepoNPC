@@ -47,6 +47,7 @@ from reponpc.admin.onboarding import (
     ANALYSIS_TERMINATION_VALIDATION_VERSION,
     ANALYSIS_TIMEOUT_SECONDS,
     ANALYSIS_TOKEN_ESTIMATOR_VERSION,
+    ANALYSIS_VALIDATION_VERSION,
     analysis_generation_policy_identity,
     validate_analysis_output_budget,
 )
@@ -143,7 +144,7 @@ class AnalysisBatchService:
         chat_model: str = "chat-runtime",
         prompt_version: str = ANALYSIS_PROMPT_VERSION,
         output_schema_version: str = ANALYSIS_OUTPUT_SCHEMA_VERSION,
-        validation_version: str = "validation-v1",
+        validation_version: str = ANALYSIS_VALIDATION_VERSION,
         analysis_max_output_tokens: int = ANALYSIS_MAX_OUTPUT_TOKENS,
         analysis_timeout_seconds: int = int(ANALYSIS_TIMEOUT_SECONDS),
         analysis_generation_attempts: int = 3,

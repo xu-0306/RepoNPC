@@ -612,7 +612,7 @@ describe("guided onboarding resume data", () => {
             path: "README.md",
             start_line: 1,
             end_line: 1,
-            excerpt: "CANARY-RAW-REPOSITORY-BODY",
+            url: "https://github.com/octocat/demo/blob/CANARY-RAW-REPOSITORY-BODY/README.md#L1",
           },
         ],
       },
@@ -802,6 +802,12 @@ describe("guided draft recovery", () => {
       expect(guidedErrorMessage(locale, "REQUEST_FAILED", "review")).toContain(
         zh ? "網路連線" : "network connection",
       );
+      const provider = guidedErrorMessage(locale, "PROVIDER_ERROR");
+      expect(provider).toContain(
+        zh ? "模型沒有回傳可用的結果" : "model did not",
+      );
+      expect(provider).toContain(zh ? "輸入已保留" : "input is preserved");
+      expect(provider).not.toContain(zh ? "無法確認原因" : "cause is unknown");
       const unknown = guidedErrorMessage(
         locale,
         "private-response-canary",

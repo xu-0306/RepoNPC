@@ -26,6 +26,7 @@ import {
   type CharacterPreparationResult,
 } from "./CharacterAssetConverter";
 import { AdminAccessLayout } from "./AdminAccessLayout";
+import { useConfirmDialog } from "./ConfirmDialog";
 import {
   BatchAnalysisPanel,
   type BatchActionState,
@@ -603,23 +604,27 @@ function repositoryFact(value: unknown): RepositoryFact | null {
     typeof fact.path !== "string" ||
     !isNullableNumber(fact.start_line) ||
     !isNullableNumber(fact.end_line) ||
-    typeof fact.excerpt !== "string"
+    typeof fact.url !== "string" ||
+    !fact.url.startsWith("https://github.com/")
   ) {
     return null;
   }
   return fact as unknown as RepositoryFact;
 }
 
+function isLocalizedText(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const text = value as Record<string, unknown>;
+  return typeof text["zh-TW"] === "string" && typeof text.en === "string";
+}
+
 function modelInference(value: unknown): ModelInference | null {
   if (!value || typeof value !== "object") return null;
   const inference = value as Record<string, unknown>;
-  const statement = inference.statement;
   if (
     inference.evidence_class !== "MODEL_INFERENCE" ||
-    !statement ||
-    typeof statement !== "object" ||
-    typeof (statement as Record<string, unknown>)["zh-TW"] !== "string" ||
-    typeof (statement as Record<string, unknown>).en !== "string" ||
+    !isLocalizedText(inference.title) ||
+    !isLocalizedText(inference.statement) ||
     !Array.isArray(inference.supporting_evidence_ids) ||
     !inference.supporting_evidence_ids.every(
       (evidenceId) => typeof evidenceId === "string",
@@ -1101,6 +1106,7 @@ export function AdminPage({
   locale: Locale;
   onLocaleChange?: (locale: Locale) => void;
 }) {
+  const [confirmDialog, confirm] = useConfirmDialog(locale);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [setupCode, setSetupCode] = useState("");
@@ -2836,14 +2842,19 @@ export function AdminPage({
         return;
       }
       const frozen = source.analysis_model_pair;
-      const confirmed = window.confirm(
-        analysisModelConfirmationMessage(
+      const confirmed = await confirm({
+        title:
+          locale === "zh-TW"
+            ? "以目前模型重新分析？"
+            : "Reanalyze with the current models?",
+        description: analysisModelConfirmationMessage(
           locale,
           item.commit_sha,
           frozen,
           analysisSelection.selection,
         ),
-      );
+        confirmLabel: locale === "zh-TW" ? "重新分析" : "Reanalyze",
+      });
       if (!confirmed) {
         batchMutationPending.current = false;
         return;
@@ -3968,6 +3979,7 @@ export function AdminPage({
           message={serviceSaveNotice.message}
         />
       )}
+      {confirmDialog}
     </>
   );
 }

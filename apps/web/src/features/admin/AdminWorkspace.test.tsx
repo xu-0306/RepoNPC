@@ -1,7 +1,18 @@
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { AdminWorkspace, type AdminWorkspaceProps } from "./AdminWorkspace";
+
+// Node omits overlay portals. Expose authored popover content for the existing
+// markup assertions; browser focus and dismissal still need browser checks.
+vi.mock("react-aria-components", async (importOriginal) => {
+  const rac = await importOriginal<typeof import("react-aria-components")>();
+  return {
+    ...rac,
+    Popover: ({ children }: { children: ReactNode }) => <>{children}</>,
+  };
+});
 
 function props(
   overrides: Partial<AdminWorkspaceProps> = {},
@@ -203,6 +214,14 @@ describe("AdminWorkspace", () => {
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain("Setup guide");
     expect(markup).toContain('aria-label="Display settings"');
+    expect(markup).toMatch(
+      /<button(?=[^>]*aria-label="Display settings")(?=[^>]*aria-expanded="false")[^>]*>/,
+    );
+    expect(markup).toContain('role="dialog"');
+    expect(markup).not.toContain('<details class="admin-display-settings"');
+    expect(markup).toContain('id="admin-interface-scale"');
+    expect(markup).toContain("Standard (100%)");
+    expect(markup).toContain("Large (125%)");
     expect(markup).toContain("Comfortable (default, 112.5%)");
     expect(markup).toContain("Administrator");
   });

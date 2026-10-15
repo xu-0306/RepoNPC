@@ -515,12 +515,13 @@ def test_partial_batch_recovers_only_failed_item_and_preserves_successes(
                     "path": "src/main.py",
                     "start_line": 1,
                     "end_line": 2,
-                    "excerpt": f"validated excerpt for {slug}",
+                    "url": f"https://github.com/{slug}/blob/{item.input.commit_sha}/src/main.py#L1-L2",
                 }
             ],
             "inferences": [
                 {
                     "evidence_class": "MODEL_INFERENCE",
+                    "title": {"zh-TW": f"重點 {slug}", "en": f"Highlight {slug}"},
                     "statement": {"zh-TW": f"推論 {slug}", "en": f"Inference {slug}"},
                     "supporting_evidence_ids": [evidence_id],
                 }
@@ -620,9 +621,9 @@ def test_partial_batch_recovers_only_failed_item_and_preserves_successes(
         ).json()
 
     assert len(succeeded) == 2
-    assert {item["result"]["facts"][0]["excerpt"] for item in succeeded} == {
-        "validated excerpt for octocat/one",
-        "validated excerpt for octocat/two",
+    assert {item["result"]["inferences"][0]["title"]["en"] for item in succeeded} == {
+        "Highlight octocat/one",
+        "Highlight octocat/two",
     }
     assert failed["retryable"] is False
     assert failed["reanalyzable"] is True
@@ -639,8 +640,8 @@ def test_partial_batch_recovers_only_failed_item_and_preserves_successes(
     assert len(successor_snapshot["items"]) == 1
     assert successor_snapshot["items"][0]["slug"] == "octocat/fails-once"
     assert successor_snapshot["items"][0]["source_item_id"] == failed["item_id"]
-    assert successor_snapshot["items"][0]["result"]["facts"][0]["excerpt"] == (
-        "validated excerpt for octocat/fails-once"
+    assert successor_snapshot["items"][0]["result"]["inferences"][0]["title"]["en"] == (
+        "Highlight octocat/fails-once"
     )
     assert [item["result"] for item in source_after["items"] if item["state"] == "complete"] == [
         item["result"] for item in succeeded

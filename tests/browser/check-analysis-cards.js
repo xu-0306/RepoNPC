@@ -7,37 +7,52 @@ export async function checkAnalysisCards(tab, viewport) {
   };
   for (const locale of ["zh-TW", "en"]) {
     const chinese = locale === "zh-TW";
-    const sources = chinese ? "查看專案依據（1 個來源）" : "View project evidence (1 source)";
-    const full = chinese ? "閱讀完整解讀" : "Read the full interpretation";
+    const first = chinese ? "共用的輸入解析" : "Shared input parsing";
+    const second = chinese ? "文件說明使用條件" : "Docs explain usage conditions";
+    const missing = chinese ? "部分出處不在這次結果中" : "Some sources are not in this result";
+    const info = chinese ? "AI 整理，僅供你參考" : "AI summary, for your reference";
+    const privacy = chinese ? "不會公開，也不會自動寫進作品集。" : "Never public, never added to your portfolio automatically.";
     for (const width of [375, 768, 1024, 1440]) {
       await viewport.set({ width, height: 900 });
-      const source = tab.playwright.getByText(sources, { exact: true }).nth(0);
-      await source.press("Enter");
+      const toggle = tab.playwright.getByRole("button", { name: first, exact: true });
+      await toggle.press("Enter");
       const opened = await tab.playwright.evaluate(() => {
-        const first = document.querySelector(".guided-onboarding__interpretation");
+        const row = document.querySelector(".guided-analysis__highlight");
+        const button = row.querySelector(".guided-analysis__toggle");
+        const body = row.querySelector(".guided-analysis__body");
+        const links = [...row.querySelectorAll("a")];
         return {
-          open: first.querySelector(".guided-onboarding__sources").open,
-          path: first.querySelector(".guided-onboarding__source strong").textContent,
-          hasScript: !!first.querySelector("script"),
-          focused: document.activeElement === first.querySelector("summary"),
+          expanded: button.getAttribute("aria-expanded") === "true" && !body.hidden,
+          focused: document.activeElement === button,
+          links: links.length === 3 && links.every((a) => a.href.startsWith("https://github.com/") && a.target === "_blank" && a.rel.includes("noopener")),
+          path: body.querySelector("a").textContent,
+          more: row.querySelector(".guided-analysis__more")?.textContent,
+          hasScript: !!row.querySelector("script"),
         };
       });
-      verify(opened.open && opened.focused && opened.path === "src/parser.ts:4-12" && !opened.hasScript, `${locale}/${width}: keyboard sources, focus, correct evidence, escaped excerpt`);
-      await source.press("Space");
-      await tab.playwright.getByText(full, { exact: true }).press("Enter");
-      const expanded = await tab.playwright.evaluate(() => {
-        const text = document.querySelectorAll(".guided-onboarding__interpretation-text")[1];
-        return text.querySelector("details").open && getComputedStyle(text.querySelector(".guided-onboarding__interpretation-preview")).display === "none";
-      });
-      verify(expanded, `${locale}/${width}: full interpretation replaces preview`);
-      await tab.playwright.getByText(full, { exact: true }).press("Enter");
+      verify(opened.expanded && opened.focused && opened.links && opened.path.startsWith("src/parser.ts:4-12") && opened.more === "+1" && !opened.hasScript, `${locale}/${width}: keyboard expansion, focus, GitHub links, +1, escaped statement`);
+      await toggle.press("Enter");
+      const secondToggle = tab.playwright.getByRole("button", { name: second, exact: true });
+      await secondToggle.press("Enter");
+      verify((await tab.playwright.domSnapshot()).includes(missing), `${locale}/${width}: partly missing sources are disclosed`);
+      await secondToggle.press("Enter");
+      const infoButton = tab.playwright.getByRole("button", { name: info, exact: true });
+      await infoButton.press("Enter");
+      verify((await tab.playwright.domSnapshot()).includes(privacy), `${locale}/${width}: privacy popover opens from the keyboard`);
+      await tab.playwright.getByRole("dialog").press("Escape");
+      const dismissed = await tab.playwright.evaluate(() => ({
+        closed: !document.querySelector(".guided-analysis__popover"),
+        focused: document.activeElement?.classList.contains("guided-analysis__info") ?? false,
+      }));
+      verify(dismissed.closed && dismissed.focused, `${locale}/${width}: Escape closes the popover and returns focus`);
       const layout = await tab.playwright.evaluate(() => ({
         overflow: document.documentElement.scrollWidth > innerWidth,
-        cards: document.querySelectorAll(".guided-onboarding__interpretation").length,
-        closed: [...document.querySelectorAll(".guided-onboarding__sources")].every((e) => !e.open),
-        controls: [...document.querySelectorAll(".guided-onboarding__sources > summary")].every((e) => e.getBoundingClientRect().height >= 44),
+        rows: document.querySelectorAll(".guided-analysis__highlight").length,
+        collapsed: [...document.querySelectorAll(".guided-analysis__toggle")].every((e) => e.getAttribute("aria-expanded") === "false"),
+        controls: [...document.querySelectorAll(".guided-analysis__toggle")].every((e) => e.getBoundingClientRect().height >= 44),
+        removed: !document.querySelector("pre, .guided-onboarding__interpretation, .guided-onboarding__sources"),
       }));
-      verify(!layout.overflow && layout.cards === 2 && layout.closed && layout.controls, `${locale}/${width}: no overflow, two cards, collapsed sources, 44px controls`);
+      verify(!layout.overflow && layout.rows === 2 && layout.collapsed && layout.controls && layout.removed, `${locale}/${width}: no overflow, two collapsed rows, 44px controls, no excerpts`);
     }
     await tab.playwright.getByRole("button", { name: "中文 / English", exact: true }).press("Enter");
   }
@@ -45,7 +60,7 @@ export async function checkAnalysisCards(tab, viewport) {
   const contribution = await tab.playwright.domSnapshot();
   verify(contribution.includes("你的貢獻說明") && contribution.includes("0/1") && !contribution.includes("此專案的貢獻已由你確認"), "next step requires owner input and does not confirm a contribution");
   await tab.playwright.getByRole("button", { name: "返回", exact: true }).press("Enter");
-  verify((await tab.playwright.domSnapshot()).includes("AI 整理・尚未確認"), "back navigation preserves analysis results");
+  verify((await tab.playwright.domSnapshot()).includes("共用的輸入解析"), "back navigation preserves analysis results");
   await viewport.reset();
   return checks;
 }

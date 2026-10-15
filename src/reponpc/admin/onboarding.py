@@ -7,6 +7,7 @@ import re
 import tempfile
 import threading
 import time
+import unicodedata
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from pathlib import Path
@@ -49,11 +50,23 @@ MAX_OWNER_STATEMENT_CHARACTERS = 4000
 ANALYSIS_MAX_OUTPUT_TOKENS = 16384
 ANALYSIS_MAX_OUTPUT_TOKENS_HARD_LIMIT = 16384
 CONTRIBUTION_MAX_OUTPUT_TOKENS = 700
-ANALYSIS_PROMPT_VERSION = "onboarding-prompt-v2"
-ANALYSIS_OUTPUT_SCHEMA_VERSION = "analysis-schema-v2"
+# Evidence records packed into one analysis request, which bounds its facts.
+ANALYSIS_CONTEXT_RECORDS = 8
+ANALYSIS_PROMPT_VERSION = "onboarding-prompt-v3"
+ANALYSIS_OUTPUT_SCHEMA_VERSION = "analysis-schema-v3"
+ANALYSIS_VALIDATION_VERSION = "validation-v2"
 ANALYSIS_OUTPUT_POLICY_VERSION = "analysis-output-policy-v2-reasoning-on"
 ANALYSIS_TOKEN_ESTIMATOR_VERSION = "utf8-bytes-v1"
 ANALYSIS_TERMINATION_VALIDATION_VERSION = "finish-reason-length-reject-v1"
+# The prompt asks for at most 16 Chinese characters or 8 English words; the
+# accepted bound is looser so a slightly long headline does not fail analysis.
+ANALYSIS_TITLE_MAX_CHARACTERS = {"zh-TW": 24, "en": 80}
+# Writing systems each output locale uses natively. A model-written word in any
+# other writing system must also occur in the request's own source text.
+_LOCALE_BASE_SCRIPTS = {
+    "zh-TW": frozenset({"CJK", "BOPOMOFO", "LATIN"}),
+    "en": frozenset({"LATIN"}),
+}
 _ANALYSIS_CONTEXT_SAFETY_MARGIN_TOKENS = 256
 _CONTRIBUTION_CONTEXT_SAFETY_MARGIN_TOKENS = 256
 _DEFAULT_INCLUDE_PATTERNS = (
@@ -194,6 +207,57 @@ def _contains_personal_inference(text: str) -> bool:
     )
 
 
+def _letter_script(character: str) -> str | None:
+    """Name the writing system of a letter from its Unicode name, or None for non-letters."""
+
+    # Modifier letters (Lm) such as 々 behave like marks, so only Lu/Ll/Lt/Lo count.
+    if unicodedata.category(character) not in {"Lu", "Ll", "Lt", "Lo"}:
+        return None
+    name = unicodedata.name(character, "")
+    if not name:
+        return None
+    return "CJK" if name.startswith("CJK ") else name.split(" ", 1)[0]
+
+
+def _source_scripts(text: str) -> frozenset[str]:
+    """Return every writing system any letter of the source text uses."""
+
+    scripts = (_letter_script(character) for character in unicodedata.normalize("NFKC", text))
+    return frozenset(script for script in scripts if script is not None)
+
+
+def _word_scripts(text: str) -> frozenset[str]:
+    """Return writing systems forming words of two or more consecutive letters.
+
+    A lone foreign letter such as μ or λ is usually a symbol, not a word.
+    """
+
+    scripts: set[str] = set()
+    current: str | None = None
+    length = 0
+    for character in unicodedata.normalize("NFKC", text):
+        script = _letter_script(character)
+        length = length + 1 if script is not None and script == current else 1
+        current = script
+        if current is not None and length >= 2:
+            scripts.add(current)
+    return frozenset(scripts)
+
+
+def _reject_ungrounded_scripts(
+    values: Sequence[LocalizedSuggestion | LocalizedTitle], source_text: str
+) -> None:
+    """Reject model words in a writing system neither the locale nor the source uses."""
+
+    source = _source_scripts(source_text)
+    for value in values:
+        for locale, text in value.public().items():
+            if not _word_scripts(text) <= _LOCALE_BASE_SCRIPTS[locale] | source:
+                raise GuidedOnboardingError(
+                    "PROVIDER_ERROR", reason="PROVIDER_OUTPUT_SCHEMA_INVALID"
+                )
+
+
 def analysis_effective_output_tokens(
     configured_output_tokens: int,
     capabilities: ProviderCapabilities,
@@ -303,7 +367,18 @@ class LocalizedSuggestion(_StrictModel):
         return {"zh-TW": self.zh_tw, "en": self.en}
 
 
+class LocalizedTitle(_StrictModel):
+    zh_tw: str = Field(
+        alias="zh-TW", min_length=1, max_length=ANALYSIS_TITLE_MAX_CHARACTERS["zh-TW"]
+    )
+    en: str = Field(min_length=1, max_length=ANALYSIS_TITLE_MAX_CHARACTERS["en"])
+
+    def public(self) -> dict[str, str]:
+        return {"zh-TW": self.zh_tw, "en": self.en}
+
+
 class AnalysisInference(_StrictModel):
+    title: LocalizedTitle
     statement: LocalizedSuggestion
     supporting_evidence_ids: tuple[str, ...] = Field(min_length=1, max_length=8)
 
@@ -562,7 +637,9 @@ class GuidedOnboardingService:
                             timeout,
                         )
                     _validate_analysis_termination(provider_result)
-                    envelope = _parse_analysis(provider_result.content, frozenset(selected))
+                    envelope = _parse_analysis(
+                        provider_result.content, frozenset(selected), messages[-1].content
+                    )
                 finally:
                     reader.close()
                 _raise_if_cancelled(cancel_requested)
@@ -577,6 +654,7 @@ class GuidedOnboardingService:
                     "inferences": [
                         {
                             "evidence_class": "MODEL_INFERENCE",
+                            "title": inference.title.public(),
                             "statement": inference.statement.public(),
                             "supporting_evidence_ids": list(inference.supporting_evidence_ids),
                         }
@@ -740,7 +818,9 @@ class GuidedOnboardingService:
                         )
                     _validate_analysis_termination(provider_result)
                     _notify_stage(stage_changed, "validating")
-                    envelope = _parse_analysis(provider_result.content, frozenset(selected))
+                    envelope = _parse_analysis(
+                        provider_result.content, frozenset(selected), messages[-1].content
+                    )
                 finally:
                     reader.close()
                 _raise_if_cancelled(cancel_requested)
@@ -755,6 +835,7 @@ class GuidedOnboardingService:
                     "inferences": [
                         {
                             "evidence_class": "MODEL_INFERENCE",
+                            "title": inference.title.public(),
                             "statement": inference.statement.public(),
                             "supporting_evidence_ids": list(inference.supporting_evidence_ids),
                         }
@@ -817,7 +898,7 @@ class GuidedOnboardingService:
                     self._provider_timeout_seconds,
                 )
                 _validate_contribution_termination(result)
-                proposal = _parse_contribution(result.content)
+                proposal = _parse_contribution(result.content, messages[-1].content)
         except ChatLimitError as exc:
             raise GuidedOnboardingError(
                 exc.code, retry_after_seconds=exc.retry_after_seconds
@@ -1138,7 +1219,7 @@ def _analysis_config(
                 "lexical_weight": 1.0,
                 "vector_weight": 1.0,
                 "candidate_count_per_channel": 30,
-                "final_context_records": 8,
+                "final_context_records": ANALYSIS_CONTEXT_RECORDS,
                 "max_records_per_repository": 6,
             },
             "source_weights": {
@@ -1176,8 +1257,6 @@ def _fact_payload(evidence: Any) -> dict[str, object] | None:
         "path": evidence.path,
         "start_line": evidence.start_line,
         "end_line": evidence.end_line,
-        "title": evidence.title,
-        "excerpt": evidence.content[:600],
         "url": evidence.github_permalink,
     }
 
@@ -1194,6 +1273,7 @@ def _analysis_messages(
         {
             "inferences": [
                 {
+                    "title": {"zh-TW": "簡短的繁體中文重點", "en": "Short English headline"},
                     "statement": {
                         "zh-TW": "依據證據撰寫的繁體中文技術推論",
                         "en": "An English technical inference grounded in the evidence",
@@ -1214,9 +1294,12 @@ def _analysis_messages(
             "achievement, or impact. "
             "Return exactly one JSON object and nothing else: no Markdown, code fence, preface, "
             "commentary, or trailing text. The only top-level property is `inferences`, an array "
-            "of at most 6 objects. Each object has exactly `statement` and "
-            "`supporting_evidence_ids`. `statement` has exactly the non-empty string properties "
-            "`zh-TW` and `en`. `supporting_evidence_ids` contains 1 to 8 IDs copied verbatim "
+            "of at most 6 objects. Each object has exactly `title`, `statement`, and "
+            "`supporting_evidence_ids`. `title` and `statement` each have exactly the non-empty "
+            "string properties `zh-TW` and `en`. `title` is a short headline of the inference: "
+            "at most 16 characters in `zh-TW` and at most 8 words in `en`. Write `zh-TW` values "
+            "in Traditional Chinese and `en` values in English; keep code identifiers and file "
+            "names unchanged. `supporting_evidence_ids` contains 1 to 8 IDs copied verbatim "
             "from the server-owned allowlist. Do not add properties. "
             f"ALLOWED_EVIDENCE_IDS={allowed_ids_json}. VALID_JSON_EXAMPLE={example}",
         ),
@@ -1265,6 +1348,15 @@ def _analysis_response_schema() -> dict[str, Any]:
             "en": {"type": "string", "minLength": 1, "maxLength": 2000},
         },
     }
+    title = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["zh-TW", "en"],
+        "properties": {
+            locale: {"type": "string", "minLength": 1, "maxLength": maximum}
+            for locale, maximum in ANALYSIS_TITLE_MAX_CHARACTERS.items()
+        },
+    }
     return {
         "type": "object",
         "additionalProperties": False,
@@ -1276,8 +1368,9 @@ def _analysis_response_schema() -> dict[str, Any]:
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["statement", "supporting_evidence_ids"],
+                    "required": ["title", "statement", "supporting_evidence_ids"],
                     "properties": {
+                        "title": title,
                         "statement": localized,
                         "supporting_evidence_ids": {
                             "type": "array",
@@ -1360,7 +1453,9 @@ def _contribution_response_schema() -> dict[str, Any]:
     }
 
 
-def _parse_analysis(content: str | dict[str, Any], selected: frozenset[str]) -> AnalysisEnvelope:
+def _parse_analysis(
+    content: str | dict[str, Any], selected: frozenset[str], source_text: str
+) -> AnalysisEnvelope:
     try:
         envelope = AnalysisEnvelope.model_validate(_provider_payload(content))
     except (ValidationError, ValueError, json.JSONDecodeError) as exc:
@@ -1370,22 +1465,30 @@ def _parse_analysis(content: str | dict[str, Any], selected: frozenset[str]) -> 
     for inference in envelope.inferences:
         if not set(inference.supporting_evidence_ids).issubset(selected):
             raise GuidedOnboardingError("PROVIDER_ERROR", reason="PROVIDER_EVIDENCE_ID_INVALID")
-        if _contains_personal_inference(inference.statement.zh_tw) or _contains_personal_inference(
-            inference.statement.en
-        ):
+        texts = (*inference.title.public().values(), *inference.statement.public().values())
+        if any(_contains_personal_inference(text) for text in texts):
             raise GuidedOnboardingError(
                 "PROVIDER_ERROR", reason="PROVIDER_PERSONAL_INFERENCE_REJECTED"
             )
+    _reject_ungrounded_scripts(
+        [value for item in envelope.inferences for value in (item.title, item.statement)],
+        source_text,
+    )
     return envelope
 
 
-def _parse_contribution(content: str | dict[str, Any]) -> ContributionProposal:
+def _parse_contribution(content: str | dict[str, Any], source_text: str) -> ContributionProposal:
     try:
-        return ContributionProposal.model_validate(_provider_payload(content))
+        proposal = ContributionProposal.model_validate(_provider_payload(content))
     except (ValidationError, ValueError, json.JSONDecodeError) as exc:
         raise GuidedOnboardingError(
             "PROVIDER_ERROR", reason="PROVIDER_OUTPUT_SCHEMA_INVALID"
         ) from exc
+    _reject_ungrounded_scripts(
+        [proposal.role, proposal.summary, *(claim.statement for claim in proposal.claims)],
+        source_text,
+    )
+    return proposal
 
 
 def _validate_contribution_request(

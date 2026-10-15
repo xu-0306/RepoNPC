@@ -6,6 +6,7 @@ import { ModelBrandIcon } from "./ModelBrandIcon";
 import { ModelEditor } from "./ModelEditor";
 import { modelProbeError } from "./modelProbeError";
 import { DeleteSettingButton } from "./DeleteSettingButton";
+import { ConfirmButton } from "./ConfirmDialog";
 import type { ModelConnectionView } from "./ModelConnectionPanel";
 
 export interface EmbeddingProfileView {
@@ -456,31 +457,35 @@ export function EmbeddingProfilePanel({
               </button>
               {managementActions && !profile.active && (
                 <>
-                  <button
+                  <ConfirmButton
+                    locale={locale}
+                    title={
+                      locale === "zh-TW"
+                        ? "重建索引並啟用？"
+                        : "Rebuild and activate?"
+                    }
+                    description={
+                      locale === "zh-TW"
+                        ? "更換資料查找模型需要完整重建索引。重建完成前會保留目前公開資料。"
+                        : "Changing the content finder model requires a full reindex. Current public data remains available until it finishes."
+                    }
+                    confirmLabel={
+                      locale === "zh-TW" ? "重建並啟用" : "Rebuild and activate"
+                    }
                     disabled={
                       pending ||
                       !profile.last_probed_at ||
                       Boolean(profile.last_error_code) ||
                       !["ready", "reindex_required"].includes(profile.status)
                     }
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          locale === "zh-TW"
-                            ? "更換資料查找模型需要完整重建索引。重建完成前會保留目前公開資料。確認重建並啟用？"
-                            : "Changing the content finder model requires a full reindex. Current public data remains available until it finishes. Rebuild and activate?",
-                        )
-                      )
-                        onActivate(profile.profile_id);
-                    }}
-                    type="button"
+                    onConfirm={() => onActivate(profile.profile_id)}
                   >
                     {profile.status === "reindex_required"
                       ? locale === "zh-TW"
                         ? "更新網站資料並啟用"
                         : "Update website data and activate"
                       : copy.activate}
-                  </button>
+                  </ConfirmButton>
                 </>
               )}
               <DeleteSettingButton
@@ -505,28 +510,35 @@ export function EmbeddingProfilePanel({
                 profile.provider === "ollama" &&
                 !profile.active && (
                   <>
-                    <button
+                    <ConfirmButton
+                      locale={locale}
+                      title={
+                        locale === "zh-TW"
+                          ? `由 Ollama 安裝「${profile.model_id}」？`
+                          : `Install “${profile.model_id}” through Ollama?`
+                      }
+                      description={copy.modelConfirm}
+                      confirmLabel={locale === "zh-TW" ? "安裝" : "Install"}
                       disabled={pending}
-                      onClick={() => {
-                        if (window.confirm(copy.modelConfirm)) {
-                          onOllamaPull(profile.profile_id);
-                        }
-                      }}
-                      type="button"
+                      onConfirm={() => onOllamaPull(profile.profile_id)}
                     >
                       {copy.pullModel}
-                    </button>
-                    <button
+                    </ConfirmButton>
+                    <ConfirmButton
+                      locale={locale}
+                      title={
+                        locale === "zh-TW"
+                          ? `由 Ollama 刪除「${profile.model_id}」？`
+                          : `Delete “${profile.model_id}” through Ollama?`
+                      }
+                      description={copy.modelConfirm}
+                      confirmLabel={locale === "zh-TW" ? "刪除" : "Delete"}
+                      destructive
                       disabled={pending}
-                      onClick={() => {
-                        if (window.confirm(copy.modelConfirm)) {
-                          onOllamaDelete(profile.profile_id);
-                        }
-                      }}
-                      type="button"
+                      onConfirm={() => onOllamaDelete(profile.profile_id)}
                     >
                       {copy.deleteModel}
-                    </button>
+                    </ConfirmButton>
                   </>
                 )}
               <details className="model-card__technical">

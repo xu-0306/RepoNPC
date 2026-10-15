@@ -1,5 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
+
+import { Button, Dialog, DialogTrigger, Popover } from "react-aria-components";
+
+import "./guidedAnalysis.css";
 
 import type { Locale } from "../../i18n/messages";
 import {
@@ -19,6 +23,7 @@ import {
   type AdminWorkspaceStatus,
 } from "./AdminStatusCards";
 import { OnboardingStepper } from "./OnboardingStepper";
+import { ConfirmButton } from "./ConfirmDialog";
 import { CheckboxField } from "./CheckboxField";
 import type { ClaimKind } from "./ClaimEditor";
 
@@ -119,22 +124,14 @@ type Copy = {
   back: string;
   editSelection: string;
   startOver: string;
-  startOverConfirm: string;
+  startOverTitle: string;
+  startOverDescription: string;
   navigationBlockedByBatch: string;
   factsHeading: string;
-  factsDescription: string;
-  noFacts: string;
   inferenceHeading: string;
   inferenceDescription: string;
+  inferencePrivacy: string;
   noInferences: string;
-  inferenceBadge: string;
-  sourcesLabel: (count: number) => string;
-  otherFacts: string;
-  missingSources: string;
-  technicalDetails: string;
-  fullInterpretation: string;
-  analysisVersion: string;
-  skipped: (count: number) => string;
   contributionsHeading: string;
   contributionsDescription: string;
   ownerStatementLabel: string;
@@ -307,24 +304,15 @@ const COPY: Record<Locale, Copy> = {
     back: "返回",
     editSelection: "編輯專案選擇",
     startOver: "重新開始",
-    startOverConfirm: "重新開始會清除目前尚未儲存的引導內容。確定繼續嗎？",
+    startOverTitle: "重新開始？",
+    startOverDescription: "這會清除目前尚未儲存的引導內容。",
     navigationBlockedByBatch:
       "目前批次分析仍在執行。請先在下方取消批次，等待狀態更新後再返回、編輯選擇或重新開始。",
     factsHeading: "專案中可確認的資訊",
-    factsDescription: "直接來自已固定 commit 的專案內容；不代表個人貢獻。",
-    noFacts: "沒有可顯示的專案中可確認資訊。",
-    inferenceHeading: "AI 推論",
-    inferenceDescription:
-      "AI 根據參考依據提出的推論；不會自動成為你已確認的個人貢獻。",
+    inferenceHeading: "專案重點",
+    inferenceDescription: "AI 整理，僅供你參考",
+    inferencePrivacy: "不會公開，也不會自動寫進作品集。",
     noInferences: "沒有 AI 推論。",
-    inferenceBadge: "AI 整理・尚未確認",
-    sourcesLabel: (count) => `查看專案依據（${count} 個來源）`,
-    otherFacts: "其他可核對的專案內容",
-    missingSources: "部分參考依據未包含在這份結果中，請勿視為已核對。",
-    technicalDetails: "技術識別資訊",
-    fullInterpretation: "閱讀完整解讀",
-    analysisVersion: "分析版本（commit）",
-    skipped: (count) => `已略過 ${count} 個不符合安全規則的項目`,
     contributionsHeading: "你對這個專案的貢獻",
     contributionsDescription:
       "請用自己的話描述工作與不應歸屬給你的內容。AI 建議只是草稿，必須由你確認或編輯。",
@@ -520,28 +508,16 @@ const COPY: Record<Locale, Copy> = {
     back: "Back",
     editSelection: "Edit project selection",
     startOver: "Start over",
-    startOverConfirm:
-      "Starting over clears the unsaved guided setup. Continue?",
+    startOverTitle: "Start over?",
+    startOverDescription: "This clears the unsaved guided setup.",
     navigationBlockedByBatch:
       "A batch analysis is still running. Cancel it below and wait for the status update before going back, editing the selection, or starting over.",
     factsHeading: "Project information you can verify",
-    factsDescription:
-      "Directly observed at the pinned commit; it does not prove personal contribution.",
-    noFacts: "No verifiable project information to display.",
-    inferenceHeading: "AI inferences",
-    inferenceDescription:
-      "AI suggestions grounded in supporting information; they never become your confirmed contribution automatically.",
+    inferenceHeading: "Highlights",
+    inferenceDescription: "AI summary, for your reference",
+    inferencePrivacy:
+      "Never public, never added to your portfolio automatically.",
     noInferences: "No AI inferences.",
-    inferenceBadge: "AI interpretation · unconfirmed",
-    sourcesLabel: (count) =>
-      `View project evidence (${count} ${count === 1 ? "source" : "sources"})`,
-    otherFacts: "Other verifiable project content",
-    missingSources:
-      "Some supporting evidence is missing from this result. It has not been verified here.",
-    technicalDetails: "Technical identifiers",
-    fullInterpretation: "Read the full interpretation",
-    analysisVersion: "Analyzed version (commit)",
-    skipped: (count) => `${count} items were skipped by safety rules`,
     contributionsHeading: "Your contribution to this project",
     contributionsDescription:
       "Describe your work and boundaries in your own words. AI suggestions are drafts that require explicit confirmation or editing.",
@@ -779,85 +755,91 @@ function providerDisplayName(
   return locale === "zh-TW" ? "尚未設定" : "Not configured";
 }
 
-function EvidenceFact({ fact, copy }: { fact: RepositoryFact; copy: Copy }) {
-  const location =
-    fact.start_line === null
-      ? fact.path
-      : `${fact.path}:${fact.start_line}${
-          fact.end_line && fact.end_line !== fact.start_line
-            ? `-${fact.end_line}`
-            : ""
-        }`;
-  return (
-    <li
-      className="guided-onboarding__source"
-      data-evidence-class="REPOSITORY_FACT"
-    >
-      <strong>{location}</strong>
-      <pre>{fact.excerpt}</pre>
-      <details>
-        <summary>{copy.technicalDetails}</summary>
-        <code>{fact.evidence_id}</code>
-      </details>
-    </li>
-  );
+function sourceLocation(fact: RepositoryFact): string {
+  return fact.start_line === null
+    ? fact.path
+    : `${fact.path}:${fact.start_line}${
+        fact.end_line && fact.end_line !== fact.start_line
+          ? `-${fact.end_line}`
+          : ""
+      }`;
 }
 
-function EvidenceInference({
+export function AnalysisHighlight({
   inference,
   locale,
   facts,
-  copy,
 }: {
   inference: ModelInference;
   locale: Locale;
   facts: RepositoryFact[];
-  copy: Copy;
 }) {
-  const statement = localized(inference.statement, locale);
-  const longStatement = statement.length > 240;
-  const missingSources = inference.supporting_evidence_ids.some(
-    (id) => !facts.some((fact) => fact.evidence_id === id),
-  );
+  const [expanded, setExpanded] = useState(false);
+  const bodyId = useId();
+  const firstSource = facts[0];
+  const missingSources =
+    facts.length < new Set(inference.supporting_evidence_ids).size;
   return (
     <li
-      className="guided-onboarding__interpretation"
+      className="guided-analysis__highlight"
       data-evidence-class="MODEL_INFERENCE"
     >
-      <p className="guided-onboarding__interpretation-badge">
-        {copy.inferenceBadge}
-      </p>
-      <div className="guided-onboarding__interpretation-text">
-        <p
-          className={
-            longStatement
-              ? "guided-onboarding__interpretation-preview"
-              : undefined
-          }
+      <div className="guided-analysis__row">
+        <button
+          className="guided-analysis__toggle"
+          aria-expanded={expanded}
+          aria-controls={bodyId}
+          onClick={() => setExpanded(!expanded)}
+          type="button"
         >
-          {statement}
-        </p>
-        {longStatement && (
-          <details>
-            <summary>{copy.fullInterpretation}</summary>
-            <p>{statement}</p>
-          </details>
+          {localized(inference.title, locale)}
+        </button>
+        {firstSource && (
+          <div className="guided-analysis__source-chip">
+            <a
+              href={firstSource.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={sourceLocation(firstSource)}
+            >
+              {firstSource.path.split("/").pop()}{" "}
+              <span aria-hidden="true">↗</span>
+              <span className="visually-hidden">
+                {locale === "zh-TW"
+                  ? "（在新分頁開啟 GitHub）"
+                  : " (opens GitHub in a new tab)"}
+              </span>
+            </a>
+            {facts.length > 1 && (
+              <span className="guided-analysis__more">+{facts.length - 1}</span>
+            )}
+          </div>
         )}
       </div>
-      <details className="guided-onboarding__sources">
-        <summary>{copy.sourcesLabel(facts.length)}</summary>
-        <p>{copy.factsDescription}</p>
-        {facts.length > 0 ? (
-          <ul>
-            {facts.map((fact) => (
-              <EvidenceFact fact={fact} copy={copy} key={fact.evidence_id} />
-            ))}
-          </ul>
-        ) : (
-          <p>{copy.noFacts}</p>
+      <div className="guided-analysis__body" id={bodyId} hidden={!expanded}>
+        <p>{localized(inference.statement, locale)}</p>
+        <ul>
+          {facts.map((fact) => (
+            <li key={fact.evidence_id} data-evidence-class="REPOSITORY_FACT">
+              <a href={fact.url} target="_blank" rel="noopener noreferrer">
+                {sourceLocation(fact)} <span aria-hidden="true">↗</span>
+                <span className="visually-hidden">
+                  {locale === "zh-TW"
+                    ? "（在新分頁開啟 GitHub）"
+                    : " (opens GitHub in a new tab)"}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+        {missingSources && (
+          <p className="guided-analysis__missing">
+            {locale === "zh-TW"
+              ? "部分出處不在這次結果中，請勿視為已核對。"
+              : "Some sources are not in this result; do not treat them as verified."}
+          </p>
         )}
-        {missingSources && <p>{copy.missingSources}</p>}
-      </details>
+      </div>
     </li>
   );
 }
@@ -873,36 +855,54 @@ function EvidenceGroups({
 }) {
   const analysis = repository.analysis;
   if (!analysis) return null;
-  const citedIds = new Set(
-    analysis.inferences.flatMap(
-      (inference) => inference.supporting_evidence_ids,
-    ),
-  );
-  const otherFacts = analysis.facts.filter(
-    (fact) => !citedIds.has(fact.evidence_id),
-  );
   return (
-    <div className="guided-onboarding__evidence-groups">
-      <p className="guided-onboarding__analysis-version">
-        {copy.analysisVersion}: <code>{analysis.repository.commit_sha}</code>
-      </p>
+    <>
+      <div className="guided-analysis__repo">
+        <h3>{repository.metadata.slug}</h3>
+        {repository.metadata.primary_language && (
+          <span className="guided-analysis__chip">
+            {repository.metadata.primary_language}
+          </span>
+        )}
+        <code className="guided-analysis__chip">
+          {analysis.repository.commit_sha.slice(0, 7)}
+        </code>
+      </div>
       <section
+        className="guided-analysis__highlights"
         aria-labelledby={`guided-inferences-${repository.metadata.slug}`}
       >
         <h4 id={`guided-inferences-${repository.metadata.slug}`}>
           {copy.inferenceHeading}
         </h4>
-        <p>{copy.inferenceDescription}</p>
+        <div className="guided-analysis__note">
+          <p>{copy.inferenceDescription}</p>
+          <DialogTrigger>
+            <Button
+              className="guided-analysis__info"
+              aria-label={copy.inferenceDescription}
+            >
+              ⓘ
+            </Button>
+            <Popover
+              className="guided-analysis__popover"
+              placement="bottom start"
+            >
+              <Dialog aria-label={copy.inferenceDescription} lang={locale}>
+                <p>{copy.inferencePrivacy}</p>
+              </Dialog>
+            </Popover>
+          </DialogTrigger>
+        </div>
         {analysis.inferences.length > 0 ? (
-          <ul>
+          <ul className="guided-analysis__list">
             {analysis.inferences.map((inference, index) => (
-              <EvidenceInference
+              <AnalysisHighlight
                 inference={inference}
                 key={`${repository.metadata.slug}-inference-${index}`}
                 locale={locale}
-                copy={copy}
-                facts={analysis.facts.filter((fact) =>
-                  inference.supporting_evidence_ids.includes(fact.evidence_id),
+                facts={inference.supporting_evidence_ids.flatMap((id) =>
+                  analysis.facts.filter((fact) => fact.evidence_id === id),
                 )}
               />
             ))}
@@ -911,23 +911,7 @@ function EvidenceGroups({
           <p>{copy.noInferences}</p>
         )}
       </section>
-      {otherFacts.length > 0 && (
-        <details className="guided-onboarding__sources">
-          <summary>
-            {copy.otherFacts} ({otherFacts.length})
-          </summary>
-          <p>{copy.factsDescription}</p>
-          <ul>
-            {otherFacts.map((fact) => (
-              <EvidenceFact fact={fact} copy={copy} key={fact.evidence_id} />
-            ))}
-          </ul>
-        </details>
-      )}
-      {analysis.facts.length === 0 && analysis.inferences.length === 0 && (
-        <p>{copy.noFacts}</p>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -945,16 +929,15 @@ function BatchAnalysisResults({
   return (
     <section
       aria-label={copy.factsHeading}
-      className="guided-onboarding__results"
+      className="guided-analysis__results"
     >
       <ul>
         {completed.map((repository) => (
           <li
-            className="guided-onboarding__repository"
+            className="guided-analysis__repository"
             data-analysis-result={repository.metadata.slug}
             key={repository.metadata.slug}
           >
-            <h3>{repository.metadata.slug}</h3>
             <EvidenceGroups
               copy={copy}
               locale={locale}
@@ -970,27 +953,18 @@ function BatchAnalysisResults({
 function RepositoryRow({
   repository,
   state,
-  locale,
   copy,
   busy,
   onAction,
-  onAnalyze,
 }: {
   repository: GuidedRepository;
   state: GuidedOnboardingState;
-  locale: Locale;
   copy: Copy;
   busy: boolean;
   onAction: GuidedOnboardingViewProps["onAction"];
-  onAnalyze: GuidedOnboardingViewProps["onAnalyze"];
 }) {
   const slugId = repository.metadata.slug.replace(/[^a-zA-Z0-9_-]/g, "-");
   const selectionLocked = state.selectionConfirmed;
-  const reason = analysisButtonReason(repository, state, copy, busy);
-  const disabled = reason !== null || !repository.selected;
-  const disabledMessage = !repository.selected
-    ? copy.disabledNoSelection
-    : reason;
 
   function optionChange(
     field: "ref" | "include" | "exclude",
@@ -1100,43 +1074,6 @@ function RepositoryRow({
         </details>
       )}
       {selectionLocked && <p>{copy.selectionLocked}</p>}
-      {state.step === "analysis" && (
-        <div className="guided-onboarding__analysis-action">
-          <button
-            aria-describedby={
-              disabledMessage ? `guided-analysis-reason-${slugId}` : undefined
-            }
-            disabled={disabled}
-            onClick={() => onAnalyze(repository.metadata.slug)}
-            type="button"
-          >
-            {repository.analysisStatus === "running"
-              ? copy.analyzing
-              : repository.analysisStatus === "complete"
-                ? copy.retryAnalysis
-                : repository.analysisStatus === "unavailable"
-                  ? copy.retryAnalysis
-                  : copy.analyze}
-          </button>
-          {disabledReason(
-            disabledMessage ?? null,
-            `guided-analysis-reason-${slugId}`,
-          )}
-          {repository.analysisStatus === "complete" && (
-            <p role="status">{copy.analyzed}</p>
-          )}
-          {repository.analysisStatus === "unavailable" && (
-            <p role="alert">{copy.unavailable}</p>
-          )}
-          {analysisReady(repository) && (
-            <EvidenceGroups
-              copy={copy}
-              locale={locale}
-              repository={repository}
-            />
-          )}
-        </div>
-      )}
     </li>
   );
 }
@@ -1621,7 +1558,6 @@ function ModelsStep({
 function RepositoriesStep({
   state,
   copy,
-  locale,
   busy,
   onAction,
   onDiscover,
@@ -1629,7 +1565,6 @@ function RepositoriesStep({
 }: {
   state: GuidedOnboardingState;
   copy: Copy;
-  locale: Locale;
   busy: boolean;
   onAction: GuidedOnboardingViewProps["onAction"];
   onDiscover: GuidedOnboardingViewProps["onDiscover"];
@@ -1749,9 +1684,7 @@ function RepositoriesStep({
                 busy={busy}
                 copy={copy}
                 key={repository.metadata.slug}
-                locale={locale}
                 onAction={onAction}
-                onAnalyze={() => undefined}
                 repository={repository}
                 state={state}
               />
@@ -1880,10 +1813,46 @@ function AnalysisStep({
     : hasActiveBatch || hasRunning
       ? copy.disabledAnalysisRunning
       : null;
+  const analysisActions =
+    !hasBatchAnalysis &&
+    repositories.map((repository) => {
+      const slugId = repository.metadata.slug.replace(/[^a-zA-Z0-9_-]/g, "-");
+      const reason = analysisButtonReason(repository, state, copy, busy);
+      const disabled = reason !== null || !repository.selected;
+      const disabledMessage = !repository.selected
+        ? copy.disabledNoSelection
+        : reason;
+
+      return (
+        <div className="guided-analysis__retry" key={repository.metadata.slug}>
+          {repositories.length > 1 && <span>{repository.metadata.slug}</span>}
+          <button
+            aria-describedby={
+              disabledMessage ? `guided-analysis-reason-${slugId}` : undefined
+            }
+            disabled={disabled}
+            onClick={() => onAnalyze(repository.metadata.slug)}
+            type="button"
+          >
+            {repository.analysisStatus === "running"
+              ? copy.analyzing
+              : repository.analysisStatus === "complete"
+                ? copy.retryAnalysis
+                : repository.analysisStatus === "unavailable"
+                  ? copy.retryAnalysis
+                  : copy.analyze}
+          </button>
+          {disabledReason(
+            disabledMessage ?? null,
+            `guided-analysis-reason-${slugId}`,
+          )}
+        </div>
+      );
+    });
   return (
     <section
       aria-labelledby="guided-analysis-heading"
-      className="guided-onboarding__step"
+      className="guided-onboarding__step guided-analysis"
     >
       <h2 id="guided-analysis-heading">
         {allTerminal && !hasActiveBatch && repositories.some(analysisReady)
@@ -1939,18 +1908,29 @@ function AnalysisStep({
             status={providerStatus}
           />
           {repositories.length > 0 ? (
-            <ul>
+            <ul className="guided-analysis__repositories">
               {repositories.map((repository) => (
-                <RepositoryRow
-                  busy={busy}
-                  copy={copy}
+                <li
+                  className="guided-analysis__repository"
+                  data-analysis-result={repository.metadata.slug}
                   key={repository.metadata.slug}
-                  locale={locale}
-                  onAction={onAction}
-                  onAnalyze={onAnalyze}
-                  repository={repository}
-                  state={state}
-                />
+                >
+                  {analysisReady(repository) ? (
+                    <EvidenceGroups
+                      copy={copy}
+                      locale={locale}
+                      repository={repository}
+                    />
+                  ) : (
+                    <h3>{repository.metadata.slug}</h3>
+                  )}
+                  {repository.analysisStatus === "complete" && (
+                    <p role="status">{copy.analyzed}</p>
+                  )}
+                  {repository.analysisStatus === "unavailable" && (
+                    <p role="alert">{copy.unavailable}</p>
+                  )}
+                </li>
               ))}
             </ul>
           ) : (
@@ -1970,19 +1950,22 @@ function AnalysisStep({
           )}
         </>
       )}
-      <button
-        aria-describedby={
-          continueReason ? "guided-analysis-continue-reason" : undefined
-        }
-        disabled={Boolean(continueReason)}
-        onClick={() => onAction({ type: "CONTINUE_TO_CONTRIBUTIONS" })}
-        className="ux-primary"
-        type="button"
-      >
-        {allTerminal || batchAnalysisTerminal
-          ? copy.continueContributions
-          : copy.continueManually}
-      </button>
+      <div className="guided-analysis__actions">
+        <button
+          aria-describedby={
+            continueReason ? "guided-analysis-continue-reason" : undefined
+          }
+          disabled={Boolean(continueReason)}
+          onClick={() => onAction({ type: "CONTINUE_TO_CONTRIBUTIONS" })}
+          className="ux-primary"
+          type="button"
+        >
+          {allTerminal || batchAnalysisTerminal
+            ? copy.continueContributions
+            : copy.continueManually}
+        </button>
+        {analysisActions}
+      </div>
       {disabledReason(continueReason, "guided-analysis-continue-reason")}
     </section>
   );
@@ -2564,22 +2547,25 @@ export function GuidedOnboardingView({
                   {copy.editSelection}
                 </button>
               )}
-              <button
+              <ConfirmButton
                 aria-describedby={
                   navigationBatchActive
                     ? "guided-navigation-batch-reason"
                     : undefined
                 }
                 disabled={busy || navigationBatchActive}
-                onClick={() => {
-                  if (window.confirm(copy.startOverConfirm)) {
+                locale={locale}
+                title={copy.startOverTitle}
+                description={copy.startOverDescription}
+                confirmLabel={copy.startOver}
+                destructive
+                onConfirm={() => {
+                  if (!busy && !navigationBatchActive)
                     onAction({ type: "RESET" });
-                  }
                 }}
-                type="button"
               >
                 {copy.startOver}
-              </button>
+              </ConfirmButton>
             </details>
             {navigationBatchActive && (
               <p
@@ -2653,7 +2639,6 @@ export function GuidedOnboardingView({
             <RepositoriesStep
               busy={busy}
               copy={copy}
-              locale={locale}
               onAction={onAction}
               onDiscover={onDiscover}
               onResolve={onResolve}

@@ -19,6 +19,7 @@ from reponpc.admin.onboarding import (
     _analysis_messages,
     _analysis_response_schema,
     _parse_analysis,
+    _parse_contribution,
 )
 from reponpc.chat.limits import ChatLimits
 from reponpc.indexing.exclusions import SourceEntryKind
@@ -188,6 +189,7 @@ class FakeChat:
             content = {
                 "inferences": [
                     {
+                        "title": {"zh-TW": "架構重點", "en": "Architecture highlight"},
                         "statement": {
                             "zh-TW": "此儲存庫包含架構說明",
                             "en": "The repository contains an architecture overview",
@@ -675,6 +677,13 @@ def test_analysis_prompt_enforces_exact_json_contract_and_server_owned_ids() -> 
     assert statements["en"] == {"type": "string", "minLength": 1, "maxLength": 2000}
     assert evidence_ids["minItems"] == 1
     assert evidence_ids["maxItems"] == 8
+    assert inference["required"] == ["title", "statement", "supporting_evidence_ids"]
+    titles = inference["properties"]["title"]["properties"]
+    assert titles["zh-TW"] == {"type": "string", "minLength": 1, "maxLength": 24}
+    assert titles["en"] == {"type": "string", "minLength": 1, "maxLength": 80}
+    assert "`title` is a short headline" in system
+    assert "Write `zh-TW` values in Traditional Chinese and `en` values in English" in system
+    assert '"title":{"zh-TW":' in system
 
 
 @pytest.mark.parametrize(
@@ -685,6 +694,7 @@ def test_analysis_prompt_enforces_exact_json_contract_and_server_owned_ids() -> 
             {
                 "inferences": [
                     {
+                        "title": {"zh-TW": "架構重點", "en": "Architecture highlight"},
                         "statement": {"zh-TW": "架構摘要", "en": "Architecture summary"},
                         "supporting_evidence_ids": ["E_unknown"],
                     }
@@ -697,6 +707,7 @@ def test_analysis_prompt_enforces_exact_json_contract_and_server_owned_ids() -> 
             {
                 "inferences": [
                     {
+                        "title": {"zh-TW": "架構重點", "en": "Architecture highlight"},
                         "statement": {"zh-TW": "架構摘要", "en": "I led this project"},
                         "supporting_evidence_ids": ["E_allowed"],
                     }
@@ -711,7 +722,7 @@ def test_analysis_validation_reports_safe_failure_reason(
     content: dict[str, object], selected: frozenset[str], reason: str
 ) -> None:
     with pytest.raises(GuidedOnboardingError) as error:
-        _parse_analysis(content, selected)
+        _parse_analysis(content, selected, "")
 
     assert error.value.code == "PROVIDER_ERROR"
     assert error.value.reason == reason
@@ -736,12 +747,14 @@ def test_analysis_person_policy_allows_nonhuman_technical_subjects(zh_tw: str, e
         {
             "inferences": [
                 {
+                    "title": {"zh-TW": "架構重點", "en": "Architecture highlight"},
                     "statement": {"zh-TW": zh_tw, "en": en},
                     "supporting_evidence_ids": ["E_allowed"],
                 }
             ]
         },
         frozenset({"E_allowed"}),
+        "",
     )
 
     assert envelope.inferences[0].statement.zh_tw == zh_tw
@@ -778,16 +791,233 @@ def test_analysis_person_policy_rejects_explicit_person_attribution(zh_tw: str, 
             {
                 "inferences": [
                     {
+                        "title": {"zh-TW": "架構重點", "en": "Architecture highlight"},
                         "statement": {"zh-TW": zh_tw, "en": en},
                         "supporting_evidence_ids": ["E_allowed"],
                     }
                 ]
             },
             frozenset({"E_allowed"}),
+            "",
         )
 
     assert error.value.code == "PROVIDER_ERROR"
     assert error.value.reason == "PROVIDER_PERSONAL_INFERENCE_REJECTED"
+
+
+def _analysis_content(
+    zh_tw: str,
+    en: str,
+    *,
+    title_zh_tw: str = "架構重點",
+    title_en: str = "Architecture highlight",
+) -> dict[str, object]:
+    return {
+        "inferences": [
+            {
+                "title": {"zh-TW": title_zh_tw, "en": title_en},
+                "statement": {"zh-TW": zh_tw, "en": en},
+                "supporting_evidence_ids": ["E_allowed"],
+            }
+        ]
+    }
+
+
+@pytest.mark.parametrize(
+    ("zh_tw", "en", "source"),
+    [
+        pytest.param(
+            "反硬編碼技能 предназнач於邊界上",
+            "Anti-hardcode skills apply at boundaries",
+            "# Engineering Guardrails\nSkills for coding agents.",
+            id="cyrillic-word-in-chinese",
+        ),
+        pytest.param("架構摘要", "Архитектура overview", "", id="cyrillic-word-in-english"),
+        pytest.param("使用 キャッシュ 層", "Uses a cache layer", "cache layer", id="kana"),
+        pytest.param("架構摘要", "Uses the 캐시 layer", "", id="hangul"),
+        pytest.param("架構摘要", "Reads the 設定 file", "settings file", id="han-in-english"),
+    ],
+)
+def test_analysis_rejects_words_in_a_writing_system_neither_locale_nor_source_uses(
+    zh_tw: str, en: str, source: str
+) -> None:
+    with pytest.raises(GuidedOnboardingError) as error:
+        _parse_analysis(_analysis_content(zh_tw, en), frozenset({"E_allowed"}), source)
+
+    assert error.value.code == "PROVIDER_ERROR"
+    assert error.value.reason == "PROVIDER_OUTPUT_SCHEMA_INVALID"
+
+
+@pytest.mark.parametrize(
+    ("zh_tw", "en", "source"),
+    [
+        pytest.param(
+            "說明位於 docs/читать.md",
+            "The guide lives in docs/читать.md",
+            "path=docs/читать.md",
+            id="russian-repository-file-name",
+        ),
+        pytest.param(
+            "介面以「Привет」問候使用者",
+            "The interface greets users with «Привет»",
+            "print('Привет')",
+            id="russian-repository-text",
+        ),
+        pytest.param(
+            "部署說明在 設定.md",
+            "Deployment notes are in 設定.md",
+            "path=設定.md",
+            id="english-quotes-grounded-han",
+        ),
+        pytest.param(
+            "延遲低於 5 μs，並使用 λ 函式",  # noqa: RUF001 - deliberate fullwidth comma
+            "Latency stays under 5 μs with a λ function",
+            "",
+            id="single-letter-symbols",
+        ),
+        pytest.param(
+            "全形ＡＢＣ與 snake_case、getUserID",
+            "Fullwidth ＡＢＣ, snake_case and getUserID",  # noqa: RUF001 - deliberate fullwidth letters
+            "",
+            id="fullwidth-and-identifiers",
+        ),
+        pytest.param("日々更新 🎉", "Updated daily 🎉", "", id="modifier-letter-and-emoji"),
+        pytest.param("ㄅㄆㄇ 注音標示", "Bopomofo labels", "", id="bopomofo"),
+    ],
+)
+def test_analysis_accepts_writing_systems_from_the_locale_or_the_source(
+    zh_tw: str, en: str, source: str
+) -> None:
+    envelope = _parse_analysis(_analysis_content(zh_tw, en), frozenset({"E_allowed"}), source)
+
+    assert envelope.inferences[0].statement.zh_tw == zh_tw
+    assert envelope.inferences[0].statement.en == en
+
+
+@pytest.mark.parametrize(
+    ("content", "reason"),
+    [
+        pytest.param(
+            _analysis_content("架構摘要", "Summary", title_zh_tw="架構 обзор"),
+            "PROVIDER_OUTPUT_SCHEMA_INVALID",
+            id="ungrounded-title",
+        ),
+        pytest.param(
+            _analysis_content("架構摘要", "Summary", title_en="I led the parser"),
+            "PROVIDER_PERSONAL_INFERENCE_REJECTED",
+            id="personal-title",
+        ),
+        pytest.param(
+            _analysis_content("架構摘要", "Summary", title_zh_tw="長" * 25),
+            "PROVIDER_OUTPUT_SCHEMA_INVALID",
+            id="title-over-limit",
+        ),
+        pytest.param(
+            {
+                "inferences": [
+                    {
+                        "statement": {"zh-TW": "架構摘要", "en": "Summary"},
+                        "supporting_evidence_ids": ["E_allowed"],
+                    }
+                ]
+            },
+            "PROVIDER_OUTPUT_SCHEMA_INVALID",
+            id="missing-title",
+        ),
+    ],
+)
+def test_analysis_titles_pass_the_same_output_checks_as_statements(
+    content: dict[str, object], reason: str
+) -> None:
+    with pytest.raises(GuidedOnboardingError) as error:
+        _parse_analysis(content, frozenset({"E_allowed"}), "")
+
+    assert error.value.reason == reason
+
+
+def _proposal(role: str, summary: str, claim: str) -> dict[str, object]:
+    return {
+        "role": {"zh-TW": role, "en": "Co-maintainer"},
+        "summary": {"zh-TW": summary, "en": "Maintained public modules"},
+        "claims": [
+            {
+                "id": "demo_context",
+                "kind": "context",
+                "statement": {"zh-TW": claim, "en": "Structured from the original statement"},
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    "proposal",
+    [
+        pytest.param(_proposal("共同 предназнач", "維護公開模組", "依照原始說明整理"), id="role"),
+        pytest.param(_proposal("共同維護者", "維護 предназнач", "依照原始說明整理"), id="summary"),
+        pytest.param(_proposal("共同維護者", "維護公開模組", "依照 предназнач"), id="claim"),
+    ],
+)
+def test_contribution_rejects_ungrounded_writing_system_in_every_field(
+    proposal: dict[str, object],
+) -> None:
+    with pytest.raises(GuidedOnboardingError) as error:
+        _parse_contribution(proposal, "Repository: octocat/demo\n我維護公開模組")
+
+    assert error.value.reason == "PROVIDER_OUTPUT_SCHEMA_INVALID"
+
+
+def test_contribution_accepts_writing_system_from_the_owner_statement() -> None:
+    proposal = _parse_contribution(
+        _proposal("共同維護者", "維護「Привет」問候模組", "依照原始說明整理"),
+        "Repository: octocat/demo\n我維護 Привет 問候模組",
+    )
+
+    assert proposal.summary.zh_tw == "維護「Привет」問候模組"
+
+
+def test_analysis_service_rejects_ungrounded_writing_system_without_retry(
+    tmp_path: Path,
+) -> None:
+    chat = FakeChat()
+    service, _database, _resolver, _chat = _service(tmp_path, chat=chat)
+    original_generate = chat.generate
+
+    def generate(messages, response_schema, max_output_tokens, timeout):
+        result = original_generate(messages, response_schema, max_output_tokens, timeout)
+        evidence_ids = re.findall(r"persistent_id=(E_[0-9a-f]+)", messages[-1].content)
+        return ProviderResult(
+            {
+                "inferences": [
+                    {
+                        "title": {"zh-TW": "架構重點", "en": "Architecture highlight"},
+                        "statement": {
+                            "zh-TW": "此儲存庫 предназнач 架構說明",
+                            "en": "The repository contains an architecture overview",
+                        },
+                        "supporting_evidence_ids": [evidence_ids[0]],
+                    }
+                ]
+            },
+            result.finish_reason,
+            None,
+            None,
+            result.duration_ms,
+        )
+
+    chat.generate = generate  # type: ignore[method-assign]
+
+    with pytest.raises(GuidedOnboardingError) as error:
+        service.analyze_repository(
+            session_hash="session-a",
+            slug="octocat/demo",
+            ref=None,
+            include=(),
+            exclude=(),
+            cancel_requested=threading.Event(),
+        )
+
+    assert error.value.reason == "PROVIDER_OUTPUT_SCHEMA_INVALID"
+    assert chat.calls == 1
 
 
 def test_analysis_service_accepts_technical_responsibility_without_retry(
@@ -804,6 +1034,7 @@ def test_analysis_service_accepts_technical_responsibility_without_retry(
             {
                 "inferences": [
                     {
+                        "title": {"zh-TW": "架構重點", "en": "Architecture highlight"},
                         "statement": {
                             "zh-TW": "模組負責轉換音訊",
                             "en": "The module is responsible for audio conversion.",
@@ -845,6 +1076,7 @@ def test_analysis_service_rejects_person_attribution_without_retry(tmp_path: Pat
             {
                 "inferences": [
                     {
+                        "title": {"zh-TW": "架構重點", "en": "Architecture highlight"},
                         "statement": {
                             "zh-TW": "作者主導架構",
                             "en": "The author led the architecture work.",

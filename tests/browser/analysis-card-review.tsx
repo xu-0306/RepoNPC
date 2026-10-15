@@ -19,20 +19,20 @@ function Review() {
       analysis: {
         repository: { slug: "example/evidence-browser", commit_sha: "a".repeat(40), default_branch: "main", html_url: "https://github.com/example/evidence-browser" },
         facts: [
-          { evidence_class: "REPOSITORY_FACT", evidence_id: "E_parser", path: "src/parser.ts", start_line: 4, end_line: 12, excerpt: 'export function parse(input: string) {\n  return validate(input);\n}\n// <script>alert("untrusted")</script>' },
-          { evidence_class: "REPOSITORY_FACT", evidence_id: "E_docs", path: "docs/" + "long-path-".repeat(16) + "/guide.md", start_line: 10, end_line: 18, excerpt: "Documented project behavior. ".repeat(20) },
-          { evidence_class: "REPOSITORY_FACT", evidence_id: "E_other", path: "LICENSE", start_line: null, end_line: null, excerpt: "Synthetic license content." },
+          { evidence_class: "REPOSITORY_FACT", evidence_id: "E_parser", path: "src/parser.ts", start_line: 4, end_line: 12, url: "https://github.com/example/evidence-browser/blob/" + "a".repeat(40) + "/src/parser.ts#L4-L12" },
+          { evidence_class: "REPOSITORY_FACT", evidence_id: "E_docs", path: "docs/" + "long-path-".repeat(16) + "/guide.md", start_line: 10, end_line: 18, url: "https://github.com/example/evidence-browser/blob/" + "a".repeat(40) + "/docs/" + "long-path-".repeat(16) + "/guide.md#L10-L18" },
+          { evidence_class: "REPOSITORY_FACT", evidence_id: "E_other", path: "LICENSE", start_line: null, end_line: null, url: "https://github.com/example/evidence-browser/blob/" + "a".repeat(40) + "/LICENSE" },
         ],
         inferences: [
-          { evidence_class: "MODEL_INFERENCE", statement: { "zh-TW": "這個專案提供輸入解析與驗證，讓其他功能可以共用一致的處理方式。", en: "This project provides input parsing and validation that other features can reuse." }, supporting_evidence_ids: ["E_parser"] },
-          { evidence_class: "MODEL_INFERENCE", statement: { "zh-TW": "文件描述專案如何使用解析功能，並說明使用前需要核對的條件。這些內容描述專案本身，無法證明任何人的角色或貢獻。\n".repeat(8), en: "The documentation explains how to use parsing and which conditions to check first. This describes the project and cannot establish anyone's role or contribution.\n".repeat(8) }, supporting_evidence_ids: ["E_docs"] },
+          { evidence_class: "MODEL_INFERENCE", title: { "zh-TW": "共用的輸入解析", en: "Shared input parsing" }, statement: { "zh-TW": "這個專案提供輸入解析與驗證，讓其他功能可以共用一致的處理方式。<script>alert(\"untrusted\")</script>", en: "This project provides input parsing and validation that other features can reuse. <script>alert(\"untrusted\")</script>" }, supporting_evidence_ids: ["E_parser", "E_other"] },
+          { evidence_class: "MODEL_INFERENCE", title: { "zh-TW": "文件說明使用條件", en: "Docs explain usage conditions" }, statement: { "zh-TW": "文件描述專案如何使用解析功能，並說明使用前需要核對的條件。這些內容描述專案本身，無法證明任何人的角色或貢獻。\n".repeat(8), en: "The documentation explains how to use parsing and which conditions to check first. This describes the project and cannot establish anyone's role or contribution.\n".repeat(8) }, supporting_evidence_ids: ["E_docs", "E_absent"] },
         ], skipped_summary: { count: 0, reasons: [] },
       },
       ownerStatement: "", proposal: null, confirmedContribution: null, previousContribution: null,
     }],
   }));
   return <main className="admin-workspace">
-    <h1>Analysis card browser fixture</h1>
+    <h1>Analysis highlights browser fixture</h1>
     <button type="button" onClick={() => setLocale(locale === "en" ? "zh-TW" : "en")}>中文 / English</button>
     <GuidedOnboardingView locale={locale} state={state} busy={false} errorCode="" providerStatus={null} providerStatusPending={false}
       batchAnalysisView={<p>{locale === "en" ? "Analysis complete" : "分析完成"}</p>} batchAnalysisTerminal

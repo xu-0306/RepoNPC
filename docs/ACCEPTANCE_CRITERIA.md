@@ -433,7 +433,7 @@ The following criteria are normative release requirements under the owner-approv
 
 ### AC-040 — Personal claims require confirmation and the guided flow remains usable
 
-**2026-10-07 owner-approved analysis presentation:** Existing inferences are readable unconfirmed cards; each collapsed source group contains only its matched facts, with actual paths/lines/excerpts. Long interpretations expand intact, technical IDs are secondary, and uncited facts and empty/missing-source states remain accessible. Source disclosure does not create an owner assertion or invoke generation. The single next action opens contribution entry. Verify both locales, keyboard disclosure/focus, responsive widths and confirmation isolation. This is scoped UI evidence, not full release acceptance.
+**2026-10-07 owner-approved analysis presentation (implemented 2026-10-14):** Each analyzed repository shows its slug, available primary language and pinned commit short SHA. The `Highlights` section renders one flat row per localized inference with a short title, an optional first-source GitHub chip plus count, and a keyboard-operable expand button for the localized statement and matched source permalinks. An info popover says the summary is for reference and is never public or added to the portfolio automatically. Excerpts, technical IDs and separate uncited-fact blocks are not rendered; a highlight whose cited evidence is partly absent states that in its expanded content. The final actions put `Next: describe my contribution` before `Analyze again`; reading, expanding or opening a source does not confirm an owner assertion or invoke generation. This is scoped UI evidence, not full release acceptance.
 
 **Maps to:** FR-025, FR-028, FR-018, FR-022, NFR-002, NFR-003, NFR-009
 
@@ -1006,6 +1006,15 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **When** they are requested without an owner session, from public routes, or looked for in the export,
 - **Then** they are unavailable; with a session they return `Cache-Control: no-store`, and the CSP is unchanged.
 - **Verification:** route exposure tests and an export manifest check.
+
+### AC-080 - Model writing-system validation preserves grounded bilingual analysis
+
+**Maps to:** FR-008, FR-022, FR-027, FR-028, NFR-001
+
+- **Given** model analysis or contribution output containing Traditional Chinese/English text, words from another writing system, repository source text that may contain that writing system, and both a live response and a validated cache entry,
+- **When** the backend parses the output or serves the result from cache,
+- **Then** a word in a writing system that is neither native to the output locale nor present in the request's source is rejected as `PROVIDER_ERROR` with `PROVIDER_OUTPUT_SCHEMA_INVALID` and is not retried or cached; a grounded word is accepted; required inference `title` and `statement` fields receive the same check; and live and cache-hit results expose the same validated source locations and pinned GitHub URLs without repository excerpts.
+- **Verification:** unit tests cover rejected and grounded scripts, title and contribution fields, and no-retry behavior; API/cache tests cover the identical facts and source URLs for live and cache-hit results.
 
 **0.4.0–0.4.5 traceability additions:**
 

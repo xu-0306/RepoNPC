@@ -296,41 +296,51 @@ describe("BatchAnalysisPanel", () => {
     expect(markup).not.toContain("GITHUB_RATE_LIMITED");
   });
 
-  it("shows a durable safe repository error code and validation reason", () => {
-    const markup = renderToStaticMarkup(
-      <BatchAnalysisPanel
-        {...props({
-          job: {
-            id: "batch-failed",
-            status: "failed",
-            items: [
-              {
-                id: "item-failed",
-                slug: "octocat/demo",
-                stage: "validating",
-                state: "failed",
-                retryable: true,
-                reanalyzable: false,
-                error: {
-                  scope: "repository",
-                  code: "PROVIDER_ERROR",
-                  reason: "PROVIDER_OUTPUT_SCHEMA_INVALID",
-                  requestId: "request-id-is-not-rendered",
+  it.each(["zh-TW", "en"] as const)(
+    "shows output-check failure and direct re-analysis recovery in %s",
+    (locale) => {
+      const markup = renderToStaticMarkup(
+        <BatchAnalysisPanel
+          {...props({
+            locale,
+            job: {
+              id: "batch-failed",
+              status: "failed",
+              items: [
+                {
+                  id: "item-failed",
+                  slug: "octocat/demo",
+                  stage: "validating",
+                  state: "failed",
+                  retryable: true,
+                  reanalyzable: false,
+                  error: {
+                    scope: "repository",
+                    code: "PROVIDER_ERROR",
+                    reason: "PROVIDER_OUTPUT_SCHEMA_INVALID",
+                    requestId: "request-id-is-not-rendered",
+                  },
                 },
-              },
-            ],
-          },
-        })}
-      />,
-    );
+              ],
+            },
+          })}
+        />,
+      );
 
-    expect(markup).toContain("Error code");
-    expect(markup).toContain("PROVIDER_ERROR");
-    expect(markup).toContain("Failure reason");
-    expect(markup).toContain("PROVIDER_OUTPUT_SCHEMA_INVALID");
-    expect(markup).toContain("did not match the analysis JSON schema");
-    expect(markup).not.toContain("request-id-is-not-rendered");
-  });
+      expect(markup).toContain(locale === "en" ? "Error code" : "錯誤代碼");
+      expect(markup).toContain("PROVIDER_ERROR");
+      expect(markup).toContain(locale === "en" ? "Failure reason" : "失敗原因");
+      expect(markup).toContain("PROVIDER_OUTPUT_SCHEMA_INVALID");
+      expect(markup).toContain(
+        locale === "en"
+          ? "The model reply did not pass output checks (format or language mismatch). The result was not used; you can run re-analysis directly."
+          : "模型回覆沒有通過輸出檢查（格式或語言不一致），結果未被採用；可直接重新分析。",
+      );
+      expect(markup).not.toContain("Verify structured-output support");
+      expect(markup).not.toContain("請確認模型支援結構化輸出");
+      expect(markup).not.toContain("request-id-is-not-rendered");
+    },
+  );
 
   it.each([
     ["zh-TW", "模型因輸出 token 上限停止", "繼續手動編輯"],

@@ -1206,7 +1206,7 @@ function repositoryErrorMessage(
       NO_ELIGIBLE_CONTENT:
         "找不到符合收錄規則的可分析來源檔案；請調整 include/exclude 後重新分析。",
       PROVIDER_OUTPUT_SCHEMA_INVALID:
-        "聊天模型已回覆，但內容不符合分析 JSON 格式；請確認模型支援結構化輸出後重試。",
+        "模型回覆沒有通過輸出檢查（格式或語言不一致），結果未被採用；可直接重新分析。",
       PROVIDER_OUTPUT_LIMIT_REACHED:
         "模型因輸出 token 上限停止，分析尚未完成；請檢查分析上限與模型容量後重試，或繼續手動編輯。",
       PROVIDER_EVIDENCE_ID_INVALID:
@@ -1218,7 +1218,7 @@ function repositoryErrorMessage(
       NO_ELIGIBLE_CONTENT:
         "No analyzable source matched the include/exclude rules. Adjust the rules and run analysis again.",
       PROVIDER_OUTPUT_SCHEMA_INVALID:
-        "The chat model replied, but its content did not match the analysis JSON schema. Verify structured-output support and try again.",
+        "The model reply did not pass output checks (format or language mismatch). The result was not used; you can run re-analysis directly.",
       PROVIDER_OUTPUT_LIMIT_REACHED:
         "The model stopped at its output token limit before analysis completed. Check the analysis limit and model capacity, then retry or continue editing manually.",
       PROVIDER_EVIDENCE_ID_INVALID:

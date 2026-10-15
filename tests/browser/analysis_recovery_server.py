@@ -243,6 +243,7 @@ class FixtureChat:
             {
                 "inferences": [
                     {
+                        "title": {"zh-TW": "正式分析路徑", "en": "Production analysis path"},
                         "statement": {
                             "zh-TW": f"已驗證 {slug} 的正式分析路徑",
                             "en": f"Validated production analysis path for {slug}",

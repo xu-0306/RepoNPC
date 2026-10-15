@@ -487,37 +487,21 @@ input {
   min-width: 2.5rem;
   padding: 0.35rem;
 }
-.admin-display-settings {
-  position: relative;
-}
-.admin-display-settings > summary {
+.admin-workspace .admin-display-settings {
   align-items: center;
   border: 1px solid var(--admin-border);
   border-radius: 0.5rem;
-  cursor: pointer;
   display: inline-flex;
   font-size: 0.86rem;
-  font-weight: 750;
   gap: 0.4rem;
-  min-height: 2.75rem;
   padding: 0.55rem 0.7rem;
   user-select: none;
 }
-.admin-display-settings > summary::-webkit-details-marker {
-  display: none;
-}
-.admin-display-settings > summary::marker {
-  content: "";
-}
-.admin-display-settings > summary:hover {
-  border-color: var(--admin-primary);
-  color: var(--admin-primary-dark);
-}
-.admin-display-settings > summary:focus-visible {
+.admin-display-settings[data-focus-visible] {
   outline: 3px solid #6d5dfc;
   outline-offset: 3px;
 }
-.admin-display-settings > summary svg {
+.admin-display-settings svg {
   fill: none;
   height: 1.1rem;
   stroke: currentColor;
@@ -525,23 +509,87 @@ input {
   stroke-width: 1.8;
   width: 1.1rem;
 }
-.admin-display-settings__panel {
+/* Rendered in a portal on <body>, outside .admin-workspace. */
+.admin-display-settings__popover {
   background: var(--admin-surface);
   border: 1px solid var(--admin-border);
-  border-radius: 0.7rem;
+  border-radius: 0.5rem;
   box-shadow: 0 0.75rem 2rem rgba(30, 25, 79, 0.14);
+  color: var(--admin-ink);
   width: min(16rem, calc(100vw - 2rem));
+}
+.admin-display-settings__panel {
+  outline: none;
   padding: 0.9rem;
-  position: absolute;
-  right: 0;
-  top: calc(100% + 0.45rem);
-  z-index: 20;
+}
+.admin-display-settings__panel select {
+  border-color: var(--admin-control-border);
 }
 .admin-display-settings__panel label {
   display: grid;
   font-size: 0.82rem;
   font-weight: 800;
   gap: 0.4rem;
+}
+/* Confirmation dialog, also rendered in a portal on <body>. */
+.admin-confirm-overlay {
+  align-items: center;
+  background: rgba(23, 22, 66, 0.45);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1rem;
+  position: fixed;
+  z-index: 1000;
+}
+.admin-confirm-modal {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 1rem 2.5rem rgba(30, 25, 79, 0.2);
+  color: var(--admin-ink);
+  max-height: calc(100vh - 2rem);
+  max-width: 28rem;
+  overflow: auto;
+  width: 100%;
+}
+.admin-confirm-dialog {
+  outline: none;
+  overflow-wrap: anywhere;
+  padding: 1.25rem;
+}
+.admin-confirm-dialog :is(h2, h3) {
+  font-size: 1.1rem;
+  line-height: 1.4;
+  margin: 0 0 0.5rem;
+}
+.admin-confirm-dialog__description {
+  color: var(--admin-muted);
+  line-height: 1.6;
+  margin: 0 0 1.25rem;
+}
+.admin-confirm-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+.admin-confirm-dialog__actions button {
+  border-width: 1px;
+  font-weight: 750;
+}
+.admin-confirm-dialog__actions button[data-focus-visible] {
+  outline: 3px solid #6d5dfc;
+  outline-offset: 3px;
+}
+.admin-confirm-dialog__confirm {
+  background: var(--admin-primary);
+  border-color: var(--admin-primary);
+  color: white;
+}
+.admin-confirm-dialog__confirm--destructive {
+  background: var(--admin-danger);
+  border-color: var(--admin-danger);
 }
 .admin-workspace__help {
   align-items: center;
@@ -1348,88 +1396,6 @@ input {
 .guided-onboarding__provider-status h3 {
   font-size: 1.05rem;
 }
-.guided-onboarding__evidence-groups {
-  display: grid;
-  gap: 1rem;
-  min-width: 0;
-}
-.guided-onboarding__results > ul,
-.guided-onboarding__evidence-groups ul {
-  display: grid;
-  gap: 1rem;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.guided-onboarding__interpretation {
-  background: var(--admin-surface);
-  border: 1px solid var(--admin-border);
-  border-radius: 0.85rem;
-  overflow-wrap: anywhere;
-  padding: 1rem;
-}
-.guided-onboarding__interpretation-badge {
-  background: var(--admin-panel-subtle, #f8f7ff);
-  border-radius: 0.45rem;
-  color: var(--admin-primary-dark);
-  display: inline-block;
-  font-size: 0.85rem;
-  font-weight: 700;
-  margin: 0 0 0.75rem;
-  padding: 0.4rem 0.6rem;
-}
-.guided-onboarding__interpretation-text > p {
-  font-size: 1.05rem;
-  line-height: 1.7;
-  margin: 0 0 1rem;
-  white-space: pre-wrap;
-}
-.guided-onboarding__interpretation-preview {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  overflow: hidden;
-}
-.guided-onboarding__interpretation-text:has(details[open]) > p {
-  display: none;
-}
-.guided-onboarding__interpretation-text details p {
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
-.guided-onboarding__sources {
-  background: var(--admin-panel-subtle, #f8f7ff);
-  border: 1px solid var(--admin-border);
-  border-radius: 0.55rem;
-  padding: 0.25rem 0.75rem;
-}
-.guided-onboarding__evidence-groups summary {
-  cursor: pointer;
-  line-height: 1.5;
-  min-height: 44px;
-  padding-block: 0.65rem;
-}
-.guided-onboarding__source {
-  background: var(--admin-surface);
-  border: 1px solid var(--admin-border);
-  border-radius: 0.5rem;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  padding: 0.75rem;
-}
-.guided-onboarding__source pre {
-  font-size: 0.85rem;
-  line-height: 1.65;
-  margin-block: 0.75rem;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-.guided-onboarding__analysis-version {
-  color: var(--admin-muted);
-  font-size: 0.85rem;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
 .admin-workspace .guided-onboarding__evidence {
   border: 1px solid var(--admin-border);
   border-left: 0.35rem solid #4d7f58;
@@ -1942,14 +1908,6 @@ form button {
   }
 }
 @media (max-width: 52rem) {
-  .admin-display-settings {
-    position: static;
-  }
-  .admin-display-settings__panel {
-    left: 0;
-    max-width: 100%;
-    right: auto;
-  }
   .admin-workspace__header {
     align-items: start;
     grid-template-columns: 1fr;
@@ -1957,7 +1915,7 @@ form button {
   .admin-workspace__utilities {
     justify-content: flex-start;
   }
-  .admin-display-settings > summary span {
+  .admin-display-settings span {
     display: none;
   }
   .admin-status-cards {

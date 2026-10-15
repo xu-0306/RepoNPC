@@ -30,6 +30,16 @@ class Source:
         return object()
 
 
+_FACT = {
+    "evidence_id": f"E_{'1' * 24}",
+    "evidence_class": "REPOSITORY_FACT",
+    "path": "src/main.py",
+    "start_line": 1,
+    "end_line": 2,
+    "url": f"https://github.com/octocat/demo/blob/{'a' * 40}/src/main.py#L1-L2",
+}
+
+
 class Onboarding:
     def __init__(self, failure: GuidedOnboardingError | None = None) -> None:
         self.calls = 0
@@ -50,10 +60,11 @@ class Onboarding:
         stage_changed("validating")
         return {
             "repository": {"slug": "octocat/demo", "commit_sha": "a" * 40},
-            "facts": [{"excerpt": "untrusted repository source must not persist"}],
+            "facts": [_FACT],
             "inferences": [
                 {
                     "evidence_class": "MODEL_INFERENCE",
+                    "title": {"zh-TW": "架構重點", "en": "Architecture highlight"},
                     "statement": {"zh-TW": "摘要", "en": "Summary"},
                     "supporting_evidence_ids": [f"E_{'1' * 24}"],
                 }
@@ -184,7 +195,7 @@ def _pair(model: str, revision: int) -> AnalysisModelPair:
     )
 
 
-def test_validated_result_cache_is_commit_complete_and_excludes_source_excerpt(tmp_path) -> None:
+def test_validated_result_cache_keeps_source_locations_but_no_repository_text(tmp_path) -> None:
     database = RuntimeDatabase(tmp_path / "runtime")
     database.initialize()
     store = BatchRuntimeStore(database)
@@ -215,14 +226,14 @@ def test_validated_result_cache_is_commit_complete_and_excludes_source_excerpt(t
     cached_result = runner(cached, lambda: False)
 
     assert source.calls == onboarding.calls == 1
-    assert cached_result["facts"] == []
+    assert cached_result["facts"] == result["facts"] == [_FACT]
+    assert cached_result["inferences"] == result["inferences"]
     with database.connection() as connection:
         rows = connection.execute(
             "SELECT metadata_json, payload_json FROM analysis_cache_entries"
         ).fetchall()
     serialized = "".join(str(value) for row in rows for value in row)
     for canary in (
-        "untrusted repository source",
         "cache-test-token",
         "archive-body-canary",
         "prompt-context-canary",
@@ -270,7 +281,7 @@ def test_validated_cache_reuses_after_restart_and_tamper_rebuilds(tmp_path) -> N
 
     assert (first_source.calls, first_onboarding.calls) == (1, 1)
     assert (warm_source.calls, warm_onboarding.calls) == (0, 0)
-    assert warm_result["facts"] == []
+    assert warm_result["facts"] == first_result["facts"]
 
     _derived_key, result_key = warm_runner._cache_keys(warm_item, None)
     with restarted_database.connection() as connection:
@@ -332,6 +343,90 @@ def test_structurally_invalid_cache_rebuilds_instead_of_failing_batch(tmp_path) 
     assert result["facts"]
     assert (source.calls, onboarding.calls) == (1, 1)
     assert store.get_cache(result_key) is not None
+
+
+_CACHED_INFERENCE = {
+    "evidence_class": "MODEL_INFERENCE",
+    "title": {"zh-TW": "架構重點", "en": "Architecture highlight"},
+    "statement": {"zh-TW": "摘要", "en": "Summary"},
+    "supporting_evidence_ids": [f"E_{'1' * 24}"],
+}
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param(
+            {
+                "repository": {"slug": "octocat/demo", "commit_sha": "a" * 40},
+                "inferences": [
+                    {key: value for key, value in _CACHED_INFERENCE.items() if key != "title"}
+                ],
+                "skipped_summary": {"count": 0, "reasons": []},
+            },
+            id="previous-shape-without-facts-or-titles",
+        ),
+        pytest.param(
+            {
+                "repository": {"slug": "octocat/demo", "commit_sha": "a" * 40},
+                "facts": [
+                    {
+                        **_FACT,
+                        "url": f"https://github.com/octocat/demo/blob/{'b' * 40}/src/main.py#L1",
+                    }
+                ],
+                "inferences": [_CACHED_INFERENCE],
+                "skipped_summary": {"count": 0, "reasons": []},
+            },
+            id="fact-link-outside-pinned-commit",
+        ),
+        pytest.param(
+            {
+                "repository": {"slug": "octocat/demo", "commit_sha": "a" * 40},
+                "facts": [{**_FACT, "excerpt": "raw-source-canary"}],
+                "inferences": [_CACHED_INFERENCE],
+                "skipped_summary": {"count": 0, "reasons": []},
+            },
+            id="fact-with-repository-text",
+        ),
+        pytest.param(
+            {
+                "repository": {"slug": "octocat/demo", "commit_sha": "a" * 40},
+                "facts": [_FACT],
+                "inferences": [{**_CACHED_INFERENCE, "title": {"zh-TW": "長" * 25, "en": "Long"}}],
+                "skipped_summary": {"count": 0, "reasons": []},
+            },
+            id="title-over-limit",
+        ),
+    ],
+)
+def test_cache_entries_not_matching_the_current_result_shape_rebuild(
+    tmp_path, payload: dict[str, object]
+) -> None:
+    database = RuntimeDatabase(tmp_path / "runtime")
+    database.initialize()
+    store = BatchRuntimeStore(database)
+    onboarding = Onboarding()
+    runner = _runner(store, onboarding)
+    batch, _ = store.create_batch(_request("stale-cache"))
+    item = store.claim_next_item(batch.batch_id)
+    assert item is not None
+    derived_key, result_key = runner._cache_keys(item, None)
+    store.put_cache(
+        cache_key=result_key,
+        cache_kind="validated_analysis",
+        derived_index_key=derived_key,
+        metadata=runner._result_cache_metadata(item, None, None),
+        payload=payload,
+    )
+
+    result = runner(item, lambda: False)
+
+    assert onboarding.calls == 1
+    assert result["facts"] == [_FACT]
+    rebuilt = store.get_cache(result_key)
+    assert rebuilt is not None
+    assert "raw-source-canary" not in str(rebuilt.payload)
 
 
 def test_derived_marker_does_not_skip_work_after_generation_failure(tmp_path) -> None:

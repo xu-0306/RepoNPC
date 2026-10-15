@@ -1,3 +1,9 @@
+import {
+  Children,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -11,7 +17,52 @@ import {
   type RepositoryAnalysis,
   type RepositoryMetadata,
 } from "./guidedOnboarding";
-import { GuidedOnboardingView } from "./GuidedOnboardingView";
+import {
+  AnalysisHighlight,
+  GuidedOnboardingView,
+} from "./GuidedOnboardingView";
+import { ConfirmButton } from "./ConfirmDialog";
+import { Dialog, DialogTrigger, Popover } from "react-aria-components";
+
+// Keep server rendering real; direct handler checks opt into the shared hook pattern.
+const directHooks = vi.hoisted(() => ({
+  values: null as unknown[] | null,
+  cursor: 0,
+}));
+vi.mock("react", async (importOriginal) => {
+  const react = await importOriginal<typeof import("react")>();
+  return {
+    ...react,
+    useId: () =>
+      directHooks.values === null ? react.useId() : "highlight-body",
+    useEffect: (...args: Parameters<typeof react.useEffect>) => {
+      if (directHooks.values === null) react.useEffect(...args);
+    },
+    useRef: (initial: unknown) =>
+      directHooks.values === null
+        ? react.useRef(initial)
+        : { current: initial },
+    useState: (initial: unknown) => {
+      if (directHooks.values === null) return react.useState(initial);
+      const index = directHooks.cursor++;
+      if (!(index in directHooks.values)) directHooks.values[index] = initial;
+      return [
+        directHooks.values[index],
+        (next: unknown) => {
+          directHooks.values![index] = next;
+        },
+      ];
+    },
+  };
+});
+
+function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
+  return Children.toArray(node).flatMap((child) =>
+    isValidElement<Record<string, unknown>>(child)
+      ? [child, ...elements(child.props.children as ReactNode)]
+      : [],
+  );
+}
 
 const metadata: RepositoryMetadata = {
   slug: "octocat/demo",
@@ -63,12 +114,13 @@ const analysis: RepositoryAnalysis = {
       path: "src/parser.ts",
       start_line: 4,
       end_line: 12,
-      excerpt: "export function parse(input: string)",
+      url: `https://github.com/octocat/demo/blob/${"a".repeat(40)}/src/parser.ts#L4-L12`,
     },
   ],
   inferences: [
     {
       evidence_class: "MODEL_INFERENCE",
+      title: { "zh-TW": "可重用的解析器", en: "Reusable parser" },
       statement: {
         "zh-TW": "這個 repository 可能提供可重用的 parser。",
         en: "The repository may provide a reusable parser.",
@@ -211,7 +263,7 @@ describe("GuidedOnboardingView", () => {
     );
   });
 
-  it("keeps repository facts and model inferences in distinct evidence groups", () => {
+  it("keeps cited repository sources distinct from model highlights", () => {
     const markup = renderToStaticMarkup(
       <GuidedOnboardingView
         {...props({ state: state({ step: "analysis" }) })}
@@ -220,110 +272,347 @@ describe("GuidedOnboardingView", () => {
 
     expect(markup).toContain('data-evidence-class="REPOSITORY_FACT"');
     expect(markup).toContain('data-evidence-class="MODEL_INFERENCE"');
-    expect(markup).toContain("View project evidence (1 source)");
-    expect(markup).toContain("AI inferences");
-    expect(markup).toContain("E_fact_1");
+    expect(markup).toContain("Reusable parser");
+    expect(markup).toContain("Highlights");
+    expect(markup).not.toContain("E_fact_1");
     expect(markup).toContain("The repository may provide a reusable parser.");
   });
 
   it.each(["en", "zh-TW"] as const)(
-    "pairs each interpretation with its own collapsed sources in %s",
+    "renders localized flat highlights, linked sources and final actions in %s",
     (locale) => {
       const extraFact = {
         ...analysis.facts[0],
-        evidence_id: "unreferenced",
-        path: "docs/notes.md",
+        evidence_id: "extra-source",
+        path: "docs/guide.md",
         start_line: null,
         end_line: null,
-        excerpt: "<script>untrusted()</script>",
+        url: `https://github.com/octocat/demo/blob/${"a".repeat(40)}/docs/guide.md`,
+      };
+      const uncitedFact = {
+        ...extraFact,
+        evidence_id: "unreferenced",
+        path: "docs/notes.md",
+        url: "https://github.com/octocat/demo/blob/main/docs/notes.md",
+      };
+      const firstInference = {
+        ...analysis.inferences[0],
+        supporting_evidence_ids: [extraFact.evidence_id, "E_fact_1"],
       };
       const secondInference = {
         ...analysis.inferences[0],
+        title: { en: "Second highlight", "zh-TW": "另一個重點" },
         statement: {
-          en: "Second interpretation. ".repeat(30),
-          "zh-TW": "另一份完整的解讀內容。".repeat(40),
+          en:
+            "Second interpretation. ".repeat(30) +
+            "<script>untrusted()</script>",
+          "zh-TW":
+            "另一段完整的解讀內容。".repeat(40) +
+            "<script>untrusted()</script>",
         },
         supporting_evidence_ids: ["missing"],
       };
-      const markup = renderToStaticMarkup(
-        <GuidedOnboardingView
-          {...props({
-            locale,
-            state: state({
-              step: "analysis",
-              repositories: [
-                repository({
-                  analysis: {
-                    ...analysis,
-                    facts: [...analysis.facts, extraFact],
-                    inferences: [...analysis.inferences, secondInference],
-                  },
-                }),
-              ],
+      const input = props({
+        locale,
+        state: state({
+          step: "analysis",
+          repositories: [
+            repository({
+              analysis: {
+                ...analysis,
+                facts: [...analysis.facts, extraFact, uncitedFact],
+                inferences: [firstInference, secondInference],
+              },
             }),
-          })}
-        />,
+          ],
+        }),
+      });
+      const markup = renderToStaticMarkup(<GuidedOnboardingView {...input} />);
+      const rows = markup.split('class="guided-analysis__highlight"').slice(1);
+      expect(rows).toHaveLength(2);
+      for (const link of rows.join("").matchAll(/href="([^"]+)"/g)) {
+        expect(link[1]).toMatch(/^https:\/\/github\.com\//);
+      }
+      expect(rows[0]).toContain("src/parser.ts:4-12");
+      expect(rows[0]).toContain(`>${firstInference.title[locale]}</button>`);
+      expect(rows[0]).toContain('aria-expanded="false"');
+      expect(rows[0]).toMatch(
+        /aria-controls="([^"]+)"[\s\S]*id="\1" hidden=""/,
       );
-      const cards = markup
-        .split('class="guided-onboarding__interpretation"')
-        .slice(1);
-      expect(cards).toHaveLength(2);
-      expect(cards[0]).toContain("src/parser.ts:4-12");
-      expect(cards[0]).not.toContain("docs/notes.md");
-      expect(cards[1]).not.toContain("src/parser.ts");
-      expect(markup).toContain(
+      expect(rows[0]).toContain(
+        '<span class="guided-analysis__more">+1</span>',
+      );
+      const chip = rows[0].match(
+        /class="guided-analysis__source-chip"[\s\S]*?<a href="([^"]+)"/,
+      );
+      expect(chip?.[1]).toBe(extraFact.url);
+      expect(rows[0]).toContain(`href="${analysis.facts[0].url}"`);
+      expect(rows[0]).toContain('target="_blank" rel="noopener noreferrer"');
+      expect(rows[0]).not.toContain("docs/notes.md");
+      expect(rows[1]).toContain(`>${secondInference.title[locale]}</button>`);
+      expect(rows[1]).not.toContain("src/parser.ts");
+      expect(rows[1]).not.toContain('class="guided-analysis__source-chip"');
+      const missingNote =
         locale === "en"
-          ? "AI interpretation · unconfirmed"
-          : "AI 整理・尚未確認",
-      );
-      expect(markup).toContain(
-        locale === "en" ? "Read the full interpretation" : "閱讀完整解讀",
-      );
-      expect(markup).toContain(
+          ? "Some sources are not in this result; do not treat them as verified."
+          : "部分出處不在這次結果中，請勿視為已核對。";
+      expect(rows[1]).toContain(missingNote);
+      expect(rows[0]).not.toContain(missingNote);
+      expect(markup).toContain(locale === "en" ? "Highlights" : "專案重點");
+      const note =
         locale === "en"
-          ? "Some supporting evidence is missing"
-          : "部分參考依據未包含",
+          ? "AI summary, for your reference"
+          : "AI 整理，僅供你參考";
+      expect(markup).toContain(`<p>${note}</p>`);
+      expect(markup).toContain(`aria-label="${note}"`);
+      expect(markup).toMatch(
+        /<button class="guided-analysis__info"[^>]*aria-expanded="false"/,
       );
-      expect(markup).toContain(
-        locale === "en"
-          ? "Other verifiable project content"
-          : "其他可核對的專案內容",
-      );
+      for (const removed of [
+        "AI 整理・尚未確認",
+        "AI interpretation · unconfirmed",
+        "閱讀完整解讀",
+        "Read the full interpretation",
+        "其他可核對的專案內容",
+        "Other verifiable project content",
+        "技術識別資訊",
+        "Technical identifiers",
+        "guided-onboarding__interpretation",
+        "guided-onboarding__sources",
+        "<pre",
+        "E_fact_1",
+        "docs/notes.md",
+      ]) {
+        expect(markup).not.toContain(removed);
+      }
       expect(markup).toContain("&lt;script&gt;untrusted()&lt;/script&gt;");
       expect(markup).not.toContain("<script>");
       expect(markup).not.toMatch(/<details[^>]*open/);
-      expect(markup).toContain(analysis.repository.commit_sha);
+      expect(markup).toContain(
+        '<code class="guided-analysis__chip">aaaaaaa</code>',
+      );
+      expect(markup).toContain(
+        '<span class="guided-analysis__chip">TypeScript</span>',
+      );
       expect(markup).not.toContain('data-evidence-class="OWNER_ASSERTION"');
+      const actions = markup.slice(
+        markup.indexOf('class="guided-analysis__actions"'),
+      );
+      expect(
+        markup.indexOf('class="guided-analysis__actions"'),
+      ).toBeGreaterThan(
+        markup.lastIndexOf('class="guided-analysis__highlight"'),
+      );
+      const next =
+        locale === "en"
+          ? "Next: describe my contribution"
+          : "下一步：描述我的貢獻";
+      const retry = locale === "en" ? "Analyze again" : "重新分析";
+      expect(actions).toContain(`>${next}</button>`);
+      expect(actions).toContain(`>${retry}</button>`);
+      expect(actions.indexOf(next)).toBeLessThan(actions.indexOf(retry));
+      expect(markup.split(`>${retry}</button>`)).toHaveLength(2);
+      expect(input.onAction).not.toHaveBeenCalled();
+      expect(input.onAnalyze).not.toHaveBeenCalled();
     },
   );
 
-  it("preserves facts without inferences and allows an empty completed result to continue", () => {
-    for (const facts of [analysis.facts, []]) {
-      const markup = renderToStaticMarkup(
-        <GuidedOnboardingView
-          {...props({
-            state: state({
-              step: "analysis",
-              repositories: [
-                repository({
-                  analysis: { ...analysis, facts, inferences: [] },
-                }),
-              ],
-            }),
-          })}
-        />,
-      );
-      expect(markup).toContain("No AI inferences.");
-      expect(markup).toMatch(
-        /<button[^>]*>Next: describe my contribution<\/button>/,
-      );
-      expect(markup).toContain(
-        facts.length
-          ? "Other verifiable project content"
-          : "No verifiable project information to display.",
-      );
-    }
-  });
+  it.each(["en", "zh-TW"] as const)(
+    "expands only the statement and all source links in %s",
+    (locale) => {
+      directHooks.values = [];
+      try {
+        const render = () => {
+          directHooks.cursor = 0;
+          return AnalysisHighlight({
+            inference: analysis.inferences[0],
+            locale,
+            facts: analysis.facts,
+          });
+        };
+        const collapsed = render();
+        const toggle = elements(collapsed).find(
+          (node) => node.type === "button",
+        )!;
+        expect(toggle.props["aria-expanded"]).toBe(false);
+        expect(renderToStaticMarkup(collapsed)).toContain(
+          'id="highlight-body" hidden=""',
+        );
+        (toggle.props.onClick as () => void)();
+        const expanded = render();
+        const markup = renderToStaticMarkup(expanded);
+        expect(markup).toContain(
+          'aria-expanded="true" aria-controls="highlight-body"',
+        );
+        expect(markup).not.toContain('hidden=""');
+        const body = elements(expanded).find(
+          (node) => node.props.id === "highlight-body",
+        )!;
+        expect(
+          Children.toArray(body.props.children as ReactNode)
+            .filter(isValidElement)
+            .map((node) => node.type),
+        ).toEqual(["p", "ul"]);
+        expect(markup).toContain(analysis.inferences[0].statement[locale]);
+        expect(markup).toContain(`href="${analysis.facts[0].url}"`);
+        (
+          elements(expanded).find((node) => node.type === "button")!.props
+            .onClick as () => void
+        )();
+        expect(renderToStaticMarkup(render())).toContain(
+          'aria-expanded="false"',
+        );
+      } finally {
+        directHooks.values = null;
+      }
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
+    "keeps an empty completed result usable without uncited content in %s",
+    (locale) => {
+      for (const facts of [analysis.facts, []]) {
+        const markup = renderToStaticMarkup(
+          <GuidedOnboardingView
+            {...props({
+              locale,
+              state: state({
+                step: "analysis",
+                repositories: [
+                  repository({
+                    analysis: { ...analysis, facts, inferences: [] },
+                    metadata: { ...metadata, primary_language: null },
+                  }),
+                ],
+              }),
+            })}
+          />,
+        );
+        expect(markup).toContain(
+          locale === "en" ? "No AI inferences." : "沒有 AI 推論。",
+        );
+        expect(markup).toMatch(
+          locale === "en"
+            ? /<button[^>]*>Next: describe my contribution<\/button>/
+            : /<button[^>]*>下一步：描述我的貢獻<\/button>/,
+        );
+        expect(markup).not.toContain("Other verifiable project content");
+        expect(markup).not.toContain("其他可核對的專案內容");
+        expect(markup).not.toContain("src/parser.ts");
+        expect(markup).not.toContain("TypeScript");
+        expect(markup).not.toContain('class="guided-analysis__source-chip"');
+      }
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
+    "requires destructive start-over confirmation and preserves disabled guards in %s",
+    (locale) => {
+      directHooks.values = [];
+      try {
+        for (const blocked of [
+          { busy: false, batchAnalysisActive: false },
+          { busy: true, batchAnalysisActive: false },
+          { busy: false, batchAnalysisActive: true },
+        ]) {
+          const input = props({
+            locale,
+            state: state({ step: "analysis" }),
+            ...blocked,
+          });
+          const tree = GuidedOnboardingView(input);
+          const confirm = elements(tree).find(
+            (node) => node.type === ConfirmButton,
+          )!;
+          expect(confirm.props.locale).toBe(locale);
+          expect(confirm.props.title).toBe(
+            locale === "en" ? "Start over?" : "重新開始？",
+          );
+          expect(confirm.props.description).toBe(
+            locale === "en"
+              ? "This clears the unsaved guided setup."
+              : "這會清除目前尚未儲存的引導內容。",
+          );
+          expect(confirm.props.destructive).toBe(true);
+          expect(confirm.props.confirmLabel).toBe(
+            locale === "en" ? "Start over" : "重新開始",
+          );
+          expect(confirm.props.disabled).toBe(
+            blocked.busy || blocked.batchAnalysisActive,
+          );
+          expect(confirm.props["aria-describedby"]).toBe(
+            blocked.batchAnalysisActive
+              ? "guided-navigation-batch-reason"
+              : undefined,
+          );
+          expect(input.onAction).not.toHaveBeenCalled();
+          (confirm.props.onConfirm as () => void)();
+          expect(input.onAction).toHaveBeenCalledTimes(
+            blocked.busy || blocked.batchAnalysisActive ? 0 : 1,
+          );
+          if (!blocked.busy && !blocked.batchAnalysisActive)
+            expect(input.onAction).toHaveBeenCalledWith({ type: "RESET" });
+        }
+      } finally {
+        directHooks.values = null;
+      }
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
+    "uses a React Aria privacy popover and keeps moved action callbacks in %s",
+    (locale) => {
+      directHooks.values = [];
+      try {
+        const input = props({ locale, state: state({ step: "analysis" }) });
+        const step = elements(GuidedOnboardingView(input)).find(
+          (node) =>
+            typeof node.type === "function" &&
+            node.type.name === "AnalysisStep",
+        )!;
+        const stepTree = (step.type as (props: unknown) => ReactNode)(
+          step.props,
+        );
+        const group = elements(stepTree).find(
+          (node) =>
+            typeof node.type === "function" &&
+            node.type.name === "EvidenceGroups",
+        )!;
+        const groupTree = (group.type as (props: unknown) => ReactNode)(
+          group.props,
+        );
+        const nodes = elements(groupTree);
+        expect(
+          nodes.filter((node) => node.type === DialogTrigger),
+        ).toHaveLength(1);
+        expect(nodes.filter((node) => node.type === Popover)).toHaveLength(1);
+        const dialog = nodes.find((node) => node.type === Dialog)!;
+        expect(dialog.props.lang).toBe(locale);
+        expect(renderToStaticMarkup(dialog.props.children as ReactNode)).toBe(
+          locale === "en"
+            ? "<p>Never public, never added to your portfolio automatically.</p>"
+            : "<p>不會公開，也不會自動寫進作品集。</p>",
+        );
+        const footer = elements(stepTree).find(
+          (node) => node.props.className === "guided-analysis__actions",
+        )!;
+        const buttons = elements(footer).filter(
+          (node) => node.type === "button",
+        );
+        expect(buttons).toHaveLength(2);
+        expect(input.onAnalyze).not.toHaveBeenCalled();
+        expect(input.onAction).not.toHaveBeenCalled();
+        (buttons[0].props.onClick as () => void)();
+        expect(input.onAction).toHaveBeenCalledExactlyOnceWith({
+          type: "CONTINUE_TO_CONTRIBUTIONS",
+        });
+        (buttons[1].props.onClick as () => void)();
+        expect(input.onAnalyze).toHaveBeenCalledExactlyOnceWith(metadata.slug);
+      } finally {
+        directHooks.values = null;
+      }
+    },
+  );
 
   it("shows a server-owned provider preflight without exposing connection details", () => {
     const markup = renderToStaticMarkup(
@@ -421,7 +710,14 @@ describe("GuidedOnboardingView", () => {
     expect(terminalMarkup).toMatch(/<button[^>]*>Back<\/button>/);
     expect(terminalMarkup).toContain('data-analysis-result="octocat/demo"');
     expect(terminalMarkup).toContain("src/parser.ts");
-    expect(terminalMarkup).toContain("export function parse(input: string)");
+    expect(terminalMarkup).toContain(`href="${analysis.facts[0].url}"`);
+    expect(terminalMarkup).toContain("Reusable parser");
+    expect(terminalMarkup).not.toContain("<pre");
+    expect(
+      terminalMarkup.indexOf('class="guided-analysis__actions"'),
+    ).toBeGreaterThan(
+      terminalMarkup.indexOf('data-analysis-result="octocat/demo"'),
+    );
   });
 
   it("renders explicit proposal edit, accept, and reject controls", () => {

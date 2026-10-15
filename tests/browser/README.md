@@ -22,7 +22,7 @@ the test edits its in-browser public profile draft. Stop the host and close the
 owned browser session afterward. Results and exclusions are recorded in
 `docs/OPTIMIZATION_PLAN_2026-10-11.md`.
 
-## Analysis cards (2026-10-07)
+## Analysis highlights (updated 2026-10-14; cards 2026-10-07)
 
 `analysis-card-review.tsx` mounts the production guided view and reducer with
 synthetic in-memory analysis. Copy it to `apps/web/.analysis-card-review.tsx`
@@ -31,11 +31,13 @@ with its module URL set to `/.analysis-card-review.tsx`. Run Vite on an unused
 loopback port and open that HTML with the documented Chrome browser runtime.
 Import `check-analysis-cards.js` in that runtime and call
 `checkAnalysisCards(tab, await chrome.capabilities.get("viewport"))`.
-It checks both locales at 375/768/1024/1440px, keyboard disclosure, exact sources,
-escaped excerpts, long text, 44px controls, overflow and confirmation isolation.
-Stop the owned Vite process and remove only the two copied fixture files afterward.
-The dated results and scope limits are in
-`release-evidence/analysis-cards-20261007/RESULT.zh-TW.md`.
+It checks both locales at 375/768/1024/1440px: keyboard expansion of highlight
+rows, GitHub source links and `+n`, escaped statements, the partly-missing-source
+note, the privacy popover (Escape closes it and returns focus), 44px controls,
+overflow and confirmation isolation. Stop the owned Vite process and remove only
+the two copied fixture files afterward. The 2026-10-07 results in
+`release-evidence/analysis-cards-20261007/RESULT.zh-TW.md` describe the retired
+card layout and remain a dated record only.
 
 These fixtures mount production React components and styles. They use synthetic data only. `admin-events-review.tsx` and `visitor-ui-review.tsx` replace **all** fetch requests; unhandled routes never reach a real API. Do not remove that interception or reuse this harness with real credentials.
 

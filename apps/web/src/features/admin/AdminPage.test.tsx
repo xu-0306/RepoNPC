@@ -110,12 +110,13 @@ describe("analysis response boundary", () => {
         path: "src/index.ts",
         start_line: 1,
         end_line: 2,
-        excerpt: "export const demo = true;",
+        url: `https://github.com/octocat/demo/blob/${"a".repeat(40)}/src/index.ts#L1-L2`,
       },
     ],
     inferences: [
       {
         evidence_class: "MODEL_INFERENCE",
+        title: { "zh-TW": "專案重點", en: "Project highlight" },
         statement: { "zh-TW": "推論", en: "Inference" },
         supporting_evidence_ids: ["fact-1"],
       },
@@ -123,16 +124,62 @@ describe("analysis response boundary", () => {
     skipped_summary: { count: 0, reasons: [] },
   };
 
-  it("accepts the canonical excerpt contract", () => {
-    expect(batchAnalysisResult(response)?.facts[0].excerpt).toBe(
-      "export const demo = true;",
-    );
+  it.each(["zh-TW", "en"] as const)(
+    "accepts the canonical title and source URL contract in %s",
+    (locale) => {
+      const result = batchAnalysisResult(response);
+      expect(result).toEqual(response);
+      expect(result?.facts[0].url).toBe(response.facts[0].url);
+      expect(result?.inferences[0].title[locale]).toBe(
+        response.inferences[0].title[locale],
+      );
+    },
+  );
+
+  it.each([
+    undefined,
+    null,
+    { en: "Missing Chinese" },
+    { "zh-TW": "缺少英文" },
+    { "zh-TW": "重點", en: 1 },
+  ])("rejects a missing or malformed inference title: %j", (title) => {
+    expect(
+      batchAnalysisResult({
+        ...response,
+        inferences: [{ ...response.inferences[0], title }],
+      }),
+    ).toBeNull();
+  });
+
+  it.each([
+    undefined,
+    null,
+    "javascript:alert(1)",
+    "data:text/html,unsafe",
+    "http://github.com/octocat/demo",
+    "https://example.com/source",
+    "https://github.com.evil.example/source",
+    "https://github.com@evil.example/source",
+  ])("rejects a missing or non-GitHub source URL: %s", (url) => {
+    expect(
+      batchAnalysisResult({
+        ...response,
+        facts: [{ ...response.facts[0], url }],
+      }),
+    ).toBeNull();
   });
 
   it("rejects legacy text fields and malformed nested values", () => {
     const legacy = {
       ...response,
-      facts: [{ ...response.facts[0], excerpt: undefined, text: "legacy" }],
+      facts: [
+        {
+          ...response.facts[0],
+          url: undefined,
+          excerpt: "legacy",
+          text: "legacy",
+        },
+      ],
     };
     expect(batchAnalysisResult(legacy)).toBeNull();
     expect(

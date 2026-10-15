@@ -59,6 +59,7 @@ class RecordingOnboarding:
             "inferences": [
                 {
                     "evidence_class": "MODEL_INFERENCE",
+                    "title": {"zh-TW": "架構重點", "en": "Architecture highlight"},
                     "statement": {
                         "zh-TW": "此 repository 包含架構說明。",
                         "en": "The repository contains an architecture overview.",

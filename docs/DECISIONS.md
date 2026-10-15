@@ -614,3 +614,23 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
 - Contract: [README export](PROFILE_README_EXPORT_CONTRACT_2026-10-12.md),
   Approved Specification 0.4.11, FR-016/024, AC-028; existing manual/external gates
   remain independent of local regression evidence.
+
+## ADR-060: Validate model writing systems and use source-only analysis facts
+
+- **Status:** Accepted 2026-10-14 (OR-034); implementation and verification are separate from release acceptance.
+- **Authorization:** The owner approved plan items A–E on 2026-10-14 after reviewing the output-validation, cache/source-shape, and analysis-presentation repair.
+- **Decision:**
+  - Analysis output uses schema/prompt version 3 and validation version 2. Every inference requires localized `title` and `statement`; title bounds are 24 characters for `zh-TW` and 80 for `en` at the backend boundary. The same evidence-ID, personal-attribution and locale/source writing-system checks apply to both fields.
+  - The writing-system check normalizes NFKC, treats locale-native systems as allowed, and permits another system only when it occurs in the packed analysis source. Contribution role, summary and claim strings use the owner-authored request as their source. Owner-authored input is not checked. Ungrounded output fails with the existing `PROVIDER_ERROR` / `PROVIDER_OUTPUT_SCHEMA_INVALID` reason, without retry, fallback, raw-output retention or cache success.
+  - Analysis facts contain only evidence ID/class, path, line range and a pinned GitHub URL; `excerpt` and fact `title` are absent. Validated cache payloads retain those facts and the localized inferences so a cache hit has the same source links as a live result.
+  - The admin analysis view uses repository metadata and commit chips, compact expandable Highlights rows, matched GitHub source links and a privacy popover. It keeps inferences unconfirmed and places contribution entry before reanalysis.
+- **Boundaries:** Public schema-v1 configuration and owner-confirmation rules are unchanged. The backend remains the only citation/URL authority; no provider fallback, repository-text persistence or automatic owner assertion is introduced. The current UI does not render uncited facts as a separate block; a highlight with partly absent cited evidence keeps a one-line notice in its expanded content.
+- **Consequences:** Technical Specification becomes 0.4.12, AC-080 is added, and old cache payloads without the new facts/title shape are invalidated and rebuilt. Local tests document the boundary; no live provider call or release acceptance is implied.
+
+## ADR-061: Limit React Aria Components to the authenticated admin surface
+
+- **Status:** Accepted 2026-10-14 (OR-035); implementation and verification are separate from release acceptance.
+- **Authorization:** The owner approved plan item F and the admin-only React Aria scope on 2026-10-14. The client-only license supplement was added during implementation and still needs owner review before release.
+- **Decision:** Add `react-aria-components@1.21.1` for the authenticated admin bundle only. Replace the approved `window.confirm` cases with a shared `ConfirmDialog` using React Aria `Modal`/`Dialog` with `alertdialog` semantics, Cancel autofocus, destructive confirmation styling, and explicit confirmation callbacks. Replace the hand-written display-settings `<details>` overlay and the Highlights privacy disclosure with React Aria `DialogTrigger`/`Popover`; retain native `<details>`, `<select>`, and specialized controls elsewhere. `client-only@0.0.1` (a transitive dependency) ships without license text although it declares MIT and points at the React project, so the Windows notices use a pinned supplement containing the MIT text of the installed `react@19.1.1` package, with its source and hash recorded.
+- **Boundaries:** The visitor bundle does not import React Aria, no new admin/public endpoint or provider behavior is added, and browser focus/dismissal remains a browser-level verification item. Existing CSS variables and reduced-motion rules remain the style boundary.
+- **Consequences:** Admin confirmation and popover markup gains shared accessible semantics while the visitor dependency surface remains unchanged. F's local tests cover authored markup and callbacks; a full browser/accessibility pass is still required before release acceptance.

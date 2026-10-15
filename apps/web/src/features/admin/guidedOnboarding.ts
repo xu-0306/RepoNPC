@@ -46,11 +46,12 @@ export interface RepositoryFact {
   path: string;
   start_line: number | null;
   end_line: number | null;
-  excerpt: string;
+  url: string;
 }
 
 export interface ModelInference {
   evidence_class: "MODEL_INFERENCE";
+  title: LocalizedText;
   statement: LocalizedText;
   supporting_evidence_ids: string[];
 }
@@ -939,6 +940,11 @@ export function guidedErrorMessage(
       "zh-TW":
         "模型操作逾時且未儲存部分結果。你的輸入已保留，可明確重試或改為手動填寫。",
       en: "The model operation timed out and no partial result was saved. Your input is preserved; retry explicitly or continue manually.",
+    },
+    PROVIDER_ERROR: {
+      "zh-TW":
+        "模型沒有回傳可用的結果，不是本機服務問題。你的輸入已保留，可稍後重試或改為手動填寫。",
+      en: "The model did not return a usable result; this is not a local service problem. Your input is preserved; retry later or continue manually.",
     },
     PROVIDER_OUTPUT_LIMIT_REACHED: {
       "zh-TW":
