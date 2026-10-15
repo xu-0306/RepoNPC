@@ -111,7 +111,8 @@ const COPY = {
     remove: "刪除",
     pullModel: "由 Ollama 安裝模型",
     deleteModel: "由 Ollama 刪除模型",
-    modelConfirm: "此動作會變更 Ollama 的模型儲存。確定繼續嗎？",
+    installModelConfirm: "模型會下載到這台電腦，需要一些時間與儲存空間。",
+    deleteModelConfirm: "模型會從這台電腦移除，之後要用時需重新下載。",
     active: "目前啟用",
     empty: "尚未設定資料查找模型。",
     pending: "正在處理資料查找模型…",
@@ -148,7 +149,10 @@ const COPY = {
     remove: "Delete",
     pullModel: "Install through Ollama",
     deleteModel: "Delete through Ollama",
-    modelConfirm: "This changes Ollama model storage. Continue?",
+    installModelConfirm:
+      "The model will download to this computer and needs time and storage space.",
+    deleteModelConfirm:
+      "The model will be removed from this computer. Download it again to use it later.",
     active: "Active",
     empty: "No content finder model has been set up.",
     pending: "Working on content finder models…",
@@ -517,7 +521,7 @@ export function EmbeddingProfilePanel({
                           ? `由 Ollama 安裝「${profile.model_id}」？`
                           : `Install “${profile.model_id}” through Ollama?`
                       }
-                      description={copy.modelConfirm}
+                      description={copy.installModelConfirm}
                       confirmLabel={locale === "zh-TW" ? "安裝" : "Install"}
                       disabled={pending}
                       onConfirm={() => onOllamaPull(profile.profile_id)}
@@ -531,7 +535,7 @@ export function EmbeddingProfilePanel({
                           ? `由 Ollama 刪除「${profile.model_id}」？`
                           : `Delete “${profile.model_id}” through Ollama?`
                       }
-                      description={copy.modelConfirm}
+                      description={copy.deleteModelConfirm}
                       confirmLabel={locale === "zh-TW" ? "刪除" : "Delete"}
                       destructive
                       disabled={pending}

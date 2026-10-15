@@ -231,6 +231,56 @@ function selectedState() {
 }
 
 describe("guidedOnboardingReducer", () => {
+  it.each([true, false])(
+    "restores a draft without overwriting server readiness %s in either response order",
+    (modelsConfigured) => {
+      const draft = { ...selectedState(), modelsConfigured: !modelsConfigured };
+      const initial = initialGuidedOnboardingState();
+      const serverUpdate = {
+        type: "SET_MODELS_CONFIGURED",
+        value: modelsConfigured,
+      } as const;
+      const restore = { type: "RESTORE_DRAFT", state: draft } as const;
+      const serverFirst = guidedOnboardingReducer(
+        guidedOnboardingReducer(initial, serverUpdate),
+        restore,
+      );
+      const draftFirst = guidedOnboardingReducer(
+        guidedOnboardingReducer(initial, restore),
+        serverUpdate,
+      );
+      expect(serverFirst).toEqual({ ...draft, modelsConfigured });
+      expect(draftFirst).toEqual(serverFirst);
+    },
+  );
+
+  it.each([true, false])(
+    "resets the draft while preserving server model readiness %s",
+    (modelsConfigured) => {
+      const configured = guidedOnboardingReducer(selectedState(), {
+        type: "SET_MODELS_CONFIGURED",
+        value: modelsConfigured,
+      });
+      const reset = guidedOnboardingReducer(configured, { type: "RESET" });
+      expect(reset).toEqual({
+        ...initialGuidedOnboardingState(),
+        modelsConfigured,
+      });
+      const restarted = guidedOnboardingReducer(reset, { type: "START_AI" });
+      expect(restarted.step).toBe("models");
+      if (modelsConfigured) {
+        expect(
+          guidedOnboardingReducer(restarted, { type: "COMPLETE_MODEL_SETUP" })
+            .step,
+        ).toBe("repositories");
+      } else {
+        expect(() =>
+          guidedOnboardingReducer(restarted, { type: "COMPLETE_MODEL_SETUP" }),
+        ).toThrow("ONBOARDING_MODELS_REQUIRED");
+      }
+    },
+  );
+
   it("requires explicit selection confirmation before analysis", () => {
     const unconfirmed = selectedState();
 

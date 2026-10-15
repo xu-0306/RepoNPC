@@ -2,8 +2,83 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { EmbeddingProfilePanel } from "./EmbeddingProfilePanel";
+import { ConfirmButton } from "./ConfirmDialog";
+
+vi.mock("./ConfirmDialog", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./ConfirmDialog")>();
+  return { ...original, ConfirmButton: vi.fn(original.ConfirmButton) };
+});
 
 describe("EmbeddingProfilePanel", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "explains installation and removal separately before confirmation in %s",
+    (locale) => {
+      vi.mocked(ConfirmButton).mockClear();
+      const onOllamaPull = vi.fn();
+      const onOllamaDelete = vi.fn();
+      renderToStaticMarkup(
+        <EmbeddingProfilePanel
+          catalog={[]}
+          connections={[]}
+          error=""
+          installedModels={[]}
+          locale={locale}
+          onActivate={vi.fn()}
+          onCreate={vi.fn()}
+          onDelete={vi.fn()}
+          onOllamaDelete={onOllamaDelete}
+          onOllamaPull={onOllamaPull}
+          onProbe={vi.fn()}
+          onRefresh={vi.fn()}
+          pending={false}
+          profiles={[
+            {
+              profile_id: "embedding-1",
+              provider: "ollama",
+              model_id: "qwen3-embedding:0.6b",
+              dimension: 1024,
+              normalized: true,
+              connection_reference: "ollama-local",
+              status: "ready",
+              active: false,
+              last_error_code: null,
+              last_probed_at: "2026-09-10T00:00:00Z",
+            },
+          ]}
+        />,
+      );
+      const confirmations = new Map(
+        vi
+          .mocked(ConfirmButton)
+          .mock.calls.map(([props]) => [props.children, props]),
+      );
+      const install = confirmations.get(
+        locale === "zh-TW" ? "由 Ollama 安裝模型" : "Install through Ollama",
+      )!;
+      const remove = confirmations.get(
+        locale === "zh-TW" ? "由 Ollama 刪除模型" : "Delete through Ollama",
+      )!;
+      expect(install.description).toBe(
+        locale === "zh-TW"
+          ? "模型會下載到這台電腦，需要一些時間與儲存空間。"
+          : "The model will download to this computer and needs time and storage space.",
+      );
+      expect(remove.description).toBe(
+        locale === "zh-TW"
+          ? "模型會從這台電腦移除，之後要用時需重新下載。"
+          : "The model will be removed from this computer. Download it again to use it later.",
+      );
+      expect(remove.destructive).toBe(true);
+      expect(onOllamaPull).not.toHaveBeenCalled();
+      expect(onOllamaDelete).not.toHaveBeenCalled();
+      install.onConfirm();
+      expect(onOllamaPull).toHaveBeenCalledExactlyOnceWith("embedding-1");
+      expect(onOllamaDelete).not.toHaveBeenCalled();
+      remove.onConfirm();
+      expect(onOllamaDelete).toHaveBeenCalledExactlyOnceWith("embedding-1");
+    },
+  );
+
   it("renders safe provider-aware controls without credential or URL fields", () => {
     const markup = renderToStaticMarkup(
       <EmbeddingProfilePanel

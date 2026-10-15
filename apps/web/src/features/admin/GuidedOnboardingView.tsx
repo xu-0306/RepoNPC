@@ -130,6 +130,7 @@ type Copy = {
   factsHeading: string;
   inferenceHeading: string;
   inferenceDescription: string;
+  inferencePrivacyLabel: string;
   inferencePrivacy: string;
   noInferences: string;
   contributionsHeading: string;
@@ -311,6 +312,7 @@ const COPY: Record<Locale, Copy> = {
     factsHeading: "專案中可確認的資訊",
     inferenceHeading: "專案重點",
     inferenceDescription: "AI 整理，僅供你參考",
+    inferencePrivacyLabel: "隱私說明",
     inferencePrivacy: "不會公開，也不會自動寫進作品集。",
     noInferences: "沒有 AI 推論。",
     contributionsHeading: "你對這個專案的貢獻",
@@ -515,6 +517,7 @@ const COPY: Record<Locale, Copy> = {
     factsHeading: "Project information you can verify",
     inferenceHeading: "Highlights",
     inferenceDescription: "AI summary, for your reference",
+    inferencePrivacyLabel: "Privacy details",
     inferencePrivacy:
       "Never public, never added to your portfolio automatically.",
     noInferences: "No AI inferences.",
@@ -880,7 +883,7 @@ function EvidenceGroups({
           <DialogTrigger>
             <Button
               className="guided-analysis__info"
-              aria-label={copy.inferenceDescription}
+              aria-label={copy.inferencePrivacyLabel}
             >
               ⓘ
             </Button>
@@ -888,7 +891,7 @@ function EvidenceGroups({
               className="guided-analysis__popover"
               placement="bottom start"
             >
-              <Dialog aria-label={copy.inferenceDescription} lang={locale}>
+              <Dialog aria-label={copy.inferencePrivacyLabel} lang={locale}>
                 <p>{copy.inferencePrivacy}</p>
               </Dialog>
             </Popover>

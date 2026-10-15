@@ -1849,7 +1849,13 @@ export function AdminPage({
       window.sessionStorage.getItem(GUIDED_ONBOARDING_STORAGE_KEY) ?? "",
     );
     guidedResumeFound.current = resumed !== null;
-    if (resumed) setGuidedState(resumed);
+    if (resumed)
+      setGuidedState((current) =>
+        guidedOnboardingReducer(current, {
+          type: "RESTORE_DRAFT",
+          state: resumed,
+        }),
+      );
     setGuidedResumeReady(true);
   }, [authenticated]);
 
@@ -2106,9 +2112,13 @@ export function AdminPage({
             );
             setBaseConfig(parsed.parsed ?? null);
             if (!guidedResumeFound.current)
-              setGuidedState(
-                guidedOnboardingFromConfig(parsed.parsed) ??
-                  initialGuidedOnboardingState(true),
+              setGuidedState((current) =>
+                guidedOnboardingReducer(current, {
+                  type: "RESTORE_DRAFT",
+                  state:
+                    guidedOnboardingFromConfig(parsed.parsed) ??
+                    initialGuidedOnboardingState(true),
+                }),
               );
           } catch {
             setBaseConfig(null);
@@ -3760,12 +3770,14 @@ export function AdminPage({
                 if (currentDraft.current !== draft) return;
                 setBaseConfig(validated.parsed ?? null);
                 setPublicationOpen(false);
-                setGuidedState(
-                  guidedOnboardingReducer(mapped, {
-                    type: "OPEN_CLAIM_EDITOR",
-                    slug,
-                    kind,
-                  }),
+                setGuidedState((current) =>
+                  guidedOnboardingReducer(
+                    guidedOnboardingReducer(current, {
+                      type: "RESTORE_DRAFT",
+                      state: mapped,
+                    }),
+                    { type: "OPEN_CLAIM_EDITOR", slug, kind },
+                  ),
                 );
                 setTimeout(() => {
                   const fields = document.querySelectorAll<HTMLTextAreaElement>(

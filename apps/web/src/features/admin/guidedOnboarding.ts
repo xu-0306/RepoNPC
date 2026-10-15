@@ -194,6 +194,7 @@ export type GuidedOnboardingAction =
   | { type: "DRAFT_READY" }
   | { type: "SET_MODE"; mode: "guided" | "advanced" }
   | { type: "MARK_RAW_YAML_UNMAPPED"; value: boolean }
+  | { type: "RESTORE_DRAFT"; state: GuidedOnboardingState }
   | { type: "RESET" };
 
 export interface GuidedOnboardingViewProps {
@@ -769,8 +770,13 @@ export function guidedOnboardingReducer(
         mode: action.value ? "advanced" : state.mode,
         rawYamlHasUnmappedChanges: action.value,
       };
+    case "RESTORE_DRAFT":
+      return { ...action.state, modelsConfigured: state.modelsConfigured };
     case "RESET":
-      return initialGuidedOnboardingState();
+      return {
+        ...initialGuidedOnboardingState(),
+        modelsConfigured: state.modelsConfigured,
+      };
   }
 }
 

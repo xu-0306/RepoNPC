@@ -364,7 +364,10 @@ describe("GuidedOnboardingView", () => {
           ? "AI summary, for your reference"
           : "AI 整理，僅供你參考";
       expect(markup).toContain(`<p>${note}</p>`);
-      expect(markup).toContain(`aria-label="${note}"`);
+      expect(markup).toContain(
+        `aria-label="${locale === "en" ? "Privacy details" : "隱私說明"}"`,
+      );
+      expect(markup).not.toContain(`aria-label="${note}"`);
       expect(markup).toMatch(
         /<button class="guided-analysis__info"[^>]*aria-expanded="false"/,
       );
@@ -588,6 +591,9 @@ describe("GuidedOnboardingView", () => {
         expect(nodes.filter((node) => node.type === Popover)).toHaveLength(1);
         const dialog = nodes.find((node) => node.type === Dialog)!;
         expect(dialog.props.lang).toBe(locale);
+        expect(dialog.props["aria-label"]).toBe(
+          locale === "en" ? "Privacy details" : "隱私說明",
+        );
         expect(renderToStaticMarkup(dialog.props.children as ReactNode)).toBe(
           locale === "en"
             ? "<p>Never public, never added to your portfolio automatically.</p>"
