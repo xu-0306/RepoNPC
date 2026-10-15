@@ -20,6 +20,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json
 RUN corepack enable && corepack prepare pnpm@11.16.0 --activate && pnpm install --frozen-lockfile
 COPY apps/web apps/web
+COPY docs/PAGES_SHARING_GUIDE.md docs/PAGES_SHARING_GUIDE.md
 COPY scripts/check_visitor_source.mjs scripts/check_visitor_source.mjs
 COPY src/reponpc/scene/color_schemes.yml src/reponpc/scene/color_schemes.yml
 COPY --from=python-build /app/apps/web/src/app/scene-fallback.generated.css apps/web/src/app/scene-fallback.generated.css
