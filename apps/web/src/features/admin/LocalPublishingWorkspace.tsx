@@ -150,6 +150,7 @@ export function LocalPublishingWorkspace({
   onAddClaim,
   onActiveSceneChange,
   draftUnsaved = false,
+  publicSharingAvailable = true,
 }: {
   locale: AdminLocale;
   content: string;
@@ -165,6 +166,7 @@ export function LocalPublishingWorkspace({
   onAddClaim: (repository: string, kind: ClaimKind) => void;
   onActiveSceneChange?: (state: SceneAppearanceState | null) => void;
   draftUnsaved?: boolean;
+  publicSharingAvailable?: boolean;
 }) {
   const zh = locale === "zh-TW";
   const [preview, setPreview] = useState<AdminPreview | null>(null);
@@ -723,7 +725,11 @@ export function LocalPublishingWorkspace({
           </p>
         )}
       </section>
-      <VisitorGatewayPanel locale={locale} request={request} />
+      <VisitorGatewayPanel
+        locale={locale}
+        request={request}
+        publicSharingAvailable={publicSharingAvailable}
+      />
       <PagesSharePanel
         locale={locale}
         request={request}

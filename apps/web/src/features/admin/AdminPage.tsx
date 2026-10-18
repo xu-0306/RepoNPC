@@ -3736,6 +3736,7 @@ export function AdminPage({
               applyGuidedAction({ type: "OPEN_PUBLICATION_MODEL_SETUP" })
             }
             onCreateDraft={() => void createGuidedDraft()}
+            publicSharingAvailable={accessState !== "local_launch"}
             repositories={selectedRepositories(guidedState).map(
               (repository) => repository.metadata.slug,
             )}

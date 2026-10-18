@@ -188,11 +188,11 @@ python scripts/funnel_compose_preflight.py
 docker compose -f compose.yml -f compose.funnel.yml up -d --build
 ```
 
-擁有者另外安裝、登入並授權官方 Tailscale，將下方 `<visitor-port>` 換成 gateway port：
+擁有者另外安裝、登入並授權官方 Tailscale，將下方 `<https-port>` 換成訪客網址的連接埠（443、8443 或 10000），`<visitor-port>` 換成 gateway port：
 
 ```bash
-tailscale funnel --bg --https=443 http://127.0.0.1:<visitor-port>
-tailscale funnel --https=443 off
+tailscale funnel --bg --https=<https-port> http://127.0.0.1:<visitor-port>
+tailscale funnel --https=<https-port> off
 ```
 
 RepoNPC 只顯示操作說明；關閉 gateway 不代表 Funnel 已停用。管理頁分開顯示本機就緒、入口已設定與擁有者確認過的外網檢查；重啟、停止或來源設定改變會清除外網確認；版本變更不會清除原本的時間紀錄，仍應依實際更新重新檢查。真實 Tailscale／Pages／模型與乾淨主機驗收尚未執行，Windows 安裝版與 Pages 靜態匯出分屬 A8、A5。

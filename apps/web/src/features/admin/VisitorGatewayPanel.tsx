@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AdminLocale } from "./AdminWorkspace";
 import { ModelSetupRequests } from "./modelSetupRequests";
+import { funnelHttpsPort } from "./visitorGatewayPort";
 
 export interface VisitorGatewayStatus {
   revision: number;
@@ -221,9 +222,12 @@ function draftChanged(
 export function VisitorGatewayPanel({
   locale,
   request,
+  publicSharingAvailable = true,
 }: {
   locale: AdminLocale;
   request: Request;
+  /** False under the loopback evaluation profile, which cannot run the gateway. */
+  publicSharingAvailable?: boolean;
 }) {
   const zh = locale === "zh-TW";
   const gateway = useVisitorGateway(request, locale);
@@ -239,8 +243,11 @@ export function VisitorGatewayPanel({
   const localListenerActive = Boolean(
     status?.enabled || status?.listener_ready,
   );
+  const funnelPort = funnelHttpsPort(gatewayValue);
+  const funnelPortText = funnelPort ?? "<https-port>";
   const canStart = Boolean(
     status &&
+      publicSharingAvailable &&
       !gateway.pending &&
       !changed &&
       status.local_ready &&
@@ -377,6 +384,13 @@ export function VisitorGatewayPanel({
           ? "這裡只設定 RepoNPC 的訪客入口。主機與已選回答模型必須保持可用；停止分享不會影響本機預覽、準備內容、FAQ 審核或一般編輯。"
           : "Configure only the RepoNPC visitor entry here. The host and selected answer model must stay available. Stopping sharing does not affect local preview, preparation, FAQ review, or ordinary editing."}
       </p>
+      {!publicSharingAvailable && (
+        <p role="note">
+          {zh
+            ? "目前是本機試用模式，無法公開分享。本機預覽和卡片圖仍可使用；要公開分享，請改用正式模式啟動 RepoNPC。"
+            : "RepoNPC is running in local trial mode, so public sharing is unavailable. Local preview and the card image still work; to share publicly, start RepoNPC in production mode."}
+        </p>
+      )}
 
       {gateway.loading && !status && (
         <p role="status">
@@ -454,7 +468,7 @@ export function VisitorGatewayPanel({
 
       <fieldset
         className="visitor-gateway__origins"
-        disabled={!status || gateway.pending}
+        disabled={!status || gateway.pending || !publicSharingAvailable}
       >
         <legend>
           {zh
@@ -528,6 +542,7 @@ export function VisitorGatewayPanel({
         <button
           disabled={
             !status ||
+            !publicSharingAvailable ||
             !changed ||
             !hasBothOrNeither ||
             localListenerActive ||
@@ -652,15 +667,17 @@ export function VisitorGatewayPanel({
             : "Install, sign in, authorize, and run these commands yourself through Tailscale's official flow. RepoNPC does not run commands or manage Tailscale."}
         </p>
         <p>
-          {zh
-            ? "請將 <visitor-port> 替換為 REPONPC_VISITOR_GATEWAY_PORT；預設值為 8001。"
-            : "Replace <visitor-port> with REPONPC_VISITOR_GATEWAY_PORT; the default is 8001."}
+          {funnelPort
+            ? zh
+              ? "請將 <visitor-port> 替換為 REPONPC_VISITOR_GATEWAY_PORT；預設值為 8001。"
+              : "Replace <visitor-port> with REPONPC_VISITOR_GATEWAY_PORT; the default is 8001."
+            : zh
+              ? "請將 <https-port> 替換為訪客網址的連接埠（443、8443 或 10000），<visitor-port> 替換為 REPONPC_VISITOR_GATEWAY_PORT（預設 8001）。"
+              : "Replace <https-port> with the visitor origin's port (443, 8443, or 10000) and <visitor-port> with REPONPC_VISITOR_GATEWAY_PORT (default 8001)."}
         </p>
         <pre>
           <code>
-            {
-              "tailscale funnel --bg --https=443 http://127.0.0.1:<visitor-port>"
-            }
+            {`tailscale funnel --bg --https=${funnelPortText} http://127.0.0.1:<visitor-port>`}
           </code>
         </pre>
         <p>
@@ -669,7 +686,7 @@ export function VisitorGatewayPanel({
             : "Official command to turn Funnel off:"}
         </p>
         <pre>
-          <code>tailscale funnel --https=443 off</code>
+          <code>{`tailscale funnel --https=${funnelPortText} off`}</code>
         </pre>
         <p>
           {zh

@@ -132,9 +132,16 @@ Tailscale remains external. Guidance uses current official CLI syntax, requires
 Tailscale 1.52 or later, and shows commands containing only the configured port:
 
 ```text
-tailscale funnel --bg --https=443 http://127.0.0.1:<visitor-port>
-tailscale funnel --https=443 off
+tailscale funnel --bg --https=<https-port> http://127.0.0.1:<visitor-port>
+tailscale funnel --https=<https-port> off
 ```
+
+`<https-port>` is the port of the entered visitor origin (443 when it has no
+explicit port). The GUI fills it in only for Funnel's 443, 8443 or 10000 and
+otherwise keeps the placeholder, so it never suggests a port already used on
+the host. Under `loopback_evaluation` the GUI states that public sharing needs
+the production profile and disables the origin form and gateway start
+(2026-10-18).
 
 The owner performs installation/login/authorization/enable/disable in the
 official flow. RepoNPC does not invoke those commands, install Tailscale, read
