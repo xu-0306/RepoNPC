@@ -10,6 +10,8 @@ from typing import Any
 
 import pytest
 
+from reponpc.admin.onboarding import _analysis_response_schema
+from reponpc.chat.service import _answer_schema
 from reponpc.providers import (
     ProviderCapabilities,
     ProviderError,
@@ -19,6 +21,9 @@ from reponpc.providers import (
 from reponpc.providers.http_transport import ProviderHttpResponse
 from reponpc.providers.ollama import OllamaChatProvider
 from reponpc.providers.openai_compatible import OpenAICompatibleChatProvider
+from reponpc.providers.openai_responses import OpenAIResponsesChatProvider
+from tests.unit.test_chat_stream import StreamTransport, ndjson, sse
+from tests.unit.test_openai_responses import completed, events
 
 CAPABILITIES = ProviderCapabilities(
     streaming=False,
@@ -477,3 +482,44 @@ def test_openai_adapter_consumes_frozen_failure_fixtures_without_reflection(
 
     assert raised.value.code is expected_code
     assert str(scenario["body"]) not in str(raised.value)
+
+
+@pytest.mark.parametrize("adapter", ["ollama", "openai_compatible", "responses"])
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("schema_factory", [_answer_schema, _analysis_response_schema])
+def test_request_local_enum_passes_through_structured_output_unchanged(
+    adapter: str, stream: bool, schema_factory
+) -> None:
+    schema = schema_factory(("S1", "S2", "S3"))
+    content = '{"inferences":[]}'
+    if adapter == "ollama":
+        payload = {"message": {"content": content}, "done": True, "done_reason": "stop"}
+        frames = [ndjson(payload)]
+        cls = OllamaChatProvider
+    elif adapter == "openai_compatible":
+        payload = {"choices": [{"message": {"content": content}, "finish_reason": "stop"}]}
+        frames = sse({"choices": [{"delta": {"content": content}, "finish_reason": "stop"}]})
+        frames += sse("[DONE]")
+        cls = OpenAICompatibleChatProvider
+    else:
+        payload = completed(content)
+        frames = [line for frame in events(payload=payload) for line in sse(frame)]
+        cls = OpenAIResponsesChatProvider
+    transport = StreamTransport(frames) if stream else RecordingTransport([response(200, payload)])
+    provider = cls(
+        "https://models.example.test/v1", "fixture-chat", CAPABILITIES, transport=transport
+    )
+    kwargs = {"on_progress": lambda _: None} if stream else {}
+    assert provider.generate(MESSAGES, schema, 100, 3.0, **kwargs).content == content
+    assert len(transport.requests) == 1
+    request = transport.requests[0] if stream else json.loads(transport.requests[0].body)
+    if adapter == "ollama":
+        assert request["format"] == schema
+    else:
+        format_config = (
+            request["text"]["format"]
+            if adapter == "responses"
+            else request["response_format"]["json_schema"]
+        )
+        assert format_config["strict"] is True
+        assert format_config["schema"] == schema

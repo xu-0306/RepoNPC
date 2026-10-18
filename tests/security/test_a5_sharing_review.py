@@ -367,9 +367,9 @@ def test_export_copies_only_actually_cited_owner_assertions(tmp_path: Path) -> N
 
     def generate(messages, response_schema, max_output_tokens, timeout):
         packed = "\n".join(item.content for item in messages)
-        source = re.search(
-            r"\[UNTRUSTED DATA (S\d+) persistent_id=\S+ class=OWNER_ASSERTION", packed
-        )
+        assert "persistent_id=" not in packed
+        assert "[UNTRUSTED DATA S1 " in packed
+        source = re.search(r"\[UNTRUSTED DATA (S\d+) class=OWNER_ASSERTION", packed)
         assert source is not None
         return ProviderResult(
             {

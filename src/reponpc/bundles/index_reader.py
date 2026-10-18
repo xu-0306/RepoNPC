@@ -425,7 +425,7 @@ class ReadOnlyIndex:
         accepted_count = 0
         for ordinal, evidence in enumerate(records, start=1):
             block = (
-                f"[UNTRUSTED DATA S{ordinal} persistent_id={evidence.evidence_id} "
+                f"[UNTRUSTED DATA S{ordinal} "
                 f"class={evidence.evidence_class} repository={evidence.repository_slug} "
                 f"commit={evidence.commit_sha} path={evidence.path} "
                 f"lines={evidence.start_line}-{evidence.end_line}]\n"

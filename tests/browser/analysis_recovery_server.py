@@ -236,7 +236,10 @@ class FixtureChat:
                 self.controller.retry_release.wait(timeout=30)
             if slug_call <= 2:
                 raise ProviderError(ProviderFailureCode.INVALID_RESPONSE)
-        evidence_ids = re.findall(r"persistent_id=(E_[0-9a-f]+)", prompt)
+        allowed = re.search(r"ALLOWED_EVIDENCE_IDS=(\[[^\]]*\])", messages[0].content)
+        evidence_ids = json.loads(allowed[1]) if allowed else []
+        assert evidence_ids == re.findall(r"\[UNTRUSTED DATA (S\d+) ", prompt)
+        assert "persistent_id=" not in prompt
         if not evidence_ids:
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE)
         return ProviderResult(

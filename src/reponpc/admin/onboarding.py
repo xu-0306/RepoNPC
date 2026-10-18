@@ -8,7 +8,7 @@ import tempfile
 import threading
 import time
 import unicodedata
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, Literal
@@ -615,15 +615,21 @@ class GuidedOnboardingService:
                     if not packed.evidence_ids:
                         raise GuidedOnboardingError("CONFIG_INVALID")
                     selected = list(packed.evidence_ids)
+                    source_ids = {
+                        f"S{ordinal}": evidence_id
+                        for ordinal, evidence_id in enumerate(selected, start=1)
+                    }
                     facts = [
                         _fact_payload(reader.evidence(evidence_id)) for evidence_id in selected
                     ]
                     facts = [fact for fact in facts if fact is not None]
                     _raise_if_cancelled(cancel_requested)
                     timeout = self._analysis_provider_subdeadline(deadline)
-                    messages = _analysis_messages(normalized_slug, packed.text, selected)
+                    messages = _analysis_messages(normalized_slug, packed.text, tuple(source_ids))
+                    response_schema = _analysis_response_schema(tuple(source_ids))
                     _validate_analysis_request(
                         messages,
+                        response_schema,
                         output_tokens=analysis_output_tokens,
                         max_context_tokens=providers.chat.capabilities().max_context_tokens,
                     )
@@ -632,13 +638,13 @@ class GuidedOnboardingService:
                     with self._analysis_generation_permit(limits, ProviderLane.ADMIN_SINGLE):
                         provider_result = providers.generate(
                             messages,
-                            _analysis_response_schema(),
+                            response_schema,
                             analysis_output_tokens,
                             timeout,
                         )
                     _validate_analysis_termination(provider_result)
                     envelope = _parse_analysis(
-                        provider_result.content, frozenset(selected), messages[-1].content
+                        provider_result.content, source_ids, messages[-1].content
                     )
                 finally:
                     reader.close()
@@ -793,14 +799,20 @@ class GuidedOnboardingService:
                     if not packed.evidence_ids:
                         raise GuidedOnboardingError("CONFIG_INVALID")
                     selected = list(packed.evidence_ids)
+                    source_ids = {
+                        f"S{ordinal}": evidence_id
+                        for ordinal, evidence_id in enumerate(selected, start=1)
+                    }
                     facts = [
                         _fact_payload(reader.evidence(evidence_id)) for evidence_id in selected
                     ]
                     facts = [fact for fact in facts if fact is not None]
                     _raise_if_cancelled(cancel_requested)
-                    messages = _analysis_messages(snapshot.slug, packed.text, selected)
+                    messages = _analysis_messages(snapshot.slug, packed.text, tuple(source_ids))
+                    response_schema = _analysis_response_schema(tuple(source_ids))
                     _validate_analysis_request(
                         messages,
+                        response_schema,
                         output_tokens=analysis_output_tokens,
                         max_context_tokens=providers.chat.capabilities().max_context_tokens,
                     )
@@ -811,7 +823,7 @@ class GuidedOnboardingService:
                     ):
                         provider_result = providers.generate(
                             messages,
-                            _analysis_response_schema(),
+                            response_schema,
                             analysis_output_tokens,
                             self._analysis_provider_subdeadline(deadline),
                             on_attempt=lambda _attempt: _notify_stage(stage_changed, "generating"),
@@ -819,7 +831,7 @@ class GuidedOnboardingService:
                     _validate_analysis_termination(provider_result)
                     _notify_stage(stage_changed, "validating")
                     envelope = _parse_analysis(
-                        provider_result.content, frozenset(selected), messages[-1].content
+                        provider_result.content, source_ids, messages[-1].content
                     )
                 finally:
                     reader.close()
@@ -1042,10 +1054,11 @@ class GuidedOnboardingService:
         """Reserve the full request envelope before packing repository evidence."""
 
         capabilities = providers.chat.capabilities()
-        base_messages = _analysis_messages(slug, "", candidate_ids)
+        source_ids = tuple(f"S{ordinal}" for ordinal in range(1, len(candidate_ids) + 1))
+        base_messages = _analysis_messages(slug, "", source_ids)
         reserved = _analysis_request_tokens(base_messages)
         reserved += _conservative_token_count(
-            json.dumps(_analysis_response_schema(), ensure_ascii=False, sort_keys=True)
+            json.dumps(_analysis_response_schema(source_ids), ensure_ascii=False, sort_keys=True)
         )
         available = (
             capabilities.max_context_tokens
@@ -1338,7 +1351,7 @@ def _contribution_messages(slug: str, statement: str) -> tuple[ProviderMessage, 
     )
 
 
-def _analysis_response_schema() -> dict[str, Any]:
+def _analysis_response_schema(source_ids: Sequence[str]) -> dict[str, Any]:
     localized = {
         "type": "object",
         "additionalProperties": False,
@@ -1376,7 +1389,7 @@ def _analysis_response_schema() -> dict[str, Any]:
                             "type": "array",
                             "minItems": 1,
                             "maxItems": 8,
-                            "items": {"type": "string"},
+                            "items": {"type": "string", "enum": list(source_ids)},
                         },
                     },
                 },
@@ -1394,6 +1407,7 @@ def _analysis_request_tokens(messages: Sequence[ProviderMessage]) -> int:
 
 def _validate_analysis_request(
     messages: Sequence[ProviderMessage],
+    response_schema: dict[str, Any],
     *,
     output_tokens: int,
     max_context_tokens: int,
@@ -1402,7 +1416,7 @@ def _validate_analysis_request(
 
     request_tokens = _analysis_request_tokens(messages)
     request_tokens += _conservative_token_count(
-        json.dumps(_analysis_response_schema(), ensure_ascii=False, sort_keys=True)
+        json.dumps(response_schema, ensure_ascii=False, sort_keys=True)
     )
     if request_tokens + output_tokens + _ANALYSIS_CONTEXT_SAFETY_MARGIN_TOKENS > max_context_tokens:
         raise GuidedOnboardingError("CONFIG_INVALID")
@@ -1454,7 +1468,7 @@ def _contribution_response_schema() -> dict[str, Any]:
 
 
 def _parse_analysis(
-    content: str | dict[str, Any], selected: frozenset[str], source_text: str
+    content: str | dict[str, Any], selected: Mapping[str, str], source_text: str
 ) -> AnalysisEnvelope:
     try:
         envelope = AnalysisEnvelope.model_validate(_provider_payload(content))
@@ -1474,6 +1488,10 @@ def _parse_analysis(
         [value for item in envelope.inferences for value in (item.title, item.statement)],
         source_text,
     )
+    for inference in envelope.inferences:
+        inference.supporting_evidence_ids = tuple(
+            selected[source_id] for source_id in inference.supporting_evidence_ids
+        )
     return envelope
 
 

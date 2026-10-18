@@ -234,7 +234,7 @@ class GroundedChatService:
                     try:
                         result = self._providers.generate_with_progress(
                             provider_messages,
-                            _ANSWER_SCHEMA,
+                            _answer_schema(tuple(selected)),
                             self._max_output_tokens,
                             self._remaining(deadline),
                             on_progress=observe,
@@ -251,7 +251,7 @@ class GroundedChatService:
                     )
                     result = generate(
                         provider_messages,
-                        _ANSWER_SCHEMA,
+                        _answer_schema(tuple(selected)),
                         self._max_output_tokens,
                         self._remaining(deadline),
                     )
@@ -448,27 +448,31 @@ def _chunks(value: str, size: int) -> tuple[str, ...]:
     return tuple(value[offset : offset + size] for offset in range(0, len(value), size))
 
 
-_ANSWER_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["segments", "insufficient_evidence"],
-    "properties": {
-        "segments": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["kind", "text", "source_ids"],
-                "properties": {
-                    "kind": {
-                        "type": "string",
-                        "enum": ["person", "participation", "project", "inference"],
+def _answer_schema(source_ids: tuple[str, ...]) -> dict[str, Any]:
+    source_item: dict[str, Any] = {"type": "string"}
+    if source_ids:
+        source_item["enum"] = list(source_ids)
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["segments", "insufficient_evidence"],
+        "properties": {
+            "segments": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["kind", "text", "source_ids"],
+                    "properties": {
+                        "kind": {
+                            "type": "string",
+                            "enum": ["person", "participation", "project", "inference"],
+                        },
+                        "text": {"type": "string"},
+                        "source_ids": {"type": "array", "items": source_item},
                     },
-                    "text": {"type": "string"},
-                    "source_ids": {"type": "array", "items": {"type": "string"}},
                 },
             },
+            "insufficient_evidence": {"type": "boolean"},
         },
-        "insufficient_evidence": {"type": "boolean"},
-    },
-}
+    }

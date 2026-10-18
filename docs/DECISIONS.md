@@ -644,3 +644,12 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
 - **Why:** The owner needs to avoid ports already used on the host, which a single environment default cannot do from the admin GUI.
 - **Boundaries:** The listener still binds only `127.0.0.1`; no new error codes; the CSP, trial-mode logic and provider behavior are unchanged. Restore keeps the restored port value.
 - **Consequences:** Clients that omit `visitor_port` keep the owner value. Any port change needs a fresh owner-reported external check before the entry is treated as verified.
+
+## ADR-063: Model output cites only request-local evidence IDs
+
+- **Status:** Accepted 2026-10-19 (owner-approved).
+- **Authorization:** The owner approved the request-local evidence ID repair on 2026-10-19.
+- **Why:** Diagnosis with qwen3.5:9b and qwen3.8:27b found 4 of 6 chat calls rejected because the model cited persistent `E_...` IDs exposed beside `S{n}` in evidence headers; replacing E IDs with the matching S IDs offline made the same outputs pass validation. Analysis had the inverse mismatch and produced `PROVIDER_EVIDENCE_ID_INVALID` in the clean-host run.
+- **Decision:** Evidence headers expose only ordered request-local `S{n}` IDs plus existing metadata and escaped untrusted content. Chat and analysis structured-output schemas enumerate the request's allowed S IDs. Analysis prompts and examples use the same S IDs; after full validation the server maps them back to the ordered persistent IDs retained by context packing.
+- **Boundaries:** Validation strictness is unchanged: unknown/unselected IDs still fail, and analysis rejects both persistent E IDs and unknown S IDs with `PROVIDER_EVIDENCE_ID_INVALID`. Stored and API `supporting_evidence_ids` remain persistent E IDs; no schema migration, provider fallback, CSP change, dependency or real-provider call is introduced. Empty chat selections preserve the existing no-match behavior without an empty schema enum.
+- **Consequences:** Prompt-parsing fakes use request-local IDs. Provider adapters pass the schema enum through unchanged; local deterministic tests verify schema order, strict rejection and persistent-ID mapping. This repair does not establish live-provider or release acceptance.
