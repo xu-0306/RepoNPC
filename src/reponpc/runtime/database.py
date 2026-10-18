@@ -1442,6 +1442,14 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             "DEFAULT 'chat_completions' CHECK(chat_api IN ('chat_completions', 'responses'))",
         ),
     ),
+    Migration(
+        version=36,
+        name="visitor_gateway_owner_port",
+        statements=(
+            "ALTER TABLE visitor_gateway_settings ADD COLUMN visitor_port INTEGER "
+            "CHECK (visitor_port IS NULL OR visitor_port BETWEEN 1024 AND 65535)",
+        ),
+    ),
 )
 
 

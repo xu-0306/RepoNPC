@@ -50,7 +50,7 @@ fragment or extra subdomain is accepted.
 | New environment field | Default / validation | Meaning |
 | --- | --- | --- |
 | `REPONPC_ADMIN_ORIGINS` | CSV; empty resolves to the existing `REPONPC_PUBLIC_BASE_URL`; exact normalized origins | Explicit private production administration origins. HTTPS, or direct HTTP loopback for existing local administration. No wildcards, user information, query, fragment or path. |
-| `REPONPC_VISITOR_GATEWAY_PORT` | `8001`; integer 1–65535; different from the application port | Visitor listener always binds `127.0.0.1`; no configurable public bind. |
+| `REPONPC_VISITOR_GATEWAY_PORT` | `8001`; integer 1–65535; different from the application port | Default local visitor port. The owner can override it in the admin GUI (1024–65535, different from the application port), stored in runtime SQLite migration 36. The override can change only while the gateway is stopped and clears external verification. Visitor listener always binds `127.0.0.1`; no configurable public bind. |
 | `REPONPC_VISITOR_TRUSTED_PROXY_CIDRS` | Empty; optional canonical loopback-only CIDRs | Explicit trust for the direct local proxy's single-address `X-Forwarded-For`. Empty means aggregate identity protection. |
 
 The gateway is available only in `production`. The evaluation launcher cannot
@@ -139,7 +139,9 @@ tailscale funnel --https=<https-port> off
 `<https-port>` is the port of the entered visitor origin (443 when it has no
 explicit port). The GUI fills it in only for Funnel's 443, 8443 or 10000 and
 otherwise keeps the placeholder, so it never suggests a port already used on
-the host. Under `loopback_evaluation` the GUI states that public sharing needs
+the host. The same form sets the local visitor service port (1024–65535,
+not the application port) and overrides `REPONPC_VISITOR_GATEWAY_PORT` while
+stored; the commands then show the effective port. Under `loopback_evaluation` the GUI states that public sharing needs
 the production profile and disables the origin form and gateway start
 (2026-10-18).
 
@@ -158,7 +160,7 @@ mutations require CSRF. Strict bodies reject unknown fields. All responses use
 | Endpoint | Strict request |
 | --- | --- |
 | `GET /api/admin/visitor-gateway` | No body |
-| `PUT /api/admin/visitor-gateway` | `{revision, gateway_origin, pages_origin}` |
+| `PUT /api/admin/visitor-gateway` | `{revision, gateway_origin, pages_origin, visitor_port?}`; `visitor_port` is tri-state: omitted keeps the stored value, `null` clears it to the environment default, an integer 1024–65535 sets it |
 | `POST /api/admin/visitor-gateway/start` | `{revision}` |
 | `POST /api/admin/visitor-gateway/stop` | `{revision}` |
 | `POST /api/admin/visitor-gateway/verify` | `{revision, external_checks_confirmed: true}` |
@@ -179,11 +181,13 @@ Allowlisted response schema:
   "verified_at": null,
   "verification_method": null,
   "active_bundle_id": null,
-  "client_identity_mode": "aggregate"
+  "client_identity_mode": "aggregate",
+  "visitor_port": 8001,
+  "visitor_port_source": "environment"
 }
 ```
 
-`client_identity_mode` is `aggregate` or `trusted_proxy`. `local_ready` comes
+`visitor_port` is the effective local listener port, and `visitor_port_source` is `owner` or `environment`. `client_identity_mode` is `aggregate` or `trusted_proxy`. `local_ready` comes
 from actual current bundle/runtime/model readiness. `entry_configured` means
 both validated origins are stored and the listener is actually ready; it does
 not assert that Funnel is authorized or reachable. `external_verified` means `verified_at is not null and listener_ready`. Configure,

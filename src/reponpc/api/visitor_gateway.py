@@ -30,6 +30,14 @@ class VisitorGatewayError(RuntimeError):
         super().__init__("visitor gateway operation failed")
 
 
+class _KeepVisitorPort:
+    """Marks a configure call that did not mention the local port."""
+
+
+KEEP_VISITOR_PORT = _KeepVisitorPort()
+VisitorPortChange = int | None | _KeepVisitorPort
+
+
 class _LoopbackServer(uvicorn.Server):
     @contextmanager
     def capture_signals(self) -> Generator[None, None, None]:
@@ -69,6 +77,7 @@ class VisitorGateway:
         self._error_code: str | None = None
         self._started_gateway_origin: str | None = None
         self._started_pages_origin: str | None = None
+        self._started_visitor_port: int | None = None
         self._operation_lock = asyncio.Lock()
 
     def snapshot(self) -> dict[str, Any]:
@@ -84,7 +93,7 @@ class VisitorGateway:
             self._accepting = False
             self._error_code = "GATEWAY_UNAVAILABLE"
             listener_ready = False
-            settings = VisitorGatewaySettings(1, False, None, None, None)
+            settings = VisitorGatewaySettings(1, False, None, None, None, None)
         return {
             "revision": settings.revision,
             "gateway_origin": settings.gateway_origin,
@@ -103,6 +112,8 @@ class VisitorGateway:
             "client_identity_mode": (
                 "trusted_proxy" if self._environment.visitor_trusted_proxy_cidrs else "aggregate"
             ),
+            "visitor_port": self._effective_visitor_port(settings),
+            "visitor_port_source": "owner" if settings.visitor_port is not None else "environment",
         }
 
     async def resume(self) -> dict[str, Any]:
@@ -121,17 +132,28 @@ class VisitorGateway:
             return self.snapshot()
 
     async def configure(
-        self, *, revision: int, gateway_origin: str | None, pages_origin: str | None
+        self,
+        *,
+        revision: int,
+        gateway_origin: str | None,
+        pages_origin: str | None,
+        visitor_port: VisitorPortChange = KEEP_VISITOR_PORT,
     ) -> dict[str, Any]:
         async with self._operation_lock:
             return await self._configure(
                 revision=revision,
                 gateway_origin=gateway_origin,
                 pages_origin=pages_origin,
+                visitor_port=visitor_port,
             )
 
     async def _configure(
-        self, *, revision: int, gateway_origin: str | None, pages_origin: str | None
+        self,
+        *,
+        revision: int,
+        gateway_origin: str | None,
+        pages_origin: str | None,
+        visitor_port: VisitorPortChange = KEEP_VISITOR_PORT,
     ) -> dict[str, Any]:
         settings = self._store.get()
         self._expect_revision(settings, revision)
@@ -147,11 +169,17 @@ class VisitorGateway:
             )
             if normalized_gateway != gateway_origin or normalized_pages != pages_origin:
                 raise VisitorGatewayError("GATEWAY_CONFIGURATION_INVALID")
+        if isinstance(visitor_port, _KeepVisitorPort):
+            port_to_store = settings.visitor_port
+        else:
+            self._validate_visitor_port(visitor_port)
+            port_to_store = visitor_port
         try:
             self._store.configure(
                 revision=revision,
                 gateway_origin=gateway_origin,
                 pages_origin=pages_origin,
+                visitor_port=port_to_store,
             )
         except VisitorGatewayStoreError as exc:
             raise VisitorGatewayError(exc.code) from None
@@ -169,9 +197,11 @@ class VisitorGateway:
         if self._listener_ready() and (
             self._started_gateway_origin,
             self._started_pages_origin,
+            self._started_visitor_port,
         ) == (
             settings.gateway_origin,
             settings.pages_origin,
+            self._effective_visitor_port(settings),
         ):
             self._store.set_enabled(revision=revision, enabled=True)
             return self.snapshot()
@@ -238,6 +268,7 @@ class VisitorGateway:
 
     async def _listen(self, settings: VisitorGatewaySettings) -> None:
         self._starting = True
+        port = self._effective_visitor_port(settings)
         listener: socket.socket | None = None
         server: _LoopbackServer | None = None
         task: asyncio.Task[None] | None = None
@@ -248,7 +279,7 @@ class VisitorGateway:
                 listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             else:
                 listener.setsockopt(socket.SOL_SOCKET, exclusive_address, 1)
-            listener.bind(("127.0.0.1", self._environment.visitor_gateway_port))
+            listener.bind(("127.0.0.1", port))
             listener.listen(socket.SOMAXCONN)
             listener.setblocking(False)
             listener.set_inheritable(False)
@@ -262,7 +293,7 @@ class VisitorGateway:
                 pages_origin=settings.pages_origin or "",
                 listener_ready_supplier=self._listener_ready,
                 web_dist=self._web_dist,
-                gateway_port=self._environment.visitor_gateway_port,
+                gateway_port=port,
                 trusted_proxy_cidrs=self._environment.visitor_trusted_proxy_cidrs,
                 max_message_characters=self._environment.max_message_characters,
                 max_history_messages=self._environment.max_history_messages,
@@ -274,7 +305,7 @@ class VisitorGateway:
             config = uvicorn.Config(
                 app,
                 host="127.0.0.1",
-                port=self._environment.visitor_gateway_port,
+                port=port,
                 lifespan="off",
                 proxy_headers=False,
                 log_config=None,
@@ -297,6 +328,7 @@ class VisitorGateway:
             self._error_code = None
             self._started_gateway_origin = settings.gateway_origin
             self._started_pages_origin = settings.pages_origin
+            self._started_visitor_port = port
         except VisitorGatewayError:
             self._error_code = "GATEWAY_UNAVAILABLE"
             await self._cleanup_start_failure(server, task, listener)
@@ -378,6 +410,7 @@ class VisitorGateway:
         self._socket = None
         self._started_gateway_origin = None
         self._started_pages_origin = None
+        self._started_visitor_port = None
         return stopped
 
     def _listener_ready(self) -> bool:
@@ -434,6 +467,17 @@ class VisitorGateway:
         ):
             raise VisitorGatewayError("GATEWAY_CONFIGURATION_INVALID")
         return gateway, pages
+
+    def _effective_visitor_port(self, settings: VisitorGatewaySettings) -> int:
+        if settings.visitor_port is not None:
+            return settings.visitor_port
+        return self._environment.visitor_gateway_port
+
+    def _validate_visitor_port(self, port: int | None) -> None:
+        if port is None:
+            return
+        if isinstance(port, bool) or not 1024 <= port <= 65535 or port == self._environment.port:
+            raise VisitorGatewayError("GATEWAY_CONFIGURATION_INVALID")
 
     @staticmethod
     def _expect_revision(settings: VisitorGatewaySettings, revision: int) -> None:

@@ -4,7 +4,11 @@ import {
   VisitorGatewayPanel,
   visitorGatewayErrorMessage,
 } from "./VisitorGatewayPanel";
-import { funnelHttpsPort } from "./visitorGatewayPort";
+import {
+  funnelHttpsPort,
+  parseVisitorPort,
+  withFunnelPort,
+} from "./visitorGatewayPort";
 import type { VisitorGatewayRequest } from "./VisitorGatewayPanel";
 
 describe("visitor gateway panel", () => {
@@ -78,6 +82,78 @@ describe("visitor gateway panel", () => {
     expect(funnelHttpsPort("http://host.example.ts.net:10000")).toBeNull();
     expect(funnelHttpsPort("")).toBeNull();
     expect(funnelHttpsPort("not a url")).toBeNull();
+  });
+
+  it.each(["zh-TW", "en"] as const)(
+    "%s labels the public entry port and local visitor port controls",
+    (locale) => {
+      const request = vi.fn(
+        async <T,>(): Promise<T> => null as T,
+      ) as VisitorGatewayRequest;
+      const markup = renderToStaticMarkup(
+        <VisitorGatewayPanel locale={locale} request={request} />,
+      );
+      const funnelLabel =
+        locale === "zh-TW" ? "公開入口連接埠" : "Public entry port";
+      const localLabel =
+        locale === "zh-TW"
+          ? "本機訪客服務連接埠"
+          : "Local visitor service port";
+
+      expect(markup).toContain(`>${funnelLabel}<`);
+      expect(markup).toContain('for="visitor-funnel-port"');
+      expect(markup).toContain('id="visitor-funnel-port"');
+      expect(markup).toContain('value="443"');
+      expect(markup).toContain('<option value="8443">8443</option>');
+      expect(markup).toContain('<option value="10000">10000</option>');
+      expect(markup).toContain(`>${localLabel}<`);
+      expect(markup).toContain('for="visitor-local-port"');
+      expect(markup).toContain('id="visitor-local-port"');
+      // A text input keeps mistyped values visible (and invalid) instead of
+      // collapsing them to "" which would mean "clear to the default".
+      expect(markup).toMatch(
+        /<input(?=[^>]*id="visitor-local-port")(?=[^>]*type="text")(?=[^>]*pattern="\[0-9\]\*")[^>]*>/,
+      );
+      expect(markup).not.toContain('type="number"');
+      expect(markup).toContain('inputMode="numeric"');
+      expect(markup).toContain('min="1024"');
+      expect(markup).toContain('max="65535"');
+      expect(markup).not.toContain("Using the default");
+      expect(request).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rewrites only the Funnel port of the visitor origin", () => {
+    expect(withFunnelPort("https://host.example.ts.net:10000", "443")).toBe(
+      "https://host.example.ts.net",
+    );
+    expect(withFunnelPort("https://host.example.ts.net", "10000")).toBe(
+      "https://host.example.ts.net:10000",
+    );
+    expect(withFunnelPort("https://host.example.ts.net:443", "8443")).toBe(
+      "https://host.example.ts.net:8443",
+    );
+    expect(withFunnelPort(" https://host.example.ts.net/ ", "8443")).toBe(
+      "https://host.example.ts.net:8443",
+    );
+    expect(withFunnelPort("https://host.example.ts.net/x/", "10000")).toBe(
+      "https://host.example.ts.net:10000",
+    );
+    expect(withFunnelPort("http://host.example.ts.net:8443", "10000")).toBe(
+      "http://host.example.ts.net:8443",
+    );
+    expect(withFunnelPort("not a url", "10000")).toBe("not a url");
+    expect(withFunnelPort("", "443")).toBe("");
+  });
+
+  it("accepts only whole local ports from 1024 to 65535", () => {
+    expect(parseVisitorPort("1024")).toBe(1024);
+    expect(parseVisitorPort(" 65535 ")).toBe(65535);
+    expect(parseVisitorPort("1023")).toBeNull();
+    expect(parseVisitorPort("65536")).toBeNull();
+    expect(parseVisitorPort("8001.5")).toBeNull();
+    expect(parseVisitorPort("")).toBeNull();
+    expect(parseVisitorPort("80a")).toBeNull();
   });
 
   it("maps only known gateway errors to actionable safe copy", () => {

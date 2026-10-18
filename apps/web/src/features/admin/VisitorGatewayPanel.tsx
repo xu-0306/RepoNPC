@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AdminLocale } from "./AdminWorkspace";
 import { ModelSetupRequests } from "./modelSetupRequests";
-import { funnelHttpsPort } from "./visitorGatewayPort";
+import {
+  type FunnelHttpsPort,
+  funnelHttpsPort,
+  parseVisitorPort,
+  withFunnelPort,
+} from "./visitorGatewayPort";
 
 export interface VisitorGatewayStatus {
   revision: number;
@@ -17,6 +22,8 @@ export interface VisitorGatewayStatus {
   verification_method: "owner_reported" | null;
   active_bundle_id: string | null;
   client_identity_mode: "aggregate" | "trusted_proxy";
+  visitor_port: number;
+  visitor_port_source: "owner" | "environment";
 }
 
 export type VisitorGatewayRequest = <T>(
@@ -198,6 +205,7 @@ function useVisitorGateway(request: Request, locale: AdminLocale) {
 interface GatewayDraft {
   gateway: string;
   pages: string;
+  port: string;
   revision: number;
   baseGateway: string;
   basePages: string;
@@ -215,7 +223,8 @@ function draftChanged(
     draft &&
       status &&
       (originValue(draft.gateway) !== (status.gateway_origin ?? "") ||
-        originValue(draft.pages) !== (status.pages_origin ?? "")),
+        originValue(draft.pages) !== (status.pages_origin ?? "") ||
+        draft.port.trim() !== String(status.visitor_port)),
   );
 }
 
@@ -238,6 +247,15 @@ export function VisitorGatewayPanel({
   const changed = draftChanged(draft, status);
   const gatewayValue = changed ? (draft?.gateway ?? "") : serverGateway;
   const pagesValue = changed ? (draft?.pages ?? "") : serverPages;
+  const portValue = changed
+    ? (draft?.port ?? "")
+    : status
+      ? String(status.visitor_port)
+      : "";
+  // A blank port means "use the environment default" and is valid.
+  const portBlank = portValue.trim() === "";
+  const portNumber = parseVisitorPort(portValue);
+  const portValid = portBlank || portNumber !== null;
   const hasBothOrNeither =
     Boolean(gatewayValue.trim()) === Boolean(pagesValue.trim());
   const localListenerActive = Boolean(
@@ -245,6 +263,9 @@ export function VisitorGatewayPanel({
   );
   const funnelPort = funnelHttpsPort(gatewayValue);
   const funnelPortText = funnelPort ?? "<https-port>";
+  const visitorPortText = status
+    ? String(portNumber ?? status.visitor_port)
+    : "<visitor-port>";
   const canStart = Boolean(
     status &&
       publicSharingAvailable &&
@@ -270,7 +291,7 @@ export function VisitorGatewayPanel({
       checksComplete,
   );
 
-  function edit(field: "gateway" | "pages", value: string) {
+  function edit(field: "gateway" | "pages" | "port", value: string) {
     if (!status) return;
     setDraft((current) => {
       const keepCurrent = draftChanged(current, status);
@@ -280,6 +301,7 @@ export function VisitorGatewayPanel({
           : {
               gateway: status.gateway_origin ?? "",
               pages: status.pages_origin ?? "",
+              port: String(status.visitor_port),
               revision: status.revision,
               baseGateway: status.gateway_origin ?? "",
               basePages: status.pages_origin ?? "",
@@ -289,12 +311,21 @@ export function VisitorGatewayPanel({
   }
 
   async function save() {
-    if (!status || !draft || !changed || !hasBothOrNeither) return;
-    const saved = await gateway.mutate("/api/admin/visitor-gateway", "PUT", {
+    if (!status || !draft || !changed || !hasBothOrNeither || !portValid)
+      return;
+    const body: Record<string, string | number | boolean | null> = {
       revision: draft.revision,
       gateway_origin: draft.gateway.trim() || null,
       pages_origin: draft.pages.trim() || null,
-    });
+    };
+    // Omitting visitor_port keeps the stored value; null clears it to the default.
+    const nextPort = portBlank ? null : portNumber;
+    if (nextPort !== status.visitor_port) body.visitor_port = nextPort;
+    const saved = await gateway.mutate(
+      "/api/admin/visitor-gateway",
+      "PUT",
+      body,
+    );
     if (saved) {
       setDraft(null);
       setChecks([false, false, false, false]);
@@ -488,6 +519,26 @@ export function VisitorGatewayPanel({
             value={gatewayValue}
           />
         </label>
+        <label htmlFor="visitor-funnel-port">
+          {zh ? "公開入口連接埠" : "Public entry port"}
+          <select
+            id="visitor-funnel-port"
+            onChange={(event) =>
+              edit(
+                "gateway",
+                withFunnelPort(
+                  gatewayValue,
+                  event.target.value as FunnelHttpsPort,
+                ),
+              )
+            }
+            value={funnelPort ?? "443"}
+          >
+            <option value="443">443</option>
+            <option value="8443">8443</option>
+            <option value="10000">10000</option>
+          </select>
+        </label>
         <label htmlFor="visitor-pages-origin">
           {zh
             ? "GitHub Pages 網域（不含專案路徑）"
@@ -505,6 +556,23 @@ export function VisitorGatewayPanel({
             value={pagesValue}
           />
         </label>
+        <label htmlFor="visitor-local-port">
+          {zh ? "本機訪客服務連接埠" : "Local visitor service port"}
+          <input
+            id="visitor-local-port"
+            inputMode="numeric"
+            max={65535}
+            min={1024}
+            onChange={(event) => edit("port", event.target.value)}
+            pattern="[0-9]*"
+            spellCheck={false}
+            type="text"
+            value={portValue}
+          />
+        </label>
+        {status?.visitor_port_source === "environment" && (
+          <p>{zh ? "目前使用預設值" : "Using the default"}</p>
+        )}
       </fieldset>
       <p id="visitor-pages-origin-help">
         {zh
@@ -530,6 +598,13 @@ export function VisitorGatewayPanel({
             : "Enter both origins or clear both."}
         </p>
       )}
+      {!portValid && (
+        <p role="alert">
+          {zh
+            ? "連接埠必須是 1024 到 65535 之間的整數。"
+            : "The port must be a whole number from 1024 to 65535."}
+        </p>
+      )}
       {changed && status?.enabled && (
         <p role="status">
           {zh
@@ -545,6 +620,7 @@ export function VisitorGatewayPanel({
             !publicSharingAvailable ||
             !changed ||
             !hasBothOrNeither ||
+            !portValid ||
             localListenerActive ||
             gateway.pending
           }
@@ -667,17 +743,21 @@ export function VisitorGatewayPanel({
             : "Install, sign in, authorize, and run these commands yourself through Tailscale's official flow. RepoNPC does not run commands or manage Tailscale."}
         </p>
         <p>
-          {funnelPort
+          {status && funnelPort
             ? zh
-              ? "請將 <visitor-port> 替換為 REPONPC_VISITOR_GATEWAY_PORT；預設值為 8001。"
-              : "Replace <visitor-port> with REPONPC_VISITOR_GATEWAY_PORT; the default is 8001."
-            : zh
-              ? "請將 <https-port> 替換為訪客網址的連接埠（443、8443 或 10000），<visitor-port> 替換為 REPONPC_VISITOR_GATEWAY_PORT（預設 8001）。"
-              : "Replace <https-port> with the visitor origin's port (443, 8443, or 10000) and <visitor-port> with REPONPC_VISITOR_GATEWAY_PORT (default 8001)."}
+              ? "指令中的連接埠已依上方設定填入。"
+              : "The ports in these commands come from the settings above."
+            : status
+              ? zh
+                ? "請將 <https-port> 替換為訪客網址的連接埠（443、8443 或 10000）。"
+                : "Replace <https-port> with the visitor origin's port (443, 8443, or 10000)."
+              : zh
+                ? "請將 <https-port> 替換為訪客網址的連接埠（443、8443 或 10000），<visitor-port> 替換為 REPONPC_VISITOR_GATEWAY_PORT（預設 8001）。"
+                : "Replace <https-port> with the visitor origin's port (443, 8443, or 10000) and <visitor-port> with REPONPC_VISITOR_GATEWAY_PORT (default 8001)."}
         </p>
         <pre>
           <code>
-            {`tailscale funnel --bg --https=${funnelPortText} http://127.0.0.1:<visitor-port>`}
+            {`tailscale funnel --bg --https=${funnelPortText} http://127.0.0.1:${visitorPortText}`}
           </code>
         </pre>
         <p>

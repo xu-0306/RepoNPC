@@ -820,6 +820,77 @@ def test_private_gateway_routes_drive_real_listener_with_auth_csrf_and_dated_rep
         assert cleared.headers["cache-control"] == "no-store"
 
 
+def test_private_visitor_port_put_is_tri_state_and_bounded(tmp_path):
+    primary = _application_without_github(tmp_path)
+    environment = load_environment(
+        {
+            "REPONPC_PUBLIC_BASE_URL": ORIGIN,
+            "REPONPC_ADMIN_ORIGINS": ORIGIN,
+            "REPONPC_CONFIG_REPOSITORY": "example/fixture",
+            "REPONPC_INDEX_MANIFEST_URL": "http://127.0.0.1:9/disabled",
+            "REPONPC_VISITOR_GATEWAY_PORT": "18001",
+        }
+    )
+    gateway = VisitorGateway(
+        database=RuntimeDatabase(tmp_path),
+        environment=environment,
+        state_supplier=lambda: primary.state.reponpc,
+        bundle_manager_supplier=lambda: None,
+        chat_service_supplier=lambda: None,
+        faq_supplier=lambda: None,
+        web_dist=tmp_path / "missing-web",
+    )
+    primary.state.visitor_gateway = gateway
+    base = "/api/admin/visitor-gateway"
+    origins = {
+        "gateway_origin": "https://fixture.ts.net",
+        "pages_origin": "https://fixture.github.io",
+    }
+    with TestClient(primary, base_url=ORIGIN) as client:
+        csrf = _login(client)
+        primary.state.reponpc = SetupState(
+            index_ready=True, model_ready=True, index_version="fixture-index"
+        )
+        headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
+        status = client.get(base).json()
+        assert status["visitor_port"] == 18001
+        assert status["visitor_port_source"] == "environment"
+
+        owner = client.put(
+            base, json={"revision": 1, **origins, "visitor_port": 19000}, headers=headers
+        )
+        assert owner.status_code == 200
+        assert owner.json()["visitor_port"] == 19000
+        assert owner.json()["visitor_port_source"] == "owner"
+        kept = client.put(base, json={"revision": 2, **origins}, headers=headers)
+        assert kept.status_code == 200
+        assert kept.json()["visitor_port"] == 19000
+        assert kept.json()["visitor_port_source"] == "owner"
+        cleared = client.put(
+            base, json={"revision": 3, **origins, "visitor_port": None}, headers=headers
+        )
+        assert cleared.status_code == 200
+        assert cleared.json()["visitor_port"] == 18001
+        assert cleared.json()["visitor_port_source"] == "environment"
+
+        revision = cleared.json()["revision"]
+        for invalid in (1023, 65536, "19000", True):
+            rejected = client.put(
+                base,
+                json={"revision": revision, **origins, "visitor_port": invalid},
+                headers=headers,
+            )
+            assert rejected.status_code == 400, invalid
+        app_port_conflict = client.put(
+            base,
+            json={"revision": revision, **origins, "visitor_port": environment.port},
+            headers=headers,
+        )
+        assert app_port_conflict.status_code == 422
+        assert app_port_conflict.json()["error"]["code"] == "GATEWAY_CONFIGURATION_INVALID"
+        assert client.get(base).json()["revision"] == revision
+
+
 def test_aggregate_admission_keeps_atomic_daily_budget_without_a_fake_ip_bucket(tmp_path):
     database = RuntimeDatabase(tmp_path)
     database.initialize()

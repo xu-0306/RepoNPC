@@ -370,7 +370,11 @@ public-response contracts remain compatible. Production private management
 binds configured Origin/Referer to the exact request scheme and Host; its host
 must differ from Pages and Funnel even across ports. New fields are
 `REPONPC_ADMIN_ORIGINS`, `REPONPC_VISITOR_GATEWAY_PORT` and
-`REPONPC_VISITOR_TRUSTED_PROXY_CIDRS`; the gateway defaults off and loopback-only.
+`REPONPC_VISITOR_TRUSTED_PROXY_CIDRS`; the gateway defaults off and loopback-only. The owner may store a local
+visitor port (1024–65535, not the application port) in the admin gateway form;
+while stored it overrides `REPONPC_VISITOR_GATEWAY_PORT`. `PUT
+/api/admin/visitor-gateway` treats an omitted `visitor_port` as keep, `null`
+as clear to the environment default, and an integer as set (ADR-062).
 Aggregate daily/provider/in-flight protection is the default identity mode;
 verified trusted-proxy mode additionally enforces per-IP admission and fails
 closed on invalid/missing identity. Exact visitor assets come from a validated

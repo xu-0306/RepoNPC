@@ -635,3 +635,12 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
 - **Boundaries:** The visitor bundle does not import React Aria, no new admin/public endpoint or provider behavior is added, and browser focus/dismissal remains a browser-level verification item. Existing CSS variables and reduced-motion rules remain the style boundary.
 - **CSP note (2026-10-15):** React Aria's runtime `<style>` injection is blocked by `style-src 'self'`; the CSP is unchanged, and the pressable `touch-action` rule is supplied statically in `styles.css`. Two residuals remain: one console CSP message per admin page load and no overscroll containment for confirmation dialogs in iOS Safari. Changing either requires an owner-approved CSP contract change.
 - **Consequences:** Admin confirmation and popover markup gains shared accessible semantics while the visitor dependency surface remains unchanged. F's local tests cover authored markup and callbacks; a full browser/accessibility pass is still required before release acceptance.
+
+## ADR-062: Owner-set Funnel ports in the gateway form
+
+- **Status:** Accepted 2026-10-18 (owner-approved design); implementation verification is recorded separately from release acceptance.
+- **Authorization:** The owner approved this gateway form change on 2026-10-18.
+- **Decision:** The public Funnel HTTPS port stays part of the stored visitor origin, so the form only rewrites that origin (443 drops the explicit port). This adds no API field. The local visitor service port is stored in `visitor_gateway_settings.visitor_port` (runtime migration 36, nullable, 1024–65535); NULL falls back to `REPONPC_VISITOR_GATEWAY_PORT`. `PUT /api/admin/visitor-gateway` treats `visitor_port` as tri-state: omitted keeps the stored value, `null` clears it to the environment default, and an integer sets it. Changes are accepted only while the listener is stopped, must differ from the application port, and clear external verification.
+- **Why:** The owner needs to avoid ports already used on the host, which a single environment default cannot do from the admin GUI.
+- **Boundaries:** The listener still binds only `127.0.0.1`; no new error codes; the CSP, trial-mode logic and provider behavior are unchanged. Restore keeps the restored port value.
+- **Consequences:** Clients that omit `visitor_port` keep the owner value. Any port change needs a fresh owner-reported external check before the entry is treated as verified.

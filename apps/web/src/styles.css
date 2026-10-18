@@ -2116,7 +2116,8 @@ form button {
   gap: 0.4rem;
   min-width: 0;
 }
-.visitor-gateway__origins input {
+.visitor-gateway__origins input,
+.visitor-gateway__origins select {
   box-sizing: border-box;
   max-width: 100%;
   min-width: 0;

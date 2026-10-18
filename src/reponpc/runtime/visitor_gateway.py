@@ -21,6 +21,7 @@ class VisitorGatewaySettings:
     gateway_origin: str | None
     pages_origin: str | None
     verified_at: str | None
+    visitor_port: int | None
 
 
 class VisitorGatewayStore:
@@ -37,7 +38,12 @@ class VisitorGatewayStore:
         return _settings(row)
 
     def configure(
-        self, *, revision: int, gateway_origin: str | None, pages_origin: str | None
+        self,
+        *,
+        revision: int,
+        gateway_origin: str | None,
+        pages_origin: str | None,
+        visitor_port: int | None,
     ) -> VisitorGatewaySettings:
         with self._database.connection() as connection:
             try:
@@ -47,11 +53,12 @@ class VisitorGatewayStore:
                     raise VisitorGatewayStoreError("GATEWAY_CONFIGURATION_INVALID")
                 connection.execute(
                     "UPDATE visitor_gateway_settings SET gateway_origin = ?, pages_origin = ?, "
+                    "visitor_port = ?, "
                     "revision = revision + 1, "
                     "verification_gateway_origin = NULL, verification_pages_origin = NULL, "
                     "verification_bundle_id = NULL, verified_at = NULL, verification_method = NULL "
                     "WHERE id = 1 AND revision = ?",
-                    (gateway_origin, pages_origin, revision),
+                    (gateway_origin, pages_origin, visitor_port, revision),
                 )
                 connection.commit()
             except Exception:
@@ -138,4 +145,5 @@ def _settings(row: sqlite3.Row) -> VisitorGatewaySettings:
         gateway_origin=row["gateway_origin"],
         pages_origin=row["pages_origin"],
         verified_at=row["verified_at"],
+        visitor_port=row["visitor_port"],
     )

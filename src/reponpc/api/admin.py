@@ -70,7 +70,11 @@ from reponpc.admin.operations import AdminOperations
 from reponpc.admin.preview_assets import PreviewAssetError, PreviewAssetStore
 from reponpc.admin.scene import AdminSceneService, SceneServiceError
 from reponpc.api.public import SVG_ASSET_CSP, error_response
-from reponpc.api.visitor_gateway import VisitorGateway, VisitorGatewayError
+from reponpc.api.visitor_gateway import (
+    KEEP_VISITOR_PORT,
+    VisitorGateway,
+    VisitorGatewayError,
+)
 from reponpc.bundles.manager import BundleActivationError
 from reponpc.cards.assets import CanonicalSprite, SpriteValidationError
 from reponpc.cards.conversion import (
@@ -392,6 +396,8 @@ class GatewayRevisionRequest(_StrictRequest):
 class GatewayConfigurationRequest(GatewayRevisionRequest):
     gateway_origin: Annotated[str | None, Field(max_length=2048)]
     pages_origin: Annotated[str | None, Field(max_length=2048)]
+    # Tri-state: omitted keeps the stored port, null clears it to the environment default.
+    visitor_port: Annotated[int | None, Field(ge=1024, le=65535, strict=True)] = None
 
 
 class GatewayVerificationRequest(GatewayRevisionRequest):
@@ -412,6 +418,8 @@ class GatewaySnapshot(_StrictRequest):
     verification_method: Literal["owner_reported"] | None
     active_bundle_id: str | None
     client_identity_mode: Literal["aggregate", "trusted_proxy"]
+    visitor_port: int
+    visitor_port_source: Literal["owner", "environment"]
 
 
 def create_admin_router(
@@ -1843,7 +1851,16 @@ def create_admin_router(
             request,
             session_token,
             csrf_token or "",
-            lambda gateway: gateway.configure(**body.model_dump()),
+            lambda gateway: gateway.configure(
+                revision=body.revision,
+                gateway_origin=body.gateway_origin,
+                pages_origin=body.pages_origin,
+                visitor_port=(
+                    body.visitor_port
+                    if "visitor_port" in body.model_fields_set
+                    else KEEP_VISITOR_PORT
+                ),
+            ),
         )
 
     @router.post("/visitor-gateway/start")

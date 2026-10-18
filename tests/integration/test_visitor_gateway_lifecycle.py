@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import socket
+import sqlite3
 from collections.abc import Callable, Coroutine
 from functools import wraps
 from pathlib import Path
@@ -12,7 +13,7 @@ import pytest
 
 from reponpc.api.visitor_gateway import VisitorGateway, VisitorGatewayError
 from reponpc.config.environment import load_environment
-from reponpc.runtime.database import RuntimeDatabase
+from reponpc.runtime.database import MIGRATIONS, RuntimeDatabase
 
 
 class BundleManager:
@@ -211,3 +212,120 @@ def test_bundle_manager_failure_does_not_fall_back_to_stale_setup_state(
 
     assert snapshot["local_ready"] is False
     assert snapshot["active_bundle_id"] is None
+
+
+def test_visitor_port_migration_adds_nullable_bounded_column(tmp_path: Path) -> None:
+    database = RuntimeDatabase(tmp_path / "runtime")
+    database.initialize(migrations=tuple(m for m in MIGRATIONS if m.version <= 35))
+    with database.connection() as connection:
+        connection.execute(
+            "UPDATE visitor_gateway_settings SET gateway_origin = 'https://fixture.ts.net', "
+            "pages_origin = 'https://fixture.github.io' WHERE id = 1"
+        )
+    database.initialize()
+
+    assert database.schema_version() == 36
+    with database.connection() as connection:
+        row = connection.execute(
+            "SELECT gateway_origin, visitor_port FROM visitor_gateway_settings WHERE id = 1"
+        ).fetchone()
+        assert tuple(row) == ("https://fixture.ts.net", None)
+        connection.execute("UPDATE visitor_gateway_settings SET visitor_port = 1024 WHERE id = 1")
+        connection.execute("UPDATE visitor_gateway_settings SET visitor_port = 65535 WHERE id = 1")
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "UPDATE visitor_gateway_settings SET visitor_port = 1023 WHERE id = 1"
+            )
+
+
+@run_async
+async def test_owner_visitor_port_overrides_environment_only_while_stopped(
+    tmp_path: Path,
+) -> None:
+    gateway, _database, environment_port, _state, _manager = make_gateway(tmp_path)
+    try:
+        initial = gateway.snapshot()
+        assert initial["visitor_port"] == environment_port
+        assert initial["visitor_port_source"] == "environment"
+
+        owner_port = free_port()
+        configured = await gateway.configure(
+            revision=1,
+            gateway_origin="https://fixture.ts.net",
+            pages_origin="https://fixture.github.io",
+            visitor_port=owner_port,
+        )
+        assert configured["visitor_port"] == owner_port
+        assert configured["visitor_port_source"] == "owner"
+
+        started = await gateway.start(revision=configured["revision"])
+        assert started["listener_ready"] and started["visitor_port"] == owner_port
+        with socket.create_connection(("127.0.0.1", owner_port), timeout=2):
+            pass
+
+        with pytest.raises(VisitorGatewayError) as running:
+            await gateway.configure(
+                revision=started["revision"],
+                gateway_origin="https://fixture.ts.net",
+                pages_origin="https://fixture.github.io",
+                visitor_port=free_port(),
+            )
+        assert running.value.code == "GATEWAY_CONFIGURATION_INVALID"
+
+        stopped = await gateway.stop(revision=started["revision"])
+        cleared = await gateway.configure(
+            revision=stopped["revision"],
+            gateway_origin="https://fixture.ts.net",
+            pages_origin="https://fixture.github.io",
+            visitor_port=None,
+        )
+        assert cleared["visitor_port"] == environment_port
+        assert cleared["visitor_port_source"] == "environment"
+    finally:
+        await gateway.shutdown()
+
+
+@run_async
+async def test_owner_visitor_port_rejects_out_of_range_and_app_port(tmp_path: Path) -> None:
+    gateway, _database, _port, _state, _manager = make_gateway(tmp_path)
+    app_port = gateway._environment.port
+    try:
+        for invalid in (1023, 65536, app_port):
+            with pytest.raises(VisitorGatewayError) as raised:
+                await gateway.configure(
+                    revision=1,
+                    gateway_origin="https://fixture.ts.net",
+                    pages_origin="https://fixture.github.io",
+                    visitor_port=invalid,
+                )
+            assert raised.value.code == "GATEWAY_CONFIGURATION_INVALID"
+        assert gateway.snapshot()["revision"] == 1
+        assert gateway.snapshot()["visitor_port_source"] == "environment"
+    finally:
+        await gateway.shutdown()
+
+
+@run_async
+async def test_changing_visitor_port_clears_external_proof(tmp_path: Path) -> None:
+    gateway, database, _port, _state, _manager = make_gateway(tmp_path)
+    configured = await gateway.configure(
+        revision=1,
+        gateway_origin="https://fixture.ts.net",
+        pages_origin="https://fixture.github.io",
+    )
+    with database.connection() as connection:
+        connection.execute(
+            "UPDATE visitor_gateway_settings SET verification_gateway_origin = "
+            "'https://fixture.ts.net', verification_pages_origin = 'https://fixture.github.io', "
+            "verification_bundle_id = 'active-bundle', verified_at = '2026-10-18T00:00:00Z', "
+            "verification_method = 'owner_reported' WHERE id = 1"
+        )
+    changed = await gateway.configure(
+        revision=configured["revision"],
+        gateway_origin="https://fixture.ts.net",
+        pages_origin="https://fixture.github.io",
+        visitor_port=free_port(),
+    )
+    assert changed["verified_at"] is None
+    assert changed["external_verified"] is False
+    assert changed["visitor_port_source"] == "owner"

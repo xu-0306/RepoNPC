@@ -342,6 +342,7 @@ def build_application(
             revision=intent.get().revision,
             gateway_origin=GATEWAY_ORIGIN,
             pages_origin=PAGES_ORIGIN,
+            visitor_port=None,
         )
         intent.set_enabled(revision=configured.revision, enabled=True)
         application.state.visitor_gateway = VisitorGateway(
