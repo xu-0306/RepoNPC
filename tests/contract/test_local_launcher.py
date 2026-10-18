@@ -1,4 +1,8 @@
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 POWERSHELL_LAUNCHER = ROOT / "scripts" / "start-reponpc.ps1"
@@ -79,3 +83,60 @@ def test_local_launcher_reconciles_only_owned_stale_processes() -> None:
     assert "$null -eq $process.Path" in script
     assert "not managed by this RepoNPC launcher" in script
     assert "[string]$State.started_at" in script
+
+
+@pytest.mark.parametrize(
+    ("config", "missing_executable", "needs_sync"),
+    [
+        ("version_info = 3.13.15\n", None, True),
+        ("version = 3.13.15\n", None, True),
+        ("version_info = 3.14.0\n", None, False),
+        ("version = 3.14.7\n", None, False),
+        ("home = C:\\Python315\nversion_info = 3.15.1\n", None, False),
+        ("version_info = 3.9.20\n", None, True),
+        ("version_info = invalid\n", None, True),
+        ("version = 3.14.invalid\n", None, True),
+        ("version_info = 3.14.7invalid\n", None, True),
+        ("version_info = 999999999999.14.7\n", None, True),
+        (" version_info = 3.14.7\r\n", None, False),
+        ("", None, True),
+        ("home = C:\\Python314\n", None, True),
+        (None, None, True),
+        ("version_info = 3.14.7\n", "python.exe", True),
+        ("version_info = 3.14.7\n", "reponpc.exe", True),
+    ],
+)
+def test_local_launcher_syncs_missing_or_incompatible_python_environment(
+    tmp_path: Path, config: str | None, missing_executable: str | None, needs_sync: bool
+) -> None:
+    shell = shutil.which("pwsh") or shutil.which("powershell")
+    if shell is None:
+        pytest.skip("PowerShell is unavailable on this host")
+    scripts = tmp_path / ".venv" / "Scripts"
+    scripts.mkdir(parents=True)
+    for executable in ("python.exe", "reponpc.exe"):
+        if executable != missing_executable:
+            (scripts / executable).touch()
+    if config is not None:
+        (tmp_path / ".venv" / "pyvenv.cfg").write_text(config, encoding="utf-8")
+
+    script = POWERSHELL_LAUNCHER.read_text(encoding="utf-8")
+    start = script.index('    $pythonExe = Join-Path $repoRoot ".venv\\Scripts\\python.exe"')
+    end = script.index("    if ($pythonEnvironmentNeedsSync) {", start)
+    decision = script[start:end]
+    command = (
+        "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; "
+        f"$repoRoot = '{str(tmp_path).replace(chr(39), chr(39) * 2)}';\n"
+        + decision
+        + "\nWrite-Output $pythonEnvironmentNeedsSync"
+    )
+    result = subprocess.run(
+        [shell, "-NoProfile", "-NonInteractive", "-Command", command],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() == str(needs_sync)

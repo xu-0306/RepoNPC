@@ -23,7 +23,7 @@ RepoNPC 不會自動切換模型或替你下載、開啟公開連線。一般預
 
 **已有 Windows 安裝候選：**從開始功能表開啟 RepoNPC，依管理頁引導操作。安裝候選的建置、校驗與未完成驗收見 [Windows 指南](packaging/windows/README.md)；目前不宣稱已有正式穩定安裝版。
 
-**從原始碼在 Windows 評估：**先安裝 Git、PowerShell、[uv](https://docs.astral.sh/uv/) 與 Node.js／Corepack，使用專案鎖定的 pnpm 版本，然後執行：
+**從原始碼在 Windows 評估：**先安裝 Git、PowerShell、[uv](https://docs.astral.sh/uv/) 與 Node.js／Corepack，使用專案鎖定的 pnpm 版本，uv 會自動準備 Python 3.14，然後執行：
 
 ```powershell
 git clone https://github.com/xu-0306/RepoNPC.git

@@ -462,10 +462,22 @@ function Invoke-RepoNpcLauncher {
     $pythonEnvironmentNeedsSync =
         -not (Test-Path -LiteralPath $pythonExe -PathType Leaf) -or
         -not (Test-Path -LiteralPath $reponpcExe -PathType Leaf)
+    if (-not $pythonEnvironmentNeedsSync) {
+        $pythonEnvironmentNeedsSync = $true
+        try {
+            $venvConfig = [IO.File]::ReadAllText((Join-Path $repoRoot ".venv\pyvenv.cfg"))
+            if ($venvConfig -match '(?m)^\s*version(?:_info)?\s*=\s*(\d+\.\d+\.\d+)\s*$') {
+                $pythonEnvironmentNeedsSync = [version]$Matches[1] -lt [version]"3.14"
+            }
+        }
+        catch {
+            $pythonEnvironmentNeedsSync = $true
+        }
+    }
     if ($pythonEnvironmentNeedsSync) {
         $uv = Resolve-ExternalCommand @("uv.exe", "uv")
         if ($null -eq $uv) {
-            throw "The Python environment is missing. Install uv, then run this launcher again."
+            throw "The launcher needs uv to prepare Python 3.14. Install uv, then run this launcher again."
         }
         Write-Step "Installing locked Python dependencies."
         $uvCacheDirectory = Join-Path $repoRoot ".uv-cache"
