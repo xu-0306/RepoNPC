@@ -191,7 +191,7 @@ def create_mock_app(state: MockServerState | None = None) -> FastAPI:
             raise HTTPException(status_code=409, detail={"code": "CONFIG_CONFLICT"})
         try:
             content = base64.b64decode(payload.content, validate=True)
-        except (ValueError, binascii.Error):
+        except ValueError, binascii.Error:
             raise HTTPException(status_code=422, detail={"code": "VALIDATION_ERROR"}) from None
         server_state.contents[path] = content
         server_state.mutation_count += 1

@@ -89,7 +89,7 @@ def _create_file(path: Path, content: bytes) -> tuple[int, int]:
             try:
                 _regular_file(path, identity)
                 path.unlink()
-            except (OSError, BackupValidationError):
+            except OSError, BackupValidationError:
                 pass  # Do not unlink a substituted or externally linked file.
 
 
@@ -356,7 +356,7 @@ def validate_backup(sqlite_bytes: bytes, working_directory: Path) -> ValidatedBa
         return ValidatedBackup(output, source_version)
     except BackupValidationError:
         raise
-    except (sqlite3.Error, RuntimeDatabaseError, OSError, MemoryError):
+    except sqlite3.Error, RuntimeDatabaseError, OSError, MemoryError:
         if time.monotonic() >= deadline:
             raise BackupValidationError("BACKUP_VALIDATION_TIMEOUT") from None
         raise BackupValidationError("BACKUP_SQLITE_INVALID") from None
@@ -370,5 +370,5 @@ def validate_backup(sqlite_bytes: bytes, working_directory: Path) -> ValidatedBa
                 keep_output=complete,
                 owned_directory=owned_directory,
             )
-        except (OSError, BackupValidationError):
+        except OSError, BackupValidationError:
             raise BackupValidationError("BACKUP_PRIVATE_FILE_INVALID") from None

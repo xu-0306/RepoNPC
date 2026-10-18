@@ -215,7 +215,7 @@ class _BuiltWebFiles(StaticFiles):
                 bundle_manager=getattr(state, "bundle_manager", None),
                 scene_supplier=getattr(state, "scene_supplier", lambda: None),
             )
-        except (OSError, ValueError, BundleActivationError):
+        except OSError, ValueError, BundleActivationError:
             return Response(status_code=503)
         response = Response(document, media_type="text/html", headers={"Cache-Control": "no-store"})
         if method == "HEAD":
@@ -244,7 +244,7 @@ def _request_id(candidate: str | None) -> str:
     if candidate is not None:
         try:
             return str(uuid.UUID(candidate))
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             pass
     return str(uuid.uuid4())
 
@@ -336,7 +336,7 @@ def create_app(
             if scene is not None and scene.database is not None and runtime_storage_usable:
                 try:
                     scene.cleanup_expired_background_drafts()
-                except (SceneServiceError, RuntimeDatabaseError):
+                except SceneServiceError, RuntimeDatabaseError:
                     logging.getLogger(__name__).warning("Scene draft cleanup unavailable")
 
         async def analysis_cleanup_lifecycle() -> None:
@@ -1145,7 +1145,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
                 max_attempts=settings.analysis_generation_attempts,
                 retry_base_seconds=5.0,
             )
-        except (ModelConnectionError, ValueError):
+        except ModelConnectionError, ValueError:
             return None
 
     app.state.analysis_runtime_supplier = analysis_runtime_supplier

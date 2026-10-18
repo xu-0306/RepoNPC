@@ -124,7 +124,7 @@ def fetch_pages_resource(
     future.add_done_callback(lambda _future: _DNS_SLOTS.release())
     try:
         address = future.result(timeout=_remaining(deadline))
-    except (TimeoutError, ProviderError, OSError, ValueError):
+    except TimeoutError, ProviderError, OSError, ValueError:
         future.cancel()
         raise SiteExportError("SHARING_VERIFICATION_UNAVAILABLE") from None
     if address[1] != socket.SOCK_STREAM or address[3][1] != 443:
@@ -182,7 +182,7 @@ def fetch_pages_resource(
         )
     except SiteExportError:
         raise
-    except (HTTPException, OSError, ValueError):
+    except HTTPException, OSError, ValueError:
         raise SiteExportError("SHARING_VERIFICATION_UNAVAILABLE") from None
     finally:
         if timer is not None:

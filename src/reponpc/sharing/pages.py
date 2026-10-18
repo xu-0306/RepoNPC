@@ -94,7 +94,7 @@ class PagesSharingService:
                 connection.commit()
         except SiteExportError:
             raise
-        except (OSError, sqlite3.Error, RuntimeDatabaseError):
+        except OSError, sqlite3.Error, RuntimeDatabaseError:
             raise SiteExportError("SHARING_EXPORT_UNAVAILABLE") from None
         return self.state()
 
@@ -142,7 +142,7 @@ class PagesSharingService:
         except SiteExportError:
             self._clear_verification()
             raise
-        except (OSError, ValueError, UnicodeError, FaqError, SceneServiceError):
+        except OSError, ValueError, UnicodeError, FaqError, SceneServiceError:
             self._clear_verification()
             raise SiteExportError("SHARING_VERIFICATION_UNAVAILABLE") from None
 
@@ -161,7 +161,7 @@ class PagesSharingService:
                 connection.commit()
         except SiteExportError:
             raise
-        except (OSError, sqlite3.Error, RuntimeDatabaseError):
+        except OSError, sqlite3.Error, RuntimeDatabaseError:
             raise SiteExportError("SHARING_CONFLICT") from None
         return self.state()
 
@@ -197,7 +197,7 @@ class PagesSharingService:
                     for field in ("profile", "repositories", "suggested_questions")
                 }
             )
-        except (KeyError, TypeError, ValueError, ValidationError):
+        except KeyError, TypeError, ValueError, ValidationError:
             raise SiteExportError("SHARING_EXPORT_INVALID") from None
         remote = fetch_pages_resource(
             f"{target.url}{card_path}",
@@ -224,7 +224,7 @@ class PagesSharingService:
                     "verified_content_sha256=NULL, verified_at=NULL WHERE singleton_id=1"
                 )
                 connection.commit()
-        except (OSError, sqlite3.Error):
+        except OSError, sqlite3.Error:
             return
 
     def _row(self) -> sqlite3.Row:
@@ -238,7 +238,7 @@ class PagesSharingService:
             return row
         except SiteExportError:
             raise
-        except (OSError, sqlite3.Error, RuntimeDatabaseError):
+        except OSError, sqlite3.Error, RuntimeDatabaseError:
             raise SiteExportError("SHARING_EXPORT_UNAVAILABLE") from None
 
     def _current_origins(self) -> tuple[str, str]:

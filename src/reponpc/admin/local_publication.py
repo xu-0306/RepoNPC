@@ -285,7 +285,7 @@ class LocalPublication:
                 if self.job.get("state") == "preparing":
                     self.job.update(state="failed", error_code="EMBEDDING_REINDEX_INTERRUPTED")
                     self._persist()
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 self.job = {"state": "failed", "error_code": "PORTFOLIO_CORRUPT", "revision": None}
 
     def status(self) -> dict[str, Any]:

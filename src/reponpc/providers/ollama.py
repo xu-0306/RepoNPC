@@ -103,7 +103,7 @@ class OllamaChatProvider(ChatProvider):
         except ProviderError as exc:
             self._preparation_error = exc.code
             raise
-        except (ValueError, TypeError, KeyError):
+        except ValueError, TypeError, KeyError:
             self._preparation_error = ProviderFailureCode.INVALID_RESPONSE
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
 

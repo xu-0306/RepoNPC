@@ -662,7 +662,7 @@ def _last_page(link: str | None, api_base_url: str, request_path: str) -> int:
 def _is_secondary_limit_body(body: bytes) -> bool:
     try:
         payload = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    except UnicodeDecodeError, json.JSONDecodeError:
         return False
     if not isinstance(payload, dict):
         return False

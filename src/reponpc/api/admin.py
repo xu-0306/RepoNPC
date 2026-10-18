@@ -729,7 +729,7 @@ def create_admin_router(
             return JSONResponse(result, headers={"Cache-Control": "no-store"})
         except maintenance_errors as exc:
             return maintenance_failure(request, exc)
-        except (ValueError, StarletteHTTPException):
+        except ValueError, StarletteHTTPException:
             return maintenance_failure(request, MaintenanceError("BACKUP_FORMAT_INVALID"))
 
     @router.post("/maintenance/restore")
@@ -942,7 +942,7 @@ def create_admin_router(
         body: LocalLaunchRequest | None = None
         try:
             body = LocalLaunchRequest.model_validate(await request.json())
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             body = None
         grant = (
             body.grant if body is not None and local_launch_boundary(request, configured) else ""
@@ -1953,7 +1953,7 @@ def create_admin_router(
                 code=exc.code,
                 message="FAQ operation could not be completed.",
             )
-        except (ProviderError, ChatLimitError):
+        except ProviderError, ChatLimitError:
             return error_response(
                 request,
                 status_code=503,
@@ -2163,7 +2163,7 @@ def create_admin_router(
             if artifact is not None:
                 artifact.cleanup()
             return pages_sharing_error(request, exc)
-        except (BundleActivationError, SceneServiceError, FaqError):
+        except BundleActivationError, SceneServiceError, FaqError:
             if artifact is not None:
                 artifact.cleanup()
             return error_response(
@@ -2207,7 +2207,7 @@ def create_admin_router(
             content = await asyncio.to_thread(sharing.readme, web_dist=web_dist, locale=locale)
         except SiteExportError as exc:
             return pages_sharing_error(request, exc)
-        except (BundleActivationError, SceneServiceError, FaqError):
+        except BundleActivationError, SceneServiceError, FaqError:
             return pages_sharing_error(request, SiteExportError("SHARING_CONFLICT"))
         return Response(
             content,
@@ -2699,7 +2699,7 @@ def create_admin_router(
             return _config_error(request, exc)
         except GitHubAdminError as exc:
             return _github_error(request, exc)
-        except (SpriteValidationError, CardRenderError):
+        except SpriteValidationError, CardRenderError:
             return error_response(
                 request,
                 status_code=422,
@@ -3395,7 +3395,7 @@ def _attach_preview_urls(
                 content=content,
                 media_type=cast(Any, media_type),
             )
-        except (ValueError, PreviewAssetError):
+        except ValueError, PreviewAssetError:
             continue
         result[url_key] = f"/api/admin/assets/previews/{asset_id}"
     return result

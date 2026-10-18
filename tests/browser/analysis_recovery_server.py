@@ -368,7 +368,7 @@ class BrowserAcceptanceApp:
             body = b"".join(chunks)
             try:
                 payload = json.loads(body)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 payload = {}
             key = str(payload.get("idempotency_key", ""))
             self.requests.append(

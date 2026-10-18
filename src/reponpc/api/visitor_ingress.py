@@ -176,7 +176,7 @@ def _visitor_files(root: Path | None) -> dict[str, Path]:
                 raise ValueError("invalid visitor build")
             files["/scene-mode.js"] = _regular_build_file(root, "scene-mode.js")
         return files
-    except (OSError, ValueError, KeyError, TypeError, RecursionError):
+    except OSError, ValueError, KeyError, TypeError, RecursionError:
         return {}
 
 
@@ -636,7 +636,7 @@ def create_visitor_gateway_app(
             try:
                 assert web_dist is not None
                 checked = _regular_build_file(web_dist, file.relative_to(web_dist).as_posix())
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 return Response(status_code=404)
             if checked.suffix != ".html":
                 return FileResponse(checked)
@@ -650,7 +650,7 @@ def create_visitor_gateway_app(
                     bundle_manager=bundle_manager_supplier(),
                     scene_supplier=getattr(app.state, "scene_supplier", lambda: None),
                 )
-            except (OSError, ValueError, BundleActivationError):
+            except OSError, ValueError, BundleActivationError:
                 return Response(status_code=503)
             response = Response(
                 document, media_type="text/html", headers={"Cache-Control": "no-store"}
@@ -714,7 +714,7 @@ def create_visitor_gateway_app(
             )
         except ClientDisconnect:
             return _DisconnectedResponse()
-        except (ValidationError, ValueError):
+        except ValidationError, ValueError:
             return error_response(
                 request,
                 status_code=400,

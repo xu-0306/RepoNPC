@@ -116,7 +116,7 @@ def _canonicalize_sprite(sprite_base64: str) -> bytes:
 
     try:
         decoded = base64.b64decode(sprite_base64, validate=True)
-    except (binascii.Error, ValueError):
+    except binascii.Error, ValueError:
         _raise("ASSET_INVALID")
 
     # Requiring the exact standard representation rejects whitespace, URL-safe
@@ -246,7 +246,7 @@ def _decode_draft(raw: bytes) -> LocalPortfolioDraft:
         )
     except LocalPortfolioError:
         raise
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+    except OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError:
         _raise("PORTFOLIO_CORRUPT")
 
 
@@ -267,7 +267,7 @@ def _set_scene_background_path(content: str, image_bytes: bytes) -> str:
             values, allow_unicode=True, sort_keys=False, default_flow_style=False
         )
         parse_public_config_bytes(updated.encode("utf-8"))
-    except (TypeError, ValueError, yaml.YAMLError, ConfigValidationError):
+    except TypeError, ValueError, yaml.YAMLError, ConfigValidationError:
         _raise("CONFIG_INVALID")
     return updated
 
@@ -359,7 +359,7 @@ class LocalPortfolioStore:
                 default_flow_style=False,
             )
             parse_public_config_bytes(rewritten.encode("utf-8"))
-        except (ConfigValidationError, TypeError, ValueError, yaml.YAMLError):
+        except ConfigValidationError, TypeError, ValueError, yaml.YAMLError:
             _raise("CONFIG_INVALID")
         sprite = (
             _canonicalize_sprite(current.sprite_base64)
@@ -454,7 +454,7 @@ class LocalPortfolioStore:
             return _decode_draft(raw)
         except LocalPortfolioError:
             raise
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        except OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError:
             _raise("PORTFOLIO_CORRUPT")
 
     def _write_unlocked(self, draft: LocalPortfolioDraft) -> None:
@@ -488,7 +488,7 @@ class LocalPortfolioStore:
             _best_effort_chmod(self._draft_path, 0o600)
         except LocalPortfolioError:
             raise
-        except (OSError, TypeError, ValueError):
+        except OSError, TypeError, ValueError:
             _raise("PORTFOLIO_WRITE_FAILED")
         finally:
             if temp_path is not None:
@@ -538,7 +538,7 @@ def apply_character(content: str, png_base64: str) -> LocalPortfolioDraft:
             sort_keys=False,
             default_flow_style=False,
         )
-    except (TypeError, ValueError, yaml.YAMLError):
+    except TypeError, ValueError, yaml.YAMLError:
         _raise("CONFIG_INVALID")
 
     rewritten_config, _ = _parse_public_content(rewritten)

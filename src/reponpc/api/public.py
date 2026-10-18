@@ -309,7 +309,7 @@ def create_public_router(
                 await asyncio.to_thread(faq.public_payload, locale),
                 headers={"Cache-Control": "no-store"},
             )
-        except (BundleActivationError, FaqError):
+        except BundleActivationError, FaqError:
             return unavailable(request, locale)
 
     @router.get("/readyz")
@@ -424,7 +424,7 @@ def create_public_router(
                 with scene_service.published_profile() as snapshot:  # type: ignore[attr-defined]
                     body = localized_public_profile_bytes(snapshot.document, locale)
                     selected_version = snapshot.bundle_id
-            except (SceneServiceError, BundleActivationError):
+            except SceneServiceError, BundleActivationError:
                 return unavailable(request, locale)
             return Response(
                 content=body,
@@ -461,7 +461,7 @@ def create_public_router(
                 directory, index_version=version(), built_at=None, repository_count=None
             )
             body = localized_public_profile_bytes(payload, locale)
-        except (OSError, PublicProfileError, SpriteValidationError, SceneResolutionError):
+        except OSError, PublicProfileError, SpriteValidationError, SceneResolutionError:
             return unavailable(request, locale)
         return Response(
             content=body,
@@ -486,7 +486,7 @@ def create_public_router(
                         return Response(status_code=404)
                     payload = snapshot.sprite_content
                     selected_version = snapshot.bundle_id
-            except (SceneServiceError, BundleActivationError):
+            except SceneServiceError, BundleActivationError:
                 return unavailable(request, DEFAULT_LOCALE)
             return Response(
                 payload,
@@ -542,7 +542,7 @@ def create_public_router(
                 media_type="image/png",
                 headers={"ETag": _etag(version(), f"character:{revision}", payload)},
             )
-        except (OSError, PublicProfileError, SpriteValidationError, SceneResolutionError):
+        except OSError, PublicProfileError, SpriteValidationError, SceneResolutionError:
             return unavailable(request, DEFAULT_LOCALE)
 
     @router.api_route("/api/public/scene-background", methods=["GET", "HEAD", "OPTIONS"])
@@ -564,7 +564,7 @@ def create_public_router(
         if scene_service is not None:
             try:
                 result = scene_service.background_for_revision(revision)  # type: ignore[attr-defined]
-            except (SceneServiceError, BundleActivationError):
+            except SceneServiceError, BundleActivationError:
                 return Response(status_code=404)
             if result is None:
                 return Response(status_code=404)

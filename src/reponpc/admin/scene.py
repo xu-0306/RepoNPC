@@ -720,7 +720,7 @@ class AdminSceneService:
             if image.sha256 != match.group(1) or image.content != content:
                 raise ValueError
             return content
-        except (OSError, ManifestError, SceneImageError, ValueError):
+        except OSError, ManifestError, SceneImageError, ValueError:
             raise SceneServiceError("PUBLIC_SCENE_UNAVAILABLE") from None
 
     def _read_presentation_receipt(
@@ -771,7 +771,7 @@ class AdminSceneService:
             ):
                 return None
             return _settings_payload(settings, scene)
-        except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
+        except OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError:
             return None
 
     def _validate_scene_stage(self, scene: PublicScene | None, sprite: bytes) -> None:
@@ -785,7 +785,7 @@ class AdminSceneService:
                 for variant in ("light", "dark")
             ):
                 raise ValueError
-        except (OSError, ValueError, SpriteValidationError):
+        except OSError, ValueError, SpriteValidationError:
             raise SceneServiceError("PUBLIC_SCENE_UNAVAILABLE") from None
 
     def _draft_row(self, *, session_hash: str, draft_id: str) -> sqlite3.Row:
@@ -820,7 +820,7 @@ class AdminSceneService:
             if image.sha256 != digest or image.content != content:
                 raise OSError
             return image
-        except (OSError, SceneImageError):
+        except OSError, SceneImageError:
             raise SceneServiceError("NOT_FOUND") from None
 
     def _state_row(self) -> sqlite3.Row:
@@ -972,7 +972,7 @@ class AdminSceneService:
                 ):
                     return False
             return True
-        except (KeyError, TypeError, ValueError, LocalPortfolioError, SceneServiceError):
+        except KeyError, TypeError, ValueError, LocalPortfolioError, SceneServiceError:
             return False
 
     def _read_draft_raw_locked(self) -> bytes | None:
@@ -1054,7 +1054,7 @@ class AdminSceneService:
                         stem, extension = path.stem, path.suffix.removeprefix(".")
                         if (stem, extension) not in active:
                             path.unlink(missing_ok=True)
-        except (OSError, sqlite3.Error):
+        except OSError, sqlite3.Error:
             return
 
 
@@ -1154,7 +1154,7 @@ def _settings_match_public(
             ).public
             == scene
         )
-    except (KeyError, SceneResolutionError):
+    except KeyError, SceneResolutionError:
         return False
 
 

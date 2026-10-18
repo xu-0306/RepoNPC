@@ -244,7 +244,7 @@ def _fetch(
                     raise BuiltinDownloadError("builtin_download_size")
                 target.flush()
                 os.fsync(target.fileno())
-    except (BuiltinDownloadCancelled, BuiltinDownloadError):
+    except BuiltinDownloadCancelled, BuiltinDownloadError:
         raise
     except OSError:
         raise BuiltinDownloadError("builtin_download_io") from None
@@ -357,7 +357,7 @@ def download_builtin_model(
         except Exception:
             os.replace(final, stage)
             raise BuiltinDownloadError("builtin_download_verification") from None
-    except (BuiltinDownloadCancelled, BuiltinDownloadError):
+    except BuiltinDownloadCancelled, BuiltinDownloadError:
         raise
     except Exception:
         raise BuiltinDownloadError("builtin_download_io") from None

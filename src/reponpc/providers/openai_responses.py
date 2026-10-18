@@ -78,7 +78,7 @@ def _result(payload: dict[str, Any], duration_ms: float) -> ProviderResult:
             if usage is not None
             else None
         )
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
     return ProviderResult(text, "stop", parsed_usage, None, duration_ms)
 
@@ -107,7 +107,7 @@ class ResponsesStreamParser:
                 self._data.append(value[5:].lstrip(" "))
             elif not value:
                 self._flush()
-        except (UnicodeError, ValueError, KeyError, TypeError):
+        except UnicodeError, ValueError, KeyError, TypeError:
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
 
     def _flush(self) -> None:
@@ -163,7 +163,7 @@ class ResponsesStreamParser:
             if self.payload is None:
                 raise ValueError
             return _result(self.payload, duration_ms)
-        except (ValueError, KeyError, TypeError):
+        except ValueError, KeyError, TypeError:
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
 
 
@@ -234,7 +234,7 @@ class OpenAIResponsesChatProvider(OpenAICompatibleChatProvider):
                 raise ProviderError(_failure_for_response(response.status, response.body))
             try:
                 result = _result(_json_object(response.body), (time.monotonic() - started) * 1000)
-            except (ValueError, TypeError, KeyError):
+            except ValueError, TypeError, KeyError:
                 raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
         if not self.capabilities_config.usage_reporting:
             result = ProviderResult(

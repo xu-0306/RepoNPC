@@ -1823,7 +1823,7 @@ class BatchRuntimeStore:
                             str(row["payload_sha256"]),
                         )
                     )
-                except (BatchRuntimeError, ValueError):
+                except BatchRuntimeError, ValueError:
                     valid_entry = False
                 if not valid_entry:
                     connection.execute(

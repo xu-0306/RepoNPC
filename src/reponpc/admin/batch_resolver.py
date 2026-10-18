@@ -638,7 +638,7 @@ class GitHubRESTMetadataResolver:
                 if exc.code != "NOT_FOUND":
                     raise
                 blockers.append(ResolutionBlocker(selection.slug, exc.code))
-            except (KeyError, TypeError, ValueError):
+            except KeyError, TypeError, ValueError:
                 blockers.append(ResolutionBlocker(selection.slug, "NOT_FOUND"))
         return MetadataResolution(tuple(repositories), tuple(blockers))
 
@@ -1135,7 +1135,7 @@ def _header_epoch(headers: Mapping[str, str], name: str) -> datetime | None:
         return None
     try:
         return datetime.fromtimestamp(value, UTC)
-    except (OverflowError, OSError, ValueError):
+    except OverflowError, OSError, ValueError:
         return None
 
 
@@ -1146,7 +1146,7 @@ def _retry_at(value: str | None, now: datetime) -> datetime | None:
         return now + timedelta(seconds=max(1, int(value)))
     try:
         parsed = parsedate_to_datetime(value)
-    except (TypeError, ValueError, IndexError):
+    except TypeError, ValueError, IndexError:
         return None
     if parsed.tzinfo is None:
         return None

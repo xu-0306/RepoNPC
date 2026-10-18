@@ -176,7 +176,7 @@ class OllamaModelOperationCoordinator:
                 self._registry.complete_ollama_model_action(
                     snapshot.profile_id, action="pull", succeeded=True
                 )
-        except (OllamaPullCancelled, BuiltinDownloadCancelled):
+        except OllamaPullCancelled, BuiltinDownloadCancelled:
             self._set(operation_id, status="cancelled", error_code=None)
         except BuiltinDownloadError as exc:
             self._set(operation_id, status="failed", error_code=exc.code.upper())

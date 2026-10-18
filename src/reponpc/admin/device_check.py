@@ -59,7 +59,7 @@ def collect_hardware_profile(data_directory: Path) -> HardwareProfile:
         gpu_total, gpu_free = _nvidia_memory()
     try:
         free_disk = _capacity(shutil.disk_usage(data_directory).free)
-    except (OSError, ValueError):
+    except OSError, ValueError:
         free_disk = None
     return HardwareProfile(
         host_ram_bytes=total,
@@ -79,7 +79,7 @@ def _windows_memory() -> tuple[int | None, int | None]:
         function.restype = ctypes.c_int
         if not function(ctypes.byref(status)):
             return None, None
-    except (AttributeError, OSError, ValueError):
+    except AttributeError, OSError, ValueError:
         return None, None
     return _coherent_memory(
         _capacity(status.ullTotalPhys, positive=True), _capacity(status.ullAvailPhys)
@@ -92,7 +92,7 @@ def _read_text(path: Path, *, missing: str | None = None) -> str | None:
             text = source.read(_PROC_READ_LIMIT + 1)
     except FileNotFoundError:
         return missing
-    except (OSError, UnicodeError):
+    except OSError, UnicodeError:
         return None
     return text if len(text) <= _PROC_READ_LIMIT else None
 
@@ -122,7 +122,7 @@ def _sysconf_memory(page_count_name: str) -> int | None:
     try:
         pages = sysconf(page_count_name)
         page_size = sysconf("SC_PAGE_SIZE")
-    except (AttributeError, OSError, ValueError):
+    except AttributeError, OSError, ValueError:
         return None
     if type(pages) is not int or pages < 0 or type(page_size) is not int or page_size <= 0:
         return None
@@ -219,7 +219,7 @@ def _unescape_mount_path(value: str) -> str:
 def _nvidia_memory() -> tuple[int | None, int | None]:
     try:
         executable = shutil.which("nvidia-smi")
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None, None
     if executable is None:
         return None, None
@@ -255,14 +255,14 @@ def _nvidia_memory() -> tuple[int | None, int | None]:
         if process.wait(timeout=0.2) != 0:
             return None, None
         return _parse_nvidia_memory(output[0])
-    except (OSError, RuntimeError, subprocess.TimeoutExpired):
+    except OSError, RuntimeError, subprocess.TimeoutExpired:
         return None, None
     finally:
         try:
             if process.poll() is None:
                 process.kill()
             process.wait(timeout=0.2)
-        except (OSError, subprocess.TimeoutExpired):
+        except OSError, subprocess.TimeoutExpired:
             pass
         if not reader.is_alive():
             with suppress(OSError):

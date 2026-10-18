@@ -227,7 +227,7 @@ def verify_bundle_archive(
             index.close()
             raise BundleError("bundle_smoke_query_failed")
         return VerifiedBundle(directory=staging_directory, manifest=manifest, index=index)
-    except (BundleError, ManifestError):
+    except BundleError, ManifestError:
         shutil.rmtree(staging_directory, ignore_errors=True)
         raise
     except (OSError, tarfile.TarError, ValueError, json.JSONDecodeError) as exc:
@@ -268,7 +268,7 @@ def verify_retained_bundle_directory(
             index.close()
             raise BundleError("bundle_smoke_query_failed")
         return VerifiedBundle(directory=directory, manifest=manifest, index=index)
-    except (BundleError, ManifestError):
+    except BundleError, ManifestError:
         raise
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         raise BundleError("bundle_validation_failed") from exc
@@ -454,7 +454,7 @@ def _manifest_paths_match_profile(staging: Path, manifest: BundleManifest) -> bo
         scene = parse_public_profile_bytes(
             (staging / "public/profile.json").read_bytes()
         ).character.scene
-    except (OSError, PublicProfileError):
+    except OSError, PublicProfileError:
         return False
     return bool(scene is not None and scene.background_url is not None) == bool(scene_paths)
 

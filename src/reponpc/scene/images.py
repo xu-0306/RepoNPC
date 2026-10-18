@@ -81,9 +81,9 @@ def validate_scene_image(content: bytes, *, filename: str) -> CanonicalSceneImag
                 image = Image.frombytes("RGBA", source.size, pixels)
     except SceneImageError:
         raise
-    except (Image.DecompressionBombError, Image.DecompressionBombWarning):
+    except Image.DecompressionBombError, Image.DecompressionBombWarning:
         raise SceneImageError("IMAGE_DIMENSIONS_INVALID") from None
-    except (UnidentifiedImageError, OSError, SyntaxError, ValueError, struct.error):
+    except UnidentifiedImageError, OSError, SyntaxError, ValueError, struct.error:
         raise SceneImageError("IMAGE_INVALID") from None
 
     output = io.BytesIO()
@@ -92,7 +92,7 @@ def validate_scene_image(content: bytes, *, filename: str) -> CanonicalSceneImag
             image.save(output, format="PNG", optimize=False, compress_level=9)
         else:
             image.save(output, format="WEBP", lossless=True, quality=100, method=6)
-    except (OSError, ValueError):
+    except OSError, ValueError:
         raise SceneImageError("IMAGE_INVALID") from None
     canonical = output.getvalue()
     if not canonical or len(canonical) > MAX_SCENE_IMAGE_BYTES:

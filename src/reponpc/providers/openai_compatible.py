@@ -282,7 +282,7 @@ def _failure_for_response(status: int, body: bytes) -> ProviderFailureCode:
         candidates = (error.get("code"), error.get("type"))
         if any(value in _CONTEXT_OVERFLOW_CODES for value in candidates):
             return ProviderFailureCode.CONTEXT_OVERFLOW
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         pass
     return ProviderFailureCode.INVALID_RESPONSE
 

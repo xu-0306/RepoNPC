@@ -83,7 +83,7 @@ def load_builtin_manifest() -> BuiltinEmbeddingManifest:
             .read_text(encoding="utf-8")
         )
         return BuiltinEmbeddingManifest.model_validate(yaml.safe_load(raw))
-    except (OSError, UnicodeError, yaml.YAMLError, ValidationError):
+    except OSError, UnicodeError, yaml.YAMLError, ValidationError:
         raise BuiltinArtifactError("builtin_manifest_invalid") from None
 
 
@@ -139,5 +139,5 @@ def verify_builtin_artifacts(root: Path, manifest: BuiltinEmbeddingManifest | No
         return directory
     except BuiltinArtifactError:
         raise
-    except (OSError, ValueError):
+    except OSError, ValueError:
         raise BuiltinArtifactError("builtin_artifacts_missing") from None

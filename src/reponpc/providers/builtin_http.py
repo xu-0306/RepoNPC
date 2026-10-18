@@ -29,7 +29,7 @@ class _DeadlineStream:
             if time.monotonic() >= self._deadline:
                 raise BuiltinDownloadError("builtin_download_http")
             return result
-        except (HTTPException, OSError):
+        except HTTPException, OSError:
             raise BuiltinDownloadError("builtin_download_http") from None
 
 
@@ -69,7 +69,7 @@ class PinnedBuiltinHttpTransport:
             if parsed.query:
                 target += "?" + parsed.query
             return _PinnedHTTPSConnection(host, 443, address, 15.0), target
-        except (ValueError, OSError, ProviderError):
+        except ValueError, OSError, ProviderError:
             raise BuiltinDownloadError("builtin_download_http") from None
 
     @contextmanager
@@ -109,7 +109,7 @@ class PinnedBuiltinHttpTransport:
                     stream=cast(BinaryIO, _DeadlineStream(response)),
                 )
                 return
-            except (HTTPException, OSError, ValueError, UnicodeError):
+            except HTTPException, OSError, ValueError, UnicodeError:
                 raise BuiltinDownloadError("builtin_download_http") from None
             finally:
                 connection.close()

@@ -550,7 +550,7 @@ class AdminSessionService:
     def _verify_password_hash(self, password_hash: str, password: str) -> bool:
         try:
             return self._hasher.verify(password_hash, password)
-        except (InvalidHashError, VerificationError, VerifyMismatchError):
+        except InvalidHashError, VerificationError, VerifyMismatchError:
             return False
 
     @staticmethod

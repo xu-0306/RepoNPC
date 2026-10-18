@@ -521,7 +521,7 @@ def _read_secret_file(
             )
             return None
         resolved = candidate.resolve(strict=True)
-    except (OSError, RuntimeError, ValueError):
+    except OSError, RuntimeError, ValueError:
         _issue(issues, name, "unreadable_secret_file", "the secret file cannot be read safely")
         return None
     if not _inside_allowed_root(resolved, roots):

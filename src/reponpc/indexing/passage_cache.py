@@ -231,7 +231,7 @@ class PassageVectorCache:
         ).hexdigest()
         try:
             data = _canonical_json(payload).encode("utf-8")
-        except (TypeError, ValueError, OverflowError):
+        except TypeError, ValueError, OverflowError:
             return
         if len(data) > self._max_bytes:
             return
@@ -368,7 +368,7 @@ def _decode_entry(path: Path, *, max_bytes: int) -> tuple[dict[str, Any], NDArra
         if len(data) > max_bytes:
             return None
         payload = json.loads(data.decode("utf-8"), parse_constant=_reject_json_constant)
-    except (OSError, UnicodeError, json.JSONDecodeError, ValueError, TypeError):
+    except OSError, UnicodeError, json.JSONDecodeError, ValueError, TypeError:
         return None
     if not isinstance(payload, dict) or frozenset(payload) != _ENVELOPE_KEYS:
         return None
@@ -430,7 +430,7 @@ def _decode_entry(path: Path, *, max_bytes: int) -> tuple[dict[str, Any], NDArra
             return None
         vector = np.frombuffer(vector_bytes, dtype=np.dtype("<f4")).copy()
         _validate_provider_output(vector.reshape(1, dimension), count=1, dimension=dimension)
-    except (binascii.Error, UnicodeError, TypeError, ValueError, OverflowError):
+    except binascii.Error, UnicodeError, TypeError, ValueError, OverflowError:
         return None
     return payload, vector
 

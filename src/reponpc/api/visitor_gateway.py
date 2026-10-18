@@ -40,7 +40,7 @@ VisitorPortChange = int | None | _KeepVisitorPort
 
 class _LoopbackServer(uvicorn.Server):
     @contextmanager
-    def capture_signals(self) -> Generator[None, None, None]:
+    def capture_signals(self) -> Generator[None]:
         # The private listener shares the primary server's process and signals.
         yield
 
@@ -127,7 +127,7 @@ class VisitorGateway:
                     return self.snapshot()
                 self._validate_configuration(settings.gateway_origin, settings.pages_origin)
                 await self._listen(settings)
-            except (VisitorGatewayError, VisitorGatewayStoreError):
+            except VisitorGatewayError, VisitorGatewayStoreError:
                 self._error_code = "GATEWAY_UNAVAILABLE"
             return self.snapshot()
 
@@ -333,7 +333,7 @@ class VisitorGateway:
             self._error_code = "GATEWAY_UNAVAILABLE"
             await self._cleanup_start_failure(server, task, listener)
             raise
-        except (OSError, RuntimeError, SystemExit):
+        except OSError, RuntimeError, SystemExit:
             self._error_code = "GATEWAY_UNAVAILABLE"
             await self._cleanup_start_failure(server, task, listener)
             raise VisitorGatewayError("GATEWAY_UNAVAILABLE") from None
@@ -400,7 +400,7 @@ class VisitorGateway:
                         asyncio.shield(task),
                         timeout=max(0.0, deadline - time.monotonic()),
                     )
-            except (Exception, SystemExit):
+            except Exception, SystemExit:
                 stopped = False
         if listener is not None:
             with suppress(OSError):
@@ -493,7 +493,7 @@ def _pages_origin(value: str) -> str | None:
     try:
         if urlsplit(value).port is not None:
             return None
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     parsed = _canonical_origin(value, https_only=True)
     if parsed is None or not parsed.startswith("https://"):

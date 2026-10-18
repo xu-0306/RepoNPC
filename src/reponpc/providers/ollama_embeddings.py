@@ -125,7 +125,7 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
             payload = _json_object(response.body)
             if not ollama_model_available(payload, self._model):
                 return ProviderHealth(False, _checked_at(), ProviderFailureCode.UNAVAILABLE)
-        except (UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
+        except UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError:
             return ProviderHealth(
                 False,
                 _checked_at(),
@@ -164,7 +164,7 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
                     ):
                         raise ValueError
                     progress(completed, total)
-                except (UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
+                except UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError:
                     raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
 
             try:
@@ -218,7 +218,7 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
             )
         try:
             return ollama_model_ids(_json_object(response.body))
-        except (UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
+        except UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError:
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
 
     def delete_model(self) -> None:
@@ -305,7 +305,7 @@ class OllamaEmbeddingProvider(RuntimeEmbeddingProvider):
             matrix = _parse_vectors(raw_vectors, len(texts), dimension)
         except ProviderError:
             raise
-        except (KeyError, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
+        except KeyError, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError:
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
         if self._identity is None:
             self._identity = EmbeddingIdentity(

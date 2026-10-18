@@ -141,7 +141,7 @@ def parse_scene_registry(text: str) -> SceneRegistry:
 def load_scene_registry(path: str | Path) -> SceneRegistry:
     try:
         text = Path(path).read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
+    except OSError, UnicodeError:
         raise SceneRegistryError("registry file cannot be read as UTF-8") from None
     return parse_scene_registry(text)
 

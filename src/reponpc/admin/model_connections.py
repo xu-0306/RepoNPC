@@ -174,7 +174,7 @@ class ProtectedModelSecretStore:
             ):
                 raise ValueError
             return ModelConnectionSecret(base_url, api_key, chat_api)
-        except (InvalidToken, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        except InvalidToken, KeyError, TypeError, ValueError, json.JSONDecodeError:
             raise ModelSecretStoreError("MODEL_SECRET_STORAGE_UNAVAILABLE") from None
         except ModelSecretStoreError:
             raise
@@ -192,7 +192,7 @@ class ProtectedModelSecretStore:
     def install_key(self, value: bytes) -> None:
         try:
             Fernet(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raise ModelSecretStoreError("MODEL_SECRET_STORAGE_UNAVAILABLE") from None
         self._write_key(value)
 
@@ -226,7 +226,7 @@ class ProtectedModelSecretStore:
             return value
         except ModelSecretStoreError:
             raise
-        except (OSError, ValueError, TypeError):
+        except OSError, ValueError, TypeError:
             raise ModelSecretStoreError("MODEL_SECRET_STORAGE_UNAVAILABLE") from None
 
     def _read_key(self) -> bytes:
@@ -243,7 +243,7 @@ class ProtectedModelSecretStore:
             return value
         except ModelSecretStoreError:
             raise
-        except (OSError, ValueError, TypeError):
+        except OSError, ValueError, TypeError:
             raise ModelSecretStoreError("MODEL_SECRET_STORAGE_UNAVAILABLE") from None
 
 
@@ -706,7 +706,7 @@ def validate_resolved_provider_addresses(
             for item in resolve(hostname, None, type=socket.SOCK_STREAM)
         }
         parsed = tuple(ipaddress.ip_address(address) for address in addresses)
-    except (OSError, ValueError, IndexError, TypeError):
+    except OSError, ValueError, IndexError, TypeError:
         raise ModelConnectionError("PROVIDER_NETWORK_UNAVAILABLE") from None
     if not parsed or any(_forbidden_provider_address(address) for address in parsed):
         raise ModelConnectionError("PROVIDER_NETWORK_BLOCKED")

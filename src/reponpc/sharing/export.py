@@ -212,7 +212,7 @@ def _bundle_manifest(public_directory: Path, bundle_id: str) -> BundleManifest:
         if manifest.bundle_id != bundle_id:
             raise ValueError
         return manifest
-    except (OSError, ManifestError, ValueError):
+    except OSError, ManifestError, ValueError:
         raise SiteExportError("SHARING_EXPORT_INVALID") from None
 
 
@@ -220,7 +220,7 @@ def _visitor_dependencies(web_dist: Path) -> dict[str, bytes]:
     manifest_bytes = _read_regular_file(web_dist, ".vite/manifest.json", _MAX_VITE_MANIFEST_BYTES)
     try:
         manifest = json.loads(manifest_bytes)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    except UnicodeDecodeError, json.JSONDecodeError:
         raise SiteExportError("SHARING_EXPORT_INVALID") from None
     if not isinstance(manifest, dict):
         raise SiteExportError("SHARING_EXPORT_INVALID")
@@ -237,7 +237,7 @@ def _visitor_dependencies(web_dist: Path) -> dict[str, bytes]:
         closure_paths = {
             source.resolve(strict=True).relative_to(root).as_posix() for source in paths.values()
         }
-    except (OSError, ValueError):
+    except OSError, ValueError:
         raise SiteExportError("SHARING_EXPORT_INVALID") from None
     for key, item in manifest.items():
         if not isinstance(key, str) or not isinstance(item, dict):
@@ -267,7 +267,7 @@ def _visitor_dependencies(web_dist: Path) -> dict[str, bytes]:
     for public_path, source_path in sorted(paths.items()):
         try:
             relative = source_path.resolve(strict=True).relative_to(root).as_posix()
-        except (OSError, ValueError):
+        except OSError, ValueError:
             raise SiteExportError("SHARING_EXPORT_INVALID") from None
         if public_path == "/":
             output_path = "index.html"
@@ -351,7 +351,7 @@ def _add_public_documents(
         for locale in ("zh-TW", "en"):
             try:
                 profile = json.loads(localized_public_profile_bytes(snapshot.document, locale))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 raise SiteExportError("SHARING_EXPORT_INVALID") from None
             if not isinstance(profile, dict) or not isinstance(profile.get("character"), dict):
                 raise SiteExportError("SHARING_EXPORT_INVALID")
@@ -453,7 +453,7 @@ def _add_cited_owner_assertions(files: dict[str, bytes], index: Any) -> None:
         faq_path = f"faq-{locale}.json"
         try:
             payload = json.loads(files[faq_path])
-        except (KeyError, UnicodeDecodeError, json.JSONDecodeError):
+        except KeyError, UnicodeDecodeError, json.JSONDecodeError:
             raise SiteExportError("SHARING_EXPORT_INVALID") from None
         if not isinstance(payload, dict) or not isinstance(payload.get("entries"), list):
             raise SiteExportError("SHARING_EXPORT_INVALID")
@@ -509,7 +509,7 @@ def _add_cited_owner_assertions(files: dict[str, bytes], index: Any) -> None:
                     raise SiteExportError("SHARING_EXPORT_INVALID")
                 try:
                     expected_url = evidence.github_permalink
-                except (IndexReadError, TypeError, ValueError, AttributeError):
+                except IndexReadError, TypeError, ValueError, AttributeError:
                     raise SiteExportError("SHARING_EXPORT_INVALID") from None
                 if (
                     citation.get("evidence_class") != evidence.evidence_class
@@ -544,7 +544,7 @@ def _validate_public_links(files: dict[str, bytes]) -> None:
     for locale in ("zh-TW", "en"):
         try:
             payload = json.loads(files[f"faq-{locale}.json"])
-        except (KeyError, UnicodeDecodeError, json.JSONDecodeError):
+        except KeyError, UnicodeDecodeError, json.JSONDecodeError:
             raise SiteExportError("SHARING_EXPORT_INVALID") from None
         if not isinstance(payload, dict) or not isinstance(payload.get("entries"), list):
             raise SiteExportError("SHARING_EXPORT_INVALID")
@@ -694,5 +694,5 @@ def _verify_written_export(
                         offset = next_offset
                 if offset != len(expected):
                     raise SiteExportError("SHARING_EXPORT_INVALID")
-    except (OSError, zipfile.BadZipFile, RuntimeError):
+    except OSError, zipfile.BadZipFile, RuntimeError:
         raise SiteExportError("SHARING_EXPORT_INVALID") from None

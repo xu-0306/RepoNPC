@@ -434,7 +434,7 @@ class BundleManager:
     def _pointer_bundle_id(self) -> str | None:
         try:
             payload = json.loads(self._pointer.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        except OSError, UnicodeDecodeError, json.JSONDecodeError:
             return None
         if not isinstance(payload, dict) or set(payload) != {"bundle_id"}:
             return None

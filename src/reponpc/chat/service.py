@@ -302,7 +302,7 @@ class GroundedChatService:
                 tuple(localized.suggested_questions[:3]),
                 (first_link.label, first_link.url) if first_link is not None else None,
             )
-        except (OSError, PublicProfileError, KeyError):
+        except OSError, PublicProfileError, KeyError:
             return None, (), None
 
     def _remaining(self, deadline: float) -> float:

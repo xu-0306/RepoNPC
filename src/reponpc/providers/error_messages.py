@@ -40,7 +40,7 @@ def provider_error_message(
     )
     try:
         payload = json.loads(text)
-    except (ValueError, RecursionError):
+    except ValueError, RecursionError:
         if media_type != "text/plain" or text.lstrip().startswith("<"):
             return None
         message = text

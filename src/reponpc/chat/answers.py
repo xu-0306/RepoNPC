@@ -117,7 +117,7 @@ def validate_v2_answer(
             owner_aliases=owner_aliases,
             suggested_questions=suggestions,
         )
-    except (ValidationError, ValueError, TypeError, AttributeError, KeyError):
+    except ValidationError, ValueError, TypeError, AttributeError, KeyError:
         return _no_match(locale, suggestions)
 
 
@@ -360,7 +360,7 @@ def _load_locale_policy(locale: Literal["zh-TW", "en"]) -> _LocalePolicy:
         if not references:
             raise ValueError("person reference policy is empty")
         return _LocalePolicy(references, exclusions)
-    except (OSError, TypeError, ValueError, yaml.YAMLError):
+    except OSError, TypeError, ValueError, yaml.YAMLError:
         return _LocalePolicy((), ())
 
 
@@ -389,7 +389,7 @@ def _load_inflation_terms() -> dict[str, tuple[str, ...]]:
                 return {}
             result[group] = tuple(sorted(terms, key=len, reverse=True))
         return result
-    except (OSError, TypeError, ValueError, yaml.YAMLError):
+    except OSError, TypeError, ValueError, yaml.YAMLError:
         return {}
 
 

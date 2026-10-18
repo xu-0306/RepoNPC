@@ -223,7 +223,7 @@ def parse_model_catalog(text: str) -> ModelCatalog:
         raise ModelGuidanceError("catalog text must be bounded")
     try:
         raw = yaml.load(text, Loader=_UniqueKeyLoader)
-    except (yaml.YAMLError, RecursionError):
+    except yaml.YAMLError, RecursionError:
         raise ModelGuidanceError("catalog YAML is malformed") from None
     root = _mapping(raw, {"schema_version", "models"})
     if type(root["schema_version"]) is not int or root["schema_version"] != 1:
@@ -272,7 +272,7 @@ def load_model_catalog(path: str | Path | None = None) -> ModelCatalog:
     try:
         content = Path(path) if path is not None else Path(__file__).with_name("model_catalog.yml")
         text = content.read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
+    except OSError, UnicodeError:
         raise ModelGuidanceError("catalog cannot be read as UTF-8") from None
     return parse_model_catalog(text)
 

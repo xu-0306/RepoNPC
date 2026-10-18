@@ -218,7 +218,7 @@ class UrllibProviderHttpTransport:
             return _PinnedHTTPConnection(hostname, port, address, timeout), target
         except ProviderError:
             raise
-        except (OSError, ValueError, TypeError):
+        except OSError, ValueError, TypeError:
             raise ProviderError(ProviderFailureCode.UNAVAILABLE) from None
 
 
@@ -358,7 +358,7 @@ def _resolve_provider_destination(
             candidates.append((family, socktype, protocol, sockaddr))
     except ProviderError:
         raise
-    except (OSError, ValueError, IndexError, TypeError):
+    except OSError, ValueError, IndexError, TypeError:
         raise ProviderError(ProviderFailureCode.UNAVAILABLE) from None
     if not candidates:
         raise ProviderError(ProviderFailureCode.UNAVAILABLE)

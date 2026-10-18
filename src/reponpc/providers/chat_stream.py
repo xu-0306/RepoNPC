@@ -33,13 +33,13 @@ class ChatStreamParser:
                 self._sse_data.append(value[5:].lstrip(" "))
             elif not value:
                 self._flush_sse()
-        except (UnicodeError, ValueError, KeyError, TypeError):
+        except UnicodeError, ValueError, KeyError, TypeError:
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
 
     def finish(self) -> None:
         try:
             self._flush_sse()
-        except (ValueError, KeyError, TypeError):
+        except ValueError, KeyError, TypeError:
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
         if not self.terminal or not isinstance(self.finish_reason, str) or not self.finish_reason:
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE)

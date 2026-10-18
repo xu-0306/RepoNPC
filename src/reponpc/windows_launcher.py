@@ -86,7 +86,7 @@ def _identity_key(data_dir: Path) -> Path:
             encoded = stream.read(65)
         if len(encoded) != 64 or len(bytes.fromhex(encoded.decode("ascii"))) != 32:
             raise _LauncherError
-    except (UnicodeError, ValueError):
+    except UnicodeError, ValueError:
         raise _LauncherError from None
     return key_file
 
@@ -175,7 +175,7 @@ def _healthy(port: int, timeout: float) -> bool:
             return False
         body = response.read(4097)
         return len(body) <= 4096 and json.loads(body) == {"status": "alive"}
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return False
     finally:
         connection.close()
@@ -275,7 +275,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     _open_admin(application, port)
             if failed.is_set() or not thread.is_alive():
                 raise _LauncherError
-    except (EOFError, KeyboardInterrupt):
+    except EOFError, KeyboardInterrupt:
         pass
     except Exception:
         print("RepoNPC 無法啟動。 RepoNPC could not start.")

@@ -146,7 +146,7 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
             payload = _json_object(response.body)
             if not openai_model_available(payload, self._model):
                 return ProviderHealth(False, _checked_at(), ProviderFailureCode.UNAVAILABLE)
-        except (UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
+        except UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError:
             return ProviderHealth(
                 False,
                 _checked_at(),
@@ -200,7 +200,7 @@ class OpenAICompatibleEmbeddingProvider(RuntimeEmbeddingProvider):
             matrix = _parse_records(records, len(texts), dimension)
         except ProviderError:
             raise
-        except (KeyError, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
+        except KeyError, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError:
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
         if self._identity is None:
             self._identity = EmbeddingIdentity(
@@ -261,7 +261,7 @@ def _validated_row(raw_vector: object, dimension: int) -> list[float]:
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE)
         try:
             converted = np.float32(value)
-        except (OverflowError, TypeError, ValueError):
+        except OverflowError, TypeError, ValueError:
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE) from None
         if not np.isfinite(converted):
             raise ProviderError(ProviderFailureCode.INVALID_RESPONSE)

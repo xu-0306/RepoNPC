@@ -73,7 +73,7 @@ def canonical_json_bytes(value: object) -> bytes:
             separators=(",", ":"),
             allow_nan=False,
         ).encode("utf-8")
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         raise SiteExportError("SHARING_EXPORT_INVALID") from None
 
 
@@ -150,7 +150,7 @@ def parse_manifest(content: bytes) -> dict[str, Any]:
         raise SiteExportError("SHARING_EXPORT_INVALID")
     try:
         value = json.loads(content)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    except UnicodeDecodeError, json.JSONDecodeError:
         raise SiteExportError("SHARING_EXPORT_INVALID") from None
     if not isinstance(value, dict) or set(value) != {
         "schema_version",

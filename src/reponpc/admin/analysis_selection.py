@@ -372,7 +372,7 @@ class AnalysisSelectionRegistry:
                 embedding_provider=embedding.provider,
                 embedding_identity=embedding.identity,
             )
-        except (AnalysisSelectionError, AttributeError):
+        except AnalysisSelectionError, AttributeError:
             return None
 
     def _embedding_connection_current(self, profile: _EmbeddingProfile) -> bool:

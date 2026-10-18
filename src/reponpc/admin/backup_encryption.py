@@ -111,7 +111,7 @@ def _metadata_bytes(metadata: BackupMetadata) -> bytes:
             allow_nan=False,
             separators=(",", ":"),
         ).encode("ascii")
-    except (ValueError, OverflowError):
+    except ValueError, OverflowError:
         raise BackupEncryptionError("BACKUP_METADATA_INVALID") from None
     if len(encoded) > MAX_METADATA_BYTES:
         raise BackupEncryptionError("BACKUP_METADATA_INVALID")
@@ -167,7 +167,7 @@ def _decode_plaintext(plaintext: bytes) -> tuple[BackupMetadata, bytes]:
         }:
             raise ValueError
         metadata = BackupMetadata(**value)
-    except (ValueError, TypeError, UnicodeError, RecursionError):
+    except ValueError, TypeError, UnicodeError, RecursionError:
         raise BackupEncryptionError("BACKUP_FORMAT_INVALID") from None
     sqlite_bytes = plaintext[4 + metadata_size :]
     _validate_sqlite(sqlite_bytes)
