@@ -697,3 +697,12 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
 - **Retry boundary:** No automatic backend retry is added. Automatic retry is deferred until ADR-064 logs show how often temporary failures happen.
 - **Delivery:** Pages visitors receive the new frontend only after the owner re-exports and re-uploads the static site.
 - **Boundaries:** No model, citation or validation changes, provider fallback, dependency, CSP change or real-model call.
+
+## ADR-067: Apply REPONPC_LOG_LEVEL and give the installer a log file
+
+- **Status:** Accepted; owner-approved 2026-10-19.
+- **Why:** REPONPC_LOG_LEVEL was parsed but never applied and the reponpc logger had no handler. Python's last-resort WARNING threshold dropped the INFO diagnostics added by ADR-064, including real-server no-match events; pytest capture concealed the missing sink.
+- **Decision:** prepare_application configures the reponpc logger at settings.log_level with one message-only stderr handler and propagation disabled. Idempotent configuration replaces only its marked handlers and preserves foreign handlers. App import remains side-effect-free. The source launcher captures stderr in its server .err.log; Docker sends it to docker logs; the in-process visitor gateway shares the same configuration.
+- **Installer:** Move its RepoNPC level from WARNING to INFO and also write data_dir/logs/reponpc.log as UTF-8, with maxBytes=1,048,576 and backupCount=3 (one active file plus three backups, approximately 4 MiB total). Preserve this sink when maintenance rebuilds the application. Uvicorn remains warning with access_log=False.
+- **Privacy:** What is logged is unchanged: SafeLogger sanitization, event names, levels and allowlisted fields stay intact. No question, answer, source/evidence ID, IP, prompt, thinking or secret is added. Maintenance SQLite backups and allowlisted static exports do not include the logs directory; the existing private full-data-directory backup procedure does.
+- **Requirements:** NFR-012/014 and AC-035; enables the existing ADR-064 diagnostics for FR-043/044/046 and AC-019/062/064/067 without changing their acceptance thresholds.

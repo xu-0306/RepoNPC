@@ -9,6 +9,8 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Any, Final
 
 MAX_TEXT_LENGTH: Final = 160
@@ -48,6 +50,29 @@ _RATE_OUTCOMES: Final = frozenset(
 _PROVIDER_ADAPTERS: Final = frozenset(
     {"local_sentence_transformers", "ollama", "openai_compatible"}
 )
+
+
+def configure_logging(level: str, *, file_path: Path | None = None) -> None:
+    """Configure RepoNPC's JSON sinks without changing other loggers or handlers."""
+
+    logger = logging.getLogger("reponpc")
+    logger.setLevel(level)
+    logger.propagate = False
+    for handler in logger.handlers[:]:
+        if getattr(handler, "_reponpc_owned", False):
+            logger.removeHandler(handler)
+            handler.close()
+
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if file_path is not None:
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(
+            RotatingFileHandler(file_path, maxBytes=1_048_576, backupCount=3, encoding="utf-8")
+        )
+    for handler in handlers:
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler._reponpc_owned = True  # type: ignore[attr-defined]
+        logger.addHandler(handler)
 
 
 def _safe_text(value: object, *, limit: int = MAX_TEXT_LENGTH) -> str | None:

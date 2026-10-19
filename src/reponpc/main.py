@@ -91,6 +91,7 @@ from reponpc.config.environment import (
 from reponpc.i18n.catalog import translate
 from reponpc.indexing.github import GitHubSourceResolver
 from reponpc.indexing.sources import EmbeddingIdentity, EmbeddingProvider
+from reponpc.observability.logging import configure_logging
 from reponpc.providers import (
     BuiltinOnnxEmbeddingProvider,
     ChatProvider,
@@ -622,9 +623,12 @@ def run() -> None:
     )
 
 
-def prepare_application(settings: EnvironmentSettings, *, owned_host: bool = True) -> FastAPI:
+def prepare_application(
+    settings: EnvironmentSettings, *, owned_host: bool = True, log_file_path: Path | None = None
+) -> FastAPI:
     """Prepare the existing runtime for either ASGI or the owned desktop server."""
 
+    configure_logging(settings.log_level, file_path=log_file_path)
     app.state.deployment_profile = settings.deployment_profile
     app.state.admin_origins = getattr(settings, "admin_origins", ())
     try:
@@ -655,7 +659,9 @@ def prepare_application(settings: EnvironmentSettings, *, owned_host: bool = Tru
                 web_dist=_default_web_dist(),
                 scene_supplier=app.state.scene_supplier,
             )
-            _configure_maintenance(settings, runtime_database, owned_host=owned_host)
+            _configure_maintenance(
+                settings, runtime_database, owned_host=owned_host, log_file_path=log_file_path
+            )
     except RuntimeDatabaseError:
         app.state.runtime_database = None
         app.state.runtime_storage_usable = False
@@ -663,7 +669,11 @@ def prepare_application(settings: EnvironmentSettings, *, owned_host: bool = Tru
 
 
 def _configure_maintenance(
-    settings: EnvironmentSettings, runtime_database: RuntimeDatabase, *, owned_host: bool
+    settings: EnvironmentSettings,
+    runtime_database: RuntimeDatabase,
+    *,
+    owned_host: bool,
+    log_file_path: Path | None = None,
 ) -> None:
     configured = app
 
@@ -692,7 +702,7 @@ def _configure_maintenance(
     def fresh_application() -> FastAPI:
         global app
         app = create_app()
-        result = prepare_application(settings, owned_host=False)
+        result = prepare_application(settings, owned_host=False, log_file_path=log_file_path)
         if not result.state.runtime_storage_usable or result.state.runtime_database is None:
             raise MaintenanceError("RESTORE_FAILED")
         return result

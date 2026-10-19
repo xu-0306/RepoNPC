@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 import socket
 import sys
@@ -106,6 +108,7 @@ def test_isolated_environment_and_restore(
     assert all(os.environ[key] == value for key, value in inherited.items())
     assert harness.observed["REPONPC_DEPLOYMENT_PROFILE"] == "loopback_evaluation"
     assert harness.observed["REPONPC_ENV"] == "production"
+    assert harness.observed["REPONPC_LOG_LEVEL"] == "INFO"
     assert harness.observed["REPONPC_TRUSTED_PROXY_CIDRS"] == ""
     assert harness.observed["REPONPC_ADMIN_ORIGINS"] == harness.observed["REPONPC_PUBLIC_BASE_URL"]
     assert harness.observed["REPONPC_VISITOR_GATEWAY_PORT"] != harness.observed["REPONPC_PORT"]
@@ -307,6 +310,62 @@ def test_server_uses_application_object_without_proxy_or_access_logging(
     assert settings["host"] == "127.0.0.1" and settings["port"] == 54321
     assert settings["proxy_headers"] is False and settings["forwarded_allow_ips"] == ""
     assert settings["access_log"] is False
+    assert settings["log_level"] == "warning"
+
+
+def test_load_application_passes_installer_log_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import reponpc.main as runtime_main
+    from reponpc.config import environment
+
+    settings, application = object(), object()
+    observed: list[tuple[object, Path]] = []
+
+    def load_environment(*, secret_roots: tuple[Path, ...]) -> object:
+        assert secret_roots == (tmp_path / "private",)
+        return settings
+
+    def prepare(actual: object, *, log_file_path: Path) -> object:
+        observed.append((actual, log_file_path))
+        return application
+
+    monkeypatch.setattr(environment, "load_environment", load_environment)
+    monkeypatch.setattr(runtime_main, "prepare_application", prepare)
+    assert launcher._load_application(tmp_path) is application
+    assert observed == [(settings, tmp_path / "logs" / "reponpc.log")]
+
+
+def test_installer_log_file_survives_maintenance_application_rebuild(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reponpc_logger: logging.Logger
+) -> None:
+    import reponpc.main as runtime_main
+    from reponpc.observability.logging import get_safe_logger
+
+    for key in tuple(os.environ):
+        if key.startswith("REPONPC_"):
+            monkeypatch.delenv(key)
+    for key, value in launcher._environment(
+        tmp_path, launcher._identity_key(tmp_path), 18240
+    ).items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(runtime_main, "app", runtime_main.create_app())
+    application = launcher._load_application(tmp_path)
+    logger = get_safe_logger("reponpc.test.installer")
+    logger.emit(logging.INFO, "test.installer.before")
+    rebuilt = application.state.maintenance_service._factory()
+    logger.emit(logging.INFO, "test.installer.after")
+
+    payloads = [
+        json.loads(line)
+        for line in (tmp_path / "logs" / "reponpc.log").read_text(encoding="utf-8").splitlines()
+    ]
+    assert [p["event"] for p in payloads] == ["test.installer.before", "test.installer.after"]
+    assert all(p["severity"] == "INFO" for p in payloads)
+    assert reponpc_logger.level == logging.INFO
+    for app in (application, rebuilt):
+        app.state.maintenance_service.close()
+        app.state.bundle_manager.close()
 
 
 @pytest.mark.parametrize(

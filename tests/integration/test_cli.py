@@ -339,13 +339,14 @@ def test_admin_launch_token_emits_one_fragment_url_and_replaces_prior_grant(
     [("loopback_evaluation", False), ("production", True)],
 )
 def test_server_proxy_header_trust_tracks_deployment_profile(
-    tmp_path: Path, monkeypatch, profile: str, proxy_headers: bool
+    tmp_path: Path, monkeypatch, profile: str, proxy_headers: bool, reponpc_logger
 ) -> None:
     settings = SimpleNamespace(
         data_dir=tmp_path / profile,
         sqlite_busy_timeout_ms=1_000,
         host="127.0.0.1",
         port=8090,
+        log_level="INFO",
         deployment_profile=profile,
         trusted_proxy_cidrs=("127.0.0.1/32",) if proxy_headers else (),
     )

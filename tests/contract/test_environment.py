@@ -639,6 +639,7 @@ def test_secret_file_replacement_by_a_symlink_is_rejected(
 def test_production_entrypoint_uses_validated_host_and_port(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    reponpc_logger,
 ) -> None:
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(
@@ -647,6 +648,7 @@ def test_production_entrypoint_uses_validated_host_and_port(
         lambda: SimpleNamespace(
             host="127.0.0.2",
             port=8123,
+            log_level="INFO",
             deployment_profile="production",
             data_dir=tmp_path / "runtime-data",
             sqlite_busy_timeout_ms=5_000,

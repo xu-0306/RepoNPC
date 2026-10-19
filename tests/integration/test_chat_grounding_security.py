@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import io
 import json
 import logging
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
@@ -12,6 +14,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from fastapi.testclient import TestClient
 
 from reponpc.bundles.index_reader import IndexedEvidence, PackedContext
 from reponpc.bundles.manager import BundleStatus
@@ -173,6 +176,81 @@ class ProjectChat(MaliciousChat):
             None,
             1.0,
         )
+
+
+@pytest.mark.parametrize("locale", ["zh-TW", "en"])
+def test_prepared_public_no_match_reaches_json_stream_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reponpc_logger: logging.Logger,
+    locale: str,
+) -> None:
+    import reponpc.main as runtime_main
+    from reponpc.api.public import SetupState
+    from reponpc.config.environment import load_environment
+    from reponpc.windows_launcher import _environment, _identity_key
+
+    question_canary = "QUESTION_CANARY_a617"
+    answer_canary = "OUTPUT_CANARY_b728"
+    stream = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", stream)
+    settings = load_environment(
+        _environment(tmp_path, _identity_key(tmp_path), 18240),
+        secret_roots=(tmp_path / "private",),
+    )
+    monkeypatch.setattr(runtime_main, "app", runtime_main.create_app())
+    application = runtime_main.prepare_application(settings)
+
+    class CanaryEmbedding(Embedding):
+        def embed_query(self, texts):
+            assert question_canary in texts[0]
+            return super().embed_query(["What is implemented?"])
+
+    class RejectedChat(ProjectChat):
+        def generate(self, *args):
+            result = super().generate(*args)
+            result.content["segments"][0]["text"] = answer_canary
+            result.content["segments"][0]["source_ids"] = ["S999"]
+            return result
+
+    chat = RejectedChat()
+    service = GroundedChatService(
+        bundles=Bundles(),
+        providers=ProviderRuntime(chat=chat, embedding=CanaryEmbedding()),
+        limits=Limits(),
+        max_output_tokens=100,
+        timeout_seconds=5,
+    )  # type: ignore[arg-type]
+    with TestClient(application, client=("203.0.113.17", 54321)) as client:
+        application.state.reponpc = SetupState(index_ready=True, model_ready=True)
+        application.state.chat_service = service
+        response = client.post(
+            "/api/public/chat/stream",
+            json={"message": "What is implemented? " + question_canary, "locale": locale},
+        )
+
+    assert response.status_code == 200
+    assert '"insufficient_evidence":true' in response.text
+    assert chat.calls == 1
+    lines = stream.getvalue().splitlines()
+    payloads = [json.loads(line) for line in lines]
+    no_match = [p for p in payloads if p["event"].startswith("chat.answer.no_match.")]
+    assert len(no_match) == 1
+    assert no_match[0]["event"] == "chat.answer.no_match.source_id_unknown"
+    assert no_match[0]["severity"] == "INFO"
+    assert set(no_match[0]) == {"timestamp", "severity", "event"}
+    assert sum(p["event"] == "chat.stream.complete" for p in payloads) == 1
+    assert reponpc_logger.propagate is False
+    for canary in (
+        question_canary,
+        answer_canary,
+        "S1",
+        "S999",
+        "E_" + "a" * 24,
+        "203.0.113.17",
+        "I couldn't put together a reliable answer",
+    ):
+        assert canary not in stream.getvalue()
 
 
 @pytest.mark.parametrize("locale", ["zh-TW", "en"])

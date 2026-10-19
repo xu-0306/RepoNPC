@@ -118,7 +118,7 @@ def _environment(data_dir: Path, key_file: Path, port: int) -> dict[str, str]:
         "REPONPC_TRUSTED_PROXY_CIDRS": "",
         "REPONPC_VISITOR_TRUSTED_PROXY_CIDRS": "",
         "REPONPC_VISITOR_GATEWAY_PORT": "8002" if port == 8001 else "8001",
-        "REPONPC_LOG_LEVEL": "WARNING",
+        "REPONPC_LOG_LEVEL": "INFO",
         "REPONPC_CONFIG_REPOSITORY": "",
         "REPONPC_INDEX_MANIFEST_URL": "",
         "REPONPC_GITHUB_TOKEN": "",
@@ -146,7 +146,7 @@ def _load_application(data_dir: Path) -> Any:
     from reponpc.main import prepare_application
 
     settings = load_environment(secret_roots=(data_dir / "private",))
-    return prepare_application(settings)
+    return prepare_application(settings, log_file_path=data_dir / "logs" / "reponpc.log")
 
 
 def _make_server(application: Any, port: int) -> Any:
