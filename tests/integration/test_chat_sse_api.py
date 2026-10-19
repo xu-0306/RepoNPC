@@ -7,7 +7,7 @@ import json
 import logging
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from fastapi.testclient import TestClient
 
@@ -487,3 +487,55 @@ def test_local_chat_asgi_heartbeat_identity_and_usage_before_validated_answer() 
         assert service.calls[0]["allow_retry"] is True
 
     asyncio.run(exercise())
+
+
+def test_rejected_answer_public_stream_matches_pre_reason_wire_contract():
+    # Golden payload from the pre-ADR-064 stream; request ID/time remain dynamic.
+    delivery = ChatDelivery(
+        "fixture-index",
+        "en",
+        1,
+        "I couldn't find anything about that in this portfolio. Try one of these questions.",
+        (),
+        "stop",
+        ProviderUsage(4, 2),
+        True,
+        ("What does this project do?",),
+        ("Contact", "https://example.com/contact"),
+        no_match_reason="SOURCE_ID_UNKNOWN",
+    )
+    assert delivery_events(delivery, "fixed") == delivery_events(
+        replace(delivery, no_match_reason=None), "fixed"
+    )
+    service = FixtureChatService(delivery)
+    application = create_app(setup_state=ready_state(), chat_service=service)
+    with TestClient(application) as client:
+        response = client.post(
+            "/api/public/chat/stream", json={"message": "Question", "locale": "en"}
+        )
+    assert response.status_code == 200
+    data = [
+        json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
+    ]
+    request_id = data[0]["request_id"]
+    elapsed = data[-1]["elapsed_ms"]
+    assert isinstance(elapsed, int) and elapsed >= 0
+    expected = (
+        ': connected\n\nevent: metadata\ndata: {"request_id":"'
+        + request_id
+        + '","index_version":"fixture-index","locale":"en","evidence_count":1}\n\n'
+        'event: token\ndata: {"delta":"I couldn\'t find anything about that in this portfolio. '
+        'Try one of these questions."}\n\n'
+        'event: complete\ndata: {"finish_reason":"stop",'
+        '"usage":{"input_tokens":4,"output_tokens":2},'
+        '"insufficient_evidence":true,"suggested_questions":["What does this project do?"],'
+        '"contact_link":{"label":"Contact","url":"https://example.com/contact"},'
+        '"elapsed_ms":' + str(elapsed) + "}\n\n"
+    )
+    assert response.content == expected.encode("utf-8")
+    from typing import get_args
+
+    from reponpc.chat.answers import NoMatchReason
+
+    assert b"no_match_reason" not in response.content
+    assert all(reason.encode() not in response.content for reason in get_args(NoMatchReason))

@@ -7,6 +7,7 @@ import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
+from json import JSONDecodeError
 from pathlib import Path
 from typing import Any, Literal
 
@@ -35,8 +36,25 @@ _CJK_PERCENT_RE = re.compile(r"百分之([零\u3007一二兩三四五六七八�
 _ROLE_GROUPS = frozenset({"role", "responsibility", "lead", "founder", "manager", "architect"})
 
 
+NoMatchReason = Literal[
+    "MODEL_INSUFFICIENT_EVIDENCE",
+    "ENVELOPE_SCHEMA_INVALID",
+    "SOURCE_ID_UNKNOWN",
+    "MODEL_AUTHORED_MARKUP",
+    "INFERENCE_CYCLE",
+    "SELECTED_MAP_INVALID",
+    "ALL_SEGMENTS_DROPPED",
+    "VALIDATION_UNEXPECTED",
+    "NO_EVIDENCE_SELECTED",
+]
+
+
 class _EnvelopeIntegrityError(ValueError):
     """An envelope-level failure that must reject the complete answer."""
+
+    def __init__(self, reason: NoMatchReason) -> None:
+        self.reason = reason
+        super().__init__(reason)
 
 
 class AnswerSegment(BaseModel):
@@ -89,6 +107,7 @@ class ValidatedAnswer:
     # Owner-only diagnostics; never serialize this field into public delivery.
     discarded_reason_codes: tuple[str, ...] = ()
     discarded_segments: tuple[tuple[int, tuple[str, ...]], ...] = ()
+    no_match_reason: NoMatchReason | None = None
 
 
 def validate_v2_answer(
@@ -117,8 +136,12 @@ def validate_v2_answer(
             owner_aliases=owner_aliases,
             suggested_questions=suggestions,
         )
-    except ValidationError, ValueError, TypeError, AttributeError, KeyError:
-        return _no_match(locale, suggestions)
+    except ValidationError, JSONDecodeError:
+        return no_match_answer(locale, suggestions, reason="ENVELOPE_SCHEMA_INVALID")
+    except _EnvelopeIntegrityError as exc:
+        return no_match_answer(locale, suggestions, reason=exc.reason)
+    except ValueError, TypeError, AttributeError, KeyError:
+        return no_match_answer(locale, suggestions, reason="VALIDATION_UNEXPECTED")
 
 
 def _validate_v2_envelope(
@@ -133,9 +156,11 @@ def _validate_v2_envelope(
     """Apply envelope integrity checks, then salvage valid typed segments."""
 
     if envelope.insufficient_evidence:
-        return _no_match(locale, suggested_questions)
-    if not selected or any(not _SOURCE_ID_RE.fullmatch(source_id) for source_id in selected):
-        raise _EnvelopeIntegrityError("invalid selected source map")
+        return no_match_answer(locale, suggested_questions, reason="MODEL_INSUFFICIENT_EVIDENCE")
+    if not selected:
+        return no_match_answer(locale, suggested_questions, reason="NO_EVIDENCE_SELECTED")
+    if any(not _SOURCE_ID_RE.fullmatch(source_id) for source_id in selected):
+        raise _EnvelopeIntegrityError("SELECTED_MAP_INVALID")
 
     for segment in envelope.segments:
         if (
@@ -144,17 +169,17 @@ def _validate_v2_envelope(
             or _LINK_RE.search(segment.text)
             or _SOURCE_MARKER_RE.search(segment.text)
         ):
-            raise _EnvelopeIntegrityError("model-authored links, HTML, or source markers")
+            raise _EnvelopeIntegrityError("MODEL_AUTHORED_MARKUP")
         if any(
             not _SOURCE_ID_RE.fullmatch(source_id) or source_id not in selected
             for source_id in segment.source_ids
         ):
-            raise _EnvelopeIntegrityError("unknown or unselected source ID")
+            raise _EnvelopeIntegrityError("SOURCE_ID_UNKNOWN")
         if segment.kind == "inference" and any(
             selected[source_id].evidence_class == "MODEL_INFERENCE"
             for source_id in segment.source_ids
         ):
-            raise _EnvelopeIntegrityError("inference cycle")
+            raise _EnvelopeIntegrityError("INFERENCE_CYCLE")
 
     safe_owner = _safe_owner_name(owner_name)
     identity_terms = _identity_terms(owner_name, owner_aliases)
@@ -179,9 +204,10 @@ def _validate_v2_envelope(
             retained.append((kind, text, source_ids))
 
     if not retained:
-        return _no_match(
+        return no_match_answer(
             locale,
             suggested_questions,
+            reason="ALL_SEGMENTS_DROPPED",
             discarded_reason_codes=tuple(discarded_reason_codes),
             discarded_segments=tuple(discarded_segments),
         )
@@ -299,15 +325,24 @@ def _safe_suggestions(values: Sequence[str]) -> tuple[str, ...]:
     return tuple(result)
 
 
-def _no_match(
+def no_match_answer(
     locale: Literal["zh-TW", "en"],
     suggestions: tuple[str, ...] = (),
     *,
+    reason: NoMatchReason,
     discarded_reason_codes: tuple[str, ...] = (),
     discarded_segments: tuple[tuple[int, tuple[str, ...]], ...] = (),
 ) -> ValidatedAnswer:
+    """Build the unchanged visitor reply and keep its reason owner-only."""
+
     return ValidatedAnswer(
-        _NO_MATCH[locale], (), True, suggestions, discarded_reason_codes, discarded_segments
+        _NO_MATCH[locale],
+        (),
+        True,
+        _safe_suggestions(suggestions),
+        discarded_reason_codes,
+        discarded_segments,
+        reason,
     )
 
 

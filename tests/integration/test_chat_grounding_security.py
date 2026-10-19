@@ -420,13 +420,23 @@ def test_retrieved_injection_is_delimited_and_forged_output_only_abstains() -> N
     assert "S999" not in delivery.answer_markdown
 
 
-def test_fixed_prompt_overflow_abstains_before_chat_provider_call() -> None:
+def test_fixed_prompt_overflow_abstains_before_chat_provider_call(caplog, monkeypatch) -> None:
+    caplog.set_level(logging.INFO, logger="reponpc.chat.service")
     embedding = Embedding()
     chat = MaliciousChat()
 
     def tiny_capabilities() -> ProviderCapabilities:
         return ProviderCapabilities(False, True, True, True, True, 120, 100)
 
+    monkeypatch.setattr(
+        GroundedChatService,
+        "_answer_profile",
+        lambda *args, **kwargs: (
+            None,
+            ("Safe question?", "https://untrusted.invalid", "<b>Bad</b>"),
+            None,
+        ),
+    )
     chat.capabilities = tiny_capabilities  # type: ignore[method-assign]
     service = GroundedChatService(
         bundles=Bundles(),  # type: ignore[arg-type]
@@ -447,6 +457,10 @@ def test_fixed_prompt_overflow_abstains_before_chat_provider_call() -> None:
     assert delivery.citations == ()
     assert chat.calls == 0
     assert embedding.calls == 1
+    assert delivery.suggested_questions == ("Safe question?",)
+    assert delivery.finish_reason == "insufficient_context"
+    assert delivery.no_match_reason == "NO_EVIDENCE_SELECTED"
+    assert "chat.answer.no_match.no_evidence_selected" in caplog.text
 
 
 def test_embedding_and_chat_share_one_overall_deadline() -> None:
@@ -555,3 +569,70 @@ def test_empty_selected_keeps_provider_no_match_without_empty_enum(progress: boo
     assert chat.calls == 1
     assert delivery.insufficient_evidence is True
     assert delivery.evidence_count == 0 and delivery.citations == ()
+    assert delivery.no_match_reason == "NO_EVIDENCE_SELECTED"
+
+
+@pytest.mark.parametrize("for_review", [False, True])
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "SOURCE_ID_UNKNOWN",
+        "MODEL_INSUFFICIENT_EVIDENCE",
+        "ENVELOPE_SCHEMA_INVALID",
+    ],
+)
+def test_no_match_safe_log_uses_only_exact_closed_event(reason, for_review, caplog):
+    caplog.set_level(logging.INFO, logger="reponpc.chat.service")
+    question_canary = "QUESTION_CANARY_59a1"
+    answer_canary = "OUTPUT_CANARY_69f2"
+
+    class CanaryEmbedding(Embedding):
+        def embed_query(self, texts):
+            assert question_canary in texts[0]
+            return super().embed_query(["What is implemented?"])
+
+    class RejectedChat(ProjectChat):
+        def generate(self, *args):
+            result = super().generate(*args)
+            if reason == "ENVELOPE_SCHEMA_INVALID":
+                return replace(result, content='{"broken":"' + answer_canary + ' S999 E_private"')
+            result.content["segments"][0]["text"] = answer_canary
+            result.content["segments"][0]["source_ids"] = ["S999"]
+            result.content["insufficient_evidence"] = reason == "MODEL_INSUFFICIENT_EVIDENCE"
+            return result
+
+    chat = RejectedChat()
+    service = GroundedChatService(
+        bundles=Bundles(),
+        providers=ProviderRuntime(chat=chat, embedding=CanaryEmbedding()),
+        limits=Limits(),
+        max_output_tokens=100,
+        timeout_seconds=5,
+    )
+    kwargs = {"message": "What is implemented? " + question_canary, "locale": "en"}
+    delivery = (
+        service.answer_for_review(**kwargs)
+        if for_review
+        else service.answer(**kwargs, history=(), client_ip="203.0.113.1")
+    )
+    assert delivery.no_match_reason == reason and delivery.insufficient_evidence
+    assert chat.calls == 1
+    records = [record for record in caplog.records if record.name == "reponpc.chat.service"]
+    assert len(records) == 1
+    record = records[0]
+    payload = json.loads(record.getMessage())
+    assert record.levelno == logging.INFO
+    assert payload["severity"] == "INFO"
+    assert payload["event"] == "chat.answer.no_match." + reason.lower()
+    assert set(payload) == {"timestamp", "severity", "event"}
+    for canary in (
+        question_canary,
+        answer_canary,
+        delivery.answer_markdown,
+        "S1",
+        "S999",
+        "E_private",
+        "E_" + "a" * 24,
+        "203.0.113.1",
+    ):
+        assert canary not in caplog.text

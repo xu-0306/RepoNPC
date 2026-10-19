@@ -190,6 +190,7 @@ Crossing a boundary requires schema validation, size/time bounds, context-specif
 - Conversation history is untrusted and cannot introduce system messages.
 - The model receives no tokens, server paths, environment values, admin state, or unrestricted URL-fetch/tool interface.
 - Model output is a proposal: it is buffered, parsed, sanitized, checked against selected IDs and person-claim policy, and only then streamed to the browser.
+- Fixed owner-only INFO event names `chat.answer.no_match.<closed reason lowercased>` are permitted under ADR-064, with no content, identifiers or additional fields and no public exposure.
 - For envelope v2, a failed segment is dropped and only a fixed reason code reaches the server's owner-only safe log; rejected text, questions and prompts are never logged or sent to visitors. An envelope integrity failure returns the localized no-match reply without regeneration. Validation failure must not become a reason to expose raw model output.
 
 ## 6. Network policy

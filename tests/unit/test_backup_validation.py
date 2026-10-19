@@ -129,7 +129,7 @@ def _seed_current(connection: sqlite3.Connection) -> None:
     )
 
 
-@pytest.mark.parametrize("version", [33, 34])
+@pytest.mark.parametrize("version", [33, 34, 36, 37])
 def test_current_round_trip_preserves_owner_encrypted_revisions_selection_and_bundle(
     tmp_path: Path,
     version: int,
@@ -509,3 +509,31 @@ def test_output_creation_failure_removes_only_our_private_payload(
     with pytest.raises(validation.BackupValidationError):
         validation.validate_backup(blob, work)
     assert list(work.iterdir()) == []
+
+
+@pytest.mark.parametrize("version", [36, 37])
+def test_faq_reason_backup_normalization_preserves_current_and_upgrades_old(tmp_path, version):
+    def seed(connection):
+        connection.execute(
+            "INSERT INTO faq_entries(entry_id,question_key,bundle_id,locale,question,claim_kind,"
+            "review_state,answer_markdown) VALUES ('fixture','q','bundle','en','Question',"
+            "'context','approved','Reviewed answer')"
+        )
+        if version == 37:
+            connection.execute("UPDATE faq_entries SET no_match_reason='SOURCE_ID_UNKNOWN'")
+
+    blob = _source(tmp_path, version=version, mutate=seed)
+    result = validation.validate_backup(blob, _work(tmp_path))
+    assert result.schema_version == version
+    with closing(sqlite3.connect(result.path)) as connection:
+        assert (
+            connection.execute("SELECT max(version) FROM runtime_schema_migrations").fetchone()[0]
+            == 37
+        )
+        assert connection.execute(
+            "SELECT answer_markdown,review_state,no_match_reason FROM faq_entries"
+        ).fetchone() == (
+            "Reviewed answer",
+            "approved",
+            "SOURCE_ID_UNKNOWN" if version == 37 else None,
+        )

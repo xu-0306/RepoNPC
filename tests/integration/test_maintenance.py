@@ -168,9 +168,17 @@ def test_real_host_restore_or_rollback_preserves_snapshot(
         application_factory=application_factory,
         idle_check=lambda: None,
     )
+    with database.connection() as connection:
+        connection.execute(
+            "INSERT INTO faq_entries(entry_id,question_key,bundle_id,locale,question,claim_kind,"
+            "no_match_reason) VALUES ('fixture','q','bundle','en','Question','context',"
+            "'SOURCE_ID_UNKNOWN')"
+        )
     preview = service.inspect(service.backup(PASSWORD), PASSWORD, SESSION)
     preview_id = str(preview["preview_id"])
     _state(database, "AFTER")
+    with database.connection() as connection:
+        connection.execute("UPDATE faq_entries SET no_match_reason = 'ENVELOPE_SCHEMA_INVALID'")
     pointer = database.database_path.parent / "bundles/active.json"
     pointer.parent.mkdir()
     pointer.write_bytes(b'{"bundle_id":"SYNTHETIC_PREVIOUS"}')
@@ -196,6 +204,9 @@ def test_real_host_restore_or_rollback_preserves_snapshot(
         assert not host.busy
         expected = "BEFORE" if failure is None else "AFTER"
         assert client.get("/value").json() == {"value": expected}
+        with database.connection() as connection:
+            reason = connection.execute("SELECT no_match_reason FROM faq_entries").fetchone()[0]
+        assert reason == ("SOURCE_ID_UNKNOWN" if failure is None else "ENVELOPE_SCHEMA_INVALID")
         assert events[0:2] == ["start-1", "stop-1"]
         assert len(list(service._root.glob("*.reponpc-backup"))) == 2
         # Automatic current backup is encrypted using the uploaded backup's password.

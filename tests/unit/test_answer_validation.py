@@ -51,6 +51,7 @@ def test_validated_answer_builds_server_owned_immutable_citation() -> None:
     )
 
     assert result.insufficient_evidence is False
+    assert result.no_match_reason is None
     assert result.citations[0].url == (
         "https://github.com/owner/repo/blob/" + "b" * 40 + "/src/app.py#L10-L12"
     )
@@ -182,6 +183,7 @@ def test_v2_inflation_or_invented_number_drops_only_that_segment() -> None:
     assert "led a team" not in result.answer_markdown
     assert {citation.id for citation in result.citations} == {"S1", "S2"}
     assert result.discarded_reason_codes == ("INFLATION_UNSUPPORTED", "NUMBER_UNSUPPORTED")
+    assert result.no_match_reason is None
 
 
 def test_v2_participation_accepts_dates_but_drops_role_claims() -> None:
@@ -303,6 +305,7 @@ def test_v2_identity_recall_reclassifies_project_as_person() -> None:
 
     assert result.insufficient_evidence is True
     assert "OWNER_REFERENCE_MISSING" in result.discarded_reason_codes
+    assert result.no_match_reason == "ALL_SEGMENTS_DROPPED"
     assert "PROJECT_OWNER_REFERENCE" not in result.discarded_reason_codes
 
 
@@ -356,6 +359,7 @@ def test_v2_inference_cycle_rejects_the_complete_answer() -> None:
 
     assert result.insufficient_evidence is True
     assert result.citations == ()
+    assert result.no_match_reason == "INFERENCE_CYCLE"
 
 
 def test_v2_entrypoint_rejects_legacy_or_missing_v2_fields() -> None:
@@ -450,3 +454,111 @@ def test_singular_reference_is_dropped_without_rewriting_valid_sibling(kind, tex
     assert result.answer_markdown == "SQLite stores records. [S2]"
     assert result.discarded_segments == ((0, ("OWNER_REFERENCE_MISSING",)),)
     assert "Alice work" not in result.answer_markdown
+
+
+@pytest.mark.parametrize(
+    "raw,selected,reason",
+    [
+        (
+            {"segments": [], "insufficient_evidence": True},
+            dict([evidence("S1")]),
+            "MODEL_INSUFFICIENT_EVIDENCE",
+        ),
+        ({}, dict([evidence("S1")]), "ENVELOPE_SCHEMA_INVALID"),
+        ('{"segments":', dict([evidence("S1")]), "ENVELOPE_SCHEMA_INVALID"),
+        (
+            {
+                "segments": [{"kind": "project", "text": "Unknown source", "source_ids": ["S9"]}],
+                "insufficient_evidence": False,
+            },
+            dict([evidence("S1")]),
+            "SOURCE_ID_UNKNOWN",
+        ),
+        (
+            {
+                "segments": [
+                    {
+                        "kind": "project",
+                        "text": "Unselected evidence",
+                        "source_ids": ["E_unselected"],
+                    }
+                ],
+                "insufficient_evidence": False,
+            },
+            dict([evidence("S1")]),
+            "SOURCE_ID_UNKNOWN",
+        ),
+        (
+            {"segments": [], "insufficient_evidence": False},
+            dict([evidence("invalid")]),
+            "SELECTED_MAP_INVALID",
+        ),
+        (
+            {"segments": [], "insufficient_evidence": False},
+            dict([evidence("S1")]),
+            "ALL_SEGMENTS_DROPPED",
+        ),
+        ({"segments": [], "insufficient_evidence": False}, {}, "NO_EVIDENCE_SELECTED"),
+    ],
+)
+def test_closed_no_match_reasons_preserve_the_visitor_reply(raw, selected, reason):
+    result = validate_v2_answer(raw, selected, "en", suggested_questions=["Next question?"])
+    assert result.no_match_reason == reason
+    assert result.answer_markdown == (
+        "I couldn't find anything about that in this portfolio. Try one of these questions."
+    )
+    assert result.insufficient_evidence is True
+    assert result.citations == ()
+    assert result.suggested_questions == ("Next question?",)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "See https://example.invalid",
+        "<b>Markup</b>",
+        "[a](relative)",
+        "Inline [S1]",
+    ],
+)
+def test_markup_reason_rejects_all_segments_including_safe_siblings(text):
+    result = validate_v2_answer(
+        {
+            "segments": [
+                {"kind": "project", "text": "Safe sibling", "source_ids": ["S1"]},
+                {"kind": "project", "text": text, "source_ids": ["S1"]},
+            ],
+            "insufficient_evidence": False,
+        },
+        dict([evidence("S1")]),
+        "en",
+    )
+    assert result.no_match_reason == "MODEL_AUTHORED_MARKUP"
+    assert result.insufficient_evidence is True and result.citations == ()
+    assert "Safe sibling" not in result.answer_markdown
+
+
+@pytest.mark.parametrize("error_type", [ValueError, TypeError, AttributeError, KeyError])
+def test_unexpected_validation_errors_have_a_fixed_reason(monkeypatch, error_type):
+    def unexpected(*args, **kwargs):
+        raise error_type("PRIVATE_VALIDATION_CANARY")
+
+    monkeypatch.setattr("reponpc.chat.answers._validate_v2_envelope", unexpected)
+    result = validate_v2_answer(
+        {"segments": [], "insufficient_evidence": False},
+        dict([evidence("S1")]),
+        "en",
+    )
+    assert result.no_match_reason == "VALIDATION_UNEXPECTED"
+    assert result.insufficient_evidence is True and result.citations == ()
+    assert "PRIVATE_VALIDATION_CANARY" not in result.answer_markdown
+
+
+def test_model_abstention_reason_keeps_precedence_over_selected_map_validation():
+    result = validate_v2_answer(
+        {"segments": [], "insufficient_evidence": True},
+        {},
+        "en",
+    )
+    assert result.no_match_reason == "MODEL_INSUFFICIENT_EVIDENCE"
+    assert result.insufficient_evidence is True

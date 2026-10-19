@@ -224,7 +224,7 @@ def test_visitor_port_migration_adds_nullable_bounded_column(tmp_path: Path) -> 
         )
     database.initialize()
 
-    assert database.schema_version() == 36
+    assert database.schema_version() == 37
     with database.connection() as connection:
         row = connection.execute(
             "SELECT gateway_origin, visitor_port FROM visitor_gateway_settings WHERE id = 1"

@@ -13,7 +13,13 @@ from pathlib import Path
 from typing import Any, Literal
 
 from reponpc.bundles.manager import BundleManager
-from reponpc.chat.answers import Citation, ValidatedAnswer, validate_v2_answer
+from reponpc.chat.answers import (
+    Citation,
+    NoMatchReason,
+    ValidatedAnswer,
+    no_match_answer,
+    validate_v2_answer,
+)
 from reponpc.chat.limits import ChatLimits, ProviderLane
 from reponpc.indexing.public_profile import PublicProfileError, parse_public_profile_bytes
 from reponpc.observability import get_safe_logger
@@ -43,6 +49,7 @@ class ChatDelivery:
     suggested_questions: tuple[str, ...] = ()
     contact_link: tuple[str, str] | None = None
     discarded_segments: tuple[tuple[int, tuple[str, ...]], ...] = ()
+    no_match_reason: NoMatchReason | None = None
 
 
 class ChatCancelledError(RuntimeError):
@@ -179,9 +186,10 @@ class GroundedChatService:
             )
             if evidence_budget <= 0:
                 _raise_if_cancelled(cancel_requested)
-                validated = validate_v2_answer(
-                    {}, {}, locale, suggested_questions=suggested_questions
+                validated = no_match_answer(
+                    locale, suggested_questions, reason="NO_EVIDENCE_SELECTED"
                 )
+                _log_no_match(validated)
                 return ChatDelivery(
                     index_version=bundle_id,
                     locale=locale,
@@ -193,6 +201,7 @@ class GroundedChatService:
                     insufficient_evidence=True,
                     suggested_questions=validated.suggested_questions,
                     contact_link=contact_link,
+                    no_match_reason=validated.no_match_reason,
                 )
             packed = index.pack_context(
                 evidence_ids,
@@ -269,6 +278,7 @@ class GroundedChatService:
                 suggested_questions=suggested_questions,
             )
             _log_discarded_segments(validated)
+            _log_no_match(validated)
             return ChatDelivery(
                 index_version=bundle_id,
                 locale=locale,
@@ -283,6 +293,7 @@ class GroundedChatService:
                 ),
                 contact_link=contact_link if validated.insufficient_evidence else None,
                 discarded_segments=validated.discarded_segments,
+                no_match_reason=validated.no_match_reason,
             )
 
     def _answer_profile(
@@ -349,6 +360,13 @@ def _log_discarded_segments(validated: ValidatedAnswer) -> None:
             logging.INFO,
             f"chat.answer.segment_dropped.{reason.casefold()}",
         )
+
+
+def _log_no_match(validated: ValidatedAnswer) -> None:
+    """Emit only a closed reason code, never rejected content or identifiers."""
+
+    if validated.no_match_reason is not None:
+        _LOGGER.emit(logging.INFO, f"chat.answer.no_match.{validated.no_match_reason.lower()}")
 
 
 def _raise_if_cancelled(cancel_requested: threading.Event | None) -> None:

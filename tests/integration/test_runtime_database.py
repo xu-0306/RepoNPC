@@ -1189,3 +1189,54 @@ def test_pages_sharing_database_accepts_complete_verification(tmp_path: Path) ->
     assert row["verified_pages_url"] == "https://fixture.github.io/"
     assert row["verified_content_sha256"] == "a" * 64
     assert row["verified_at"] == "now"
+
+
+@pytest.mark.parametrize("broken", [False, True])
+def test_migration_37_preserves_faq_and_checks_the_closed_reason_set(tmp_path, broken):
+    from typing import get_args
+
+    from reponpc.chat.answers import NoMatchReason
+
+    database = RuntimeDatabase(tmp_path / "faq-reasons")
+    database.initialize(migrations=MIGRATIONS[:36])
+    with database.connection() as connection:
+        connection.execute(
+            "INSERT INTO faq_entries(entry_id,question_key,bundle_id,locale,question,claim_kind,"
+            "answer_markdown,review_state,revision,diagnostics_json) VALUES "
+            "('fixture','q','bundle','en','Question','context','Existing answer','approved',7,"
+            "?)",
+            ('[{"segment_index":1,"reason_codes":["NUMBER_UNSUPPORTED"]}]',),
+        )
+    migration = MIGRATIONS[36]
+    assert migration.version == 37
+    if broken:
+        failed = Migration(37, migration.name, (*migration.statements, "INVALID SQL"))
+        with pytest.raises(RuntimeDatabaseError):
+            database.initialize(migrations=(*MIGRATIONS[:36], failed))
+        assert database.schema_version() == 36
+        with database.connection() as connection:
+            assert "no_match_reason" not in {
+                row[1] for row in connection.execute("PRAGMA table_info(faq_entries)")
+            }
+    database.initialize()
+    database.initialize()
+    assert database.schema_version() == 37
+    with database.connection() as connection:
+        row = connection.execute("SELECT * FROM faq_entries").fetchone()
+        assert row["no_match_reason"] is None
+        assert (row["answer_markdown"], row["review_state"], row["revision"]) == (
+            "Existing answer",
+            "approved",
+            7,
+        )
+        assert (
+            row["diagnostics_json"] == '[{"segment_index":1,"reason_codes":["NUMBER_UNSUPPORTED"]}]'
+        )
+        for reason in (*get_args(NoMatchReason), None):
+            connection.execute("UPDATE faq_entries SET no_match_reason = ?", (reason,))
+            assert (
+                connection.execute("SELECT no_match_reason FROM faq_entries").fetchone()[0]
+                == reason
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute("UPDATE faq_entries SET no_match_reason = 'UNRECOGNIZED_CANARY'")

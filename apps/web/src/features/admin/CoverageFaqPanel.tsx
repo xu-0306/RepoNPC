@@ -1,6 +1,45 @@
 import { useEffect, useRef, useState } from "react";
 import type { ClaimKind } from "./ClaimEditor";
 
+const noMatchLabels = {
+  MODEL_INSUFFICIENT_EVIDENCE: {
+    "zh-TW": "模型判斷證據不足",
+    en: "Model found too little evidence",
+  },
+  ENVELOPE_SCHEMA_INVALID: {
+    "zh-TW": "回覆格式不符",
+    en: "Reply format invalid",
+  },
+  SOURCE_ID_UNKNOWN: {
+    "zh-TW": "引用了不存在的來源",
+    en: "Cited an unknown source",
+  },
+  MODEL_AUTHORED_MARKUP: {
+    "zh-TW": "回覆含不允許的連結或標記",
+    en: "Reply contained links or markup",
+  },
+  INFERENCE_CYCLE: {
+    "zh-TW": "推論引用了推論",
+    en: "Inference cited an inference",
+  },
+  ALL_SEGMENTS_DROPPED: {
+    "zh-TW": "每段都未通過檢查",
+    en: "Every part failed checks",
+  },
+  SELECTED_MAP_INVALID: {
+    "zh-TW": "系統檢查錯誤",
+    en: "Internal check error",
+  },
+  VALIDATION_UNEXPECTED: {
+    "zh-TW": "系統檢查錯誤",
+    en: "Internal check error",
+  },
+  NO_EVIDENCE_SELECTED: {
+    "zh-TW": "沒有找到相關資料",
+    en: "No relevant content found",
+  },
+} as const;
+
 type Request = <T>(path: string, options?: RequestInit) => Promise<T>;
 interface FaqEntry {
   entry_id: string;
@@ -12,6 +51,7 @@ interface FaqEntry {
   answer_markdown: string | null;
   citations: { title: string; url: string }[];
   dropped_segments: { segment_index: number; reason_codes: string[] }[];
+  no_match_reason: keyof typeof noMatchLabels | null;
   coverage_status:
     | "unchecked"
     | "answered"
@@ -251,7 +291,12 @@ export function CoverageFaqPanel({
               {entry.variants.join(zh ? "、" : " · ")}
             </p>
           )}
-          <p>{statusNames[entry.coverage_status]}</p>
+          <p>
+            {statusNames[entry.coverage_status]}
+            {entry.no_match_reason && (
+              <span> · {noMatchLabels[entry.no_match_reason][locale]}</span>
+            )}
+          </p>
           {entry.needs_reconfirmation && (
             <p>
               {zh

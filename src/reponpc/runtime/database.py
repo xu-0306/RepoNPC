@@ -1450,6 +1450,17 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             "CHECK (visitor_port IS NULL OR visitor_port BETWEEN 1024 AND 65535)",
         ),
     ),
+    Migration(
+        version=37,
+        name="faq_no_match_reason",
+        statements=(
+            "ALTER TABLE faq_entries ADD COLUMN no_match_reason TEXT CHECK ("
+            "no_match_reason IS NULL OR no_match_reason IN ("
+            "'MODEL_INSUFFICIENT_EVIDENCE', 'ENVELOPE_SCHEMA_INVALID', 'SOURCE_ID_UNKNOWN', "
+            "'MODEL_AUTHORED_MARKUP', 'INFERENCE_CYCLE', 'SELECTED_MAP_INVALID', "
+            "'ALL_SEGMENTS_DROPPED', 'VALIDATION_UNEXPECTED', 'NO_EVIDENCE_SELECTED'))",
+        ),
+    ),
 )
 
 

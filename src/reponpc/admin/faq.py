@@ -10,10 +10,11 @@ import unicodedata
 import uuid
 from collections.abc import Callable
 from dataclasses import asdict
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 from reponpc.admin.faq_registry import STANDARD_QUESTIONS
 from reponpc.bundles.manager import BundleManager
+from reponpc.chat.answers import NoMatchReason
 from reponpc.chat.service import GroundedChatService
 from reponpc.indexing.public_profile import parse_public_profile_bytes
 from reponpc.runtime.database import RuntimeDatabase
@@ -33,6 +34,26 @@ _PUBLIC_CITATION_FIELDS = (
     "excerpt",
     "url",
 )
+
+
+class OwnerFaqEntry(TypedDict):
+    """Private FAQ response; public delivery uses its own explicit allowlist."""
+
+    entry_id: str
+    bundle_id: str
+    question: str
+    variants: list[str]
+    topic: str | None
+    claim_kind: ClaimKind
+    answer_markdown: str | None
+    citations: list[dict[str, Any]]
+    dropped_segments: list[dict[str, Any]]
+    no_match_reason: NoMatchReason | None
+    coverage_status: str
+    review_state: str
+    needs_reconfirmation: bool
+    error_code: str | None
+    revision: int
 
 
 class FaqError(ValueError):
@@ -91,7 +112,7 @@ class ReviewedFaq:
             "entries": [self._owner_entry(row, active) for row in rows],
         }
 
-    def regenerate(self, entry_id: str, revision: int) -> dict[str, Any]:
+    def regenerate(self, entry_id: str, revision: int) -> OwnerFaqEntry:
         row = self._entry(entry_id)
         if row["revision"] != revision:
             raise FaqError("FAQ_CONFLICT")
@@ -107,6 +128,7 @@ class ReviewedFaq:
                 "answer_markdown": None,
                 "citations_json": "[]",
                 "diagnostics_json": "[]",
+                "no_match_reason": None,
                 "coverage_status": "unchecked",
             },
         )
@@ -162,6 +184,7 @@ class ReviewedFaq:
                         for index, reasons in delivery.discarded_segments
                     ]
                 ),
+                "no_match_reason": delivery.no_match_reason,
                 "coverage_status": status,
                 "review_state": "pending",
                 "error_code": None,
@@ -176,7 +199,7 @@ class ReviewedFaq:
         revision: int,
         bundle_id: str,
         variants: list[str],
-    ) -> dict[str, Any]:
+    ) -> OwnerFaqEntry:
         with (
             self.bundles.acquire_snapshot() as (
                 _index,
@@ -214,7 +237,7 @@ class ReviewedFaq:
             connection.commit()
             return self._owner_entry(self._entry(entry_id), active_bundle_id)
 
-    def review(self, entry_id: str, revision: int, action: str) -> dict[str, Any]:
+    def review(self, entry_id: str, revision: int, action: str) -> OwnerFaqEntry:
         row = self._entry(entry_id)
         if row["bundle_id"] != self.bundles.status().active_bundle_id:
             raise FaqError("FAQ_STALE")
@@ -293,7 +316,7 @@ class ReviewedFaq:
             connection.commit()
 
     @staticmethod
-    def _owner_entry(row: sqlite3.Row, active: str | None) -> dict[str, Any]:
+    def _owner_entry(row: sqlite3.Row, active: str | None) -> OwnerFaqEntry:
         return {
             "entry_id": row["entry_id"],
             "bundle_id": row["bundle_id"],
@@ -304,6 +327,7 @@ class ReviewedFaq:
             "answer_markdown": row["answer_markdown"],
             "citations": json.loads(row["citations_json"]),
             "dropped_segments": json.loads(row["diagnostics_json"]),
+            "no_match_reason": row["no_match_reason"],
             "coverage_status": row["coverage_status"],
             "review_state": row["review_state"],
             "needs_reconfirmation": row["bundle_id"] != active,

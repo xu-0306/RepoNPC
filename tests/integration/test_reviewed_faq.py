@@ -507,3 +507,86 @@ def test_question_normalization_matches_exact_v2(value, expected):
 )
 def test_internal_question_structure_can_be_explicitly_approved(question, variant):
     assert validate_question_variants(question, [variant]) == [variant]
+
+
+def test_no_match_reason_is_private_stored_returned_and_cleared_on_success(tmp_path):
+    database, manager, store, chat, service, _, _, _ = faq_system(tmp_path / "build")
+    application = _application_without_github(tmp_path / "admin")
+    application.state.admin_operations = replace(
+        application.state.admin_operations, database=database, local_portfolio=store
+    )
+    application.state.runtime_database = database
+    application.state.bundle_manager = manager
+    application.state.chat_service = service
+    with TestClient(application, base_url=ORIGIN) as client:
+        headers = {"Origin": ORIGIN, "X-CSRF-Token": _login(client)}
+        queue = client.post(
+            "/api/admin/portfolio/faq/check", headers=headers, json={"locale": "en"}
+        ).json()
+        entry = queue["entries"][0]
+        assert entry["no_match_reason"] is None
+        root = f"/api/admin/portfolio/faq/{entry['entry_id']}"
+        chat.no_match = True
+        response = client.post(
+            root + "/regenerate", headers=headers, json={"revision": entry["revision"]}
+        )
+        assert response.status_code == 200
+        entry = response.json()
+        assert entry["no_match_reason"] == "MODEL_INSUFFICIENT_EVIDENCE"
+        assert entry["coverage_status"] == "no_relevant_content"
+        assert entry["dropped_segments"] == []
+        owner = client.get("/api/admin/portfolio/faq?locale=en", headers=headers)
+        assert owner.headers["cache-control"] == "no-store"
+        assert owner.json()["entries"][0]["no_match_reason"] == "MODEL_INSUFFICIENT_EVIDENCE"
+        with database.connection() as connection:
+            stored = connection.execute(
+                "SELECT no_match_reason, diagnostics_json FROM faq_entries WHERE entry_id = ?",
+                (entry["entry_id"],),
+            ).fetchone()
+        assert tuple(stored) == ("MODEL_INSUFFICIENT_EVIDENCE", "[]")
+        reviewed = client.post(
+            root + "/review",
+            headers=headers,
+            json={"revision": entry["revision"], "action": "approve"},
+        )
+        assert reviewed.status_code == 200
+        entry = reviewed.json()
+        public = client.get("/api/public/faq?locale=en")
+        exported = client.get("/api/admin/portfolio/faq/export?locale=en", headers=headers)
+        assert public.json() == exported.json()
+        assert len(public.json()["entries"]) == 1
+        assert set(public.json()["entries"][0]) == {
+            "question",
+            "variants",
+            "answer_markdown",
+            "citations",
+        }
+        assert (
+            "no_match_reason" not in public.text
+            and "MODEL_INSUFFICIENT_EVIDENCE" not in public.text
+        )
+        chat.no_match = False
+
+        def check_cleared_before_call():
+            current = client.get("/api/admin/portfolio/faq?locale=en", headers=headers).json()[
+                "entries"
+            ][0]
+            assert current["no_match_reason"] is None
+            assert current["coverage_status"] == "unchecked"
+
+        chat.hook = check_cleared_before_call
+        response = client.post(
+            root + "/regenerate", headers=headers, json={"revision": entry["revision"]}
+        )
+        assert response.status_code == 200
+        entry = response.json()
+        assert entry["no_match_reason"] is None and entry["coverage_status"] == "answered"
+        assert entry["dropped_segments"] == []
+        with database.connection() as connection:
+            assert (
+                connection.execute(
+                    "SELECT no_match_reason FROM faq_entries WHERE entry_id = ?",
+                    (entry["entry_id"],),
+                ).fetchone()[0]
+                is None
+            )
