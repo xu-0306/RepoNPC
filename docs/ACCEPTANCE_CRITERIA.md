@@ -237,6 +237,8 @@ All of them remain not-run.
 
 ADR-065 regression (owner-approved 2026-10-19; both locales): a completed no-match stream leaves the character idle; answered streams and approved FAQ answers retain success. The latest assistant turn's in-turn suggestions are omitted from the page-level list, which hides its heading and section when empty and restores the full list after the next answered turn. Older in-turn buttons remain, every list deduplicates exact strings, and keyboard/focus, admission and disabled behavior are preserved. No-match exchanges are excluded from the next request's history; answered and approved-FAQ exchanges retain existing limits and failed/cancelled exclusions. Offline FAQ non-answers promise suggestions only when questions are shown.
 
+ADR-066 regression (owner-approved 2026-10-19; both locales): every closed no-match reason is exhaustively classified by the ADR-066 table. Only insufficient complete events carry no_match_kind; local and gateway SSE expose the coarse kind and never the raw reason. Temporary displays 「這次沒能整理出可靠的回答，請再問一次。」 / "I couldn't put together a reliable answer this time. Please ask again." and one accessible 「再問一次」 / "Ask again" button via existing retryQuestion/onRetry. Clicking submits the same question with no no-match history; disable while pending or chat is unavailable. Both kinds leave the character idle. Temporary has empty suggestions/citations, omits contact, and preserves page-level suggestions. No_content retains byte-identical ADR-065 copy and no ask-again button; unknown kinds behave as no_content. Offline FAQ behavior and owner FAQ coverage/review/export gates remain unchanged. No automatic backend retry.
+
 ### AC-020 — Species-neutral built-in packs and custom characters share all states
 
 **Maps to:** FR-015, NFR-009
@@ -759,7 +761,7 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **Given** an answer with valid segments plus one segment that upgrades the owner's statement using an inflation term from `inflation_terms.yml` (for example seniority, sole ownership, leadership) or states a number absent from its cited evidence,
 - **When** it is validated,
 - **Then** only that segment is removed, the remaining segments and their Sources are served, and the owner-only log records a reason code without the removed text reaching visitors.
-- **And** an envelope-level failure (schema error, model-authored URL/HTML, unknown or unselected source ID, inference cycle) rejects the whole answer with the localized no-match reply and no regeneration.
+- **And** an envelope-level failure (schema error, model-authored URL/HTML, unknown or unselected source ID, inference cycle) rejects the whole answer with the localized temporary no-match reply, empty citations/suggestions, no contact link and no regeneration (ADR-066).
 - **Verification:** validator tests covering lexicon terms in both locales, a number variant (digits and CJK numerals), and the envelope-level rejections.
 
 ### AC-064 - Ordinary project wording is not treated as a person claim

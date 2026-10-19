@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { messages } from "../i18n/messages";
 
 import {
   VisitorConversation,
@@ -43,6 +44,51 @@ const friendlyTurn: VisitorTurn = {
 };
 
 describe("VisitorConversation", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "reuses the accessible retry button and its disabled rules for temporary turns in %s",
+    (locale) => {
+      for (const [pending, chatAvailable] of [
+        [false, true],
+        [true, true],
+        [false, false],
+        [true, false],
+      ]) {
+        const onRetry = vi.fn();
+        const props = {
+          chatAvailable,
+          locale,
+          onRetry,
+          pending,
+          turns: [
+            {
+              id: "temporary",
+              role: "assistant" as const,
+              content: "Temporary answer",
+              noMatchKind: "temporary" as const,
+              retryQuestion: "Original question?",
+            },
+          ],
+        };
+        const markup = renderToStaticMarkup(<VisitorConversation {...props} />);
+        expect(markup).toContain(`>${messages[locale].askAgain}</button>`);
+        expect(markup).not.toContain(messages[locale].retry);
+        expect(markup.match(/<button/g)).toHaveLength(1);
+        const conversation = VisitorConversation(props);
+        const button = conversation!.props.children[0].props.children.find(
+          (child: { type?: string } | null | false) =>
+            child && child.type === "button",
+        );
+        expect(button.props.type).toBe("button");
+        expect(button.props.children).toBe(messages[locale].askAgain);
+        expect(button.props.disabled).toBe(pending || !chatAvailable);
+        if (!button.props.disabled) {
+          button.props.onClick();
+          expect(onRetry).toHaveBeenCalledExactlyOnceWith("Original question?");
+        }
+      }
+    },
+  );
+
   it.each(["zh-TW", "en"] as const)(
     "deduplicates each turn while preserving older buttons and admission in %s",
     (locale) => {

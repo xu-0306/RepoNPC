@@ -672,3 +672,28 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
 - **Suggestions:** Keep in-turn buttons; omit the latest assistant turn's suggestion strings from the page-level list, hide its section and heading when empty, and restore the full list after an answered turn. Deduplicate each list; older in-turn buttons, keyboard/focus, admission and disabled behavior stay intact.
 - **History:** Do not add no-match exchanges to model history. Existing limits, approved-FAQ exchanges and failed/cancelled-turn exclusions remain.
 - **Boundaries:** Owner-only `no_match_reason`, contact links, citations, validation and SSE fields are unchanged. No frontend text matching, dependencies, CSP changes or provider calls are introduced.
+
+## ADR-066: Visitor no-match kinds and ask-again
+
+- **Status:** Accepted, owner-approved 2026-10-19.
+- **Context:** A model-output integrity fault should not tell visitors that the portfolio has no relevant content. Preserve ADR-064 private diagnostics and ADR-065 no_content behavior.
+- **Decision:** Classify every closed NoMatchReason in one exhaustive mapping in answers.py; a new unclassified reason fails the exhaustiveness test.
+
+| Owner-only reason | Public kind |
+| --- | --- |
+| MODEL_INSUFFICIENT_EVIDENCE | no_content |
+| NO_EVIDENCE_SELECTED | no_content |
+| ALL_SEGMENTS_DROPPED | no_content |
+| ENVELOPE_SCHEMA_INVALID | temporary |
+| SOURCE_ID_UNKNOWN | temporary |
+| MODEL_AUTHORED_MARKUP | temporary |
+| INFERENCE_CYCLE | temporary |
+| SELECTED_MAP_INVALID | temporary |
+| VALIDATION_UNEXPECTED | temporary |
+
+- **Public contract:** Only no-match complete events add no_match_kind: no_content | temporary. Answered events remain unchanged. Only the coarse kind is public; raw reason codes remain owner-only, absent from public APIs/SSE/exports. The visitor gateway preserves the field for local and Pages live chat.
+- **Copy and action:** no_content keeps byte-identical ADR-065 long/short copy selected by sanitized suggestions and its optional contact route. Temporary uses zh-TW 「這次沒能整理出可靠的回答，請再問一次。」 / en "I couldn't put together a reliable answer this time. Please ask again.", empty suggestions and no contact link. Both keep insufficient_evidence=true and empty citations. The frontend accepts only the exact two kinds, defaulting absent/unknown values to no_content. Temporary adds one accessible 「再問一次」 / "Ask again" button via existing retryQuestion/onRetry, submitting the same question; disabled while pending or chat is unavailable. Both kinds return the character to idle and stay out of history. Temporary does not suppress page-level suggestions. Offline FAQ remains unchanged.
+- **Owner FAQ:** answer_for_review stores the temporary localized text as answer_markdown with the same owner-only reason and no_relevant_content coverage status. Existing explicit review, active-bundle and export gates are unchanged; this does not introduce auto-approval or additional export capability.
+- **Retry boundary:** No automatic backend retry is added. Automatic retry is deferred until ADR-064 logs show how often temporary failures happen.
+- **Delivery:** Pages visitors receive the new frontend only after the owner re-exports and re-uploads the static site.
+- **Boundaries:** No model, citation or validation changes, provider fallback, dependency, CSP change or real-model call.

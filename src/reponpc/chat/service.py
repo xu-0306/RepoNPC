@@ -18,6 +18,7 @@ from reponpc.chat.answers import (
     NoMatchReason,
     ValidatedAnswer,
     no_match_answer,
+    no_match_kind,
     validate_v2_answer,
 )
 from reponpc.chat.limits import ChatLimits, ProviderLane
@@ -291,7 +292,13 @@ class GroundedChatService:
                 suggested_questions=(
                     validated.suggested_questions if validated.insufficient_evidence else ()
                 ),
-                contact_link=contact_link if validated.insufficient_evidence else None,
+                contact_link=(
+                    contact_link
+                    if validated.insufficient_evidence
+                    and validated.no_match_reason is not None
+                    and no_match_kind(validated.no_match_reason) == "no_content"
+                    else None
+                ),
                 discarded_segments=validated.discarded_segments,
                 no_match_reason=validated.no_match_reason,
             )
@@ -411,6 +418,11 @@ def delivery_events(
         "insufficient_evidence": delivery.insufficient_evidence,
     }
     if delivery.insufficient_evidence:
+        complete["no_match_kind"] = (
+            no_match_kind(delivery.no_match_reason)
+            if delivery.no_match_reason is not None
+            else "no_content"
+        )
         complete["suggested_questions"] = list(delivery.suggested_questions[:3])
         if delivery.contact_link is not None:
             complete["contact_link"] = {

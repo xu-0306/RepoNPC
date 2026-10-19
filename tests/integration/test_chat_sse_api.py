@@ -8,11 +8,13 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, replace
+from typing import get_args
 
+import pytest
 from fastapi.testclient import TestClient
 
 from reponpc.api.public import SetupState
-from reponpc.chat.answers import Citation
+from reponpc.chat.answers import Citation, NoMatchReason, no_match_answer, no_match_kind
 from reponpc.chat.limits import ChatLimitError
 from reponpc.chat.service import ChatDelivery, delivery_events
 from reponpc.main import create_app
@@ -114,6 +116,7 @@ def test_success_stream_has_exact_order_headers_and_server_owned_citation() -> N
     assert events == ["metadata", "token", "citations", "complete"]
     assert "github.com/owner/repo/blob/" in response.text
     assert service.calls == 1
+    assert "no_match_kind" not in response.text
 
 
 def test_worker_limit_failure_is_one_safe_terminal_sse_event() -> None:
@@ -489,8 +492,8 @@ def test_local_chat_asgi_heartbeat_identity_and_usage_before_validated_answer() 
     asyncio.run(exercise())
 
 
-def test_rejected_answer_public_stream_matches_pre_reason_wire_contract():
-    # Golden payload from the pre-ADR-064 stream; request ID/time remain dynamic.
+def test_no_content_public_stream_adds_only_coarse_kind_to_pre_reason_wire_contract():
+    # Pre-ADR-064 golden payload plus ADR-066 kind; request ID/time remain dynamic.
     delivery = ChatDelivery(
         "fixture-index",
         "en",
@@ -502,7 +505,7 @@ def test_rejected_answer_public_stream_matches_pre_reason_wire_contract():
         True,
         ("What does this project do?",),
         ("Contact", "https://example.com/contact"),
-        no_match_reason="SOURCE_ID_UNKNOWN",
+        no_match_reason="MODEL_INSUFFICIENT_EVIDENCE",
     )
     assert delivery_events(delivery, "fixed") == delivery_events(
         replace(delivery, no_match_reason=None), "fixed"
@@ -528,14 +531,67 @@ def test_rejected_answer_public_stream_matches_pre_reason_wire_contract():
         'Try one of these questions."}\n\n'
         'event: complete\ndata: {"finish_reason":"stop",'
         '"usage":{"input_tokens":4,"output_tokens":2},'
-        '"insufficient_evidence":true,"suggested_questions":["What does this project do?"],'
+        '"insufficient_evidence":true,"no_match_kind":"no_content",'
+        '"suggested_questions":["What does this project do?"],'
         '"contact_link":{"label":"Contact","url":"https://example.com/contact"},'
         '"elapsed_ms":' + str(elapsed) + "}\n\n"
     )
     assert response.content == expected.encode("utf-8")
-    from typing import get_args
-
-    from reponpc.chat.answers import NoMatchReason
-
     assert b"no_match_reason" not in response.content
     assert all(reason.encode() not in response.content for reason in get_args(NoMatchReason))
+
+
+@pytest.mark.parametrize("reason", get_args(NoMatchReason))
+@pytest.mark.parametrize("locale", ["zh-TW", "en"])
+def test_no_match_complete_exposes_only_coarse_kind_locally_and_through_gateway(
+    tmp_path, reason, locale
+):
+    from tests.security.test_visitor_gateway_review import _gateway
+
+    answer = no_match_answer(locale, ("Next?",), reason=reason)
+    kind = no_match_kind(reason)
+    delivery = ChatDelivery(
+        "fixture-index",
+        locale,
+        1,
+        answer.answer_markdown,
+        (),
+        "stop",
+        ProviderUsage(4, 2),
+        True,
+        answer.suggested_questions,
+        None if kind == "temporary" else ("Contact", "https://example.com/contact"),
+        no_match_reason=reason,
+    )
+    for gateway in (False, True):
+        service = FixtureChatService(delivery)
+        application = (
+            _gateway(tmp_path, service=service)[0]
+            if gateway
+            else create_app(setup_state=ready_state(), chat_service=service)
+        )
+        with TestClient(application, base_url="https://fixture.ts.net") as client:
+            response = client.post(
+                "/api/public/chat/stream", json={"message": "Question", "locale": locale}
+            )
+        assert response.status_code == 200
+        data = [
+            json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
+        ]
+        complete = data[-1]
+        assert complete["no_match_kind"] == kind
+        assert complete["insufficient_evidence"] is True
+        assert complete["suggested_questions"] == ([] if kind == "temporary" else ["Next?"])
+        assert set(complete) == {
+            "finish_reason",
+            "usage",
+            "insufficient_evidence",
+            "no_match_kind",
+            "suggested_questions",
+            "elapsed_ms",
+        } | ({"contact_link"} if kind == "no_content" else set())
+        assert complete["usage"] == (None if gateway else {"input_tokens": 4, "output_tokens": 2})
+        assert "event: citations" not in response.text
+        assert b"no_match_reason" not in response.content
+        assert all(code.encode() not in response.content for code in get_args(NoMatchReason))
+        assert service.calls == 1

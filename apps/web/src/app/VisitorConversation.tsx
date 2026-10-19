@@ -26,6 +26,7 @@ export interface VisitorTurn {
   content: string;
   citations?: Citation[];
   failed?: boolean;
+  noMatchKind?: "no_content" | "temporary";
   retryQuestion?: string;
   suggestedQuestions?: string[];
   contactLink?: { label: string; url: string };
@@ -143,15 +144,16 @@ export function VisitorConversation({
               </a>
             </p>
           )}
-          {turn.failed && turn.retryQuestion && (
-            <button
-              disabled={pending || !chatAvailable}
-              onClick={() => onRetry(turn.retryQuestion ?? "")}
-              type="button"
-            >
-              {copy.retry}
-            </button>
-          )}
+          {(turn.failed || turn.noMatchKind === "temporary") &&
+            turn.retryQuestion && (
+              <button
+                disabled={pending || !chatAvailable}
+                onClick={() => onRetry(turn.retryQuestion ?? "")}
+                type="button"
+              >
+                {turn.noMatchKind === "temporary" ? copy.askAgain : copy.retry}
+              </button>
+            )}
           {turn.citations && turn.citations.length > 0 && (
             <details className="citations">
               <summary>{copy.citations}</summary>

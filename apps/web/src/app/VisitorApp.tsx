@@ -323,15 +323,22 @@ export function VisitorApp() {
           event.data.insufficient_evidence === true
         ) {
           insufficientEvidence = true;
-          const suggestedQuestions = Array.isArray(
-            event.data.suggested_questions,
-          )
-            ? event.data.suggested_questions.filter(
-                (item): item is string => typeof item === "string",
-              )
-            : [];
+          const noMatchKind =
+            event.data.no_match_kind === "temporary" ||
+            event.data.no_match_kind === "no_content"
+              ? event.data.no_match_kind
+              : "no_content";
+          const suggestedQuestions =
+            noMatchKind === "temporary"
+              ? []
+              : Array.isArray(event.data.suggested_questions)
+                ? event.data.suggested_questions.filter(
+                    (item): item is string => typeof item === "string",
+                  )
+                : [];
           const link = event.data.contact_link;
           const contactLink =
+            noMatchKind !== "temporary" &&
             link &&
             typeof link === "object" &&
             "label" in link &&
@@ -343,7 +350,7 @@ export function VisitorApp() {
           setTurns((current) =>
             current.map((turn) =>
               turn.id === assistantId
-                ? { ...turn, suggestedQuestions, contactLink }
+                ? { ...turn, noMatchKind, suggestedQuestions, contactLink }
                 : turn,
             ),
           );

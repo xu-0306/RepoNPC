@@ -34,6 +34,7 @@ from tests.security.test_admin_writeback import ORIGIN, _application_without_git
 class SyntheticChat:
     partial = False
     no_match = False
+    temporary = False
     failure = False
     hook = None
     calls = 0
@@ -51,6 +52,8 @@ class SyntheticChat:
             self.hook()
         if self.failure:
             raise ValueError("PRIVATE_PROVIDER_CANARY")
+        if self.temporary:
+            return ProviderResult({}, "stop", None, None, 1.0)
         segments = (
             []
             if self.no_match
@@ -507,6 +510,42 @@ def test_question_normalization_matches_exact_v2(value, expected):
 )
 def test_internal_question_structure_can_be_explicitly_approved(question, variant):
     assert validate_question_variants(question, [variant]) == [variant]
+
+
+@pytest.mark.parametrize("locale", ["zh-TW", "en"])
+def test_temporary_faq_keeps_existing_no_match_review_and_export_gates(tmp_path, locale):
+    database, _, _, chat, _, _, faq, _ = faq_system(tmp_path)
+    entry = faq.initialize_queue(locale)["entries"][0]
+    with pytest.raises(FaqError, match="FAQ operation") as rejected:
+        faq.review(entry["entry_id"], entry["revision"], "approve")
+    assert rejected.value.code == "FAQ_NOT_READY"
+    chat.temporary = True
+    entry = faq.regenerate(entry["entry_id"], entry["revision"])
+    expected = {
+        "zh-TW": "這次沒能整理出可靠的回答，請再問一次。",  # noqa: RUF001
+        "en": "I couldn't put together a reliable answer this time. Please ask again.",
+    }[locale]
+    assert entry["answer_markdown"] == expected
+    assert entry["no_match_reason"] == "ENVELOPE_SCHEMA_INVALID"
+    assert entry["coverage_status"] == "no_relevant_content"
+    assert entry["review_state"] == "pending"
+    assert entry["citations"] == entry["dropped_segments"] == []
+    assert faq.public_payload(locale)["entries"] == []
+    with database.connection() as connection:
+        stored = connection.execute(
+            "SELECT answer_markdown, no_match_reason FROM faq_entries WHERE entry_id = ?",
+            (entry["entry_id"],),
+        ).fetchone()
+    assert tuple(stored) == (expected, "ENVELOPE_SCHEMA_INVALID")
+    # Existing FAQ contract explicitly permits an owner-reviewed generated no-match.
+    # Temporary results gain no extra approval/export capability.
+    entry = faq.review(entry["entry_id"], entry["revision"], "approve")
+    exported = faq.public_payload(locale)["entries"]
+    assert len(exported) == 1
+    assert exported[0]["answer_markdown"] == expected
+    assert set(exported[0]) == {"question", "variants", "answer_markdown", "citations"}
+    faq.review(entry["entry_id"], entry["revision"], "reject")
+    assert faq.public_payload(locale)["entries"] == []
 
 
 def test_no_match_reason_is_private_stored_returned_and_cleared_on_success(tmp_path):

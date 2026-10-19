@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VisitorApp } from "./VisitorApp";
 import { VisitorPage } from "./VisitorPage";
+import { VisitorConversation } from "./VisitorConversation";
 import { messages, type Locale } from "../i18n/messages";
 import type { PublicFaq, PublicProfile } from "./publicTypes";
 
@@ -58,6 +59,7 @@ const reply = (
   text: string,
   insufficient: boolean,
   suggestions: string[] = [],
+  kind?: unknown,
 ) =>
   new Response(
     frame("metadata", {}) +
@@ -65,6 +67,7 @@ const reply = (
       frame("complete", {
         insufficient_evidence: insufficient,
         suggested_questions: suggestions,
+        no_match_kind: kind,
       }),
   );
 
@@ -155,6 +158,74 @@ async function app(
 }
 
 describe("visitor no-match UX", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "shows temporary copy and asks the same question again without no-match history in %s",
+    async (locale) => {
+      const text =
+        locale === "zh-TW"
+          ? "這次沒能整理出可靠的回答，請再問一次。"
+          : "I couldn't put together a reliable answer this time. Please ask again.";
+      const send = vi
+        .fn()
+        .mockResolvedValueOnce(reply(text, true, [], "temporary"))
+        .mockResolvedValueOnce(reply("Answered", false));
+      vi.stubGlobal("fetch", send);
+      const view = await app(locale, ["Next?"]);
+      await view.submit("Same question?");
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(view.render().characterState).toBe("idle");
+      expect(view.render().suggestions).toEqual(["Next?"]);
+      expect(view.render().turns[1].suggestedQuestions).toEqual([]);
+      expect(view.render().turns[1].contactLink).toBeUndefined();
+      expect(view.markup()).toContain(text.replaceAll("'", "&#x27;"));
+      expect(view.markup()).toContain(
+        `<button type="button">${messages[locale].askAgain}</button>`,
+      );
+      expect(view.markup()).not.toContain('class="answer-suggestions"');
+      const props = view.render();
+      const conversation = VisitorConversation({ ...props });
+      const assistant = conversation!.props.children[1];
+      const button = assistant.props.children.find(
+        (child: { type?: string } | null | false) =>
+          child && child.type === "button",
+      );
+      button.props.onClick();
+      await vi.waitFor(() => expect(view.render().pending).toBe(false));
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(send.mock.calls[1][1].body)).toEqual({
+        message: "Same question?",
+        locale,
+        history: [],
+      });
+      expect(view.render().characterState).toBe("success");
+    },
+  );
+
+  it.each([
+    "no_content",
+    "UNKNOWN",
+    "Temporary",
+    "__proto__",
+    null,
+    1,
+    {},
+    ["temporary"],
+    undefined,
+  ])("accepts only exact kinds and treats %j as no_content", async (kind) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(reply("No content", true, ["Next?"], kind)),
+    );
+    const view = await app("en", ["Next?"]);
+    await view.submit("Question");
+    expect(view.render().turns[1].noMatchKind).toBe("no_content");
+    expect(view.render().turns[1].suggestedQuestions).toEqual(["Next?"]);
+    expect(view.render().suggestions).toEqual([]);
+    expect(view.render().characterState).toBe("idle");
+    expect(view.markup()).not.toContain(messages.en.askAgain);
+    expect(view.markup()).not.toContain(messages.en.retry);
+  });
+
   it.each(["zh-TW", "en"] as const)(
     "keeps no-match idle, removes only latest duplicates, restores suggestions and excludes no-match history in %s",
     async (locale) => {

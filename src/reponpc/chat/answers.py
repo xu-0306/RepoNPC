@@ -51,6 +51,28 @@ NoMatchReason = Literal[
     "VALIDATION_UNEXPECTED",
     "NO_EVIDENCE_SELECTED",
 ]
+NoMatchKind = Literal["no_content", "temporary"]
+_NO_MATCH_KINDS: dict[NoMatchReason, NoMatchKind] = {
+    "MODEL_INSUFFICIENT_EVIDENCE": "no_content",
+    "NO_EVIDENCE_SELECTED": "no_content",
+    "ALL_SEGMENTS_DROPPED": "no_content",
+    "ENVELOPE_SCHEMA_INVALID": "temporary",
+    "SOURCE_ID_UNKNOWN": "temporary",
+    "MODEL_AUTHORED_MARKUP": "temporary",
+    "INFERENCE_CYCLE": "temporary",
+    "SELECTED_MAP_INVALID": "temporary",
+    "VALIDATION_UNEXPECTED": "temporary",
+}
+_TEMPORARY_NO_MATCH = {
+    "zh-TW": "這次沒能整理出可靠的回答，請再問一次。",  # noqa: RUF001
+    "en": "I couldn't put together a reliable answer this time. Please ask again.",
+}
+
+
+def no_match_kind(reason: NoMatchReason) -> NoMatchKind:
+    """Project an owner-only reason to its coarse visitor classification."""
+
+    return _NO_MATCH_KINDS[reason]
 
 
 class _EnvelopeIntegrityError(ValueError):
@@ -339,9 +361,16 @@ def no_match_answer(
 ) -> ValidatedAnswer:
     """Match the visitor copy to safe suggestions and keep its reason owner-only."""
 
-    safe_suggestions = _safe_suggestions(suggestions)
+    temporary = no_match_kind(reason) == "temporary"
+    safe_suggestions = () if temporary else _safe_suggestions(suggestions)
     return ValidatedAnswer(
-        (_NO_MATCH if safe_suggestions else _NO_MATCH_WITHOUT_SUGGESTIONS)[locale],
+        (
+            _TEMPORARY_NO_MATCH
+            if temporary
+            else _NO_MATCH
+            if safe_suggestions
+            else _NO_MATCH_WITHOUT_SUGGESTIONS
+        )[locale],
         (),
         True,
         safe_suggestions,

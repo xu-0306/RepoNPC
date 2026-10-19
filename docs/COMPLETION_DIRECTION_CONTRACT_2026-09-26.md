@@ -83,7 +83,7 @@ The provider returns this envelope instead of a free `answer_markdown`:
 | `project` | ≥1 `REPOSITORY_FACT` or repository metadata | Must not contain `{{owner}}` or an identity string. If the recall fallback detects a person reference, the segment is **reclassified** as `person` and revalidated. It is dropped only if that also fails. |
 | `inference` | ≥1 non-inference source | The existing cycle rule is kept. It is rendered with the existing inference label. |
 
-Envelope-level failures still reject the whole answer and produce the no-match reply (§1.8). These are invalid JSON or schema, model-authored URLs or HTML, unknown or unselected source IDs, and inference cycles. These are security or integrity failures, not content gaps.
+Envelope-level failures still reject the whole answer and produce the no-match reply (§1.8). These are invalid JSON or schema, model-authored URLs or HTML, unknown or unselected source IDs, and inference cycles. These are security or integrity failures, not content gaps. ADR-066 (owner-approved 2026-10-19) displays them as temporary rather than no_content; the complete event publishes only the coarse kind, never a reason code.
 
 ### 1.5 Recall fallback (non-authoritative)
 
@@ -114,7 +114,7 @@ Owners will not describe every part of their work, and asking them to do so is p
 
   The answer does **not** contain "the owner has not explained this" or any other gap message for visitors. What is still not allowed is a `person` segment that asserts a personal role, responsibility or achievement ("王小明負責…", "主導了…") without an owner statement. Such a segment is dropped silently (reason code kept for §3).
 - **Dropped segments:** if valid segments remain, they are shown as they are. **No visitor-facing "partially omitted" note** is appended. Reason codes go only to the owner's coverage check (§3).
-- **Nothing relevant retrieved at all** (no valid segment, or `insufficient_evidence=true`): the NPC gives a short neutral reply and offers up to three final sanitized, distinct suggested questions when available. The answer is not regenerated. ADR-065 (owner-approved 2026-10-19) fixes the copy according to that final tuple. With suggestions:
+- **No content** (MODEL_INSUFFICIENT_EVIDENCE, NO_EVIDENCE_SELECTED or ALL_SEGMENTS_DROPPED; `insufficient_evidence=true`): the NPC gives a short neutral reply and offers up to three final sanitized, distinct suggested questions when available. The answer is not regenerated. ADR-065 (owner-approved 2026-10-19) fixes the copy according to that final tuple. With suggestions:
   - zh-TW: 「這個問題我在作品集裡找不到相關內容，可以試試下面這些問題。」
   - en: "I couldn't find anything about that in this portfolio. Try one of these questions."
   - Without suggestions: zh-TW 「這個問題我在作品集裡找不到相關內容。」; en "I couldn't find anything about that in this portfolio."
@@ -122,6 +122,7 @@ Owners will not describe every part of their work, and asking them to do so is p
   - No-match completion leaves the character idle and is excluded from model history; answered and approved-FAQ exchanges keep success and existing history limits.
   - Keep in-turn suggestion buttons. Omit the latest assistant turn's suggestion strings from the page-level list, hide that section and heading when empty, and restore the full list after the next answered turn. Deduplicate each list, preserve older in-turn buttons, keyboard/focus, admission and disabled states.
   - Offline FAQ non-answers follow the same conditional promise: keep existing copy when suggestions are shown, otherwise use 「這個問題沒有足夠接近的已核准問答。」 / "No approved answer is close enough to this question."
+- **Temporary no-match** (ENVELOPE_SCHEMA_INVALID, SOURCE_ID_UNKNOWN, MODEL_AUTHORED_MARKUP, INFERENCE_CYCLE, SELECTED_MAP_INVALID or VALIDATION_UNEXPECTED): use zh-TW 「這次沒能整理出可靠的回答，請再問一次。」 / en "I couldn't put together a reliable answer this time. Please ask again." No suggestions or contact link; insufficient_evidence stays true and citations stay empty. Only no-match complete events add no_match_kind: no_content | temporary; the raw reason stays owner-only. The frontend strictly accepts only those values, defaulting missing/unknown values to no_content. A temporary turn adds one accessible 「再問一次」 / "Ask again" button through existing retryQuestion/onRetry, submitting the same question; disable while pending or chat is unavailable. Both kinds leave the character idle and stay out of model history. Temporary keeps the full page-level suggestions because it has none in-turn. No_content copy and offline FAQ remain unchanged. No automatic retry; revisit only after ADR-064 logs establish frequency. Pages visitors need an owner re-export and re-upload to receive the new frontend (ADR-066).
 - The NPC speaks as a guide **about** the owner (third person, `{{owner}}` rendered as the display name), never as the owner in first person, so visitors are not misled about who is answering.
 
 ### 1.9 Citation presentation

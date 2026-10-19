@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+from typing import get_args
+
 import pytest
 
 from reponpc.bundles.index_reader import IndexedEvidence
-from reponpc.chat.answers import no_match_answer, validate_v2_answer
+from reponpc.chat.answers import (
+    _NO_MATCH_KINDS,
+    NoMatchReason,
+    no_match_answer,
+    no_match_kind,
+    validate_v2_answer,
+)
 
 
 def evidence(
@@ -328,7 +336,9 @@ def test_v2_integrity_failures_reject_the_complete_answer(segment: dict[str, obj
     )
 
     assert result.insufficient_evidence is True
-    assert result.answer_markdown == ("I couldn't find anything about that in this portfolio.")
+    assert result.answer_markdown == (
+        "I couldn't put together a reliable answer this time. Please ask again."
+    )
     assert result.citations == ()
 
 
@@ -373,7 +383,9 @@ def test_v2_entrypoint_rejects_legacy_or_missing_v2_fields() -> None:
     )
 
     assert result.insufficient_evidence is True
-    assert result.answer_markdown == ("I couldn't find anything about that in this portfolio.")
+    assert result.answer_markdown == (
+        "I couldn't put together a reliable answer this time. Please ask again."
+    )
 
 
 @pytest.mark.parametrize(
@@ -497,15 +509,64 @@ def test_singular_reference_is_dropped_without_rewriting_valid_sibling(kind, tex
         ({"segments": [], "insufficient_evidence": False}, {}, "NO_EVIDENCE_SELECTED"),
     ],
 )
-def test_closed_no_match_reasons_preserve_the_visitor_reply(raw, selected, reason):
+def test_closed_no_match_reasons_choose_the_classified_visitor_reply(raw, selected, reason):
     result = validate_v2_answer(raw, selected, "en", suggested_questions=["Next question?"])
     assert result.no_match_reason == reason
+    temporary = reason in {"ENVELOPE_SCHEMA_INVALID", "SOURCE_ID_UNKNOWN", "SELECTED_MAP_INVALID"}
     assert result.answer_markdown == (
-        "I couldn't find anything about that in this portfolio. Try one of these questions."
+        "I couldn't put together a reliable answer this time. Please ask again."
+        if temporary
+        else "I couldn't find anything about that in this portfolio. Try one of these questions."
     )
     assert result.insufficient_evidence is True
     assert result.citations == ()
-    assert result.suggested_questions == ("Next question?",)
+    assert result.suggested_questions == (() if temporary else ("Next question?",))
+
+
+def test_no_match_kind_mapping_is_exhaustive_and_matches_owner_decision():
+    expected = {
+        "MODEL_INSUFFICIENT_EVIDENCE": "no_content",
+        "NO_EVIDENCE_SELECTED": "no_content",
+        "ALL_SEGMENTS_DROPPED": "no_content",
+        "ENVELOPE_SCHEMA_INVALID": "temporary",
+        "SOURCE_ID_UNKNOWN": "temporary",
+        "MODEL_AUTHORED_MARKUP": "temporary",
+        "INFERENCE_CYCLE": "temporary",
+        "SELECTED_MAP_INVALID": "temporary",
+        "VALIDATION_UNEXPECTED": "temporary",
+    }
+    assert set(get_args(NoMatchReason)) == set(_NO_MATCH_KINDS) == set(expected)
+    assert {reason: no_match_kind(reason) for reason in get_args(NoMatchReason)} == expected
+
+
+@pytest.mark.parametrize("reason", get_args(NoMatchReason))
+@pytest.mark.parametrize("locale", ["zh-TW", "en"])
+@pytest.mark.parametrize("suggestions", [(), (" Next? ", "Next?", "Other?")])
+def test_all_no_match_kinds_keep_exact_copy_flags_and_private_reason(reason, locale, suggestions):
+    result = no_match_answer(locale, suggestions, reason=reason)
+    if reason in {"MODEL_INSUFFICIENT_EVIDENCE", "NO_EVIDENCE_SELECTED", "ALL_SEGMENTS_DROPPED"}:
+        short = {
+            "zh-TW": "這個問題我在作品集裡找不到相關內容。",
+            "en": "I couldn't find anything about that in this portfolio.",
+        }
+        long = {
+            "zh-TW": "這個問題我在作品集裡找不到相關內容，可以試試下面這些問題。",  # noqa: RUF001
+            "en": (
+                "I couldn't find anything about that in this portfolio. Try one of these questions."
+            ),
+        }
+        expected = long if suggestions else short
+        assert result.suggested_questions == (("Next?", "Other?") if suggestions else ())
+    else:
+        expected = {
+            "zh-TW": "這次沒能整理出可靠的回答，請再問一次。",  # noqa: RUF001
+            "en": "I couldn't put together a reliable answer this time. Please ask again.",
+        }
+        assert result.suggested_questions == ()
+    assert result.answer_markdown.encode("utf-8") == expected[locale].encode("utf-8")
+    assert result.insufficient_evidence is True
+    assert result.citations == ()
+    assert result.no_match_reason == reason
 
 
 @pytest.mark.parametrize(

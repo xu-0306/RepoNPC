@@ -342,8 +342,11 @@ def test_service_renders_owner_from_leased_bundle_profile(
         client_ip="203.0.113.1",
     )
     assert rejected.insufficient_evidence is True
-    assert rejected.suggested_questions == ("What did Alice build?",)
-    assert rejected.contact_link == ("Contact", "https://example.com/contact")
+    assert rejected.suggested_questions == ()
+    assert rejected.contact_link is None
+    assert rejected.answer_markdown == (
+        "I couldn't put together a reliable answer this time. Please ask again."
+    )
 
     dropped = GroundedChatService(
         bundles=bundles,  # type: ignore[arg-type]
@@ -358,6 +361,8 @@ def test_service_renders_owner_from_leased_bundle_profile(
         client_ip="203.0.113.1",
     )
     assert dropped.insufficient_evidence is True
+    assert dropped.suggested_questions == ("What did Alice build?",)
+    assert dropped.contact_link == ("Contact", "https://example.com/contact")
     assert "chat.answer.segment_dropped.inflation_unsupported" in caplog.text
     assert "chat.answer.segment_dropped.number_unsupported" in caplog.text
     assert "led a team of 7" not in caplog.text
@@ -573,6 +578,7 @@ def test_empty_selected_keeps_provider_no_match_without_empty_enum(progress: boo
 
 
 @pytest.mark.parametrize("for_review", [False, True])
+@pytest.mark.parametrize("locale", ["zh-TW", "en"])
 @pytest.mark.parametrize(
     "reason",
     [
@@ -581,7 +587,9 @@ def test_empty_selected_keeps_provider_no_match_without_empty_enum(progress: boo
         "ENVELOPE_SCHEMA_INVALID",
     ],
 )
-def test_no_match_safe_log_uses_only_exact_closed_event(reason, for_review, caplog):
+def test_no_match_safe_log_uses_only_exact_closed_event(
+    reason, for_review, locale, caplog, monkeypatch
+):
     caplog.set_level(logging.INFO, logger="reponpc.chat.service")
     question_canary = "QUESTION_CANARY_59a1"
     answer_canary = "OUTPUT_CANARY_69f2"
@@ -602,6 +610,11 @@ def test_no_match_safe_log_uses_only_exact_closed_event(reason, for_review, capl
             return result
 
     chat = RejectedChat()
+    monkeypatch.setattr(
+        GroundedChatService,
+        "_answer_profile",
+        lambda *args, **kwargs: (None, ("Next?",), ("Contact", "https://example.com/contact")),
+    )
     service = GroundedChatService(
         bundles=Bundles(),
         providers=ProviderRuntime(chat=chat, embedding=CanaryEmbedding()),
@@ -609,13 +622,25 @@ def test_no_match_safe_log_uses_only_exact_closed_event(reason, for_review, capl
         max_output_tokens=100,
         timeout_seconds=5,
     )
-    kwargs = {"message": "What is implemented? " + question_canary, "locale": "en"}
+    kwargs = {"message": "What is implemented? " + question_canary, "locale": locale}
     delivery = (
         service.answer_for_review(**kwargs)
         if for_review
         else service.answer(**kwargs, history=(), client_ip="203.0.113.1")
     )
     assert delivery.no_match_reason == reason and delivery.insufficient_evidence
+    assert delivery.citations == ()
+    if reason == "MODEL_INSUFFICIENT_EVIDENCE":
+        assert delivery.suggested_questions == ("Next?",)
+        assert delivery.contact_link == ("Contact", "https://example.com/contact")
+    else:
+        expected = {
+            "zh-TW": "這次沒能整理出可靠的回答，請再問一次。",  # noqa: RUF001
+            "en": "I couldn't put together a reliable answer this time. Please ask again.",
+        }
+        assert delivery.answer_markdown == expected[locale]
+        assert delivery.suggested_questions == ()
+        assert delivery.contact_link is None
     assert chat.calls == 1
     records = [record for record in caplog.records if record.name == "reponpc.chat.service"]
     assert len(records) == 1
