@@ -116,7 +116,7 @@ export function VisitorConversation({
           </p>
           {turn.suggestedQuestions && turn.suggestedQuestions.length > 0 && (
             <ul className="answer-suggestions">
-              {turn.suggestedQuestions.map((suggestion) => (
+              {[...new Set(turn.suggestedQuestions)].map((suggestion) => (
                 <li key={suggestion}>
                   <button
                     disabled={

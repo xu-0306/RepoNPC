@@ -215,7 +215,9 @@ export function VisitorApp() {
           content:
             matched.kind === "answer"
               ? matched.entry.answer_markdown
-              : copy.offlineFaqNoMatch,
+              : matched.questions.length > 0
+                ? copy.offlineFaqNoMatch
+                : copy.offlineFaqNoMatchWithoutSuggestions,
           citations: matched.kind === "answer" ? matched.entry.citations : [],
           suggestedQuestions:
             matched.kind === "suggestions" ? matched.questions : undefined,
@@ -259,6 +261,7 @@ export function VisitorApp() {
         gateway?.origin,
       );
       if (!response.ok || !response.body) throw new Error("chat unavailable");
+      let insufficientEvidence = false;
       const answer = await collectValidatedReply(response.body, (event) => {
         if (requestController.current !== controller) return;
         const progress = chatProgress(event);
@@ -319,6 +322,7 @@ export function VisitorApp() {
           event.name === "complete" &&
           event.data.insufficient_evidence === true
         ) {
+          insufficientEvidence = true;
           const suggestedQuestions = Array.isArray(
             event.data.suggested_questions,
           )
@@ -347,9 +351,13 @@ export function VisitorApp() {
       });
       if (controller.signal.aborted || requestController.current !== controller)
         return;
-      setExchanges((current) =>
-        retainSuccessfulExchanges([...current, { question: trimmed, answer }]),
-      );
+      if (!insufficientEvidence)
+        setExchanges((current) =>
+          retainSuccessfulExchanges([
+            ...current,
+            { question: trimmed, answer },
+          ]),
+        );
       setTurns((current) =>
         current.map((turn) =>
           turn.id === assistantId && turn.process
@@ -364,7 +372,8 @@ export function VisitorApp() {
             : turn,
         ),
       );
-      showCharacterSuccess();
+      if (insufficientEvidence) transitionCharacter("idle");
+      else showCharacterSuccess();
     } catch {
       if (controller.signal.aborted || requestController.current !== controller)
         return;
@@ -466,6 +475,11 @@ export function VisitorApp() {
     showCharacterSuccess();
   }
 
+  const latestSuggestions = new Set(
+    [...turns]
+      .reverse()
+      .find((turn) => turn.role === "assistant")?.suggestedQuestions,
+  );
   const suggestions = [
     ...new Set([
       ...(faq && faq.bundle_id === profile?.index.version
@@ -473,7 +487,7 @@ export function VisitorApp() {
         : []),
       ...(profile?.suggested_questions ?? copy.suggestionItems),
     ]),
-  ];
+  ].filter((suggestion) => !latestSuggestions.has(suggestion));
   const offlineFaqAvailable = Boolean(
     !chatAvailable &&
       !statusBundleMismatch &&

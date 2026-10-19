@@ -663,3 +663,12 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
 - **Privacy boundary:** Only fixed codes enter these owner-only logs and review diagnostics. No question, answer, source/evidence ID, prompt, thinking, IP or session value is logged. The field/codes are excluded from public APIs, SSE, static exports and visitor browser assets. No daily statistics are added.
 - **Compatibility:** Visitor text, suggestions, contact links, insufficiency flags, citations and SSE events are unchanged. Exhausted evidence budget uses `NO_EVIDENCE_SELECTED` without calling chat generation; an empty selected map still follows the existing model-call flow (model abstention takes precedence). Missing bundle/index remains the existing unavailable/503 path, not a no-match reply. No provider retry or fallback is added.
 - **Requirements:** FR-043/044/046, NFR-012/014, AC-019/035/062/064/067; all existing acceptance thresholds remain.
+
+## ADR-065: Visitor no-match reply polish
+
+- **Status:** Accepted; owner-approved 2026-10-19. Requirements FR-011/014/022/044/047, NFR-008/009; AC-019/023/065/068.
+- **Animation:** Completed no-match streams return to idle, matching offline FAQ non-answers; answered streams and approved FAQ answers keep success.
+- **Copy:** Choose the unchanged long no-match text only when the final sanitized suggestion tuple is nonempty. Otherwise use 「這個問題我在作品集裡找不到相關內容。」 / "I couldn't find anything about that in this portfolio." Offline FAQ copy follows the same conditional promise.
+- **Suggestions:** Keep in-turn buttons; omit the latest assistant turn's suggestion strings from the page-level list, hide its section and heading when empty, and restore the full list after an answered turn. Deduplicate each list; older in-turn buttons, keyboard/focus, admission and disabled behavior stay intact.
+- **History:** Do not add no-match exchanges to model history. Existing limits, approved-FAQ exchanges and failed/cancelled-turn exclusions remain.
+- **Boundaries:** Owner-only `no_match_reason`, contact links, citations, validation and SSE fields are unchanged. No frontend text matching, dependencies, CSP changes or provider calls are introduced.

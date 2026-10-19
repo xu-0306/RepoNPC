@@ -235,6 +235,8 @@ All of them remain not-run.
 - **When** a visitor opens the site on supported desktop/mobile viewports, selects or edits a suggested question, submits it, receives validated SSE token events, opens a citation, and retries or rechecks after failure,
 - **Then** profile/project context, including the localized greeting and configured character animation behavior, remains usable during model degradation; validated token events render progressively without waiting for stream completion; citation evidence class, safe source location, and immutable link are visible; and loading/error/retry, status announcement, and focus behavior work without layout loss.
 
+ADR-065 regression (owner-approved 2026-10-19; both locales): a completed no-match stream leaves the character idle; answered streams and approved FAQ answers retain success. The latest assistant turn's in-turn suggestions are omitted from the page-level list, which hides its heading and section when empty and restores the full list after the next answered turn. Older in-turn buttons remain, every list deduplicates exact strings, and keyboard/focus, admission and disabled behavior are preserved. No-match exchanges are excluded from the next request's history; answered and approved-FAQ exchanges retain existing limits and failed/cancelled exclusions. Offline FAQ non-answers promise suggestions only when questions are shown.
+
 ### AC-020 — Species-neutral built-in packs and custom characters share all states
 
 **Maps to:** FR-015, NFR-009
@@ -776,7 +778,7 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **Given** a portfolio with repositories and participation evidence but no owner assertion about role,
 - **When** a visitor asks what the owner did in a project, in either locale,
 - **Then** the NPC answers in the third person with `participation` and `project` segments (whose repository it is, visible activity period, what the project does and how) without a gap or "the owner has not said" message and without any personal role, responsibility or achievement assertion.
-- **And** a question with no retrieved evidence returns the localized no-match reply with suggested questions.
+- **And** a question with no retrieved evidence returns the localized no-match reply with up to three sanitized distinct suggested questions when available; with none, it uses 「這個問題我在作品集裡找不到相關內容。」 / "I couldn't find anything about that in this portfolio." and promises no suggestions (ADR-065).
 - **Verification:** end-to-end chat tests with a deterministic provider, bilingual fixtures, and a check that the response contains no abstention wording.
 
 ### AC-066 - Participation evidence is accurate, count-free and honest about failure

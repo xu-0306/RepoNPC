@@ -40,6 +40,7 @@ export const messages = {
     characterOffline: "聊天目前離線",
     offlineFaqNoMatch:
       "這個問題沒有足夠接近的已核准問答。可以試試這些建議問題。",
+    offlineFaqNoMatchWithoutSuggestions: "這個問題沒有足夠接近的已核准問答。",
     genericError: "目前無法完成回答，請稍後再試。",
     retry: "重試這個問題",
     retryProfile: "重新載入作品集",
@@ -133,6 +134,8 @@ export const messages = {
     characterOffline: "Chat is offline",
     offlineFaqNoMatch:
       "No approved answer is close enough to this question. Try one of these suggestions.",
+    offlineFaqNoMatchWithoutSuggestions:
+      "No approved answer is close enough to this question.",
     genericError: "The answer could not be completed. Please try again later.",
     retry: "Retry this question",
     retryProfile: "Reload portfolio",

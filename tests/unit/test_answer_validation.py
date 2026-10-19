@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from reponpc.bundles.index_reader import IndexedEvidence
-from reponpc.chat.answers import validate_v2_answer
+from reponpc.chat.answers import no_match_answer, validate_v2_answer
 
 
 def evidence(
@@ -328,9 +328,7 @@ def test_v2_integrity_failures_reject_the_complete_answer(segment: dict[str, obj
     )
 
     assert result.insufficient_evidence is True
-    assert result.answer_markdown == (
-        "I couldn't find anything about that in this portfolio. Try one of these questions."
-    )
+    assert result.answer_markdown == ("I couldn't find anything about that in this portfolio.")
     assert result.citations == ()
 
 
@@ -343,7 +341,7 @@ def test_v2_no_valid_source_returns_localized_no_match_and_suggestions() -> None
     )
 
     assert result.insufficient_evidence is True
-    assert result.answer_markdown.startswith("這個問題我在作品集裡找不到相關內容")
+    assert result.answer_markdown == "這個問題我在作品集裡找不到相關內容，可以試試下面這些問題。"  # noqa: RUF001
     assert result.suggested_questions == ("專案用了哪些技術\uff1f", "第二個問題")
 
 
@@ -375,9 +373,7 @@ def test_v2_entrypoint_rejects_legacy_or_missing_v2_fields() -> None:
     )
 
     assert result.insufficient_evidence is True
-    assert result.answer_markdown == (
-        "I couldn't find anything about that in this portfolio. Try one of these questions."
-    )
+    assert result.answer_markdown == ("I couldn't find anything about that in this portfolio.")
 
 
 @pytest.mark.parametrize(
@@ -562,3 +558,32 @@ def test_model_abstention_reason_keeps_precedence_over_selected_map_validation()
     )
     assert result.no_match_reason == "MODEL_INSUFFICIENT_EVIDENCE"
     assert result.insufficient_evidence is True
+
+
+@pytest.mark.parametrize("locale", ["zh-TW", "en"])
+@pytest.mark.parametrize(
+    "suggestions,expected_suggestions",
+    [
+        ((), ()),
+        ((" ", "https://unsafe.example", "<b>unsafe</b>"), ()),
+        (
+            (" Next question? ", "Next question?", "Another topic?"),
+            ("Next question?", "Another topic?"),
+        ),
+    ],
+)
+def test_no_match_copy_uses_final_sanitized_suggestions(locale, suggestions, expected_suggestions):
+    result = no_match_answer(locale, suggestions, reason="MODEL_INSUFFICIENT_EVIDENCE")
+    short = {
+        "zh-TW": "這個問題我在作品集裡找不到相關內容。",
+        "en": "I couldn't find anything about that in this portfolio.",
+    }
+    long = {
+        "zh-TW": "這個問題我在作品集裡找不到相關內容，可以試試下面這些問題。",  # noqa: RUF001
+        "en": "I couldn't find anything about that in this portfolio. Try one of these questions.",
+    }
+    assert result.answer_markdown == (long if expected_suggestions else short)[locale]
+    assert result.suggested_questions == expected_suggestions
+    assert result.insufficient_evidence is True
+    assert result.citations == ()
+    assert result.no_match_reason == "MODEL_INSUFFICIENT_EVIDENCE"

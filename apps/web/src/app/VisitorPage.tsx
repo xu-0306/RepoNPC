@@ -446,22 +446,24 @@ export function VisitorPage(props: ExtendedProps) {
                 <p>{copy.visitorWelcomeText}</p>
               </div>
             )}
-            <div className="visitor-suggestions">
-              <h3>{copy.suggested}</h3>
-              <div className="visitor-suggestion-list">
-                {suggestionsList.map((suggestion) => (
-                  <button
-                    disabled={pending || !canAskSuggestion(suggestion)}
-                    key={suggestion}
-                    onClick={() => onSelectSuggestion(suggestion)}
-                    type="button"
-                  >
-                    {suggestion}
-                    <span aria-hidden="true"> ↗</span>
-                  </button>
-                ))}
+            {suggestionsList.length > 0 && (
+              <div className="visitor-suggestions">
+                <h3>{copy.suggested}</h3>
+                <div className="visitor-suggestion-list">
+                  {suggestionsList.map((suggestion) => (
+                    <button
+                      disabled={pending || !canAskSuggestion(suggestion)}
+                      key={suggestion}
+                      onClick={() => onSelectSuggestion(suggestion)}
+                      type="button"
+                    >
+                      {suggestion}
+                      <span aria-hidden="true"> ↗</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
             <form
               className="visitor-question-form"
               onSubmit={(event) => {

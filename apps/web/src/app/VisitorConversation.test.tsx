@@ -43,6 +43,36 @@ const friendlyTurn: VisitorTurn = {
 };
 
 describe("VisitorConversation", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "deduplicates each turn while preserving older buttons and admission in %s",
+    (locale) => {
+      const markup = renderToStaticMarkup(
+        <VisitorConversation
+          chatAvailable={false}
+          canAskSuggestion={(question) => question === "Approved?"}
+          locale={locale}
+          onRetry={vi.fn()}
+          pending={false}
+          turns={["older", "latest"].map((id) => ({
+            id,
+            role: "assistant",
+            content: "No match",
+            suggestedQuestions: ["Approved?", "Approved?", "Stale?", "Stale?"],
+          }))}
+        />,
+      );
+      const lists = markup.match(/<ul class="answer-suggestions">.*?<\/ul>/g);
+      expect(lists).toHaveLength(2);
+      for (const list of lists!) {
+        expect(list.match(/<button/g)).toHaveLength(2);
+        expect(list).toContain('<button type="button">Approved?</button>');
+        expect(list).toContain(
+          '<button disabled="" type="button">Stale?</button>',
+        );
+      }
+    },
+  );
+
   it("renders validated citation metadata and a usable English retry", () => {
     const markup = renderToStaticMarkup(
       <VisitorConversation

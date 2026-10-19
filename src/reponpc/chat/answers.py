@@ -25,6 +25,10 @@ _NO_MATCH = {
     "zh-TW": "這個問題我在作品集裡找不到相關內容，可以試試下面這些問題。",  # noqa: RUF001
     "en": "I couldn't find anything about that in this portfolio. Try one of these questions.",
 }
+_NO_MATCH_WITHOUT_SUGGESTIONS = {
+    "zh-TW": "這個問題我在作品集裡找不到相關內容。",
+    "en": "I couldn't find anything about that in this portfolio.",
+}
 _OWNER_PLACEHOLDER = "{{owner}}"
 _POLICY_DIR = Path(__file__).with_name("policy")
 _CJK_NUMERAL_RE = re.compile(r"[零\u3007一二兩三四五六七八九十百千万萬億]+")
@@ -333,13 +337,14 @@ def no_match_answer(
     discarded_reason_codes: tuple[str, ...] = (),
     discarded_segments: tuple[tuple[int, tuple[str, ...]], ...] = (),
 ) -> ValidatedAnswer:
-    """Build the unchanged visitor reply and keep its reason owner-only."""
+    """Match the visitor copy to safe suggestions and keep its reason owner-only."""
 
+    safe_suggestions = _safe_suggestions(suggestions)
     return ValidatedAnswer(
-        _NO_MATCH[locale],
+        (_NO_MATCH if safe_suggestions else _NO_MATCH_WITHOUT_SUGGESTIONS)[locale],
         (),
         True,
-        _safe_suggestions(suggestions),
+        safe_suggestions,
         discarded_reason_codes,
         discarded_segments,
         reason,

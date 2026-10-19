@@ -114,10 +114,14 @@ Owners will not describe every part of their work, and asking them to do so is p
 
   The answer does **not** contain "the owner has not explained this" or any other gap message for visitors. What is still not allowed is a `person` segment that asserts a personal role, responsibility or achievement ("王小明負責…", "主導了…") without an owner statement. Such a segment is dropped silently (reason code kept for §3).
 - **Dropped segments:** if valid segments remain, they are shown as they are. **No visitor-facing "partially omitted" note** is appended. Reason codes go only to the owner's coverage check (§3).
-- **Nothing relevant retrieved at all** (no valid segment, or `insufficient_evidence=true`): the NPC gives a short neutral reply and offers the suggested questions. The answer is not regenerated. Draft copy:
+- **Nothing relevant retrieved at all** (no valid segment, or `insufficient_evidence=true`): the NPC gives a short neutral reply and offers up to three final sanitized, distinct suggested questions when available. The answer is not regenerated. ADR-065 (owner-approved 2026-10-19) fixes the copy according to that final tuple. With suggestions:
   - zh-TW: 「這個問題我在作品集裡找不到相關內容，可以試試下面這些問題。」
   - en: "I couldn't find anything about that in this portfolio. Try one of these questions."
-  - The template adds up to three suggested questions and, if configured, the first profile link as a contact route.
+  - Without suggestions: zh-TW 「這個問題我在作品集裡找不到相關內容。」; en "I couldn't find anything about that in this portfolio."
+  - If configured, the first profile link remains a contact route. Owner-only no-match reasons, citations and validation are unchanged.
+  - No-match completion leaves the character idle and is excluded from model history; answered and approved-FAQ exchanges keep success and existing history limits.
+  - Keep in-turn suggestion buttons. Omit the latest assistant turn's suggestion strings from the page-level list, hide that section and heading when empty, and restore the full list after the next answered turn. Deduplicate each list, preserve older in-turn buttons, keyboard/focus, admission and disabled states.
+  - Offline FAQ non-answers follow the same conditional promise: keep existing copy when suggestions are shown, otherwise use 「這個問題沒有足夠接近的已核准問答。」 / "No approved answer is close enough to this question."
 - The NPC speaks as a guide **about** the owner (third person, `{{owner}}` rendered as the display name), never as the owner in first person, so visitors are not misled about who is answering.
 
 ### 1.9 Citation presentation
