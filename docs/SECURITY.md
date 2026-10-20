@@ -211,7 +211,7 @@ The admin listener follows the same private-network rule. A high/non-standard po
 
 - Prefer mounted secret files over `.env` for GitHub/provider/IP-HMAC secrets.
 - If both value and `_FILE` are supplied for one secret, startup fails rather than choosing precedence.
-- Secret files must be regular files, within configured secret mounts, not group/world readable where the platform exposes modes, and bounded in size.
+- Secret files must be regular files, within configured secret mounts, not group/world readable where the platform exposes modes, and bounded in size. On Windows (ADR-070) the same owner-only rule is checked on the DACL: only the current user, SYSTEM and Administrators may have allow entries, and inherited entries are rejected.
 - Setup-code plaintext is returned once to the host CLI and exists only in operator/request memory. Runtime SQLite stores its SHA-256 digest, expiry, and no raw code; reissue invalidates the prior code and successful owner creation deletes it.
 - Password plaintext exists only during setup, optional local hash generation, and login verification. Dynamic owners persist only an Argon2id hash in protected runtime SQLite.
 - Session and CSRF raw values exist only in request/browser memory; the database stores hashes.
@@ -289,6 +289,7 @@ On suspected compromise: disable public chat, revoke/rotate GitHub and provider 
 - [ ] Deployment profile is explicit: loopback evaluation has only loopback bind/base URL/peer/Host/origin and no trusted proxy; production/non-loopback setup enforces the 15-character minimum and blocklist.
 - [ ] IP-HMAC key generated uniquely; profile-appropriate grant/setup issuance, replacement, expiry, replay denial, and atomic sole-owner behavior verified.
 - [ ] GitHub/provider secrets supplied through protected files and least privilege reviewed.
+- [ ] Windows production (ADR-070): the data directory, `private\` and `model-secrets` pass the owner-only DACL check; administration stays on loopback.
 - [ ] The explicitly chosen external or pinned built-in embedding profile is probed and active; bundle identity matches; no arbitrary model downloader or provider fallback is relied on.
 - [ ] Ollama/private services are not publicly published.
 - [ ] vLLM is private; any proxy denies non-allowlisted operational routes and chat/embedding models are independently verified.

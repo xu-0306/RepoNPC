@@ -724,3 +724,34 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
 - **Decision:** One shared formatter beside EnvironmentValidationError emits `deployment environment is invalid: NAME (code), NAME (code)`, deduplicated and sorted by name then code. The production entrypoint and Windows launcher's validation use it; CLI subcommands retain `reponpc: deployment_environment_invalid` followed by the same list and exit code 2. The launcher includes the formatted error and one short `.env` recovery sentence.
 - **Privacy:** Read only issue name and code, never `message`, values or paths. Fully match names against `^[A-Z][A-Z0-9_]*$` and codes against `^[a-z][a-z0-9_]*$` (including rejecting a trailing newline); replace invalid fields with fixed `UNKNOWN_VARIABLE` / `unknown_code` before deduplication and sorting. An unknown REPONPC_* variable is still only a name, subject to the same check. Secret permission checks and environment validation are unchanged.
 - **Requirements:** FR-036, NFR-002/003/010/012 and AC-001/035/036. Regression tests preserve canary exclusion and verify exact text, duplicate/order handling, malformed fields and CLI exit behavior; existing acceptance thresholds remain unchanged.
+
+## ADR-070: Windows production mode on the owner's own computer
+
+- **Status:** Accepted; owner-approved 2026-10-20 with decisions D1–D7 as recommended in [the Windows production plan](WINDOWS_PRODUCTION_PLAN_2026-10-20.md). Implementation rounds W1–W3 and the real-host test are pending.
+- **Why:** ADR-048 and the A1 gateway contract approve a Windows installation whose owner enables Funnel, but both Windows entry points force `loopback_evaluation`, and the visitor gateway starts only in `production`. Windows also skips every private-file permission check: secret files, `model-secrets/master.key`, the IP key and the 0600/0700 writes are enforced only where POSIX modes exist. A data directory inside a checkout inherits `Authenticated Users` and `Users` access from a non-system drive root.
+- **Decision:** Windows production is the existing `production` profile with:
+  - the application on `127.0.0.1`;
+  - the explicit admin origin `http://localhost:<port>`;
+  - the visitor gateway on `127.0.0.1`;
+  - Funnel pointed only at the gateway.
+
+  The owner decided the following:
+  - **D1:** both the installer and the source launcher support Windows production mode.
+  - **D2:** the source launcher honours `REPONPC_DEPLOYMENT_PROFILE` from `.env`; the installer adds a 「RepoNPC（正式模式）」 shortcut passing `--profile production`. Nothing upgrades automatically.
+  - **D3:** the launcher prints a host setup code (ADR-016) for a new data directory, or runs the host-only `set-password` console flow for a passwordless trial owner, before opening the browser. The production password policy (ADR-024) applies.
+  - **D6:** in both profiles, `REPONPC_CONFIG_REPOSITORY` and `REPONPC_INDEX_MANIFEST_URL` may be empty; the runtime then does not poll.
+  - **D7:** Windows production rejects direct secret values from `.env`.
+- **Private files:** One shared helper creates and checks owner-only files and directories, replacing the per-module POSIX-only checks.
+  - **D4:** on Windows, it uses advapi32 through ctypes, with no new dependency. The DACL may grant access only to the current user, SYSTEM and Administrators. Inheritance is disabled at creation, and any other allow entry or inherited entry is rejected.
+  - It applies to secret files (`unsafe_secret_permissions`), the model secret key (`MODEL_SECRET_STORAGE_UNAVAILABLE`) and, in Windows production, the data directory root (`REPONPC_DATA_DIR` with the existing `unsafe_secret_permissions`).
+  - The Windows secret root defaults to `<data_dir>\private`. Launchers pass `_FILE` paths instead of copying secret values into the environment.
+  - **D5:** for an existing over-broad data directory, the launcher stops and shows one `icacls` command for the owner to run; it does not change ACLs itself.
+- **Boundaries:**
+  - No new profile, public bind, API field, error code or Tailscale automation.
+  - Windows Docker Desktop production, Windows services and non-loopback administration remain unsupported.
+  - Administrators on the host can always read the data.
+- **Consequences:**
+  - README/OPERATIONS keep the ADR-069 trial-only wording until the launchers ship (W3).
+  - AC-081 adds the Windows production acceptance; external Funnel evidence stays under A12.
+  - FR-048 gains the production option.
+- **Requirements:** FR-017/029/047/048, NFR-002/003, AC-069/071 and new AC-081.

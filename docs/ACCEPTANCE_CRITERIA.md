@@ -1020,6 +1020,15 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **Then** a word in a writing system that is neither native to the output locale nor present in the request's source is rejected as `PROVIDER_ERROR` with `PROVIDER_OUTPUT_SCHEMA_INVALID` and is not retried or cached; a grounded word is accepted; required inference `title` and `statement` fields receive the same check; and live and cache-hit results expose the same validated source locations and pinned GitHub URLs without repository excerpts.
 - **Verification:** unit tests cover rejected and grounded scripts, title and contribution fields, and no-retry behavior; API/cache tests cover the identical facts and source URLs for live and cache-hit results.
 
+### AC-081 - Windows production mode keeps administration and private files owner-only
+
+**Maps to:** FR-017, FR-029, FR-047, FR-048, NFR-002, NFR-003 (ADR-070)
+
+- **Given** a Windows 11 host where the owner explicitly selects production mode, with a new data directory and with a copy of a trial data directory that has a passwordless owner,
+- **When** RepoNPC starts, the owner signs in, starts the visitor gateway and enables Funnel with the official Tailscale commands,
+- **Then** a new directory requires a host setup code and a 15-character password; a trial owner must set a password through the host before sign-in; no local-launch grant is issued; secret files, `model-secrets/master.key` and the data directory are rejected while any account other than the current user, SYSTEM or Administrators has an allow entry, and accepted after the documented fix; and through Funnel only visitor routes respond while `/admin` and `/api/admin/*` return 404.
+- **Verification:** Windows unit tests with real files and ACLs (created, broadened, inherited and wrong-owner cases); launcher contract tests; a dated real-host walkthrough with `icacls` listings; the external Funnel check is recorded under A12.
+
 **0.4.0–0.4.5 traceability additions:**
 
 | Requirement | Acceptance criteria            |
@@ -1029,7 +1038,7 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 | FR-045      | AC-066                         |
 | FR-046      | AC-067                         |
 | FR-047      | AC-068, AC-071, AC-072, AC-074 |
-| FR-048      | AC-069                         |
+| FR-048      | AC-069, AC-081                 |
 | FR-049      | AC-070                         |
 | FR-050      | AC-072, AC-073, AC-074, AC-075 |
 | FR-051      | AC-074                         |
