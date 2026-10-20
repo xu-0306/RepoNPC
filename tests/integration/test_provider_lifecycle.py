@@ -93,11 +93,26 @@ def test_real_lifespan_polls_selected_providers_before_serving_and_degrades_safe
         embedding=embedding,  # type: ignore[arg-type]
     )
     application = create_app(
-        setup_state=SetupState(index_ready=True, index_version="fixture-index"),
+        setup_state=SetupState(
+            index_ready=True,
+            index_version="fixture-index",
+            model_last_checked_at=runtime.status().checked_at,
+        ),
         provider_runtime=runtime,
         provider_adapter="ollama",
         provider_health_seconds=3600,
     )
+
+    # Without entering the lifespan, no provider health check has run yet.
+    unstarted_client = TestClient(application)
+    try:
+        initial = unstarted_client.get("/api/public/status")
+    finally:
+        unstarted_client.close()
+    assert initial.status_code == 200
+    assert initial.json()["model"]["last_checked_at"] is None
+    assert chat.health_calls == 0
+    assert embedding.health_calls == 0
 
     with TestClient(application) as client:
         status = client.get("/api/public/status")

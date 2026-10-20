@@ -87,6 +87,11 @@ def test_health_requires_both_selected_providers_without_fallback() -> None:
         embedding=FixtureEmbedding(DOWN),  # type: ignore[arg-type]
     )
 
+    initial = runtime.status()
+    assert initial.ready is False
+    assert initial.failure_code is ProviderFailureCode.UNAVAILABLE
+    assert initial.checked_at is None
+
     status = runtime.poll_health()
 
     assert status.ready is False

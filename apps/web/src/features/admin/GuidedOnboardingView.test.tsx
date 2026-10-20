@@ -215,6 +215,45 @@ const confirmedModels: AnalysisSelectionView = {
 
 describe("GuidedOnboardingView", () => {
   it.each(["zh-TW", "en"] as const)(
+    "renders specific analysis and GitHub timeout errors in %s",
+    (locale) => {
+      const messages = [
+        [
+          "ANALYSIS_TIMEOUT",
+          locale === "zh-TW"
+            ? "此 repository 已達整體分析安全上限，請重試或繼續手動填寫。"
+            : "This repository reached the overall analysis safety ceiling; retry or continue manually.",
+        ],
+        [
+          "GITHUB_TIMEOUT",
+          locale === "zh-TW"
+            ? "GitHub 在設定的無活動期限內沒有傳回資料，請重試或繼續手動填寫。"
+            : "GitHub returned no data within the configured inactivity timeout; retry or continue manually.",
+        ],
+        [
+          "CANCELLED",
+          locale === "zh-TW"
+            ? "操作已取消，可重新開始或繼續手動填寫。"
+            : "The operation was cancelled; start again or continue manually.",
+        ],
+      ];
+      for (const [errorCode, message] of messages) {
+        const markup = renderToStaticMarkup(
+          <GuidedOnboardingView
+            {...props({
+              locale,
+              state: { ...initialGuidedOnboardingState(), step: "analysis" },
+              errorCode,
+            })}
+          />,
+        );
+        expect(markup).toContain('role="alert"');
+        expect(markup).toContain(message);
+      }
+    },
+  );
+
+  it.each(["zh-TW", "en"] as const)(
     "disables archived selection with its accessible name and visible label in %s",
     (locale) => {
       const archived = repository({

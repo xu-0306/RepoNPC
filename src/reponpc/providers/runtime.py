@@ -38,7 +38,7 @@ class RuntimeProviderStatus:
     """One safe atomic health snapshot for the explicitly selected providers."""
 
     ready: bool
-    checked_at: str
+    checked_at: str | None
     failure_code: ProviderFailureCode | None = None
 
 
@@ -71,7 +71,7 @@ class ProviderRuntime:
         self._lock = RLock()
         self._status = RuntimeProviderStatus(
             ready=False,
-            checked_at="1970-01-01T00:00:00Z",
+            checked_at=None,
             failure_code=ProviderFailureCode.UNAVAILABLE,
         )
 

@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { EmbeddingProfilePanel } from "./EmbeddingProfilePanel";
+import { embeddingProfileErrorMessage } from "./embeddingProfileError";
 import { ConfirmButton } from "./ConfirmDialog";
 
 vi.mock("./ConfirmDialog", async (importOriginal) => {
@@ -10,6 +11,46 @@ vi.mock("./ConfirmDialog", async (importOriginal) => {
 });
 
 describe("EmbeddingProfilePanel", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "renders specific test-required and download-in-progress errors in %s",
+    (locale) => {
+      const messages = [
+        [
+          "EMBEDDING_PROBE_REQUIRED",
+          locale === "zh-TW" ? "請先測試這個模型。" : "Test this model first.",
+        ],
+        [
+          "EMBEDDING_MODEL_OPERATION_ACTIVE",
+          locale === "zh-TW"
+            ? "模型下載正在進行，請等待完成或取消後再試。"
+            : "A model download is in progress; wait for it to finish or cancel it before retrying.",
+        ],
+      ];
+      for (const [code, message] of messages) {
+        const markup = renderToStaticMarkup(
+          <EmbeddingProfilePanel
+            catalog={[]}
+            connections={[]}
+            error={embeddingProfileErrorMessage(locale, new Error(code))}
+            installedModels={[]}
+            locale={locale}
+            onActivate={vi.fn()}
+            onCreate={vi.fn()}
+            onDelete={vi.fn()}
+            onOllamaDelete={vi.fn()}
+            onOllamaPull={vi.fn()}
+            onProbe={vi.fn()}
+            onRefresh={vi.fn()}
+            pending={false}
+            profiles={[]}
+          />,
+        );
+        expect(markup).toContain('role="alert"');
+        expect(markup).toContain(message);
+      }
+    },
+  );
+
   it.each(["zh-TW", "en"] as const)(
     "explains installation and removal separately before confirmation in %s",
     (locale) => {
@@ -213,6 +254,6 @@ describe("EmbeddingProfilePanel", () => {
     expect(markup).toContain("資料查找模型");
     expect(markup).toContain("重新整理");
     expect(markup).toContain("正在處理資料查找模型…");
-    expect(markup).not.toContain("�");
+    expect(markup).not.toContain("\uFFFD");
   });
 });

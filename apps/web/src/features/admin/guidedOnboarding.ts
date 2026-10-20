@@ -921,6 +921,23 @@ export function guidedErrorMessage(
       : "The draft did not pass validation. Your input is kept. Go back and check required fields, both languages, and project, contribution and profile confirmations, then retry creating the draft.";
   }
   const messages: Record<string, LocalizedText> = {
+    ANALYSIS_TIMEOUT: {
+      "zh-TW": "此 repository 已達整體分析安全上限，請重試或繼續手動填寫。",
+      en: "This repository reached the overall analysis safety ceiling; retry or continue manually.",
+    },
+    GITHUB_TIMEOUT: {
+      "zh-TW":
+        "GitHub 在設定的無活動期限內沒有傳回資料，請重試或繼續手動填寫。",
+      en: "GitHub returned no data within the configured inactivity timeout; retry or continue manually.",
+    },
+    CANCELLED: {
+      "zh-TW": "操作已取消，可重新開始或繼續手動填寫。",
+      en: "The operation was cancelled; start again or continue manually.",
+    },
+    AUTHENTICATION_REQUIRED: {
+      "zh-TW": "請重新登入後重試。",
+      en: "Sign in again and retry.",
+    },
     SERVICE_NOT_READY: {
       "zh-TW": creatingDraft
         ? "草稿建立服務尚未就緒，目前輸入仍保留。請確認本機 RepoNPC 服務已啟動完成，再重試建立草稿；若持續失敗，先保留未儲存內容，再到「維護」查看服務狀態。"

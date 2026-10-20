@@ -92,6 +92,7 @@ import { MaintenanceSetup } from "./MaintenanceSetup";
 import { GuidedOnboardingView } from "./GuidedOnboardingView";
 import { LocalLaunchAccessPanel } from "./LocalLaunchAccessPanel";
 import { modelConnectionFailureMessage } from "./modelConnectionFeedback";
+import { embeddingProfileErrorMessage } from "./embeddingProfileError";
 import {
   restoreExistingAdminSession,
   type AdminAuthMethodsBody,
@@ -738,39 +739,6 @@ export function adminDataErrorMessage(locale: Locale, error: unknown): string {
     locale,
     "無法載入管理資料。",
     "Admin data could not be loaded.",
-  );
-}
-
-function embeddingProfileErrorMessage(locale: Locale, error: unknown): string {
-  const code = error instanceof Error ? error.message : "REQUEST_FAILED";
-  if (
-    code === "EMBEDDING_PROFILE_ACTIVE_REQUIRED" ||
-    code === "EMBEDDING_REINDEX_ACTIVE"
-  ) {
-    return copyFor(
-      locale,
-      "模型正在供公開網站使用或重建索引，無法刪除。請重新整理狀態，等待索引完成，並先切換公開模型。",
-      "The model is active on the public site or rebuilding the index and cannot be deleted. Refresh its status, wait for indexing to finish, and switch the public model first.",
-    );
-  }
-  if (code === "EMBEDDING_REINDEX_REQUIRED") {
-    return copyFor(
-      locale,
-      "這個資料查找模型尚未通過測試，或與目前公開資料不相容；已保留上一個可用模型。",
-      "This content finder has not passed testing or is incompatible with the current public data. The last known-good model was preserved.",
-    );
-  }
-  if (code === "EMBEDDING_CONNECTION_REQUIRED") {
-    return copyFor(
-      locale,
-      "這個服務連線尚未由伺服器設定；RepoNPC 不會自動改用其他服務。",
-      "This service connection is not configured by the server. RepoNPC will not switch services automatically.",
-    );
-  }
-  return copyFor(
-    locale,
-    "資料查找模型操作未完成。請確認已選服務與模型名稱，並檢查網路及登入狀態後重試。",
-    "The content finder operation could not finish. Check the selected service, model name, network, and sign-in before retrying.",
   );
 }
 
