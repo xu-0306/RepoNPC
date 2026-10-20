@@ -18,20 +18,16 @@ describe("CharacterAssetConverter", () => {
   it("renders the conversion boundary and fallback download guidance bilingually", () => {
     const zh = renderToStaticMarkup(
       <CharacterAssetConverter
-        githubOperationsReady={false}
         locale="zh-TW"
         onConvert={vi.fn()}
         onValidate={vi.fn()}
-        onSave={vi.fn()}
       />,
     );
     const en = renderToStaticMarkup(
       <CharacterAssetConverter
-        githubOperationsReady={false}
         locale="en"
         onConvert={vi.fn()}
         onValidate={vi.fn()}
-        onSave={vi.fn()}
       />,
     );
 

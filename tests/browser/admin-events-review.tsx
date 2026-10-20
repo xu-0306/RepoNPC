@@ -44,8 +44,6 @@ window.fetch = async (input, init) => {
       eligible: false,
       reason: "ANALYSIS_MODELS_NOT_SELECTED",
     });
-  if (path === "/api/admin/config")
-    return reply({ content: "schema_version: 1\n", blob_sha: "synthetic-sha" });
   if (path === "/api/admin/config/validate")
     return reply({ valid: true, errors: [], parsed: {} });
   if (path === "/api/admin/config/preview")

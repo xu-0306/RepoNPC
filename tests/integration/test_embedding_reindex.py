@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import threading
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -31,7 +32,12 @@ from reponpc.indexing.exclusions import SourceEntryKind
 from reponpc.indexing.github import SourceResolutionError
 from reponpc.indexing.index_database import IndexDatabaseBuilder
 from reponpc.indexing.pipeline import IndexPipelineError
-from reponpc.indexing.sources import EmbeddingIdentity, RepositoryBlob, ResolvedRepository
+from reponpc.indexing.sources import (
+    EmbeddingIdentity,
+    RepositoryBlob,
+    ResolvedConfiguration,
+    ResolvedRepository,
+)
 from reponpc.providers import ProviderHealth
 from reponpc.providers.contracts import ProviderError, ProviderFailureCode
 from reponpc.runtime.database import RuntimeDatabase
@@ -92,6 +98,8 @@ def _candidate(
     profile: EmbeddingProfile,
     provider: RuntimeFixtureEmbedding,
     ordinal: int,
+    *,
+    configuration_source: ResolvedConfiguration | None = None,
 ) -> ReindexCandidate:
     workspace = root / f"workspace-{ordinal}"
     workspace.mkdir()
@@ -115,7 +123,7 @@ def _candidate(
             )
         }
     )
-    source = _configuration_source()
+    source = configuration_source or _configuration_source()
     snapshot = _fixture_snapshot()
     result = IndexDatabaseBuilder(provider).build(
         config=config,
@@ -648,9 +656,28 @@ def test_production_builder_uses_frozen_profile_over_public_yaml_embedding(
     profile = registry.create(_profile(provider))
     profile = registry.probe(profile.profile_id)
     config_bytes = FIXTURE_CONFIG.read_bytes()
+    manager = BundleManager(
+        data_directory=tmp_path / "active",
+        runtime_database=database,
+        expected_embedding=provider.identity(),
+    )
+    active = _candidate(
+        tmp_path,
+        profile,
+        provider,
+        0,
+        configuration_source=replace(
+            _configuration_source(),
+            repository_slug="config-owner/profile",
+            commit_sha="b" * 40,
+            github_html_url="https://github.com/config-owner/profile",
+        ),
+    )
+    active_manifest = active.verified.manifest
+    manager.activate(active.verified)
     config_snapshot = ResolvedRepository(
-        slug="config-owner/profile",
-        commit_sha="b" * 40,
+        slug=active_manifest.config_repository,
+        commit_sha=active_manifest.config_commit_sha,
         default_branch="main",
         github_html_url="https://github.com/config-owner/profile",
         blobs=(
@@ -673,16 +700,16 @@ def test_production_builder_uses_frozen_profile_over_public_yaml_embedding(
             cancel_requested=None,
             deadline=None,
         ) -> ResolvedRepository:
-            del ref, cancel_requested, deadline
+            del cancel_requested, deadline
             if slug == config_snapshot.slug:
+                assert ref == active_manifest.config_commit_sha
                 return config_snapshot
             assert slug == repository_snapshot.slug
             return repository_snapshot
 
     builder = ProductionFrozenProfileBuilder(
         data_directory=tmp_path / "data",
-        config_repository=config_snapshot.slug,
-        config_branch="main",
+        manager=manager,
         github_api_url="https://api.github.com",
         max_bundle_bytes=8 * 1024 * 1024,
         source_resolver=Resolver(),  # type: ignore[arg-type]
@@ -695,6 +722,7 @@ def test_production_builder_uses_frozen_profile_over_public_yaml_embedding(
         assert candidate.verified.index.embedding == profile.identity
     finally:
         candidate.verified.close()
+        manager.close()
 
 
 @pytest.mark.parametrize(

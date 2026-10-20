@@ -55,7 +55,6 @@ from reponpc.admin.embedding_reindex import (
     ProductionFrozenProfileBuilder,
 )
 from reponpc.admin.faq import ReviewedFaq
-from reponpc.admin.github import GitHubAdminClient, UrllibGitHubAdminTransport
 from reponpc.admin.local_portfolio import LocalPortfolioError, LocalPortfolioStore
 from reponpc.admin.local_publication import LocalArchiveResolver, LocalPublication
 from reponpc.admin.maintenance import MaintenanceError, MaintenanceService
@@ -79,7 +78,6 @@ from reponpc.api.public import SetupState, create_public_router, error_response
 from reponpc.api.visitor_gateway import VisitorGateway
 from reponpc.api.visitor_ingress import VisitorChatWorkers
 from reponpc.bundles.manager import BundleActivationError, BundleManager
-from reponpc.bundles.updater import BundleUpdater, UrllibBundleTransport
 from reponpc.chat.limits import ChatLimits
 from reponpc.chat.service import GroundedChatService
 from reponpc.config.environment import (
@@ -258,8 +256,6 @@ def create_app(
     setup_state: SetupState | None = None,
     runtime_database: RuntimeDatabase | None = None,
     bundle_manager: BundleManager | None = None,
-    bundle_updater: BundleUpdater | None = None,
-    bundle_poll_seconds: int = 300,
     provider_runtime: ProviderRuntime | None = None,
     provider_adapter: str | None = None,
     provider_health_seconds: int = 60,
@@ -360,19 +356,9 @@ def create_app(
         polling_tasks: list[asyncio.Task[None]] = []
         batch_service = application.state.analysis_batch_service
 
-        updater = application.state.bundle_updater
         manager = application.state.bundle_manager
 
         def poll_and_publish_state() -> None:
-            current_updater = application.state.bundle_updater
-            publication_lock = getattr(application.state, "publication_lock", None)
-            if publication_lock is not None:
-                with publication_lock:
-                    current_updater = application.state.bundle_updater
-                    if current_updater is not None:
-                        current_updater.poll_once()
-            elif current_updater is not None:
-                current_updater.poll_once()
             runtime_state = configured_database.bundle_state() if configured_database else None
             bundle_status = manager.status()
             current_state = application.state.reponpc
@@ -383,23 +369,8 @@ def create_app(
                 index_last_checked_at=(
                     runtime_state.last_checked_at if runtime_state is not None else None
                 ),
-                index_update_error=(
-                    runtime_state.safe_update_error if runtime_state is not None else None
-                ),
                 public_directory=getattr(manager, "active_public_directory", lambda: None)(),
             )
-
-        async def polling_lifecycle() -> None:
-            while not stopped.is_set():
-                try:
-                    await asyncio.wait_for(
-                        stopped.wait(),
-                        timeout=getattr(
-                            application.state, "bundle_poll_seconds", bundle_poll_seconds
-                        ),
-                    )
-                except TimeoutError:
-                    await asyncio.to_thread(poll_and_publish_state)
 
         gateway = getattr(application.state, "visitor_gateway", None)
         try:
@@ -413,8 +384,6 @@ def create_app(
                 polling_tasks.append(asyncio.create_task(analysis_cleanup_lifecycle()))
             if manager is not None:
                 await asyncio.to_thread(poll_and_publish_state)
-                if updater is not None:
-                    polling_tasks.append(asyncio.create_task(polling_lifecycle()))
             if gateway is not None and runtime_storage_usable:
                 with suppress(Exception):
                     await gateway.resume()
@@ -495,8 +464,6 @@ def create_app(
     application.state.runtime_storage_usable = state.runtime_storage_usable
     application.state.runtime_database = runtime_database
     application.state.bundle_manager = bundle_manager
-    application.state.bundle_updater = bundle_updater
-    application.state.bundle_poll_seconds = bundle_poll_seconds
     application.state.provider_runtime = provider_runtime
     application.state.analysis_runtime_supplier = lambda: application.state.provider_runtime
     application.state.contribution_runtime_supplier = lambda: application.state.provider_runtime
@@ -773,7 +740,6 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
     password_hash = getattr(settings, "admin_password_hash", None)
     secrets = getattr(settings, "secrets", {})
     identity_key = secrets.get("ip_hash_key")
-    github_token = secrets.get("github_token")
     if identity_key is None:
         app.state.admin_session_service = None
         app.state.admin_origins = getattr(
@@ -799,16 +765,6 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         daily_budget=settings.daily_chat_request_budget,
         global_concurrency=settings.global_chat_concurrency,
     )
-    github = None
-    if github_token is not None and settings.config_repository:
-        github = GitHubAdminClient(
-            repository=settings.config_repository,
-            branch=settings.config_branch,
-            workflow=settings.index_workflow,
-            token=github_token.reveal(),
-            transport=UrllibGitHubAdminTransport(),
-            api_url=settings.github_api_url,
-        )
     rate_limiter = GitHubRateLimiter(
         persistence=SQLiteGitHubRateStateStore(runtime_database),
     )
@@ -1219,7 +1175,6 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
             raise EmbeddingProfileError("EMBEDDING_MODEL_OPERATION_FAILED") from None
 
     app.state.admin_operations = AdminOperations(
-        github=github,
         database=runtime_database,
         public_base_url=settings.public_base_url,
         onboarding=onboarding,
@@ -1230,7 +1185,6 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         analysis_selection=analysis_selection,
         ollama_model_operations=model_operations,
         connection_model_lister=list_connection_models,
-        config_repository=settings.config_repository,
     )
 
 
@@ -1238,7 +1192,7 @@ def _configure_bundle_lifecycle(
     settings: EnvironmentSettings,
     runtime_database: RuntimeDatabase,
 ) -> None:
-    """Attach the real polling owner only when immutable discovery is configured."""
+    """Restore the retained immutable bundles and reconcile their embedding identity."""
 
     if not hasattr(settings, "embedding_provider"):
         return
@@ -1257,7 +1211,6 @@ def _configure_bundle_lifecycle(
         else EmbeddingIdentity("unconfigured", "unconfigured", 1, True, "", "")
     )
     embedding = active_profile.identity if active_profile is not None else environment_embedding
-    allowed_hosts = frozenset({"api.github.com", "github.com", "raw.githubusercontent.com"})
     manager = BundleManager(
         data_directory=settings.data_dir,
         runtime_database=runtime_database,
@@ -1270,24 +1223,6 @@ def _configure_bundle_lifecycle(
             manager.active_embedding_identity(),
             manager.status().active_bundle_id,
         )
-    manifest_url = getattr(settings, "index_manifest_url", None)
-    if not manifest_url or (settings.data_dir / "local-portfolio" / "source-local").exists():
-        app.state.bundle_updater = None
-        return
-    app.state.bundle_updater = BundleUpdater(
-        manifest_url=manifest_url,
-        transport=UrllibBundleTransport(allowed_hosts=allowed_hosts),
-        manager=manager,
-        runtime_database=runtime_database,
-        expected_embedding=embedding,
-        expected_embedding_supplier=lambda: (
-            manager.active_embedding_identity() or environment_embedding
-        ),
-        max_bundle_bytes=settings.max_bundle_bytes,
-        allowed_hosts=allowed_hosts,
-        data_directory=settings.data_dir,
-    )
-    app.state.bundle_poll_seconds = settings.index_poll_seconds
 
 
 def _configure_provider_lifecycle(
@@ -1459,8 +1394,7 @@ def _configure_embedding_reindex(settings: EnvironmentSettings) -> None:
         manager=manager,
         builder=ProductionFrozenProfileBuilder(
             data_directory=settings.data_dir,
-            config_repository=settings.config_repository,
-            config_branch=settings.config_branch,
+            manager=manager,
             github_api_url=settings.github_api_url,
             max_bundle_bytes=settings.max_bundle_bytes,
             source_resolver=github_sources,
@@ -1489,7 +1423,6 @@ def _configure_local_publication(settings: EnvironmentSettings) -> None:
             marker = settings.data_dir / "local-portfolio" / "source-local"
             marker.parent.mkdir(parents=True, exist_ok=True)
             marker.write_text("local-v1\n", encoding="utf-8")
-            app.state.bundle_updater = None
 
     def transition_factory(chat_id: str):
         chat_registry = app.state.chat_profile_registry

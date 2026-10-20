@@ -76,7 +76,6 @@ def application(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         admin_session_service=auth,
         admin_origins=(ORIGIN,),
         admin_operations=AdminOperations(
-            github=None,
             database=database,
             public_base_url=ORIGIN,
             model_connections=connections,

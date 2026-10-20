@@ -827,7 +827,6 @@ self.addEventListener('fetch', (event) => {
         analysis_pair_supplier=analysis_selection.frozen_pair,
     )
     operations = AdminOperations(
-        github=None,
         database=database,
         public_base_url=origin,
         onboarding=onboarding,

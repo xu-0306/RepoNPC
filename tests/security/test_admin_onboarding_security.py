@@ -8,6 +8,7 @@ from argon2 import PasswordHasher, Type
 from fastapi.testclient import TestClient
 
 from reponpc.admin.auth import AdminSessionService
+from reponpc.admin.batches import AnalysisBatchService
 from reponpc.admin.onboarding import GuidedOnboardingError, GuidedOnboardingService
 from reponpc.admin.operations import AdminOperations
 from reponpc.indexing.github import (
@@ -59,7 +60,7 @@ class BoundaryProbe:
             "ref": None,
         }
 
-    def analyze_repository(self, **_values: Any) -> dict[str, object]:
+    def analyze_one_compatibility(self, **_values: Any) -> dict[str, object]:
         self.source_calls += 1
         self.provider_calls += 1
         try:
@@ -90,10 +91,10 @@ def _application(tmp_path: Path) -> tuple[Any, BoundaryProbe]:
     )
     probe = BoundaryProbe()
     operations = AdminOperations(
-        None,
         database,
         ORIGIN,
         onboarding=cast(GuidedOnboardingService, probe),
+        analysis_batches=cast(AnalysisBatchService, probe),
     )
     return (
         create_app(

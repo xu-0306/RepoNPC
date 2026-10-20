@@ -84,19 +84,12 @@ export interface AdminStatus {
   previous_bundle_id?: string | null;
   pinned_bundle_id?: string | null;
   last_checked_at?: string | null;
-  update_error?: string | null;
-  configuration_repository_owner?: string | null;
 }
 
 export interface AdminSnippet {
   markdown: string;
   asset_url?: string;
   target_url?: string;
-}
-
-export interface AdminConflict {
-  current_blob_sha?: string;
-  message?: string;
 }
 
 export interface AdminWorkspaceProps {
@@ -106,17 +99,13 @@ export interface AdminWorkspaceProps {
   preview: AdminPreview | null;
   status: AdminStatus | null;
   snippet: AdminSnippet | string | null;
-  conflict: boolean | AdminConflict | null;
   busy: boolean;
   authenticated: boolean;
-  githubOperationsReady: boolean;
   notice: string;
   onDraftChange: (draft: string) => void;
   onValidate: () => void;
   onPreview: () => void;
-  onSave: () => void;
   onCopy: () => void;
-  onDispatch: () => void;
   onLogout: () => void;
   onLocaleChange?: (locale: AdminLocale) => void;
   guidedView?: ReactNode;
@@ -147,10 +136,9 @@ const COPY = {
     authRequired: "請先登入管理員工作階段，才能編輯公開設定。",
     draftHeading: "公開設定草稿",
     draftLabel: "reponpc.yml 原始 YAML",
-    draftHelp: "這份草稿尚未寫入 GitHub。儲存前請先驗證內容。",
+    draftHelp: "先驗證並預覽這份草稿，再到分享工作區儲存在本機。",
     validate: "驗證設定",
     preview: "預覽變更",
-    save: "儲存到 GitHub",
     logout: "登出",
     validationHeading: "驗證結果",
     valid: "設定驗證通過。",
@@ -171,13 +159,10 @@ const COPY = {
     previousBundle: "上一個網站資料版本",
     pinnedBundle: "固定使用的資料版本",
     lastChecked: "上次檢查",
-    updateError: "更新錯誤",
     none: "無",
-    dispatch: "要求重新發布索引",
     snippetHeading: "README 複製片段",
     snippetLabel: "可直接貼上的 Markdown",
     copy: "複製片段",
-    conflict: "設定已在其他地方變更；為避免覆寫，儲存已停用。",
     busy: "處理中…",
     copyReady: "片段已準備好。",
     guidedMode: "引導設定",
@@ -205,10 +190,9 @@ const COPY = {
     draftHeading: "Public configuration draft",
     draftLabel: "Raw reponpc.yml YAML",
     draftHelp:
-      "This draft has not been written to GitHub. Validate it before saving.",
+      "Validate and preview this draft, then save it locally in the sharing workspace.",
     validate: "Validate configuration",
     preview: "Preview changes",
-    save: "Save to GitHub",
     logout: "Log out",
     validationHeading: "Validation result",
     valid: "Configuration validation passed.",
@@ -231,14 +215,10 @@ const COPY = {
     previousBundle: "Previous website data version",
     pinnedBundle: "Pinned website data version",
     lastChecked: "Last checked",
-    updateError: "Update error",
     none: "None",
-    dispatch: "Request index publication",
     snippetHeading: "README copy snippet",
     snippetLabel: "Markdown ready to paste",
     copy: "Copy snippet",
-    conflict:
-      "The configuration changed elsewhere; saving is disabled to prevent an overwrite.",
     busy: "Working…",
     copyReady: "Snippet is ready.",
     guidedMode: "Guided setup",
@@ -247,10 +227,6 @@ const COPY = {
     maintenanceMode: "Maintenance",
   },
 } as const;
-
-function isConflict(conflict: AdminWorkspaceProps["conflict"]): boolean {
-  return Boolean(conflict);
-}
 
 function issueList(
   issues: ValidationIssue[] | undefined,
@@ -295,17 +271,13 @@ export function AdminWorkspace({
   preview,
   status,
   snippet,
-  conflict,
   busy,
   authenticated,
-  githubOperationsReady,
   notice,
   onDraftChange,
   onValidate,
   onPreview,
-  onSave,
   onCopy,
-  onDispatch,
   onLogout,
   onLocaleChange,
   guidedView,
@@ -332,16 +304,8 @@ export function AdminWorkspace({
   }, [workspaceMode]);
   const errors = issueList(validation?.errors, "error");
   const warnings = issueList(validation?.warnings, "warning");
-  const hasConflict = isConflict(conflict);
-  const saveDisabled =
-    !authenticated ||
-    !githubOperationsReady ||
-    busy ||
-    hasConflict ||
-    validation?.valid !== true;
   const profile = profileForLocale(preview?.profile, locale);
   const snippetValue = snippetText(snippet);
-  const dispatchDisabled = !authenticated || !githubOperationsReady || busy;
 
   useEffect(() => {
     applyAdminUiScale(uiScale);
@@ -575,14 +539,6 @@ export function AdminWorkspace({
               >
                 {copy.preview}
               </button>
-              <button
-                aria-describedby={hasConflict ? "admin-conflict" : undefined}
-                disabled={saveDisabled}
-                onClick={onSave}
-                type="button"
-              >
-                {copy.save}
-              </button>
             </div>
             {busy && <p role="status">{copy.busy}</p>}
           </section>
@@ -611,18 +567,6 @@ export function AdminWorkspace({
               warnings.length === 0 &&
               validation.valid !== false && <p>{copy.noIssues}</p>}
           </section>
-
-          {hasConflict && (
-            <p
-              id="admin-conflict"
-              role="alert"
-              className="admin-workspace__conflict"
-            >
-              {conflict && typeof conflict === "object" && conflict.message
-                ? conflict.message
-                : copy.conflict}
-            </p>
-          )}
 
           {preview && (
             <section
@@ -707,19 +651,7 @@ export function AdminWorkspace({
                 value={status?.last_checked_at}
                 fallback={copy.none}
               />
-              <StatusRow
-                label={copy.updateError}
-                value={status?.update_error}
-                fallback={copy.none}
-              />
             </dl>
-            <button
-              disabled={dispatchDisabled}
-              onClick={onDispatch}
-              type="button"
-            >
-              {copy.dispatch}
-            </button>
           </section>
 
           {snippetValue && (

@@ -307,7 +307,6 @@ def build_application(
         identity_hmac_key=secrets.token_bytes(32),
     )
     operations = AdminOperations(
-        github=None,
         database=database,
         public_base_url=origin,
         embedding_profiles=registry,
@@ -330,8 +329,6 @@ def build_application(
             {
                 "REPONPC_PUBLIC_BASE_URL": origin,
                 "REPONPC_ADMIN_ORIGINS": origin,
-                "REPONPC_CONFIG_REPOSITORY": "example/fixture",
-                "REPONPC_INDEX_MANIFEST_URL": "http://127.0.0.1:9/disabled",
                 "REPONPC_VISITOR_GATEWAY_PORT": str(gateway_port),
                 "REPONPC_SHUTDOWN_GRACE_SECONDS": "1",
             },

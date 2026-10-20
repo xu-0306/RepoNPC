@@ -238,17 +238,13 @@ function Review() {
         preview={null}
         status={null}
         snippet={null}
-        conflict={null}
         busy={false}
         authenticated
-        githubOperationsReady={false}
         notice=""
         onDraftChange={noop}
         onValidate={noop}
         onPreview={noop}
-        onSave={noop}
         onCopy={noop}
-        onDispatch={noop}
         onLogout={noop}
         advancedMode={false}
         guidedView={scenario === "models" ? models : repositories}

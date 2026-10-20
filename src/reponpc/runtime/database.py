@@ -40,7 +40,6 @@ class BundleRuntimeState:
     pinned_bundle_id: str | None
     manifest_etag: str | None
     last_checked_at: str | None
-    safe_update_error: str | None
 
 
 MIGRATIONS: Final[tuple[Migration, ...]] = (
@@ -1573,12 +1572,12 @@ class RuntimeDatabase:
             row = connection.execute(
                 """
                 SELECT active_bundle_id, previous_bundle_id, pinned_bundle_id,
-                       manifest_etag, last_checked_at, safe_update_error
+                       manifest_etag, last_checked_at
                 FROM bundle_state WHERE state_key = 'current'
                 """
             ).fetchone()
         if row is None:
-            return BundleRuntimeState(None, None, None, None, None, None)
+            return BundleRuntimeState(None, None, None, None, None)
         return BundleRuntimeState(
             active_bundle_id=str(row["active_bundle_id"]) if row["active_bundle_id"] else None,
             previous_bundle_id=str(row["previous_bundle_id"])
@@ -1587,7 +1586,6 @@ class RuntimeDatabase:
             pinned_bundle_id=str(row["pinned_bundle_id"]) if row["pinned_bundle_id"] else None,
             manifest_etag=str(row["manifest_etag"]) if row["manifest_etag"] else None,
             last_checked_at=str(row["last_checked_at"]) if row["last_checked_at"] else None,
-            safe_update_error=str(row["safe_update_error"]) if row["safe_update_error"] else None,
         )
 
     def save_bundle_state(self, state: BundleRuntimeState) -> None:
@@ -1600,15 +1598,14 @@ class RuntimeDatabase:
                     """
                     INSERT INTO bundle_state(
                       state_key, active_bundle_id, previous_bundle_id, pinned_bundle_id,
-                      manifest_etag, last_checked_at, safe_update_error
-                    ) VALUES ('current', ?, ?, ?, ?, ?, ?)
+                      manifest_etag, last_checked_at
+                    ) VALUES ('current', ?, ?, ?, ?, ?)
                     ON CONFLICT(state_key) DO UPDATE SET
                       active_bundle_id = excluded.active_bundle_id,
                       previous_bundle_id = excluded.previous_bundle_id,
                       pinned_bundle_id = excluded.pinned_bundle_id,
                       manifest_etag = excluded.manifest_etag,
-                      last_checked_at = excluded.last_checked_at,
-                      safe_update_error = excluded.safe_update_error
+                      last_checked_at = excluded.last_checked_at
                     """,
                     (
                         state.active_bundle_id,
@@ -1616,7 +1613,6 @@ class RuntimeDatabase:
                         state.pinned_bundle_id,
                         state.manifest_etag,
                         state.last_checked_at,
-                        state.safe_update_error,
                     ),
                 )
                 connection.execute("COMMIT")

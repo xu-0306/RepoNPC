@@ -16,7 +16,7 @@ describe("admin first-owner presentation messages", () => {
     expect(message).toBe(expected);
     expect(message).toContain("REPONPC_IP_HASH_KEY_FILE");
     expect(message).not.toContain("REPONPC_ADMIN_PASSWORD_HASH");
-    expect(message).not.toContain("REPONPC_GITHUB_TOKEN_FILE");
+    expect(message).not.toContain("REPONPC_CHAT_API_KEY_FILE");
     expect(message).not.toContain("test-secret-value");
   });
 
@@ -31,9 +31,9 @@ describe("admin first-owner presentation messages", () => {
   });
 
   it.each([
-    ["zh-TW", "已登入，但 GitHub 管理操作尚未設定。"],
-    ["en", "You are signed in, but GitHub management operations are not configured."],
-  ] as const)("distinguishes authenticated GitHub setup in %s", (locale, expected) => {
+    ["zh-TW", "已登入，但本機作品集管理尚未就緒。"],
+    ["en", "You are signed in, but local portfolio management is not ready."],
+  ] as const)("distinguishes authenticated local portfolio setup in %s", (locale, expected) => {
     expect(adminDataErrorMessage(locale, new Error("SERVICE_NOT_READY"))).toBe(
       expected,
     );

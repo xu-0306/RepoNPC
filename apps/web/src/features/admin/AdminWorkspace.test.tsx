@@ -37,23 +37,18 @@ function props(
       previous_bundle_id: null,
       pinned_bundle_id: null,
       last_checked_at: "2026-08-13T00:00:00Z",
-      update_error: null,
     },
     snippet: {
       markdown:
         "[![RepoNPC](https://example.test/card.png)](https://example.test)",
     },
-    conflict: null,
     busy: false,
     authenticated: true,
-    githubOperationsReady: true,
     notice: "",
     onDraftChange: vi.fn(),
     onValidate: vi.fn(),
     onPreview: vi.fn(),
-    onSave: vi.fn(),
     onCopy: vi.fn(),
-    onDispatch: vi.fn(),
     onLogout: vi.fn(),
     ...overrides,
   };
@@ -128,15 +123,7 @@ describe("AdminWorkspace", () => {
     expect(markup).toContain("Consider increasing revision");
   });
 
-  it("disables save on conflict and all editing actions when unauthenticated", () => {
-    const conflictMarkup = renderToStaticMarkup(
-      <AdminWorkspace {...props({ conflict: { current_blob_sha: "sha" } })} />,
-    );
-    expect(conflictMarkup).toContain("saving is disabled");
-    expect(conflictMarkup).toMatch(
-      /<button[^>]*disabled[^>]*>Save to GitHub<\/button>/,
-    );
-
+  it("disables editing actions when unauthenticated", () => {
     const signedOutMarkup = renderToStaticMarkup(
       <AdminWorkspace {...props({ authenticated: false })} />,
     );
@@ -154,29 +141,11 @@ describe("AdminWorkspace", () => {
     expect(markup).toContain("未儲存預覽");
   });
 
-  it("keeps save disabled until validation explicitly passes", () => {
-    const markup = renderToStaticMarkup(
-      <AdminWorkspace {...props({ validation: null })} />,
-    );
-
-    expect(markup).toMatch(
-      /<button[^>]*disabled[^>]*>Save to GitHub<\/button>/,
-    );
-  });
-
-  it("keeps local tools usable while GitHub-backed actions are unavailable", () => {
-    const markup = renderToStaticMarkup(
-      <AdminWorkspace {...props({ githubOperationsReady: false })} />,
-    );
+  it("keeps local validation and preview tools usable", () => {
+    const markup = renderToStaticMarkup(<AdminWorkspace {...props()} />);
 
     expect(markup).toMatch(/<button[^>]*>Validate configuration<\/button>/);
     expect(markup).toMatch(/<button[^>]*>Preview changes<\/button>/);
-    expect(markup).toMatch(
-      /<button[^>]*disabled[^>]*>Save to GitHub<\/button>/,
-    );
-    expect(markup).toMatch(
-      /<button[^>]*disabled[^>]*>Request index publication<\/button>/,
-    );
   });
 
   it("keeps degraded-operation notices inside the workspace", () => {
@@ -184,14 +153,14 @@ describe("AdminWorkspace", () => {
       <AdminWorkspace
         {...props({
           notice:
-            "You are signed in, but GitHub management operations are not configured.",
+            "You are signed in, but local portfolio management is not ready.",
         })}
       />,
     );
 
     expect(markup).toContain('class="admin-workspace__notice"');
     expect(markup).toContain('role="alert"');
-    expect(markup).toContain("GitHub management operations are not configured");
+    expect(markup).toContain("local portfolio management is not ready");
   });
 
   it("keeps Traditional Chinese and English presentation text complete", () => {

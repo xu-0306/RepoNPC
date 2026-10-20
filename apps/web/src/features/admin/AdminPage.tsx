@@ -730,8 +730,8 @@ export function adminDataErrorMessage(locale: Locale, error: unknown): string {
   if (error instanceof Error && error.message === "SERVICE_NOT_READY") {
     return copyFor(
       locale,
-      "已登入，但 GitHub 管理操作尚未設定。",
-      "You are signed in, but GitHub management operations are not configured.",
+      "已登入，但本機作品集管理尚未就緒。",
+      "You are signed in, but local portfolio management is not ready.",
     );
   }
 
@@ -1098,7 +1098,6 @@ export function AdminPage({
   const [accessState, setAccessState] = useState<AdminAccessState>("checking");
   const [csrfToken, setCsrfToken] = useState("");
   const [draft, setDraft] = useState("");
-  const [blobSha, setBlobSha] = useState("");
   const [localRevision, setLocalRevision] = useState<string | null>(null);
   const [characterSprite, setCharacterSprite] = useState<string | null>(null);
   const [publicationOpen, setPublicationOpen] = useState(false);
@@ -1197,13 +1196,11 @@ export function AdminPage({
     useState(false);
   const [analysisSelectionError, setAnalysisSelectionError] = useState("");
   const [snippet, setSnippet] = useState<SnippetBody | null>(null);
-  const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const [adminErrors, dispatchAdminError] = useReducer(
     adminErrorStateReducer,
     initialAdminErrorState,
   );
-  const [githubOperationsReady, setGitHubOperationsReady] = useState(false);
   const [baseConfig, setBaseConfig] = useState<Record<string, unknown> | null>(
     null,
   );
@@ -1310,9 +1307,6 @@ export function AdminPage({
             request_id?: string;
           };
         } | null;
-        if (response.status === 409 && path.startsWith("/api/admin/config")) {
-          setConflict(true);
-        }
         const code =
           body !== null && typeof body === "object" && "error" in body
             ? (body.error?.details?.reason ?? body.error?.code)
@@ -2054,7 +2048,6 @@ export function AdminPage({
         setDraft(resumedDraft ?? local.content);
         setLocalRevision(local.revision);
         setCharacterSprite(local.sprite_base64);
-        setGitHubOperationsReady(false);
         if (local.content) {
           try {
             const parsed = await request<AdminValidation>(
@@ -2089,17 +2082,6 @@ export function AdminPage({
       }
       if (statusResult.status === "fulfilled") {
         setStatus(statusResult.value);
-        const owner = statusResult.value.configuration_repository_owner;
-        if (owner) {
-          setGuidedState((current) =>
-            current.profile.githubLogin
-              ? current
-              : {
-                  ...current,
-                  profile: { ...current.profile, githubLogin: owner },
-                },
-          );
-        }
       }
       setBusy(false);
     })();
@@ -3139,7 +3121,6 @@ export function AdminPage({
       setPublicationOpen(true);
       setCharacterWorkspaceOpen(false);
       setValidation(result.validation);
-      setConflict(false);
       setGuidedState((current) =>
         guidedOnboardingReducer(current, { type: "DRAFT_READY" }),
       );
@@ -3191,7 +3172,6 @@ export function AdminPage({
         },
       );
       setValidation(result);
-      setConflict(false);
     });
   }
 
@@ -3229,23 +3209,6 @@ export function AdminPage({
     );
   }
 
-  async function saveCharacterAsset(filename: string, pngBase64: string) {
-    const binary = window.atob(pngBase64);
-    const bytes = Uint8Array.from(binary, (character) =>
-      character.charCodeAt(0),
-    );
-    const body = new FormData();
-    body.append("file", new File([bytes], filename, { type: "image/png" }));
-    body.append("commit_message", "Add RepoNPC canonical character");
-    await request(
-      `/api/admin/assets/character/${encodeURIComponent(filename)}`,
-      {
-        method: "PUT",
-        body,
-      },
-    );
-  }
-
   async function validateAlignedCharacterAsset(
     png: Blob,
   ): Promise<CharacterAssetBody> {
@@ -3257,34 +3220,6 @@ export function AdminPage({
     return request<CharacterAssetBody>("/api/admin/assets/character/validate", {
       method: "POST",
       body,
-    });
-  }
-
-  async function save() {
-    await perform(async () => {
-      const result = await request<{ blob_sha: string }>("/api/admin/config", {
-        method: "PUT",
-        body: JSON.stringify({
-          content: draft,
-          expected_blob_sha: blobSha,
-          commit_message: "Update RepoNPC configuration",
-        }),
-      });
-      setBlobSha(result.blob_sha);
-      setConflict(false);
-      window.sessionStorage.removeItem(GUIDED_ONBOARDING_STORAGE_KEY);
-      window.sessionStorage.removeItem(GUIDED_DRAFT_STORAGE_KEY);
-      guidedResumeFound.current = false;
-      setGuidedResumeReady(false);
-    });
-  }
-
-  async function dispatch() {
-    await perform(async () => {
-      await request<{ accepted: boolean }>("/api/admin/index/dispatch", {
-        method: "POST",
-      });
-      setStatus(await request<AdminStatus>("/api/admin/index/status"));
     });
   }
 
@@ -3334,7 +3269,6 @@ export function AdminPage({
     } catch {
       /* optional */
     }
-    setBlobSha("");
     setValidation(null);
     setPreview(null);
     setStatus(null);
@@ -3342,8 +3276,6 @@ export function AdminPage({
     setAnalysisSelectionPending(false);
     setAnalysisSelectionError("");
     setSnippet(null);
-    setConflict(false);
-    setGitHubOperationsReady(false);
     dispatchAdminError({ type: "CLEAR_ALL_ERRORS" });
     setBaseConfig(null);
     setGuidedState(initialGuidedOnboardingState());
@@ -3777,11 +3709,9 @@ export function AdminPage({
         characterAssetView={
           <CharacterAssetConverter
             disabled={busy}
-            githubOperationsReady={githubOperationsReady}
             locale={locale}
             onConvert={convertCharacterAsset}
             onValidate={validateAlignedCharacterAsset}
-            onSave={saveCharacterAsset}
             onApply={async (asset) => {
               if (draft) {
                 const applied = await request<LocalDraftBody>(
@@ -3813,10 +3743,8 @@ export function AdminPage({
             }}
           />
         }
-        conflict={conflict}
         draft={draft}
         embeddingProfileView={modelPanels}
-        githubOperationsReady={githubOperationsReady}
         guidedView={
           <GuidedOnboardingView
             workspaceStatus={workspaceStatus}
@@ -3902,12 +3830,10 @@ export function AdminPage({
         onCopy={() =>
           void navigator.clipboard.writeText(snippet?.markdown ?? "")
         }
-        onDispatch={() => void dispatch()}
         onDraftChange={(value) => {
           setDraft(value);
           setValidation(null);
           setPreview(null);
-          setConflict(false);
           setGuidedState((current) =>
             guidedOnboardingReducer(current, {
               type: "MARK_RAW_YAML_UNMAPPED",
@@ -3933,7 +3859,6 @@ export function AdminPage({
           if (mode !== "publish") applyGuidedAction({ type: "SET_MODE", mode });
         }}
         onPreview={() => void showPreview()}
-        onSave={() => void save()}
         onValidate={() => void validate()}
         preview={preview}
         snippet={snippet}

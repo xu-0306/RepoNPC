@@ -14,8 +14,6 @@ from reponpc.config.environment import (
 def values(**overrides: str) -> dict[str, str]:
     result = {
         "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
-        "REPONPC_CONFIG_REPOSITORY": "example/portfolio",
-        "REPONPC_INDEX_MANIFEST_URL": "https://example.invalid/manifest.json",
     }
     result.update(overrides)
     return result

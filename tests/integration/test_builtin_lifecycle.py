@@ -140,10 +140,6 @@ def boot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Boot]:
         {
             "REPONPC_DATA_DIR": str(tmp_path / "host"),
             "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
-            "REPONPC_CONFIG_REPOSITORY": "example/portfolio",
-            "REPONPC_INDEX_MANIFEST_URL": (
-                "https://raw.githubusercontent.com/example/portfolio/main/stable-manifest.json"
-            ),
             "REPONPC_IP_HASH_KEY": "synthetic-lifecycle-fixture-key",
         },
         secret_roots=(tmp_path,),

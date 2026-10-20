@@ -34,6 +34,7 @@ from reponpc.config.models import parse_public_config_bytes
 from reponpc.indexing.github import GitHubSourceResolver, SourceResolutionError
 from reponpc.indexing.pipeline import IndexPipelineError, build_index_bundle
 from reponpc.indexing.sources import (
+    LOCAL_CONFIGURATION_REPOSITORY,
     EmbeddingProvider,
     RepositoryParticipation,
     ResolvedConfiguration,
@@ -405,8 +406,7 @@ class ProductionFrozenProfileBuilder:
         self,
         *,
         data_directory: Path,
-        config_repository: str,
-        config_branch: str,
+        manager: BundleManager,
         github_api_url: str,
         max_bundle_bytes: int,
         source_resolver: GitHubSourceResolver | None = None,
@@ -415,8 +415,7 @@ class ProductionFrozenProfileBuilder:
     ) -> None:
         self._root = Path(data_directory) / "embedding-reindex"
         self._root.mkdir(parents=True, exist_ok=True)
-        self._config_repository = config_repository
-        self._config_branch = config_branch
+        self._manager = manager
         self._resolver = source_resolver or GitHubSourceResolver(api_base_url=github_api_url)
         self._participation_collector = participation_collector
         self._max_bundle_bytes = max_bundle_bytes
@@ -437,9 +436,13 @@ class ProductionFrozenProfileBuilder:
                 deadline=deadline,
                 monotonic=self._monotonic,
             )
+            active_id = self._manager.status().active_bundle_id
+            manifest = self._manager.verify(active_id) if active_id is not None else None
             config_snapshot = bounded.resolve(
-                slug=self._config_repository,
-                ref=self._config_branch,
+                slug=manifest.config_repository
+                if manifest is not None
+                else LOCAL_CONFIGURATION_REPOSITORY,
+                ref=manifest.config_commit_sha if manifest is not None else None,
             )
             config_blob = next(
                 (

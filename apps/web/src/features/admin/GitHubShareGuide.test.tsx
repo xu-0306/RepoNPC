@@ -10,17 +10,15 @@ import {
   GitHubShareGuide,
   type GitHubShareGuideProps,
 } from "./GitHubShareGuide";
-import { cardMarkdown, verifiedPagesMarkdown } from "./sharing";
+import { verifiedPagesMarkdown } from "./sharing";
 
 function props(
   locale: "zh-TW" | "en",
   verifiedPagesUrl: string | null,
 ): GitHubShareGuideProps {
-  const publicUrl = "https://legacy.example.test/visitor";
   return {
     locale,
     verifiedPagesUrl,
-    publicUrl,
     account: "fixture",
     profileStatus: "ready",
     imageStatus: "ready",
@@ -29,12 +27,10 @@ function props(
     readmeUrl: null,
     createUrl: null,
     filename: "reponpc-card.gif",
-    markdown: cardMarkdown(publicUrl, locale),
     cardReady: true,
     busy: false,
     notice: "",
     onAccountChange: vi.fn(),
-    onPublicUrlChange: vi.fn(),
     onCheckProfile: vi.fn(),
     onCheckImage: vi.fn(),
     onDownload: vi.fn(),
@@ -45,7 +41,7 @@ function props(
   };
 }
 
-describe("Pages and legacy README routes", () => {
+describe("Verified Pages README route", () => {
   it.each(["zh-TW", "en"] as const)(
     "offers the complete README first with placement and preservation guidance in %s",
     (locale) => {
@@ -79,7 +75,7 @@ describe("Pages and legacy README routes", () => {
           ? "先到第 3 段上傳並核對"
           : "Upload and verify your Pages site in section 3",
       );
-      expect(unavailable).toContain('id="github-share-markdown"');
+      expect(unavailable).not.toContain('id="github-share-markdown"');
       expect(input.onDownloadReadme).not.toHaveBeenCalled();
     },
   );
@@ -121,19 +117,12 @@ describe("Pages and legacy README routes", () => {
     expect(input.onPreviewReadme).toHaveBeenCalledOnce();
   });
   it.each(["zh-TW", "en"] as const)(
-    "keeps an unverified Pages site separate from the usable advanced route in %s",
+    "requires Pages verification before offering a card link in %s",
     (locale) => {
       const input = props(locale, null);
       const markup = renderToStaticMarkup(<GitHubShareGuide {...input} />);
       expect(markup).toContain('href="#pages-share-panel-heading"');
       expect(markup).not.toContain('id="github-share-pages-markdown"');
-      const legacy = markup.match(
-        /<details><summary>[^<]+<\/summary>([\s\S]*?)<\/details>/,
-      )?.[1];
-      expect(legacy).toContain('id="github-share-public-url"');
-      expect(legacy).toContain('id="github-share-markdown"');
-      expect(legacy).toContain(input.publicUrl);
-      expect(legacy).not.toMatch(/<button[^>]*disabled/);
       expect(input.onCopy).not.toHaveBeenCalled();
     },
   );
@@ -154,26 +143,14 @@ describe("Pages and legacy README routes", () => {
           .replaceAll(">", "&gt;"),
       );
       expect(field).not.toContain("legacy.example.test");
-      expect(markup).toContain('id="github-share-public-url"');
+      expect(markup).not.toContain('id="github-share-public-url"');
       expect(markup).not.toContain('href="#pages-share-panel-heading"');
     },
   );
-
-  it("retains legacy validation and disabled-copy guidance", () => {
-    const input = props("en", null);
-    input.publicUrl = "http://localhost:8090";
-    input.markdown = cardMarkdown(input.publicUrl, "en");
-    const markup = renderToStaticMarkup(<GitHubShareGuide {...input} />);
-    expect(markup).toMatch(
-      /<button[^>]*disabled=""[^>]*>Copy text for README<\/button>/,
-    );
-    expect(markup).toContain('aria-describedby="github-share-markdown-status"');
-    expect(markup).toContain('href="#pages-share-panel-heading"');
-  });
 });
 
 it.each(["zh-TW", "en"] as const)(
-  "copies each displayed route exactly and focuses the existing Pages heading in %s",
+  "copies the displayed Pages link exactly and focuses the existing Pages heading in %s",
   (locale) => {
     const input = props(locale, "https://fixture.github.io/project/");
     const nodes = (node: ReactNode): ReactElement<Record<string, unknown>>[] =>
@@ -192,7 +169,7 @@ it.each(["zh-TW", "en"] as const)(
             ? "複製要貼進 README 的文字"
             : "Copy text for README"),
     );
-    expect(copies).toHaveLength(2);
+    expect(copies).toHaveLength(1);
     copies.forEach((button, index) => {
       (button.props.onClick as () => void)();
       expect(input.onCopy).toHaveBeenNthCalledWith(

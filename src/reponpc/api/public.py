@@ -88,7 +88,6 @@ class IndexStatus(StrictResponseModel):
     ready: bool
     version: str | None
     last_checked_at: str | None
-    update_error: str | None
 
 
 class ModelStatus(StrictResponseModel):
@@ -144,7 +143,6 @@ class SetupState:
     index_ready: bool = False
     index_version: str | None = None
     index_last_checked_at: str | None = None
-    index_update_error: str | None = None
     model_ready: bool = False
     model_provider: str | None = None
     model_last_checked_at: str | None = None
@@ -169,7 +167,6 @@ class SetupState:
                 ready=self.index_ready,
                 version=_public_index_version(self.index_version),
                 last_checked_at=_public_timestamp(self.index_last_checked_at),
-                update_error=_public_index_version(self.index_update_error),
             ),
             model=ModelStatus(
                 ready=self.model_ready,

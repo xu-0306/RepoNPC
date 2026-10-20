@@ -29,7 +29,7 @@ def test_local_launcher_preserves_launch_and_secret_boundaries() -> None:
     assert '"$baseUrl/admin#local-launch="' in script
     assert "Issuing a fresh 15-minute first-owner setup code." not in script
     assert "REPONPC_ADMIN_PASSWORD_HASH" not in script
-    assert "REPONPC_GITHUB_TOKEN" in script
+    assert "REPONPC_CHAT_API_KEY" in script
     assert "REPONPC_GITHUB_OAUTH_CLIENT_SECRET" not in script
     assert "REPONPC_CREDENTIAL_ENCRYPTION_KEY" not in script
     assert "REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE" not in script

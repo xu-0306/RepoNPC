@@ -53,7 +53,6 @@ def test_setup_status_is_public_and_contains_no_sensitive_diagnostics() -> None:
             "ready": False,
             "version": None,
             "last_checked_at": None,
-            "update_error": None,
         },
         "model": {"ready": False, "provider": None, "last_checked_at": None},
         "chat_available": False,

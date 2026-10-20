@@ -24,11 +24,8 @@ from reponpc.cards.assets import validate_sprite
 from reponpc.config.environment import EnvironmentIssue, EnvironmentValidationError
 from reponpc.indexing.github import GitHubSourceResolver
 from reponpc.indexing.pipeline import (
-    PENDING_MANIFEST_NAME,
     IndexPipelineError,
     build_index_bundle,
-    publish_index_bundle,
-    publish_pending_manifest,
 )
 from reponpc.indexing.sources import (
     ParticipationCommit,
@@ -49,7 +46,7 @@ def test_cli_environment_failure_reports_names_and_codes_without_values(
     failure = EnvironmentValidationError(
         [
             EnvironmentIssue("REPONPC_PORT", "invalid_integer", canary),
-            EnvironmentIssue("REPONPC_GITHUB_TOKEN", "secret_source_collision", canary),
+            EnvironmentIssue("REPONPC_CHAT_API_KEY", "secret_source_collision", canary),
             EnvironmentIssue("REPONPC_BAD " + canary, "unknown_variable", canary),
         ]
     )
@@ -64,7 +61,7 @@ def test_cli_environment_failure_reports_names_and_codes_without_values(
     assert captured.out == ""
     assert captured.err == (
         "reponpc: deployment_environment_invalid: "
-        "REPONPC_GITHUB_TOKEN (secret_source_collision), REPONPC_PORT (invalid_integer), "
+        "REPONPC_CHAT_API_KEY (secret_source_collision), REPONPC_PORT (invalid_integer), "
         "UNKNOWN_VARIABLE (unknown_variable)\n"
     )
     assert canary not in captured.err
@@ -75,35 +72,6 @@ class FixtureResolver:
         assert slug == "fixture-owner/reponpc-demo"
         assert ref == "a" * 40
         return _fixture_snapshot()
-
-
-class RecordingPublisher:
-    def __init__(self) -> None:
-        self.events: list[str] = []
-        self.asset = b""
-        self.stable_content: bytes | None = None
-
-    def create_immutable_release(self, *, tag: str, name: str) -> int:
-        self.events.append("release")
-        assert tag == name
-        return 7
-
-    def upload_immutable_asset(self, *, release_id: int, name: str, content: bytes) -> str:
-        self.events.append("upload")
-        assert release_id == 7
-        assert name.endswith(".tar.zst")
-        self.asset = content
-        return "https://github.com/fixture-owner/reponpc-demo/releases/download/index/asset.tar.zst"
-
-    def verify_asset(self, *, asset_url: str, size: int, sha256: str) -> None:
-        self.events.append("verify")
-        assert asset_url.startswith("https://github.com/")
-        assert len(self.asset) == size
-        assert hashlib.sha256(self.asset).hexdigest() == sha256
-
-    def update_stable_manifest_last(self, *, content: bytes) -> None:
-        self.events.append("stable")
-        self.stable_content = content
 
 
 def _canonical_fixture_sprite() -> bytes:
@@ -133,7 +101,7 @@ def _write_public_assets(directory: Path) -> Path:
     return public
 
 
-def test_real_pipeline_builds_verifies_then_splits_pending_pointer_publication(
+def test_real_pipeline_builds_and_verifies_bundle(
     tmp_path: Path,
 ) -> None:
     config_path = tmp_path / "reponpc.yml"
@@ -163,17 +131,6 @@ def test_real_pipeline_builds_verifies_then_splits_pending_pointer_publication(
     assert bundle.archive_path.is_file()
     assert (output / "index.sqlite").is_file()
     assert (output / "bundle-build.json").is_file()
-    publisher = RecordingPublisher()
-    pending_path = publish_index_bundle(output, publisher=publisher, now=built_at)
-    assert pending_path == output / PENDING_MANIFEST_NAME
-    assert pending_path.is_file()
-    assert publisher.events == ["release", "upload", "verify"]
-    assert publisher.stable_content is None
-
-    publish_pending_manifest(output, publisher=publisher)
-
-    assert publisher.events == ["release", "upload", "verify", "verify", "stable"]
-    assert publisher.stable_content == pending_path.read_bytes()
 
 
 @pytest.mark.parametrize("collection", ["none", "unavailable", "collected"])
@@ -257,30 +214,15 @@ def test_config_and_index_commands_do_not_start_server(tmp_path: Path, monkeypat
             or SimpleNamespace(manifest=SimpleNamespace(bundle_id="fixture-bundle"))
         ),
     )
-    monkeypatch.setattr(
-        cli,
-        "publish_index_bundle",
-        lambda directory: (
-            command_calls.append(("publish", Path(directory)))
-            or Path(directory) / PENDING_MANIFEST_NAME
-        ),
-    )
-    monkeypatch.setattr(
-        cli,
-        "publish_pending_manifest",
-        lambda directory: command_calls.append(("publish-manifest", Path(directory))),
-    )
 
     assert cli.main(["config", "validate", str(FIXTURE_CONFIG)]) == 0
     assert (
         cli.main(["index", "build", "--config", str(FIXTURE_CONFIG), "--output", str(tmp_path)])
         == 0
     )
-    assert cli.main(["index", "publish", "--bundle-dir", str(tmp_path)]) == 0
-    assert cli.main(["index", "publish-manifest", "--bundle-dir", str(tmp_path)]) == 0
 
     assert server_calls == []
-    assert [item[0] for item in command_calls] == ["build", "publish", "publish-manifest"]
+    assert [item[0] for item in command_calls] == ["build"]
     assert "fixture-bundle" in capsys.readouterr().out
 
 

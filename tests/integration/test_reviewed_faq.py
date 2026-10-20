@@ -28,7 +28,7 @@ from reponpc.runtime.database import MIGRATIONS, Migration, RuntimeDatabase, Run
 from tests.integration.test_embedding_reindex import _profile, _system
 from tests.integration.test_index_build import FIXTURE_CONFIG, _fixture_snapshot
 from tests.integration.test_local_publication import FixtureResolver
-from tests.security.test_admin_writeback import ORIGIN, _application_without_github, _login
+from tests.security.test_admin_assets import ORIGIN, _login, local_admin_application
 
 
 class SyntheticChat:
@@ -251,7 +251,7 @@ def test_registry_has_unique_bounded_equivalent_locale_topics():
 
 def test_faq_api_all_owner_actions_and_safe_failure(tmp_path):
     database, manager, store, chat, service, _, _, build = faq_system(tmp_path / "build")
-    application = _application_without_github(tmp_path / "admin")
+    application = local_admin_application(tmp_path / "admin")
     application.state.admin_operations = replace(
         application.state.admin_operations, database=database, local_portfolio=store
     )
@@ -324,7 +324,7 @@ def test_faq_api_all_owner_actions_and_safe_failure(tmp_path):
 
 def test_question_variants_withdraw_approval_and_use_existing_revision(tmp_path):
     database, manager, store, _chat, service, _, _faq, _build = faq_system(tmp_path / "build")
-    application = _application_without_github(tmp_path / "admin")
+    application = local_admin_application(tmp_path / "admin")
     application.state.admin_operations = replace(
         application.state.admin_operations, database=database, local_portfolio=store
     )
@@ -550,7 +550,7 @@ def test_temporary_faq_keeps_existing_no_match_review_and_export_gates(tmp_path,
 
 def test_no_match_reason_is_private_stored_returned_and_cleared_on_success(tmp_path):
     database, manager, store, chat, service, _, _, _ = faq_system(tmp_path / "build")
-    application = _application_without_github(tmp_path / "admin")
+    application = local_admin_application(tmp_path / "admin")
     application.state.admin_operations = replace(
         application.state.admin_operations, database=database, local_portfolio=store
     )

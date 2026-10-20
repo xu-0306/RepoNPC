@@ -70,7 +70,7 @@ def test_built_web_assets_exclude_server_secret_and_private_provider_canaries() 
     for forbidden in ("ollama:11434", "private.example.invalid"):
         assert forbidden not in bundle
     for direct_secret_name in (
-        "reponpc_github_token",
+        "reponpc_chat_api_key",
         "reponpc_chat_api_key",
         "reponpc_ip_hash_key",
     ):

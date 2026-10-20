@@ -56,8 +56,6 @@ def make_gateway(
         {
             "REPONPC_PUBLIC_BASE_URL": "https://private.example.com",
             "REPONPC_ADMIN_ORIGINS": "https://private.example.com",
-            "REPONPC_CONFIG_REPOSITORY": "example/fixture",
-            "REPONPC_INDEX_MANIFEST_URL": "http://127.0.0.1:9/disabled",
             "REPONPC_VISITOR_GATEWAY_PORT": str(actual_port),
             "REPONPC_SHUTDOWN_GRACE_SECONDS": "1",
         },

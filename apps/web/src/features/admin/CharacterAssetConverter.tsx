@@ -92,14 +92,12 @@ export type CharacterMaterialSource =
 export interface CharacterAssetConverterProps {
   locale: AdminLocale;
   disabled?: boolean;
-  githubOperationsReady: boolean;
   onConvert: (
     source: CharacterMaterialSource,
     strategy: CharacterConversionStrategy,
     candidateId?: string,
   ) => Promise<CharacterPreparationResult>;
   onValidate: (png: Blob) => Promise<CharacterAssetBody>;
-  onSave: (filename: string, pngBase64: string) => Promise<void>;
   onApply?: (asset: CharacterAssetBody) => Promise<void>;
 }
 
@@ -138,8 +136,6 @@ const COPY = {
     download: "下載角色圖",
     filename: "角色檔案名稱",
     filenameHelp: "僅接受小寫英數、底線或連字號，並以 .png 結尾。",
-    save: "儲存角色圖到 GitHub",
-    githubUnavailable: "未設定 GitHub 寫入時仍可下載，但不能直接儲存。",
     converted: "角色動畫已準備好。請切換動作預覽，確認後再下載或儲存。",
     cleanupSuggested:
       "發現可能來自上一列的邊界殘影。請比較清理前後，再選擇要使用的版本。",
@@ -153,7 +149,6 @@ const COPY = {
     cleanupAfter: "清理版",
     cleanupUse: "使用清理版",
     cleanupKeep: "保留原版",
-    saved: "角色素材已儲存。請到公開設定選用這個角色。",
     applied:
       "角色已選用，將套用到目前作品集草稿。完成內容後可在「預覽與分享」查看。",
     failed: "角色材料處理失敗；來源未被儲存。",
@@ -235,9 +230,6 @@ const COPY = {
     filename: "Character filename",
     filenameHelp:
       "Use lowercase letters, digits, underscores, or hyphens and end with .png.",
-    save: "Save character image to GitHub",
-    githubUnavailable:
-      "You can still download the result, but GitHub writeback is not configured.",
     converted:
       "Your character animation is ready. Preview each action before downloading or saving.",
     cleanupSuggested:
@@ -254,7 +246,6 @@ const COPY = {
     cleanupAfter: "Cleaned version",
     cleanupUse: "Use cleaned version",
     cleanupKeep: "Keep original conversion",
-    saved: "Character art saved. Select it from your public settings.",
     applied:
       "Character selected for your portfolio draft. Finish your content, then open Preview & share.",
     failed: "Character material processing failed; the source was not saved.",
@@ -314,7 +305,6 @@ const COPY = {
 type StatusKey =
   | "candidatesFound"
   | "converted"
-  | "saved"
   | "applied"
   | "cleanupSuggested"
   | "cleanupAccepted"
@@ -344,10 +334,8 @@ function folderSource(files: File[]): CharacterMaterialSource | null {
 export function CharacterAssetConverter({
   locale,
   disabled = false,
-  githubOperationsReady,
   onConvert,
   onValidate,
-  onSave,
   onApply,
 }: CharacterAssetConverterProps) {
   const copy = COPY[locale];
@@ -547,26 +535,6 @@ export function CharacterAssetConverter({
     link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
-  }
-
-  async function save() {
-    if (!downloadableAsset || !offsetDraftValid || !githubOperationsReady)
-      return;
-    setPending(true);
-    setError(null);
-    setStatus(null);
-    try {
-      await onSave(filename, downloadableAsset.png_base64);
-      setStatus("saved");
-    } catch (saveError) {
-      setError({
-        kind: "failed",
-        detail:
-          saveError instanceof Error ? saveError.message : "REQUEST_FAILED",
-      });
-    } finally {
-      setPending(false);
-    }
   }
 
   async function suggestAlignment() {
@@ -1237,26 +1205,7 @@ export function CharacterAssetConverter({
               >
                 {copy.download}
               </button>
-              {(!onApply || githubOperationsReady) && (
-                <button
-                  disabled={
-                    pending ||
-                    !filenameValid ||
-                    !downloadableAsset ||
-                    !offsetDraftValid ||
-                    !githubOperationsReady ||
-                    disabled
-                  }
-                  onClick={() => void save()}
-                  type="button"
-                >
-                  {copy.save}
-                </button>
-              )}
             </div>
-            {!githubOperationsReady && !onApply && (
-              <p>{copy.githubUnavailable}</p>
-            )}
           </div>
         </div>
       )}

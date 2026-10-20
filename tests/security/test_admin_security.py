@@ -37,7 +37,15 @@ def _setup_app(tmp_path: Path):
         deployment_profile="production",
         now=lambda: datetime(2026, 8, 13, tzinfo=UTC),
     )
-    return create_app(admin_session_service=service, admin_origins=(ORIGIN,)), database, service
+    return (
+        create_app(
+            admin_session_service=service,
+            admin_origins=(ORIGIN,),
+            web_dist=tmp_path / "absent-web",
+        ),
+        database,
+        service,
+    )
 
 
 def _login(client: TestClient):
@@ -112,7 +120,7 @@ def test_setup_status_exposes_only_safe_booleans(tmp_path: Path) -> None:
     assert "expires_at" not in response.text
 
 
-def test_legacy_github_setup_route_cannot_consume_code_or_create_owner(
+def test_unknown_admin_route_cannot_consume_code_or_create_owner(
     tmp_path: Path,
 ) -> None:
     app, database, service = _setup_app(tmp_path)
@@ -120,38 +128,15 @@ def test_legacy_github_setup_route_cannot_consume_code_or_create_owner(
 
     with TestClient(app, base_url=ORIGIN) as client:
         rejected = client.post(
-            "/api/admin/setup/github/start",
+            "/api/admin/unknown-setup",
             headers={"Origin": ORIGIN},
             json={"setup_code": setup_code},
         )
 
-    assert rejected.status_code == 410
-    assert rejected.json()["error"]["code"] == "GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED"
+    assert rejected.status_code == 404
     assert setup_code not in rejected.text
     assert service.setup_status().setup_required is True
     assert service.setup_status().setup_code_available is True
-
-
-def test_github_oauth_setup_guide_is_removed_without_auth_or_secret_material(
-    tmp_path: Path,
-) -> None:
-    app, _database = _app(tmp_path)
-    with TestClient(app, base_url=ORIGIN) as client:
-        response = client.get("/api/admin/github/oauth/setup-guide", headers={"Origin": ORIGIN})
-    assert response.status_code == 410
-    assert response.json()["error"]["code"] == "GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED"
-    assert "REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE" not in response.text
-    assert "REPONPC_CREDENTIAL_ENCRYPTION_KEY_FILE" not in response.text
-
-
-def test_github_oauth_setup_guide_rejects_cross_origin_callback_configuration(
-    tmp_path: Path,
-) -> None:
-    app, _database = _app(tmp_path)
-    with TestClient(app, base_url=ORIGIN) as client:
-        response = client.get("/api/admin/github/oauth/setup-guide", headers={"Origin": ORIGIN})
-    assert response.status_code == 410
-    assert response.json()["error"]["code"] == "GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED"
 
 
 def test_setup_requires_same_origin_and_returns_generic_denial(tmp_path: Path) -> None:

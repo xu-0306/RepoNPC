@@ -160,7 +160,7 @@ def test_builtin_pack_registry_rejects_unknown_contract_values(
     assert error.issues[0].code == expected_code
 
 
-@pytest.mark.parametrize("key", ["api_key", "password", "github_token", "private_url"])
+@pytest.mark.parametrize("key", ["api_key", "password", "chat_api_key", "private_url"])
 def test_secret_fields_are_rejected_without_echoing_values(key: str) -> None:
     data = example_data()
     canary = "CANARY-DO-NOT-ECHO"

@@ -59,7 +59,7 @@ class ManualTimer:
 def database(tmp_path: Path) -> RuntimeDatabase:
     database = RuntimeDatabase(tmp_path / "data")
     database.initialize()
-    database.save_bundle_state(BundleRuntimeState(None, None, None, None, None, "BEFORE"))
+    database.save_bundle_state(BundleRuntimeState(None, None, None, "BEFORE", None))
     return database
 
 
@@ -123,7 +123,7 @@ def test_near_expiry_restore_terminal_cleanup_preserves_current(
         service.reconcile_host(host)
     assert service._preview is None and not service._restoring
     assert not preview.directory.exists()
-    assert database.bundle_state().safe_update_error == "BEFORE"
+    assert database.bundle_state().manifest_etag == "BEFORE"
 
 
 def test_expired_after_admission_never_seals_or_swaps_current(
@@ -146,7 +146,7 @@ def test_expired_after_admission_never_seals_or_swaps_current(
     with pytest.raises(MaintenanceError) as failure:
         service._replace(preview)
     assert failure.value.code == "RESTORE_FAILED"
-    assert database.bundle_state().safe_update_error == "BEFORE"
+    assert database.bundle_state().manifest_etag == "BEFORE"
     assert pointer.read_bytes() == b'{"bundle_id":"SYNTHETIC_LKG"}'
     assert set(service._root.glob("*.reponpc-backup")) == receipts
     assert service._preview is None and preview.password == ""
@@ -196,7 +196,7 @@ def test_real_lifespan_failed_gateway_stop_cleans_preview_and_stays_closed(
     preview_id = inspect(service)
     preview = service._preview
     assert preview is not None
-    database.save_bundle_state(BundleRuntimeState(None, None, None, None, None, "CURRENT_LKG"))
+    database.save_bundle_state(BundleRuntimeState(None, None, None, "CURRENT_LKG", None))
     app = create_app(runtime_database=database)
 
     class FailedGateway:
@@ -221,7 +221,7 @@ def test_real_lifespan_failed_gateway_stop_cleans_preview_and_stays_closed(
             assert host.last_error == "MAINTENANCE_STOP_FAILED"
             assert service._preview is None and not service._restoring
             assert preview.password == "" and not preview.directory.exists()
-            assert database.bundle_state().safe_update_error == "CURRENT_LKG"
+            assert database.bundle_state().manifest_etag == "CURRENT_LKG"
         finally:
             await host._exit()
 

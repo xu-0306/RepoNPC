@@ -9,6 +9,7 @@ from argon2 import PasswordHasher, Type
 from fastapi.testclient import TestClient
 
 from reponpc.admin.auth import AdminSessionService
+from reponpc.admin.batches import AnalysisBatchService
 from reponpc.admin.onboarding import GuidedOnboardingError, GuidedOnboardingService
 from reponpc.admin.operations import AdminOperations
 from reponpc.main import create_app
@@ -36,8 +37,14 @@ class RecordingOnboarding:
         self._record("resolve", {"repository": repository, "ref": ref})
         return {**_metadata(), "ref": ref}
 
-    def analyze_repository(self, **values: Any) -> dict[str, object]:
-        values["cancel_requested"] = values["cancel_requested"].is_set()
+    def analyze_one_compatibility(self, *, selection: Any, cancelled: Any) -> dict[str, object]:
+        values = {
+            "slug": selection.slug,
+            "ref": selection.ref,
+            "include": selection.include,
+            "exclude": selection.exclude,
+            "cancel_requested": cancelled(),
+        }
         self._record("analyze", values)
         return {
             "repository": {
@@ -117,11 +124,10 @@ def _application(tmp_path: Path) -> tuple[Any, RecordingOnboarding]:
     )
     onboarding = RecordingOnboarding()
     operations = AdminOperations(
-        None,
         database,
         ORIGIN,
         onboarding=cast(GuidedOnboardingService, onboarding),
-        config_repository="octocat/config",
+        analysis_batches=cast(AnalysisBatchService, onboarding),
     )
     return (
         create_app(
@@ -278,15 +284,6 @@ def test_draft_is_local_model_free_and_available_without_github_writeback(
     assert draft.status_code == 200
     assert draft.json()["content"].startswith("schema_version: 1")
     assert [name for name, _values in onboarding.calls] == ["draft"]
-
-
-def test_admin_index_status_prefills_config_repository_owner(tmp_path: Path) -> None:
-    app, _onboarding = _application(tmp_path)
-    with TestClient(app, base_url=ORIGIN) as client:
-        _login(client)
-        status = client.get("/api/admin/index/status", headers={"Origin": ORIGIN})
-    assert status.status_code == 200
-    assert status.json()["configuration_repository_owner"] == "octocat"
 
 
 def test_guided_error_codes_map_to_bounded_http_statuses(tmp_path: Path) -> None:

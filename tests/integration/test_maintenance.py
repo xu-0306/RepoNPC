@@ -21,7 +21,7 @@ SESSION = "synthetic-session-hash"
 
 
 def _state(database: RuntimeDatabase, value: str) -> None:
-    database.save_bundle_state(BundleRuntimeState(None, None, None, None, None, value))
+    database.save_bundle_state(BundleRuntimeState(None, None, None, value, None))
 
 
 @pytest.fixture
@@ -97,7 +97,7 @@ def test_invalid_backup_keeps_current_data(database: RuntimeDatabase, kind: str)
         artifact = seal(raw, PASSWORD, metadata)
     with pytest.raises((MaintenanceError, BackupEncryptionError)):
         service.inspect(artifact, password, SESSION)
-    assert database.bundle_state().safe_update_error == "BEFORE"
+    assert database.bundle_state().manifest_etag == "BEFORE"
     assert not list(service._root.glob("preview-*"))
 
 
@@ -110,7 +110,7 @@ def test_candidate_change_after_preview_is_rejected(database: RuntimeDatabase) -
     with pytest.raises(MaintenanceError) as error:
         service.verify_restore(str(preview["preview_id"]), SESSION)
     assert error.value.code == "BACKUP_SQLITE_INVALID"
-    assert database.bundle_state().safe_update_error == "BEFORE"
+    assert database.bundle_state().manifest_etag == "BEFORE"
     service.close()
 
 
@@ -153,7 +153,7 @@ def test_real_host_restore_or_rollback_preserves_snapshot(
 
         @application.get("/value")
         def read_value():
-            return {"value": database.bundle_state().safe_update_error}
+            return {"value": database.bundle_state().manifest_etag}
 
         @application.post("/restore")
         async def restore():

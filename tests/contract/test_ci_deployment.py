@@ -58,8 +58,6 @@ def test_compose_forwards_the_documented_application_environment() -> None:
 DEPLOYMENT_PLACEHOLDERS = {
     "REPONPC_PUBLIC_BASE_URL",
     "REPONPC_TRUSTED_HOSTS",
-    "REPONPC_CONFIG_REPOSITORY",
-    "REPONPC_INDEX_MANIFEST_URL",
     "REPONPC_IP_HASH_KEY_FILE",
 }
 

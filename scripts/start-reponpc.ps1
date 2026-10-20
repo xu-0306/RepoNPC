@@ -100,7 +100,6 @@ function Resolve-LocalSecretPath {
 
 function Import-LocalSecretFiles {
     $pairs = @(
-        @{ Direct = "REPONPC_GITHUB_TOKEN"; File = "REPONPC_GITHUB_TOKEN_FILE"; Required = $false },
         @{ Direct = "REPONPC_CHAT_API_KEY"; File = "REPONPC_CHAT_API_KEY_FILE"; Required = $false },
         @{ Direct = "REPONPC_EMBEDDING_API_KEY"; File = "REPONPC_EMBEDDING_API_KEY_FILE"; Required = $false },
         @{ Direct = "REPONPC_IP_HASH_KEY"; File = "REPONPC_IP_HASH_KEY_FILE"; Required = $true }
@@ -449,8 +448,6 @@ function Invoke-RepoNpcLauncher {
     Set-ProcessEnvironmentValue "REPONPC_TRUSTED_HOSTS" "localhost,127.0.0.1"
     Set-ProcessEnvironmentValue "REPONPC_ALLOWED_ORIGINS" $null
     Set-ProcessEnvironmentValue "REPONPC_TRUSTED_PROXY_CIDRS" $null
-    Set-ProcessEnvironmentDefault "REPONPC_CONFIG_REPOSITORY" "example/reponpc"
-    Set-ProcessEnvironmentDefault "REPONPC_INDEX_MANIFEST_URL" "https://raw.githubusercontent.com/example/reponpc/main/stable-manifest.json"
     if (-not [string]::IsNullOrWhiteSpace($ChatModel)) {
         Set-ProcessEnvironmentValue "REPONPC_CHAT_MODEL" $ChatModel
     }

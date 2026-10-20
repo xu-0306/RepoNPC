@@ -126,7 +126,6 @@ def test_probe_diagnostics_survive_reload_and_clear_after_success(
         admin_session_service=auth,
         admin_origins=(ORIGIN,),
         admin_operations=AdminOperations(
-            github=None,
             database=database,
             public_base_url=ORIGIN,
             model_connections=connections,

@@ -35,7 +35,6 @@ def _application(tmp_path: Path):
     )
     chat_profiles = ChatProfileRegistry(database, registry, lambda _profile: None)
     operations = AdminOperations(
-        github=None,
         database=database,
         public_base_url=ORIGIN,
         model_connections=registry,

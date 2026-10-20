@@ -52,7 +52,6 @@ from reponpc.admin.embedding_profiles import (
     embedding_model_catalog,
 )
 from reponpc.admin.faq import FaqError, ReviewedFaq
-from reponpc.admin.github import GitHubAdminError
 from reponpc.admin.local_portfolio import LocalPortfolioError, apply_character
 from reponpc.admin.maintenance import MaintenanceError, MaintenanceService
 from reponpc.admin.maintenance_host import MaintenanceHostError
@@ -270,11 +269,6 @@ class ShareProfileRequest(_StrictRequest):
         min_length=1, max_length=39, pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$"
     )
     filename: Literal["reponpc-card.gif"] = "reponpc-card.gif"
-
-
-class ConfigWriteRequest(ConfigContentRequest):
-    expected_blob_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
-    commit_message: str = Field(default="Update RepoNPC configuration", max_length=120)
 
 
 class RepositoryDiscoverRequest(_StrictRequest):
@@ -1646,25 +1640,6 @@ def create_admin_router(
             return _embedding_profile_error(request, exc)
         return _embedding_profile_response(_embedding_profile_payload(profile))
 
-    @router.get("/github/oauth/setup-guide")
-    async def github_oauth_setup_guide(request: Request) -> Response:
-        return _github_public_read_removed(request)
-
-    @router.post("/session/github/start")
-    @router.post("/setup/github/start")
-    @router.post("/identity/github/link/start")
-    @router.delete("/identity/github")
-    async def reject_legacy_github_auth(request: Request) -> Response:
-        return _github_public_read_removed(request)
-
-    @router.post("/github/connections/oauth/start")
-    async def start_github_connection(request: Request) -> Response:
-        return _github_public_read_removed(request)
-
-    @router.get("/github/callback")
-    async def github_callback(request: Request) -> Response:
-        return _github_public_read_removed(request)
-
     @router.post("/session/refresh")
     async def refresh(
         request: Request,
@@ -1904,22 +1879,6 @@ def create_admin_router(
             csrf_token or "",
             lambda gateway: gateway.verify(**body.model_dump()),
         )
-
-    @router.get("/github/connections")
-    async def github_connections(request: Request) -> Response:
-        return _github_public_read_removed(request)
-
-    @router.put("/github/connections/pat")
-    async def save_github_pat(request: Request) -> Response:
-        return _github_public_read_removed(request)
-
-    @router.post("/github/connections/{credential_id}/check")
-    async def check_github_connection(request: Request) -> Response:
-        return _github_public_read_removed(request)
-
-    @router.delete("/github/connections/{credential_id}")
-    async def delete_github_connection(request: Request) -> Response:
-        return _github_public_read_removed(request)
 
     def local_error(request: Request, exc: Exception) -> Response:
         code = getattr(exc, "code", "PORTFOLIO_INVALID")
@@ -2644,28 +2603,6 @@ def create_admin_router(
         )
         return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
-    @router.get("/config")
-    async def read_config(
-        request: Request,
-        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-    ) -> Response:
-        boundary = protected(request, session_token)
-        if isinstance(boundary, JSONResponse):
-            return boundary
-        configured, _session_hash = boundary
-        try:
-            result = configured.read_config()
-        except GitHubAdminError as exc:
-            return _github_error(request, exc)
-        return JSONResponse(
-            {
-                "content": result.content.decode("utf-8"),
-                "blob_sha": result.blob_sha,
-                "commit_sha": result.commit_sha,
-                "updated_at": result.updated_at,
-            }
-        )
-
     @router.post("/config/validate")
     async def validate_config(
         request: Request,
@@ -2699,8 +2636,6 @@ def create_admin_router(
             preview = configured.preview_config(body.content.encode("utf-8"))
         except ConfigValidationError as exc:
             return _config_error(request, exc)
-        except GitHubAdminError as exc:
-            return _github_error(request, exc)
         except SpriteValidationError, CardRenderError:
             return error_response(
                 request,
@@ -2711,33 +2646,6 @@ def create_admin_router(
         return JSONResponse(
             attach_preview_urls(preview, boundary[1]),
             headers={"Cache-Control": "no-store"},
-        )
-
-    @router.put("/config")
-    async def write_config(
-        request: Request,
-        body: ConfigWriteRequest,
-        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
-    ) -> Response:
-        boundary = protected(request, session_token, csrf_token or "")
-        if isinstance(boundary, JSONResponse):
-            return boundary
-        configured, session_hash = boundary
-        try:
-            commit = configured.write_config(
-                content=body.content.encode("utf-8"),
-                expected_blob_sha=body.expected_blob_sha,
-                commit_message=body.commit_message,
-                request_id=str(request.state.request_id),
-                session_hash=session_hash,
-            )
-        except ConfigValidationError as exc:
-            return _config_error(request, exc)
-        except GitHubAdminError as exc:
-            return _github_error(request, exc)
-        return JSONResponse(
-            {"path": commit.path, "commit_sha": commit.commit_sha, "blob_sha": commit.blob_sha}
         )
 
     @router.post("/assets/character/validate")
@@ -2829,45 +2737,6 @@ def create_admin_router(
             headers={"Cache-Control": "no-store"},
         )
 
-    @router.put("/assets/character/{filename}")
-    async def write_asset(
-        request: Request,
-        filename: str,
-        file: Annotated[UploadFile, File()],
-        expected_blob_sha: Annotated[str | None, Form()] = None,
-        commit_message: Annotated[str, Form(max_length=120)] = "Update RepoNPC character",
-        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
-    ) -> Response:
-        boundary = protected(request, session_token, csrf_token or "")
-        if isinstance(boundary, JSONResponse):
-            return boundary
-        configured, session_hash = boundary
-        content = await file.read(2 * 1024 * 1024 + 1)
-        try:
-            commit, canonical = configured.write_asset(
-                filename=filename,
-                content=content,
-                expected_blob_sha=expected_blob_sha or None,
-                commit_message=commit_message,
-                request_id=str(request.state.request_id),
-                session_hash=session_hash,
-            )
-        except SpriteValidationError as exc:
-            return _asset_error(request, exc)
-        except GitHubAdminError as exc:
-            return _github_error(request, exc)
-        return JSONResponse(
-            {
-                "commit": {
-                    "path": commit.path,
-                    "commit_sha": commit.commit_sha,
-                    "blob_sha": commit.blob_sha,
-                },
-                "asset": _asset_result(canonical),
-            }
-        )
-
     @router.get("/readme-snippet")
     async def readme_snippet(
         request: Request,
@@ -2898,22 +2767,6 @@ def create_admin_router(
         return JSONResponse(
             {"markdown": markdown, "asset_url": asset_url, "target_url": target_url}
         )
-
-    @router.post("/index/dispatch")
-    async def dispatch_index(
-        request: Request,
-        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
-    ) -> Response:
-        boundary = protected(request, session_token, csrf_token or "")
-        if isinstance(boundary, JSONResponse):
-            return boundary
-        configured, session_hash = boundary
-        try:
-            configured.dispatch(request_id=str(request.state.request_id), session_hash=session_hash)
-        except GitHubAdminError as exc:
-            return _github_error(request, exc)
-        return JSONResponse({"accepted": True}, status_code=202)
 
     @router.get("/index/status")
     async def index_status(
@@ -3311,19 +3164,6 @@ def _local_launch_error(request: Request, error: AdminAuthError | None = None) -
     )
 
 
-def _github_login_removed(request: Request) -> JSONResponse:
-    return _github_public_read_removed(request)
-
-
-def _github_public_read_removed(request: Request) -> JSONResponse:
-    return error_response(
-        request,
-        status_code=410,
-        code="GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED",
-        message="GitHub OAuth and public-read credentials are no longer available.",
-    )
-
-
 def _config_error(request: Request, error: ConfigValidationError) -> JSONResponse:
     return error_response(
         request,
@@ -3427,23 +3267,6 @@ def _conversion_error(request: Request, error: SpriteConversionError) -> JSONRes
         code="ASSET_CONVERSION_FAILED",
         message="Character material could not be converted.",
         details={"reason": error.code},
-    )
-
-
-def _github_error(request: Request, error: GitHubAdminError) -> JSONResponse:
-    statuses = {
-        "CONFIG_CONFLICT": 409,
-        "WRITE_NOT_ALLOWED": 403,
-        "NOT_FOUND": 404,
-        "SERVICE_NOT_READY": 503,
-    }
-    details = {"current_blob_sha": error.current_blob_sha} if error.current_blob_sha else {}
-    return error_response(
-        request,
-        status_code=statuses.get(error.code, 502),
-        code=error.code,
-        message="GitHub operation failed.",
-        details=details,
     )
 
 

@@ -89,7 +89,6 @@ def _application(
     registry.activate(environment.profile_id)
     coordinator = OllamaModelOperationCoordinator(registry) if model_operations else None
     operations = AdminOperations(
-        github=None,
         database=database,
         public_base_url=ORIGIN,
         embedding_profiles=registry,

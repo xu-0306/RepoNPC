@@ -27,10 +27,6 @@ def test_analysis_and_public_budgets_reach_production_transport(
     environment = {
         "REPONPC_DATA_DIR": str(tmp_path),
         "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
-        "REPONPC_CONFIG_REPOSITORY": "example/portfolio",
-        "REPONPC_INDEX_MANIFEST_URL": (
-            "https://raw.githubusercontent.com/example/portfolio/main/stable-manifest.json"
-        ),
         "REPONPC_CHAT_PROVIDER": provider_name,
         "REPONPC_CHAT_MODEL": "fixture-chat",
         "REPONPC_CHAT_BASE_URL": "https://model.example.com/v1",
@@ -99,10 +95,6 @@ def test_contribution_capability_remains_700_when_analysis_budget_is_smaller(
         {
             "REPONPC_DATA_DIR": str(tmp_path),
             "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
-            "REPONPC_CONFIG_REPOSITORY": "example/portfolio",
-            "REPONPC_INDEX_MANIFEST_URL": (
-                "https://raw.githubusercontent.com/example/portfolio/main/stable-manifest.json"
-            ),
             "REPONPC_CHAT_PROVIDER": "ollama",
             "REPONPC_CHAT_MODEL": "fixture-chat",
             "REPONPC_CHAT_BASE_URL": "http://127.0.0.1:11434",

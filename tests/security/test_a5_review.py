@@ -495,7 +495,7 @@ def _registry_source() -> str:
     return (ROOT / "src/reponpc/scene/color_schemes.yml").read_text(encoding="utf-8")
 
 
-def test_registry_extension_and_alias_need_no_config_branch() -> None:
+def test_registry_extension_and_alias_need_no_configuration_change() -> None:
     data = yaml.safe_load(_registry_source())
     added = dict(data["schemes"][0])
     added["id"] = "review_future_scheme"

@@ -95,9 +95,7 @@ def harness(tmp_path: Path):
             runtime_database=database,
             admin_session_service=auth,
             admin_origins=(ORIGIN,),
-            admin_operations=AdminOperations(
-                github=None, database=database, public_base_url=ORIGIN
-            ),
+            admin_operations=AdminOperations(database=database, public_base_url=ORIGIN),
             web_dist=tmp_path / "absent-web",
         )
         app.state.deployment_profile = "production"

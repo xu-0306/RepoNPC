@@ -16,10 +16,8 @@ import {
 } from "./GitHubShareGuide";
 import {
   CARD_FILENAME,
-  cardMarkdown,
   githubAccount,
   previewInputsMatch,
-  publicVisitorUrl,
   safeShareFields,
 } from "./sharing";
 import { VisitorGatewayPanel } from "./VisitorGatewayPanel";
@@ -218,7 +216,6 @@ export function LocalPublishingWorkspace({
   const [account, setAccount] = useState(
     githubAccount(initialAccount) ?? initialAccount,
   );
-  const [publicUrl, setPublicUrl] = useState("");
   const [pagesSharingState, setPagesSharingState] =
     useState<PagesSharingState | null>(null);
   const [metadata, setMetadata] = useState<ShareMetadata | null>(null);
@@ -236,8 +233,6 @@ export function LocalPublishingWorkspace({
   spriteRef.current = spriteBase64;
   const accountRef = useRef(account);
   accountRef.current = account;
-  const publicUrlRef = useRef(publicUrl);
-  publicUrlRef.current = publicUrl;
   const onActiveSceneChangeRef = useRef(onActiveSceneChange);
   onActiveSceneChangeRef.current = onActiveSceneChange;
   useEffect(() => {
@@ -292,10 +287,8 @@ export function LocalPublishingWorkspace({
       if (saved && typeof saved === "object") {
         const safe = safeShareFields(
           typeof saved.account === "string" ? saved.account : "",
-          typeof saved.publicUrl === "string" ? saved.publicUrl : "",
         );
         if (safe.account) setAccount(safe.account);
-        if (safe.publicUrl) setPublicUrl(safe.publicUrl);
         try {
           if (Object.keys(safe).length > 0)
             sessionStorage.setItem(
@@ -311,8 +304,8 @@ export function LocalPublishingWorkspace({
       /* Optional public-field continuity. */
     }
   }, []);
-  function remember(nextAccount: string, nextUrl: string) {
-    const safe = safeShareFields(nextAccount, nextUrl);
+  function remember(nextAccount: string) {
+    const safe = safeShareFields(nextAccount);
     try {
       if (Object.keys(safe).length > 0)
         sessionStorage.setItem("reponpc.share.public", JSON.stringify(safe));
@@ -416,7 +409,7 @@ export function LocalPublishingWorkspace({
     if (mounted.current && githubAccount(accountRef.current) === chosen) {
       setAccount(chosen);
       setMetadata(result);
-      remember(chosen, publicUrlRef.current);
+      remember(chosen);
     }
   }
   const selectedCard = preview?.cards?.[`light-${locale}`];
@@ -758,13 +751,6 @@ export function LocalPublishingWorkspace({
             failureText={zh ? "卡片預覽失敗" : "Card preview failed"}
           />
         )}
-        {!publicVisitorUrl(publicUrl) && (
-          <p>
-            {zh
-              ? "目前沒有公開網址也能先完成本機試聊和卡片圖片。若要讓別人從 GitHub 點開並聊天，之後須提供可從外網開啟的 HTTPS 訪客網址；localhost 只能在這台電腦使用。管理頁和模型服務仍須保持私人連線。"
-              : "You can finish the local trial and card image before getting a public URL. For others to click the GitHub card and chat, provide a public HTTPS visitor URL later; localhost works only on this computer. Keep the admin page and model services private."}
-          </p>
-        )}
       </section>
       <VisitorGatewayPanel
         locale={locale}
@@ -786,7 +772,6 @@ export function LocalPublishingWorkspace({
       <GitHubShareGuide
         locale={locale}
         account={account}
-        publicUrl={publicUrl}
         verifiedPagesUrl={verifiedPagesUrl}
         profileStatus={metadata?.profile_status ?? "unchecked"}
         imageStatus={metadata?.image_status ?? "unchecked"}
@@ -795,18 +780,13 @@ export function LocalPublishingWorkspace({
         readmeUrl={metadata?.readme_url ?? links?.repository ?? null}
         createUrl={metadata?.create_url ?? links?.create ?? null}
         filename={CARD_FILENAME}
-        markdown={cardMarkdown(publicUrl, locale)}
         cardReady={!!selectedCard?.gif_base64}
         busy={pending}
         notice={notice?.scope === "share" ? notice.message : ""}
         onAccountChange={(value) => {
           setAccount(value);
           setMetadata(null);
-          remember(value, publicUrl);
-        }}
-        onPublicUrlChange={(value) => {
-          setPublicUrl(value);
-          remember(account, value);
+          remember(value);
         }}
         onCheckProfile={() => void run("share", checkProfile)}
         onCheckImage={() => void run("share", checkProfile)}

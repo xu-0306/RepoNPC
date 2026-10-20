@@ -13,7 +13,6 @@ import os
 import re
 import stat
 import sys
-import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,7 +25,6 @@ from reponpc.config.private_files import is_owner_only
 SECRET_MAX_BYTES: Final = 64 * 1024
 DEFAULT_SECRET_ROOTS: Final = (Path("/run/secrets"),)
 _SECRET_PAIRS: Final = {
-    "github_token": ("REPONPC_GITHUB_TOKEN", "REPONPC_GITHUB_TOKEN_FILE"),
     "chat_api_key": ("REPONPC_CHAT_API_KEY", "REPONPC_CHAT_API_KEY_FILE"),
     "embedding_api_key": (
         "REPONPC_EMBEDDING_API_KEY",
@@ -49,23 +47,9 @@ _ENVIRONMENT_NAMES: Final = frozenset(
         "REPONPC_ADMIN_ORIGINS",
         "REPONPC_VISITOR_GATEWAY_PORT",
         "REPONPC_VISITOR_TRUSTED_PROXY_CIDRS",
-        "REPONPC_CONFIG_REPOSITORY",
-        "REPONPC_CONFIG_BRANCH",
-        "REPONPC_CONFIG_PATH",
-        "REPONPC_INDEX_MANIFEST_URL",
-        "REPONPC_INDEX_POLL_SECONDS",
         "REPONPC_MAX_BUNDLE_BYTES",
         "REPONPC_KEEP_VALID_BUNDLES",
-        "REPONPC_GITHUB_TOKEN",
-        "REPONPC_GITHUB_TOKEN_FILE",
         "REPONPC_GITHUB_API_URL",
-        "REPONPC_INDEX_WORKFLOW",
-        "REPONPC_GITHUB_OAUTH_CLIENT_ID",
-        "REPONPC_GITHUB_OAUTH_CLIENT_SECRET",
-        "REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE",
-        "REPONPC_GITHUB_OAUTH_CALLBACK_URL",
-        "REPONPC_CREDENTIAL_ENCRYPTION_KEY",
-        "REPONPC_CREDENTIAL_ENCRYPTION_KEY_FILE",
         "REPONPC_CHAT_PROVIDER",
         "REPONPC_CHAT_MODEL",
         "REPONPC_CHAT_BASE_URL",
@@ -117,17 +101,6 @@ _ENVIRONMENT_NAMES: Final = frozenset(
 _LOG_LEVELS: Final = frozenset({"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"})
 _PROVIDERS: Final = frozenset({"ollama", "openai_compatible", "vllm"})
 _EMBEDDING_PROVIDERS: Final = frozenset({"ollama", "openai_compatible", "vllm"})
-_REPOSITORY_SLUG_RE: Final = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-_RETIRED_GITHUB_PUBLIC_READ_NAMES: Final = frozenset(
-    {
-        "REPONPC_GITHUB_OAUTH_CLIENT_ID",
-        "REPONPC_GITHUB_OAUTH_CLIENT_SECRET",
-        "REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE",
-        "REPONPC_GITHUB_OAUTH_CALLBACK_URL",
-        "REPONPC_CREDENTIAL_ENCRYPTION_KEY",
-        "REPONPC_CREDENTIAL_ENCRYPTION_KEY_FILE",
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,15 +185,9 @@ class EnvironmentSettings:
     admin_origins_explicit: bool
     visitor_gateway_port: int
     visitor_trusted_proxy_cidrs: tuple[str, ...]
-    config_repository: str
-    config_branch: str
-    config_path: str
-    index_manifest_url: str
-    index_poll_seconds: int
     max_bundle_bytes: int
     keep_valid_bundles: int
     github_api_url: str
-    index_workflow: str
     chat_provider: str
     chat_model: str
     chat_base_url: str = field(repr=False)
@@ -649,12 +616,6 @@ def load_environment(
         for name, value in (environ or os.environ).items()
         if name.startswith("REPONPC_")
     }
-    if _RETIRED_GITHUB_PUBLIC_READ_NAMES.intersection(source):
-        warnings.warn(
-            "Legacy GitHub OAuth/public-read credential settings are ignored.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
     issues: list[EnvironmentIssue] = []
     for name in sorted(set(source) - _ENVIRONMENT_NAMES):
         _issue(
@@ -785,15 +746,6 @@ def load_environment(
     log_level = _text(source, "REPONPC_LOG_LEVEL", "INFO", issues).upper()
     if log_level not in _LOG_LEVELS:
         _issue(issues, "REPONPC_LOG_LEVEL", "invalid_choice", "a supported log level is required")
-    config_repository = _text(
-        source,
-        "REPONPC_CONFIG_REPOSITORY",
-        "",
-        issues,
-        allow_empty=deployment_profile in {"loopback_evaluation", "production"},
-    )
-    if config_repository and not _REPOSITORY_SLUG_RE.fullmatch(config_repository):
-        _issue(issues, "REPONPC_CONFIG_REPOSITORY", "invalid_repository", "owner/name is required")
     chat_provider = _text(source, "REPONPC_CHAT_PROVIDER", "", issues, allow_empty=True)
     if chat_provider and chat_provider not in _PROVIDERS:
         _issue(
@@ -843,9 +795,6 @@ def load_environment(
             "admin_credential_pair_required",
             "admin username and password hash must be configured together",
         )
-    # GitHub OAuth/public-read credentials are retired in 0.2.1.  Legacy names
-    # remain allowlisted for one release so deployments can remove them safely,
-    # but values and secret files are never read.
     settings = EnvironmentSettings(
         environment=environment,
         deployment_profile=deployment_profile,
@@ -861,17 +810,6 @@ def load_environment(
         admin_origins_explicit=admin_origins_explicit,
         visitor_gateway_port=gateway_port,
         visitor_trusted_proxy_cidrs=visitor_trusted_proxy_cidrs,
-        config_repository=config_repository,
-        config_branch=_text(source, "REPONPC_CONFIG_BRANCH", "main", issues),
-        config_path=_text(source, "REPONPC_CONFIG_PATH", "reponpc.yml", issues),
-        index_manifest_url=_text(
-            source,
-            "REPONPC_INDEX_MANIFEST_URL",
-            "",
-            issues,
-            allow_empty=deployment_profile in {"loopback_evaluation", "production"},
-        ),
-        index_poll_seconds=_integer(source, "REPONPC_INDEX_POLL_SECONDS", 300, issues),
         max_bundle_bytes=_integer(
             source,
             "REPONPC_MAX_BUNDLE_BYTES",
@@ -881,7 +819,6 @@ def load_environment(
         ),
         keep_valid_bundles=_integer(source, "REPONPC_KEEP_VALID_BUNDLES", 2, issues),
         github_api_url=_text(source, "REPONPC_GITHUB_API_URL", "https://api.github.com", issues),
-        index_workflow=_text(source, "REPONPC_INDEX_WORKFLOW", "build-index.yml", issues),
         chat_provider=chat_provider,
         chat_model=_text(source, "REPONPC_CHAT_MODEL", "", issues, allow_empty=True),
         chat_base_url=_text(source, "REPONPC_CHAT_BASE_URL", "", issues, allow_empty=True),

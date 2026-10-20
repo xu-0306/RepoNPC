@@ -23,7 +23,7 @@ from reponpc.providers.contracts import ProviderError, ProviderFailureCode
 from tests.integration.test_bundle_producer_consumer import _fixture_snapshot
 from tests.integration.test_embedding_reindex import _profile, _system
 from tests.integration.test_index_build import FIXTURE_CONFIG
-from tests.security.test_admin_writeback import ORIGIN, _application_without_github, _login, _sprite
+from tests.security.test_admin_assets import ORIGIN, _login, _sprite, local_admin_application
 
 
 class FixtureResolver:
@@ -252,7 +252,7 @@ def test_status_does_not_call_a_rolled_back_draft_applied(tmp_path: Path):
 
 
 def test_protected_local_save_character_preview_and_conflict_without_github(tmp_path: Path):
-    app = _application_without_github(tmp_path)
+    app = local_admin_application(tmp_path)
     app.state.admin_operations = replace(
         app.state.admin_operations, local_portfolio=LocalPortfolioStore(tmp_path)
     )
@@ -629,7 +629,7 @@ def test_local_provider_failure_still_writes_profile_error(tmp_path, monkeypatch
 
 
 def test_portfolio_status_retry_at_http_contract_without_local_preparation(tmp_path):
-    app = _application_without_github(tmp_path)
+    app = local_admin_application(tmp_path)
     with TestClient(app, base_url=ORIGIN) as client:
         _login(client)
         response = client.get("/api/admin/portfolio/status", headers={"Origin": ORIGIN})

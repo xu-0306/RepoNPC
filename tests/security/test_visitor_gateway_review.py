@@ -27,7 +27,7 @@ from reponpc.runtime.database import RuntimeDatabase
 from scripts.funnel_compose_preflight import supported
 from tests.integration.test_chat_grounding_security import Bundles
 from tests.integration.test_chat_sse_api import FixtureChatService
-from tests.security.test_admin_writeback import ORIGIN, _application_without_github, _login
+from tests.security.test_admin_assets import ORIGIN, _login, local_admin_application
 from tests.unit.test_provider_runtime import READY, FixtureChat, FixtureEmbedding
 
 
@@ -100,7 +100,6 @@ def _gateway(tmp_path, *, service=None, trusted=(), web_dist=None):
         model_ready=True,
         model_provider="PRIVATE_MODEL_CANARY",
         model_last_checked_at="2026-09-29T00:00:00Z",
-        index_update_error="PRIVATE_ERROR_CANARY",
     )
     settings = {
         "enabled": True,
@@ -593,7 +592,7 @@ def test_funnel_compose_baseline_rejects_unsupported_versions(version, accepted)
     ],
 )
 def test_private_login_rejects_ambiguous_or_unbound_authority(tmp_path, headers):
-    app = _application_without_github(tmp_path)
+    app = local_admin_application(tmp_path)
     with TestClient(app, base_url=ORIGIN) as client:
         response = client.post(
             "/api/admin/session",
@@ -607,7 +606,7 @@ def test_private_login_rejects_ambiguous_or_unbound_authority(tmp_path, headers)
 
 @pytest.mark.parametrize("path", ["/api/admin/setup", "/api/admin/auth/methods"])
 def test_private_auth_reads_bind_host_origin_and_allow_same_origin_referer(tmp_path, path):
-    app = _application_without_github(tmp_path)
+    app = local_admin_application(tmp_path)
     with TestClient(app, base_url=ORIGIN) as client:
         assert client.get(path, headers={"Origin": ORIGIN}).status_code == 200
         assert client.get(path, headers={"Referer": ORIGIN + "/admin"}).status_code == 200
@@ -619,7 +618,7 @@ def test_private_auth_reads_bind_host_origin_and_allow_same_origin_referer(tmp_p
 
 
 def test_private_origin_is_bound_to_actual_request_scheme(tmp_path):
-    app = _application_without_github(tmp_path)
+    app = local_admin_application(tmp_path)
     with TestClient(app, base_url=ORIGIN.replace("https:", "http:")) as client:
         response = client.get("/api/admin/setup", headers={"Origin": ORIGIN})
     assert response.status_code in {400, 403}
@@ -673,7 +672,7 @@ def test_gateway_resume_failure_preserves_primary_service_and_cleanup():
 
 
 def test_private_gateway_routes_drive_real_listener_with_auth_csrf_and_dated_report(tmp_path):
-    primary = _application_without_github(tmp_path)
+    primary = local_admin_application(tmp_path)
     with socket.socket() as available:
         available.bind(("127.0.0.1", 0))
         port = available.getsockname()[1]
@@ -681,8 +680,6 @@ def test_private_gateway_routes_drive_real_listener_with_auth_csrf_and_dated_rep
         {
             "REPONPC_PUBLIC_BASE_URL": ORIGIN,
             "REPONPC_ADMIN_ORIGINS": ORIGIN,
-            "REPONPC_CONFIG_REPOSITORY": "example/fixture",
-            "REPONPC_INDEX_MANIFEST_URL": "http://127.0.0.1:9/disabled",
             "REPONPC_VISITOR_GATEWAY_PORT": str(port),
             "REPONPC_SHUTDOWN_GRACE_SECONDS": "1",
         }
@@ -821,13 +818,11 @@ def test_private_gateway_routes_drive_real_listener_with_auth_csrf_and_dated_rep
 
 
 def test_private_visitor_port_put_is_tri_state_and_bounded(tmp_path):
-    primary = _application_without_github(tmp_path)
+    primary = local_admin_application(tmp_path)
     environment = load_environment(
         {
             "REPONPC_PUBLIC_BASE_URL": ORIGIN,
             "REPONPC_ADMIN_ORIGINS": ORIGIN,
-            "REPONPC_CONFIG_REPOSITORY": "example/fixture",
-            "REPONPC_INDEX_MANIFEST_URL": "http://127.0.0.1:9/disabled",
             "REPONPC_VISITOR_GATEWAY_PORT": "18001",
         }
     )

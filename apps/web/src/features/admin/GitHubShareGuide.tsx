@@ -5,7 +5,6 @@ import { githubAccount, verifiedPagesMarkdown } from "./sharing";
 export type GitHubShareGuideProps = {
   locale: "zh-TW" | "en";
   account: string;
-  publicUrl: string;
   verifiedPagesUrl: string | null;
   profileStatus:
     | "unchecked"
@@ -19,12 +18,10 @@ export type GitHubShareGuideProps = {
   readmeUrl: string | null;
   createUrl: string | null;
   filename: string;
-  markdown: string;
   cardReady: boolean;
   busy: boolean;
   notice: string;
   onAccountChange: (value: string) => void;
-  onPublicUrlChange: (value: string) => void;
   onCheckProfile: () => void;
   onCheckImage: () => void;
   onDownload: () => void;
@@ -71,12 +68,6 @@ type GuideCopy = {
   openCreatePage: string;
   openReadme: string;
   openProfile: string;
-  publicUrlLabel: string;
-  publicUrlHelp: string;
-  publicUrlNotReady: string;
-  publicUrlEntered: string;
-  legacyRouteNote: string;
-  legacyRouteSummary: string;
   verifyPages: string;
   cardIntro: string;
   filenameLabel: string;
@@ -93,7 +84,6 @@ type GuideCopy = {
   protectedBranch: string;
   readmeIntro: string;
   markdownPreviewHeading: string;
-  markdownLegacyHeading: string;
   markdownLabel: string;
   markdownReady: string;
   markdownMissing: string;
@@ -165,17 +155,7 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     openCreatePage: "前往 GitHub 建立 repository",
     openReadme: "編輯 README.md",
     openProfile: "查看 GitHub 帳號頁",
-    publicUrlLabel: "舊版由管理者維護的訪客網址",
-    publicUrlHelp:
-      "這是與 GitHub Pages 核對分開的進階部署路線。請填能從外網開啟的 HTTPS 網址；localhost 只能在你的電腦使用。",
-    publicUrlNotReady:
-      "還沒有可用的公開訪客連結。可先下載圖片，之後再產生要貼進 README 的連結。",
-    publicUrlEntered:
-      "網址格式已通過檢查；發佈後仍要從 GitHub 實際點擊卡片並試問。",
-    legacyRouteSummary: "選填進階：使用舊版獨立部署網址",
     verifyPages: "前往第 3 段上傳並核對 Pages 網站",
-    legacyRouteNote:
-      "上方 Pages 網站核對成功後，README 會使用該 Pages 網址；此欄只保留舊版管理者路線。",
     cardIntro:
       "先下載卡片，再把圖片上傳到第一步的同名 repository 根目錄。不用建立另一個 repository。",
     filenameLabel: "建議上傳檔名（根目錄）",
@@ -207,7 +187,6 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     readmeIntro:
       "最後編輯同名 repository 的 README.md，把下方文字貼到想顯示卡片的位置，保留原本的介紹。",
     markdownPreviewHeading: "已核對 Pages 網站的 README 文字",
-    markdownLegacyHeading: "舊版管理者路線的 README 文字",
     markdownLabel: "複製下方這段文字",
     markdownReady: "要貼進 README.md 的文字已準備好，可以複製。",
     markdownMissing:
@@ -289,17 +268,7 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     openCreatePage: "Create the repository on GitHub",
     openReadme: "Edit README.md",
     openProfile: "View GitHub account page",
-    publicUrlLabel: "Legacy operator-managed visitor URL",
-    publicUrlHelp:
-      "This legacy operator-managed route is separate from GitHub Pages verification. Enter a public HTTPS URL; localhost only works on your computer.",
-    publicUrlNotReady:
-      "No public visitor link is ready yet. You can download the image now and generate the README link later.",
-    publicUrlEntered:
-      "The URL format passed validation. After publishing, click the card from GitHub and ask a test question.",
-    legacyRouteSummary: "Optional advanced route: use a legacy deployment URL",
     verifyPages: "Go to section 3 to upload and verify your Pages site",
-    legacyRouteNote:
-      "When the Pages site above is verified, README uses that Pages URL. This field is kept only for the separate legacy operator-managed route.",
     cardIntro:
       "Download the card, then upload the image to the root of the matching repository from step one. No other repository is needed.",
     filenameLabel: "Suggested upload filename (repository root)",
@@ -334,7 +303,6 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     readmeIntro:
       "Finally, edit README.md in the matching repository. Paste the text below where the card should appear and keep your existing introduction.",
     markdownPreviewHeading: "README text for the verified Pages site",
-    markdownLegacyHeading: "README text for the legacy operator-managed route",
     markdownLabel: "Copy the text below",
     markdownReady: "The text for README.md is ready to copy.",
     markdownMissing:
@@ -366,7 +334,6 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
 export function GitHubShareGuide({
   locale,
   account,
-  publicUrl,
   verifiedPagesUrl,
   profileStatus,
   imageStatus,
@@ -375,12 +342,10 @@ export function GitHubShareGuide({
   readmeUrl,
   createUrl,
   filename,
-  markdown,
   cardReady,
   busy,
   notice,
   onAccountChange,
-  onPublicUrlChange,
   onCheckProfile,
   onCheckImage,
   onDownload,
@@ -391,7 +356,6 @@ export function GitHubShareGuide({
 }: GitHubShareGuideProps) {
   const copy = COPY[locale];
   const accountIsEmpty = account.trim().length === 0;
-  const markdownIsEmpty = markdown.trim().length === 0;
   const normalizedAccount = githubAccount(account);
   const profileOpen = profileStatus !== "ready";
   const pagesReady =
@@ -743,34 +707,6 @@ export function GitHubShareGuide({
               </a>
             </p>
           )}
-
-          <details>
-            <summary>{copy.legacyRouteSummary}</summary>
-            <label htmlFor="github-share-public-url">
-              {copy.publicUrlLabel}
-              <input
-                aria-describedby="github-share-public-url-help"
-                disabled={busy}
-                id="github-share-public-url"
-                inputMode="url"
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  onPublicUrlChange(event.target.value)
-                }
-                type="url"
-                value={publicUrl}
-              />
-            </label>
-            <p id="github-share-public-url-help">
-              {copy.publicUrlHelp}{" "}
-              {!markdownIsEmpty
-                ? copy.publicUrlEntered
-                : copy.publicUrlNotReady}
-            </p>
-            <p role="status">{copy.legacyRouteNote}</p>
-
-            <h4>{copy.markdownLegacyHeading}</h4>
-            {markdownField(markdown, "github-share-markdown")}
-          </details>
 
           <div className="ux-missing-fields">
             <h4>{copy.preserveReadmeHeading}</h4>

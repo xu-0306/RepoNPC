@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from reponpc.admin.faq import FaqError, ReviewedFaq
 from reponpc.chat.service import ChatDelivery
 from reponpc.runtime.database import RuntimeDatabase
-from tests.security.test_admin_writeback import ORIGIN, _application_without_github, _login
+from tests.security.test_admin_assets import ORIGIN, _login, local_admin_application
 
 
 class SyntheticBundles:
@@ -62,7 +62,7 @@ def _seed(
 
 @pytest.mark.parametrize("locale", ["zh-TW", "en"])
 def test_faq_routes_protect_mutations_and_share_only_approved_current_rows(tmp_path, locale):
-    app = _application_without_github(tmp_path)
+    app = local_admin_application(tmp_path)
     database = app.state.admin_operations.database
     app.state.runtime_database = database
     app.state.bundle_manager = SyntheticBundles()

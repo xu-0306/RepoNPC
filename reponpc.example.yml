@@ -3,9 +3,6 @@
 # Never put API keys, passwords, tokens, private URLs, or other secrets here.
 # Chat/analysis token ceilings and reasoning controls are deployment-only
 # (ADR-055); this public YAML neither configures them nor disables reasoning.
-# GitHub OAuth and browser-entered public-read PATs were removed in 0.2.1. The
-# independent writeback token remains deployment-only and
-# must never appear in this public YAML file.
 # 0.2.2: the embedding descriptor below is an illustrative validated identity,
 # not a provider choice for first-run setup. Managed connection URLs/keys must
 # never be added here. Replace this descriptor with the selected model's actual

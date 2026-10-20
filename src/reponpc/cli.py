@@ -31,10 +31,7 @@ from reponpc.indexing.github import GitHubSourceResolver
 from reponpc.indexing.pipeline import (
     IndexPipelineError,
     build_index_bundle,
-    publish_index_bundle,
-    publish_pending_manifest,
 )
-from reponpc.indexing.publication import PublicationError
 from reponpc.indexing.sources import EmbeddingIdentity
 from reponpc.main import run as run_server
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
@@ -73,13 +70,6 @@ def _parser() -> argparse.ArgumentParser:
     build = index_commands.add_parser("build", help="build and verify an immutable bundle")
     build.add_argument("--config", type=Path, required=True)
     build.add_argument("--output", type=Path, required=True)
-    publish = index_commands.add_parser("publish", help="publish the immutable release asset")
-    publish.add_argument("--bundle-dir", type=Path, required=True)
-    publish_manifest = index_commands.add_parser(
-        "publish-manifest", help="advance the stable manifest from a pending artifact"
-    )
-    publish_manifest.add_argument("--bundle-dir", type=Path, required=True)
-
     bundle = commands.add_parser("bundle", help="retained bundle recovery commands")
     bundle_commands = bundle.add_subparsers(dest="bundle_command", required=True)
     bundle_status = bundle_commands.add_parser("status", help="show safe bundle pointers")
@@ -90,7 +80,9 @@ def _parser() -> argparse.ArgumentParser:
     bundle_pin = bundle_commands.add_parser("pin", help="activate and pin one retained bundle")
     bundle_pin.add_argument("bundle_id")
     bundle_pin.add_argument("--data-dir", type=Path)
-    bundle_unpin = bundle_commands.add_parser("unpin", help="resume normal bundle polling")
+    bundle_unpin = bundle_commands.add_parser(
+        "unpin", help="clear the pin to allow local bundle activation"
+    )
     bundle_unpin.add_argument("--data-dir", type=Path)
 
     runtime = commands.add_parser("runtime", help="mutable runtime recovery commands")
@@ -171,12 +163,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     participation_collector=resolver.participation,
                 )
                 print(f"bundle built: {built.manifest.bundle_id}")
-            elif args.index_command == "publish":
-                publish_index_bundle(args.bundle_dir)
-                print("immutable bundle published; pending manifest recorded")
-            else:
-                publish_pending_manifest(args.bundle_dir)
-                print("stable manifest published")
         elif args.command == "bundle":
             manager = _bundle_manager(args.data_dir)
             if args.bundle_command == "status":
@@ -217,7 +203,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-    except (IndexPipelineError, PublicationError) as exc:
+    except IndexPipelineError as exc:
         print(f"reponpc: {exc.code}", file=sys.stderr)
         return 1
     except AdminAuthError as exc:

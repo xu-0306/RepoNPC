@@ -50,6 +50,7 @@ from reponpc.indexing.github import GitHubSourceResolver
 from reponpc.indexing.passage_cache import PassageVectorCache
 from reponpc.indexing.pipeline import IndexPipelineError, build_index_bundle
 from reponpc.indexing.sources import (
+    LOCAL_CONFIGURATION_REPOSITORY,
     EmbeddingIdentity,
     EmbeddingProvider,
     RepositoryParticipation,
@@ -178,7 +179,7 @@ class LocalPortfolioBuilder:
                 )
             config_path.write_text(build_content, encoding="utf-8")
             source = ResolvedConfiguration(
-                repository_slug="local/portfolio",
+                repository_slug=LOCAL_CONFIGURATION_REPOSITORY,
                 commit_sha=hashlib.sha256(build_content.encode("utf-8")).hexdigest()[:40],
                 path="reponpc.yml",
                 content=build_content,

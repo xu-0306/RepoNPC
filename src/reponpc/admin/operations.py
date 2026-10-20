@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import base64
-import sqlite3
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
-from datetime import UTC, datetime
 from typing import Any, cast
 
 from reponpc.admin.analysis_selection import (
@@ -31,7 +29,6 @@ from reponpc.admin.embedding_profiles import (
     EmbeddingProfileRegistry,
 )
 from reponpc.admin.embedding_reindex import EmbeddingReindexCoordinator
-from reponpc.admin.github import GitCommit, GitFile, GitHubAdminClient, GitHubAdminError
 from reponpc.admin.local_portfolio import LocalPortfolioStore
 from reponpc.admin.local_publication import LocalPublication
 from reponpc.admin.model_connections import (
@@ -70,14 +67,18 @@ from reponpc.cards.render import (
     render_readme_snippet,
 )
 from reponpc.cards.sprite_composer import compose_builtin
-from reponpc.config.models import ConfigValidationError, PublicConfig, parse_public_config_bytes
+from reponpc.config.models import (
+    ConfigIssue,
+    ConfigValidationError,
+    PublicConfig,
+    parse_public_config_bytes,
+)
 from reponpc.providers.builtin_artifacts import builtin_embedding_identity, load_builtin_manifest
-from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
+from reponpc.runtime.database import RuntimeDatabase
 
 
 @dataclass(frozen=True, slots=True)
 class AdminOperations:
-    github: GitHubAdminClient | None
     database: RuntimeDatabase
     public_base_url: str
     onboarding: GuidedOnboardingService | None = None
@@ -91,10 +92,6 @@ class AdminOperations:
     connection_model_lister: Callable[[str], tuple[str, ...]] | None = None
     local_portfolio: LocalPortfolioStore | None = None
     local_publication: LocalPublication | None = None
-    config_repository: str = ""
-
-    def read_config(self) -> GitFile:
-        return self._github().read_config()
 
     def validate_config(self, content: bytes) -> PublicConfig:
         return parse_public_config_bytes(content)
@@ -163,26 +160,6 @@ class AdminOperations:
             "cards": cards,
         }
 
-    def write_config(
-        self,
-        *,
-        content: bytes,
-        expected_blob_sha: str,
-        commit_message: str,
-        request_id: str,
-        session_hash: str,
-    ) -> GitCommit:
-        self.validate_config(content)
-        return self._write_and_audit(
-            path="reponpc.yml",
-            content=content,
-            expected_blob_sha=expected_blob_sha,
-            commit_message=commit_message,
-            request_id=request_id,
-            session_hash=session_hash,
-            action="config.write",
-        )
-
     def validate_asset(self, *, filename: str, content: bytes) -> CanonicalSprite:
         validate_sprite_filename(filename)
         return validate_sprite(content)
@@ -209,28 +186,6 @@ class AdminOperations:
             candidate_id=candidate_id,
         )
 
-    def write_asset(
-        self,
-        *,
-        filename: str,
-        content: bytes,
-        expected_blob_sha: str | None,
-        commit_message: str,
-        request_id: str,
-        session_hash: str,
-    ) -> tuple[GitCommit, CanonicalSprite]:
-        canonical = self.validate_asset(filename=filename, content=content)
-        commit = self._write_and_audit(
-            path=f"assets/character/{filename}",
-            content=canonical.content,
-            expected_blob_sha=expected_blob_sha,
-            commit_message=commit_message,
-            request_id=request_id,
-            session_hash=session_hash,
-            action="asset.write",
-        )
-        return commit, canonical
-
     def readme_snippet(self, *, locale: str, theme: str, extension: str, revision: int) -> str:
         return render_readme_snippet(
             public_base_url=self.public_base_url,
@@ -240,28 +195,6 @@ class AdminOperations:
             revision=revision,
         )
 
-    def dispatch(self, *, request_id: str, session_hash: str) -> None:
-        try:
-            self._github().dispatch_index()
-        except Exception:
-            self._audit(
-                action="index.dispatch",
-                target_path=None,
-                result_commit_sha=None,
-                request_id=request_id,
-                outcome="failed",
-                session_hash=session_hash,
-            )
-            raise
-        self._audit(
-            action="index.dispatch",
-            target_path=None,
-            result_commit_sha=None,
-            request_id=request_id,
-            outcome="succeeded",
-            session_hash=session_hash,
-        )
-
     def index_status(self) -> dict[str, str | None]:
         state = self.database.bundle_state()
         return {
@@ -269,8 +202,6 @@ class AdminOperations:
             "previous_bundle_id": state.previous_bundle_id,
             "pinned_bundle_id": state.pinned_bundle_id,
             "last_checked_at": state.last_checked_at,
-            "update_error": state.safe_update_error,
-            "configuration_repository_owner": self.config_repository.split("/", 1)[0] or None,
         }
 
     def list_embedding_profiles(self) -> tuple[EmbeddingProfile, ...]:
@@ -495,31 +426,22 @@ class AdminOperations:
         exclude: tuple[str, ...],
         cancel_requested: Any,
     ) -> dict[str, object]:
-        if self.analysis_batches is not None:
-            try:
-                selection = RepositorySelection(
-                    slug=slug,
-                    ref=ref,
-                    include=include,
-                    exclude=exclude,
-                    confirmed=True,
-                )
-            except ValueError as exc:
-                raise BatchRuntimeError("VALIDATION_ERROR") from exc
-            cancelled = getattr(cancel_requested, "is_set", None)
-            if not callable(cancelled):
-                raise BatchRuntimeError("VALIDATION_ERROR")
-            return self.analysis_batches.analyze_one_compatibility(
-                selection=selection,
-                cancelled=cancelled,
+        try:
+            selection = RepositorySelection(
+                slug=slug,
+                ref=ref,
+                include=include,
+                exclude=exclude,
+                confirmed=True,
             )
-        return self._onboarding().analyze_repository(
-            session_hash=session_hash,
-            slug=slug,
-            ref=ref,
-            include=include,
-            exclude=exclude,
-            cancel_requested=cancel_requested,
+        except ValueError as exc:
+            raise BatchRuntimeError("VALIDATION_ERROR") from exc
+        cancelled = getattr(cancel_requested, "is_set", None)
+        if not callable(cancelled):
+            raise BatchRuntimeError("VALIDATION_ERROR")
+        return self._analysis_batches().analyze_one_compatibility(
+            selection=selection,
+            cancelled=cancelled,
         )
 
     def preflight_analysis_batch(
@@ -608,53 +530,15 @@ class AdminOperations:
     def _sprite(self, config: PublicConfig) -> CanonicalSprite:
         if config.character.builtin is not None:
             return validate_sprite(compose_builtin(config.character.builtin))
-        custom = config.character.custom
-        if custom is None:
-            raise ConfigValidationError([])
-        return validate_sprite(self._github().read(custom.sprite_path).content)
-
-    def _write_and_audit(
-        self,
-        *,
-        path: str,
-        content: bytes,
-        expected_blob_sha: str | None,
-        commit_message: str,
-        request_id: str,
-        session_hash: str,
-        action: str,
-    ) -> GitCommit:
-        try:
-            commit = self._github().write(
-                path=path,
-                content=content,
-                expected_blob_sha=expected_blob_sha,
-                commit_message=commit_message,
-            )
-        except Exception:
-            self._audit(
-                action=action,
-                target_path=path,
-                result_commit_sha=None,
-                request_id=request_id,
-                outcome="failed",
-                session_hash=session_hash,
-            )
-            raise
-        self._audit(
-            action=action,
-            target_path=path,
-            result_commit_sha=commit.commit_sha,
-            request_id=request_id,
-            outcome="succeeded",
-            session_hash=session_hash,
+        raise ConfigValidationError(
+            [
+                ConfigIssue(
+                    path="character.custom.sprite_path",
+                    code="custom_sprite_preview_needs_upload",
+                    message="preview a custom sprite from the character upload",
+                )
+            ]
         )
-        return commit
-
-    def _github(self) -> GitHubAdminClient:
-        if self.github is None:
-            raise GitHubAdminError("SERVICE_NOT_READY")
-        return self.github
 
     def _onboarding(self) -> GuidedOnboardingService:
         if self.onboarding is None:
@@ -680,35 +564,3 @@ class AdminOperations:
         if self.chat_profiles is None:
             raise ChatProfileError("SERVICE_NOT_READY")
         return self.chat_profiles
-
-    def _audit(
-        self,
-        *,
-        action: str,
-        target_path: str | None,
-        result_commit_sha: str | None,
-        request_id: str,
-        outcome: str,
-        session_hash: str,
-    ) -> None:
-        try:
-            with self.database.connection() as connection:
-                connection.execute(
-                    """
-                    INSERT INTO admin_audit(
-                        occurred_at, action, target_path, result_commit_sha,
-                        request_id, outcome, session_hash
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-                        action,
-                        target_path,
-                        result_commit_sha,
-                        request_id,
-                        outcome,
-                        session_hash,
-                    ),
-                )
-        except sqlite3.Error as exc:
-            raise RuntimeDatabaseError("runtime_admin_audit_failed") from exc

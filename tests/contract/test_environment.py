@@ -32,8 +32,6 @@ from reponpc.runtime.database import RuntimeDatabase
 def deployment_environment(**overrides: str) -> dict[str, str]:
     values = {
         "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
-        "REPONPC_CONFIG_REPOSITORY": "example/portfolio",
-        "REPONPC_INDEX_MANIFEST_URL": "https://raw.githubusercontent.com/example/portfolio/main/stable-manifest.json",
         "REPONPC_CHAT_MODEL": "test-model",
         "REPONPC_CHAT_BASE_URL": "http://ollama:11434",
         "REPONPC_EMBEDDING_MODEL": "intfloat/multilingual-e5-small",
@@ -52,7 +50,7 @@ def test_load_environment_uses_typed_defaults_and_redacts_direct_secrets(tmp_pat
     settings = load_environment(
         deployment_environment(
             REPONPC_PORT="8123",
-            REPONPC_GITHUB_TOKEN=canary,
+            REPONPC_CHAT_API_KEY=canary,
             REPONPC_IP_HASH_KEY="ip-hmac-canary",
         ),
         secret_roots=(tmp_path,),
@@ -60,10 +58,10 @@ def test_load_environment_uses_typed_defaults_and_redacts_direct_secrets(tmp_pat
 
     assert settings.port == 8123
     assert settings.data_dir == Path("/var/lib/reponpc")
-    assert settings.secrets["github_token"].reveal() == canary
-    assert repr(settings.secrets["github_token"]) == "SecretValue(<redacted>)"
+    assert settings.secrets["chat_api_key"].reveal() == canary
+    assert repr(settings.secrets["chat_api_key"]) == "SecretValue(<redacted>)"
     assert canary not in repr(settings)
-    assert canary not in str(settings.secrets["github_token"])
+    assert canary not in str(settings.secrets["chat_api_key"])
 
 
 def test_analysis_output_budget_is_independent_and_defaults_to_16384(tmp_path: Path) -> None:
@@ -173,22 +171,6 @@ def test_deployment_profile_is_explicit_and_accepts_only_loopback_endpoints(
     assert loopback.deployment_profile == "loopback_evaluation"
 
 
-def test_production_allows_empty_index_repository_and_manifest_for_local_publication(
-    tmp_path: Path,
-) -> None:
-    settings = load_environment(
-        deployment_environment(
-            REPONPC_CONFIG_REPOSITORY="",
-            REPONPC_INDEX_MANIFEST_URL="",
-        ),
-        secret_roots=(tmp_path,),
-    )
-
-    assert settings.deployment_profile == "production"
-    assert settings.config_repository == ""
-    assert settings.index_manifest_url == ""
-
-
 @pytest.mark.parametrize(
     ("host", "public_base_url"),
     [
@@ -284,7 +266,7 @@ def test_vllm_is_an_explicit_openai_compatible_provider_preset(tmp_path: Path) -
     assert private_embedding_url not in repr(settings)
 
 
-def test_first_owner_mode_needs_no_default_username_or_github_token(
+def test_first_owner_mode_needs_no_default_username_or_chat_api_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     values = deployment_environment(REPONPC_IP_HASH_KEY="ip-hmac-canary")
@@ -305,7 +287,7 @@ def test_first_owner_mode_needs_no_default_username_or_github_token(
     assert main.app.state.admin_session_service is not None
     assert main.app.state.admin_session_service.setup_status().setup_required is True
     assert main.app.state.admin_operations is not None
-    assert main.app.state.admin_operations.github is None
+    assert not hasattr(main.app.state.admin_operations, "github")
     assert main.app.state.github_rate_limiter is not None
     assert (
         main.app.state.admin_operations.onboarding._source_resolver.rate_limiter
@@ -426,32 +408,31 @@ def test_admin_restart_preserves_owner_managed_environment_embedding_profile(
     assert persisted_profile.connection_revision == replaced.revision
 
 
-def test_retired_github_public_read_settings_warn_and_are_never_loaded(tmp_path: Path) -> None:
+def test_retired_github_public_read_settings_are_rejected_and_never_loaded(
+    tmp_path: Path,
+) -> None:
     client_secret = "oauth-client-secret-canary"
     encryption_key = "credential-encryption-key-canary-material"
     missing_secret = tmp_path / "must-not-be-read"
+    retired = {
+        "REPONPC_GITHUB_OAUTH_CLIENT_ID": "oauth-client-id",
+        "REPONPC_GITHUB_OAUTH_CLIENT_SECRET": client_secret,
+        "REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE": str(missing_secret),
+        "REPONPC_GITHUB_OAUTH_CALLBACK_URL": (
+            "https://portfolio.example.com/api/admin/github/callback"
+        ),
+        "REPONPC_CREDENTIAL_ENCRYPTION_KEY": encryption_key,
+        "REPONPC_CREDENTIAL_ENCRYPTION_KEY_FILE": str(missing_secret),
+    }
 
-    with pytest.warns(DeprecationWarning, match="ignored"):
-        settings = load_environment(
-            deployment_environment(
-                REPONPC_GITHUB_OAUTH_CLIENT_ID="oauth-client-id",
-                REPONPC_GITHUB_OAUTH_CLIENT_SECRET=client_secret,
-                REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE=str(missing_secret),
-                REPONPC_GITHUB_OAUTH_CALLBACK_URL=(
-                    "https://portfolio.example.com/api/admin/github/callback"
-                ),
-                REPONPC_CREDENTIAL_ENCRYPTION_KEY=encryption_key,
-                REPONPC_CREDENTIAL_ENCRYPTION_KEY_FILE=str(missing_secret),
-            ),
-            secret_roots=(tmp_path,),
-        )
+    with pytest.raises(EnvironmentValidationError) as raised:
+        load_environment(deployment_environment(**retired), secret_roots=(tmp_path,))
 
-    assert not hasattr(settings, "github_oauth_client_id")
-    assert not hasattr(settings, "github_oauth_callback_url")
-    assert "github_oauth_client_secret" not in settings.secrets
-    assert "credential_encryption_key" not in settings.secrets
-    assert client_secret not in repr(settings)
-    assert encryption_key not in repr(settings)
+    assert {(issue.name, issue.code) for issue in raised.value.issues} == {
+        (name, "unknown_variable") for name in retired
+    }
+    assert client_secret not in format_environment_error(raised.value)
+    assert encryption_key not in format_environment_error(raised.value)
 
 
 def test_admin_service_remains_unavailable_without_identity_hmac_key(
@@ -501,8 +482,8 @@ def test_direct_and_file_secret_collision_is_safe(tmp_path: Path) -> None:
     with pytest.raises(EnvironmentValidationError) as raised:
         load_environment(
             deployment_environment(
-                REPONPC_GITHUB_TOKEN="DIRECT_SECRET_CANARY",
-                REPONPC_GITHUB_TOKEN_FILE=str(secret_file),
+                REPONPC_CHAT_API_KEY="DIRECT_SECRET_CANARY",
+                REPONPC_CHAT_API_KEY_FILE=str(secret_file),
             ),
             secret_roots=(tmp_path,),
         )
@@ -538,7 +519,7 @@ def test_secret_file_must_be_bounded_regular_utf8_file_inside_allowed_root(tmp_p
     for candidate, expected_code in cases:
         with pytest.raises(EnvironmentValidationError) as raised:
             load_environment(
-                deployment_environment(REPONPC_GITHUB_TOKEN_FILE=str(candidate)),
+                deployment_environment(REPONPC_CHAT_API_KEY_FILE=str(candidate)),
                 secret_roots=(secret_root,),
                 max_secret_bytes=32,
             )
@@ -552,12 +533,12 @@ def test_secret_file_respects_a_custom_limit_above_the_default_read_bound(tmp_pa
     secret_file.write_text(canary, encoding="utf-8")
 
     settings = load_environment(
-        deployment_environment(REPONPC_GITHUB_TOKEN_FILE=str(secret_file)),
+        deployment_environment(REPONPC_CHAT_API_KEY_FILE=str(secret_file)),
         secret_roots=(tmp_path,),
         max_secret_bytes=len(canary),
     )
 
-    assert settings.secrets["github_token"].reveal() == canary
+    assert settings.secrets["chat_api_key"].reveal() == canary
 
 
 def test_symlinked_secret_file_is_rejected_without_disclosing_target(tmp_path: Path) -> None:
@@ -573,7 +554,7 @@ def test_symlinked_secret_file_is_rejected_without_disclosing_target(tmp_path: P
 
     with pytest.raises(EnvironmentValidationError) as raised:
         load_environment(
-            deployment_environment(REPONPC_GITHUB_TOKEN_FILE=str(link)),
+            deployment_environment(REPONPC_CHAT_API_KEY_FILE=str(link)),
             secret_roots=(secret_root,),
         )
 
@@ -589,7 +570,7 @@ def test_group_or_world_readable_secret_file_is_rejected(tmp_path: Path) -> None
 
     with pytest.raises(EnvironmentValidationError) as raised:
         load_environment(
-            deployment_environment(REPONPC_GITHUB_TOKEN_FILE=str(secret_file)),
+            deployment_environment(REPONPC_CHAT_API_KEY_FILE=str(secret_file)),
             secret_roots=(tmp_path,),
         )
 
@@ -648,7 +629,7 @@ def test_secret_file_replacement_by_a_symlink_is_rejected(
 
     with pytest.raises(EnvironmentValidationError) as raised:
         load_environment(
-            deployment_environment(REPONPC_GITHUB_TOKEN_FILE=str(secret_file)),
+            deployment_environment(REPONPC_CHAT_API_KEY_FILE=str(secret_file)),
             secret_roots=(secret_root,),
         )
 
@@ -697,7 +678,7 @@ def test_production_entrypoint_reports_environment_failure_without_values(
     failure = EnvironmentValidationError(
         [
             EnvironmentIssue(
-                name="REPONPC_GITHUB_TOKEN",
+                name="REPONPC_CHAT_API_KEY",
                 code="secret_source_collision",
                 message=canary,
             )
@@ -709,7 +690,7 @@ def test_production_entrypoint_reports_environment_failure_without_values(
         main.run()
 
     assert str(raised.value) == (
-        "deployment environment is invalid: REPONPC_GITHUB_TOKEN (secret_source_collision)"
+        "deployment environment is invalid: REPONPC_CHAT_API_KEY (secret_source_collision)"
     )
     assert canary not in str(raised.value)
 
@@ -734,11 +715,11 @@ def test_environment_error_format_omits_untrusted_messages_and_values() -> None:
     message_canary = "MESSAGE_CANARY/private/path"
     value_canary = "secret-value-canary=123"
     failure = EnvironmentValidationError(
-        [EnvironmentIssue("REPONPC_GITHUB_TOKEN", "invalid_choice", message_canary)]
+        [EnvironmentIssue("REPONPC_CHAT_API_KEY", "invalid_choice", message_canary)]
     )
 
     formatted = format_environment_error(failure)
-    assert formatted == "deployment environment is invalid: REPONPC_GITHUB_TOKEN (invalid_choice)"
+    assert formatted == "deployment environment is invalid: REPONPC_CHAT_API_KEY (invalid_choice)"
     assert message_canary not in formatted
     assert value_canary not in formatted
 
@@ -795,9 +776,9 @@ def test_windows_production_rejects_a_secret_file_another_account_can_read(
     canary = "WINDOWS_SECRET_CANARY_c41d"
     secret_file = tmp_path / "github-token"
     secret_file.write_text(canary, encoding="utf-8")
-    values = deployment_environment(REPONPC_GITHUB_TOKEN_FILE=str(secret_file))
+    values = deployment_environment(REPONPC_CHAT_API_KEY_FILE=str(secret_file))
     settings = load_environment(values, secret_roots=(tmp_path,))
-    assert settings.secrets["github_token"].reveal() == canary
+    assert settings.secrets["chat_api_key"].reveal() == canary
 
     _grant_users_read(secret_file)
 
@@ -821,12 +802,12 @@ def test_windows_evaluation_keeps_reading_a_secret_file_other_accounts_can_read(
             REPONPC_DEPLOYMENT_PROFILE="loopback_evaluation",
             REPONPC_HOST="127.0.0.1",
             REPONPC_PUBLIC_BASE_URL="http://127.0.0.1:8000",
-            REPONPC_GITHUB_TOKEN_FILE=str(secret_file),
+            REPONPC_CHAT_API_KEY_FILE=str(secret_file),
         ),
         secret_roots=(tmp_path,),
     )
 
-    assert settings.secrets["github_token"].reveal() == canary
+    assert settings.secrets["chat_api_key"].reveal() == canary
 
 
 @windows_only
@@ -841,14 +822,14 @@ def test_windows_default_secret_root_is_the_private_data_directory(tmp_path: Pat
 
     settings = load_environment(
         deployment_environment(
-            REPONPC_DATA_DIR=str(data_dir), REPONPC_GITHUB_TOKEN_FILE=str(inside)
+            REPONPC_DATA_DIR=str(data_dir), REPONPC_CHAT_API_KEY_FILE=str(inside)
         )
     )
-    assert settings.secrets["github_token"].reveal() == canary
+    assert settings.secrets["chat_api_key"].reveal() == canary
     with pytest.raises(EnvironmentValidationError) as raised:
         load_environment(
             deployment_environment(
-                REPONPC_DATA_DIR=str(data_dir), REPONPC_GITHUB_TOKEN_FILE=str(outside)
+                REPONPC_DATA_DIR=str(data_dir), REPONPC_CHAT_API_KEY_FILE=str(outside)
             )
         )
     assert "secret_file_outside_root" in issue_codes(raised.value)

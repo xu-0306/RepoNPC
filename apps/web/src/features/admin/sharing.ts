@@ -28,53 +28,9 @@ export function githubAccount(value: string): string | null {
     : null;
 }
 
-export function publicVisitorUrl(value: string): string | null {
-  if (value.includes("#") || /[<>\r\n]/.test(value)) return null;
-  try {
-    const url = new URL(value.trim());
-    const host = url.hostname.toLowerCase().replace(/\.$/, "");
-    if (
-      url.protocol !== "https:" ||
-      url.username ||
-      url.password ||
-      url.hash ||
-      !host.includes(".") ||
-      host.endsWith(".localhost") ||
-      host.endsWith(".local") ||
-      host.endsWith(".internal") ||
-      host.includes(":")
-    )
-      return null;
-    if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
-      const [a, b] = host.split(".").map(Number);
-      if (
-        a === 0 ||
-        a === 10 ||
-        a === 127 ||
-        a >= 224 ||
-        (a === 169 && b === 254) ||
-        (a === 172 && b >= 16 && b <= 31) ||
-        (a === 192 && b === 168) ||
-        (a === 100 && b >= 64 && b <= 127)
-      )
-        return null;
-    }
-    return url.href;
-  } catch {
-    return null;
-  }
-}
-
-export function safeShareFields(
-  account: string,
-  publicUrl: string,
-): { account?: string; publicUrl?: string } {
+export function safeShareFields(account: string): { account?: string } {
   const normalizedAccount = githubAccount(account);
-  const normalizedUrl = publicVisitorUrl(publicUrl);
-  return {
-    ...(normalizedAccount ? { account: normalizedAccount } : {}),
-    ...(normalizedUrl ? { publicUrl: normalizedUrl } : {}),
-  };
+  return normalizedAccount ? { account: normalizedAccount } : {};
 }
 
 export function previewInputsMatch(
@@ -86,12 +42,6 @@ export function previewInputsMatch(
   return (
     currentContent === requestedContent && currentSprite === requestedSprite
   );
-}
-
-export function cardMarkdown(url: string, locale: "zh-TW" | "en"): string {
-  const target = publicVisitorUrl(url);
-  if (!target) return "";
-  return `[![${locale === "zh-TW" ? "與我的 RepoNPC 對話" : "Chat with my RepoNPC"}](./${CARD_FILENAME})](<${target}>)`;
 }
 
 export function verifiedPagesMarkdown(

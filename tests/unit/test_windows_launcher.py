@@ -94,8 +94,7 @@ def test_isolated_environment_and_restore(
     inherited = {
         "REPONPC_CHAT_API_KEY": "example-secret-not-real",
         "REPONPC_EMBEDDING_BASE_URL": "https://example.invalid/private",
-        "REPONPC_GITHUB_TOKEN_FILE": "example-private-path",
-        "REPONPC_INDEX_MANIFEST_URL": "https://example.invalid/bundle",
+        "REPONPC_CHAT_API_KEY_FILE": "example-private-path",
         "REPONPC_ADMIN_PASSWORD_HASH": "example-not-real",
         "REPONPC_VISITOR_TRUSTED_PROXY_CIDRS": "10.0.0.0/8",
         "REPONPC_UNKNOWN_SETTING": "ignored-inherited-value",
@@ -229,7 +228,6 @@ def test_launcher_environment_passes_real_configuration_validation(
         assert settings.deployment_profile == "loopback_evaluation"
         assert settings.secrets["ip_hash_key"].reveal()
         assert not settings.chat_provider and not settings.embedding_provider
-        assert not settings.config_repository and not settings.index_manifest_url
         return harness.app
 
     monkeypatch.setattr(launcher, "_load_application", load)

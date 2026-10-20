@@ -77,7 +77,6 @@ def _application(
         analysis_generation_attempts=analysis_generation_attempts,
     )
     operations = AdminOperations(
-        github=None,
         database=database,
         public_base_url=ORIGIN,
         analysis_batches=batches,

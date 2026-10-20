@@ -78,6 +78,7 @@ pythonpath = ["."]
 target-version = "py314"
 line-length = 100
 extend-exclude = [
+  "legacy",
   ".agent-foreman",
   ".pytest-tmp",
   ".uv-cache",

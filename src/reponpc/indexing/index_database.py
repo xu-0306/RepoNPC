@@ -29,7 +29,7 @@ from reponpc.indexing.parsing import ChunkCandidate, chunk_source
 from reponpc.indexing.passage_cache import PassageVectorCache
 from reponpc.indexing.sources import (
     EmbeddingIdentity,
-    PassageEmbeddingProvider,
+    EmbeddingProvider,
     RepositoryBlob,
     RepositoryParticipation,
     ResolvedConfiguration,
@@ -180,7 +180,7 @@ class IndexDatabaseBuilder:
 
     def __init__(
         self,
-        embedding_provider: PassageEmbeddingProvider,
+        embedding_provider: EmbeddingProvider,
         *,
         passage_cache: PassageVectorCache | None = None,
     ) -> None:

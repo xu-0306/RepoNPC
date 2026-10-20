@@ -393,7 +393,6 @@ def application(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Sim
 
     monkeypatch.setattr(operation_module, "collect_hardware_profile", collect)
     operations = AdminOperations(
-        github=None,
         database=database,
         public_base_url=ORIGIN,
         embedding_profiles=registry,

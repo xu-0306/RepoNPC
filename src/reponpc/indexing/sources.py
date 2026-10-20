@@ -18,6 +18,8 @@ from numpy.typing import NDArray
 from reponpc.domain.evidence import COMMIT_RE, normalize_source_path
 from reponpc.indexing.exclusions import SourceEntryKind
 
+LOCAL_CONFIGURATION_REPOSITORY = "local/portfolio"
+
 _REPOSITORY_SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 
@@ -75,11 +77,6 @@ class EmbeddingProvider(Protocol):
 
     def embed_passages(self, texts: list[str]) -> NDArray[np.float32]:
         """Return one normalized float32 vector per supplied passage."""
-
-
-# Compatibility alias for the existing Phase 2 builder import. New adapters and
-# later runtime consumers use the complete EmbeddingProvider name.
-PassageEmbeddingProvider = EmbeddingProvider
 
 
 @dataclass(frozen=True, slots=True)

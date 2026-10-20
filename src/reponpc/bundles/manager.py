@@ -272,7 +272,7 @@ class BundleManager:
             return self.status()
 
     def unpin(self) -> BundleStatus:
-        """Resume normal polling without mutating any immutable bundle."""
+        """Clear the pin so another verified local bundle can be activated."""
 
         with self._lock:
             previous_pin = self._pinned
@@ -472,7 +472,6 @@ class BundleManager:
                 pinned_bundle_id=self._pinned,
                 manifest_etag=state.manifest_etag,
                 last_checked_at=state.last_checked_at,
-                safe_update_error=state.safe_update_error,
             )
         )
 
