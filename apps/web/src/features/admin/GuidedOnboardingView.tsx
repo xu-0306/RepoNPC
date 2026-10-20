@@ -100,11 +100,12 @@ type Copy = {
   analysisResultsHeading: string;
   analysisDescription: string;
   providerHeading: string;
-  providerReady: (provider: string) => string;
-  providerNotReady: (provider: string) => string;
+  chatModel: string;
+  searchModel: string;
+  modelTested: string;
+  modelsNotSelected: string;
+  modelReasons: Record<string, string>;
   providerUnknown: string;
-  providerManaged: string;
-  providerLastChecked: string;
   refreshProvider: string;
   checkingProvider: string;
   analyze: string;
@@ -278,16 +279,23 @@ const COPY: Record<Locale, Copy> = {
     analysisResultsHeading: "先看專案內容，再描述你的貢獻",
     analysisDescription:
       "分析你已確認的公開專案；完成後檢視專案中可確認的資訊與 AI 推論，再填寫自己的貢獻。",
-    providerHeading: "模型連線",
-    providerReady: (provider) => `已連線：${provider}`,
-    providerNotReady: (provider) =>
-      `${provider} 尚未就緒。專案探索仍可使用；分析失敗後可改用手動填寫。`,
-    providerUnknown: "尚未取得模型連線狀態。",
-    providerManaged:
-      "Ollama、vLLM 與 OpenAI-compatible 的連線資料由伺服器管理，API 金鑰與私人網址不會傳到瀏覽器。",
-    providerLastChecked: "最後檢查",
+    providerHeading: "分析模型",
+    chatModel: "分析與回答模型",
+    searchModel: "資料查找模型",
+    modelTested: "已測試",
+    modelsNotSelected: "尚未選擇",
+    modelReasons: {
+      CHAT_MODEL_NOT_SELECTED: "尚未選擇回答模型",
+      SEARCH_MODEL_NOT_SELECTED: "尚未選擇資料查找模型",
+      CHAT_MODEL_NOT_READY: "回答模型尚未通過測試",
+      SEARCH_MODEL_NOT_READY: "資料查找模型尚未通過測試",
+      CHAT_MODEL_REVISION_STALE: "回答模型設定已變更，請重新測試及選用",
+      SEARCH_MODEL_REVISION_STALE: "資料查找模型設定已變更，請重新測試及選用",
+      MODEL_CONNECTION_UNAVAILABLE: "模型服務目前無法使用",
+    },
+    providerUnknown: "無法取得分析模型狀態",
     refreshProvider: "重新檢查",
-    checkingProvider: "正在檢查模型連線…",
+    checkingProvider: "正在檢查分析模型…",
     analyze: "分析專案",
     analyzing: "分析中…",
     analyzed: "分析完成",
@@ -482,16 +490,25 @@ const COPY: Record<Locale, Copy> = {
       "Review the projects, then describe your contribution",
     analysisDescription:
       "Analyze confirmed public projects, then review information you can verify from each project and AI inferences before describing your contribution.",
-    providerHeading: "Model connection",
-    providerReady: (provider) => `Connected: ${provider}`,
-    providerNotReady: (provider) =>
-      `${provider} is not ready. Project discovery still works; after an analysis failure you can continue with manual entry.`,
-    providerUnknown: "The model connection status is unavailable.",
-    providerManaged:
-      "Ollama, vLLM, and OpenAI-compatible connection details are managed by the server. API keys and private URLs are never sent to the browser.",
-    providerLastChecked: "Last checked",
+    providerHeading: "Analysis models",
+    chatModel: "Analysis and chat",
+    searchModel: "Content finder",
+    modelTested: "Tested",
+    modelsNotSelected: "Not selected",
+    modelReasons: {
+      CHAT_MODEL_NOT_SELECTED: "Chat model not selected",
+      SEARCH_MODEL_NOT_SELECTED: "Content finder not selected",
+      CHAT_MODEL_NOT_READY: "Chat model has not passed testing",
+      SEARCH_MODEL_NOT_READY: "Content finder has not passed testing",
+      CHAT_MODEL_REVISION_STALE:
+        "Chat model settings changed; retest and select again",
+      SEARCH_MODEL_REVISION_STALE:
+        "Content finder settings changed; retest and select again",
+      MODEL_CONNECTION_UNAVAILABLE: "Model service unavailable",
+    },
+    providerUnknown: "Analysis model status unavailable",
     refreshProvider: "Recheck",
-    checkingProvider: "Checking the model connection…",
+    checkingProvider: "Checking analysis models…",
     analyze: "Analyze project",
     analyzing: "Analyzing…",
     analyzed: "Analysis complete",
@@ -743,21 +760,6 @@ function disabledReason(reason: string | null, id: string): ReactNode {
   ) : null;
 }
 
-function providerDisplayName(
-  locale: Locale,
-  provider: NonNullable<
-    GuidedOnboardingViewProps["providerStatus"]
-  >["provider"],
-): string {
-  if (provider === "ollama") return "Ollama";
-  if (provider === "openai_compatible") {
-    return locale === "zh-TW"
-      ? "OpenAI-compatible（包含 vLLM）"
-      : "OpenAI-compatible (including vLLM)";
-  }
-  return locale === "zh-TW" ? "尚未設定" : "Not configured";
-}
-
 function sourceLocation(fact: RepositoryFact): string {
   return fact.start_line === null
     ? fact.path
@@ -1003,14 +1005,15 @@ function RepositoryRow({
       <div className="guided-onboarding__repository-header">
         <CheckboxField
           checked={repository.selected}
-          disabled={selectionLocked || busy}
+          disabled={selectionLocked || busy || repository.metadata.is_archived}
           id={`guided-repository-${slugId}`}
-          onChange={() =>
+          onChange={() => {
+            if (repository.metadata.is_archived) return;
             onAction({
               type: "TOGGLE_REPOSITORY",
               slug: repository.metadata.slug,
-            })
-          }
+            });
+          }}
         >
           <strong>{repository.metadata.name}</strong>
           <code>{repository.metadata.slug}</code>
@@ -1715,27 +1718,30 @@ function RepositoriesStep({
   );
 }
 
-function ProviderStatusPanel({
+function AnalysisModelStatusPanel({
   status,
   pending,
   copy,
-  locale,
   busy,
   onRefresh,
 }: {
-  status: GuidedOnboardingViewProps["providerStatus"];
+  status: GuidedOnboardingViewProps["analysisSelection"];
   pending: boolean;
   copy: Copy;
-  locale: Locale;
   busy: boolean;
-  onRefresh: GuidedOnboardingViewProps["onRefreshProviderStatus"];
+  onRefresh: GuidedOnboardingViewProps["onRefreshAnalysisSelection"];
 }) {
+  const notSelected =
+    status &&
+    (status.selection.generation === 0 ||
+      (!status.selection.chat_profile_id &&
+        !status.selection.embedding_profile_id));
   const message = pending
     ? copy.checkingProvider
-    : status?.ready
-      ? copy.providerReady(providerDisplayName(locale, status.provider))
+    : notSelected
+      ? copy.modelsNotSelected
       : status
-        ? copy.providerNotReady(providerDisplayName(locale, status.provider))
+        ? (copy.modelReasons[status.reason] ?? copy.providerUnknown)
         : copy.providerUnknown;
 
   return (
@@ -1750,16 +1756,22 @@ function ProviderStatusPanel({
           {copy.refreshProvider}
         </button>
       </div>
-      <p aria-live="polite" role="status">
-        {message}
-      </p>
-      {status?.lastCheckedAt && (
-        <p>
-          {copy.providerLastChecked}:{" "}
-          <time dateTime={status.lastCheckedAt}>{status.lastCheckedAt}</time>
-        </p>
-      )}
-      <p>{copy.providerManaged}</p>
+      <div aria-live="polite" role="status">
+        {!pending && !notSelected && status?.eligible ? (
+          <dl>
+            <dt>{copy.chatModel}</dt>
+            <dd>
+              {status.chat.model_id} · {copy.modelTested}
+            </dd>
+            <dt>{copy.searchModel}</dt>
+            <dd>
+              {status.embedding.model_id} · {copy.modelTested}
+            </dd>
+          </dl>
+        ) : (
+          <p>{message}</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -1769,8 +1781,8 @@ function AnalysisStep({
   copy,
   locale,
   busy,
-  providerStatus,
-  providerStatusPending,
+  analysisSelection,
+  analysisSelectionPending,
   batchAnalysisView,
   batchAnalysisTerminal = false,
   batchAnalysisActive,
@@ -1779,14 +1791,14 @@ function AnalysisStep({
   onAction,
   onAnalyze,
   onCreateBatch,
-  onRefreshProviderStatus,
+  onRefreshAnalysisSelection,
 }: {
   state: GuidedOnboardingState;
   copy: Copy;
   locale: Locale;
   busy: boolean;
-  providerStatus: GuidedOnboardingViewProps["providerStatus"];
-  providerStatusPending: boolean;
+  analysisSelection: GuidedOnboardingViewProps["analysisSelection"];
+  analysisSelectionPending: boolean;
   batchAnalysisView?: ReactNode;
   batchAnalysisTerminal?: boolean;
   batchAnalysisActive?: boolean;
@@ -1795,7 +1807,7 @@ function AnalysisStep({
   onAction: GuidedOnboardingViewProps["onAction"];
   onAnalyze: GuidedOnboardingViewProps["onAnalyze"];
   onCreateBatch?: GuidedOnboardingViewProps["onCreateBatch"];
-  onRefreshProviderStatus: GuidedOnboardingViewProps["onRefreshProviderStatus"];
+  onRefreshAnalysisSelection: GuidedOnboardingViewProps["onRefreshAnalysisSelection"];
 }) {
   const hasBatchAnalysis = batchAnalysisView !== undefined;
   const hasActiveBatch =
@@ -1902,13 +1914,12 @@ function AnalysisStep({
         </>
       ) : (
         <>
-          <ProviderStatusPanel
+          <AnalysisModelStatusPanel
             busy={busy}
             copy={copy}
-            locale={locale}
-            onRefresh={onRefreshProviderStatus}
-            pending={providerStatusPending}
-            status={providerStatus}
+            onRefresh={onRefreshAnalysisSelection}
+            pending={analysisSelectionPending}
+            status={analysisSelection}
           />
           {repositories.length > 0 ? (
             <ul className="guided-analysis__repositories">
@@ -2470,14 +2481,14 @@ export function GuidedOnboardingView({
   batchCreatePending,
   modelSetupView,
   modelSetupReturn,
-  providerStatus,
-  providerStatusPending,
+  analysisSelection,
+  analysisSelectionPending,
   onAction,
   onDiscover,
   onResolve,
   onAnalyze,
   onCreateBatch,
-  onRefreshProviderStatus,
+  onRefreshAnalysisSelection,
   onSuggestContribution,
   onCreateDraft,
   onCopyDraft,
@@ -2661,9 +2672,9 @@ export function GuidedOnboardingView({
               onAction={onAction}
               onAnalyze={onAnalyze}
               onCreateBatch={onCreateBatch}
-              onRefreshProviderStatus={onRefreshProviderStatus}
-              providerStatus={providerStatus}
-              providerStatusPending={providerStatusPending}
+              onRefreshAnalysisSelection={onRefreshAnalysisSelection}
+              analysisSelection={analysisSelection}
+              analysisSelectionPending={analysisSelectionPending}
               state={state}
             />
           )}

@@ -12,12 +12,19 @@ export type BatchPreflightStatus =
 
 export type BatchRateBudgetStatus = "available" | "limited" | "exhausted";
 
-export type BatchPreflightBlocker =
+export type BatchPreflightBlockerKind =
   | "provider_unavailable"
   | "rate_limited"
   | "github_unavailable"
   | "selection_changed"
-  | "no_repositories";
+  | "no_repositories"
+  | "archived"
+  | "not_found";
+
+export interface BatchPreflightBlocker {
+  kind: BatchPreflightBlockerKind;
+  slug: string;
+}
 
 export interface BatchOperationError {
   scope: "preflight" | "batch" | "repository" | "batch_action";
@@ -296,14 +303,16 @@ const COPY: Record<Locale, Copy> = {
     notReported: "伺服器尚未回報",
     confidence: (confidence) =>
       ({ low: "信心低", medium: "信心中等", high: "信心高" })[confidence],
-    blocker: (blocker) =>
+    blocker: ({ kind, slug }) =>
       ({
         provider_unavailable: "模型 provider 尚未就緒，無法開始分析。",
         rate_limited: "GitHub 目前限制新的工作；請依重試時間再試。",
         github_unavailable: "GitHub 暫時無法使用，請稍後重新檢查。",
-        selection_changed: "選擇的 repositories 已變更，請重新執行分析前檢查。",
+        selection_changed: `${slug} 的選擇已變更，請重新檢查`,
+        archived: `${slug} 已封存，無法分析`,
+        not_found: `${slug} 不存在或無法存取`,
         no_repositories: "請至少選擇一個公開 repository。",
-      })[blocker],
+      })[kind],
     rateStatus: (status) =>
       ({ available: "可使用", limited: "暫時受限", exhausted: "已用盡" })[
         status
@@ -431,7 +440,7 @@ const COPY: Record<Locale, Copy> = {
         medium: "Medium confidence",
         high: "High confidence",
       })[confidence],
-    blocker: (blocker) =>
+    blocker: ({ kind, slug }) =>
       ({
         provider_unavailable:
           "The model provider is not ready, so analysis cannot begin.",
@@ -439,10 +448,11 @@ const COPY: Record<Locale, Copy> = {
           "GitHub is limiting new work. Try again after its retry window.",
         github_unavailable:
           "GitHub is temporarily unavailable. Run preflight again later.",
-        selection_changed:
-          "The repository selection changed. Run preflight again.",
+        selection_changed: `${slug} selection changed. Run preflight again`,
+        archived: `${slug} is archived and can't be analyzed`,
+        not_found: `${slug} was not found or is inaccessible`,
         no_repositories: "Select at least one public repository.",
-      })[blocker],
+      })[kind],
     rateStatus: (status) =>
       ({
         available: "Available",
@@ -772,10 +782,10 @@ function PreflightSummary({
         <>
           <p role="status">{copy.preflightBlocked}</p>
           <ul>
-            {preflight.blockers.map((blocker) => (
-              <li key={blocker}>
+            {preflight.blockers.map((blocker, index) => (
+              <li key={`${blocker.kind}:${blocker.slug}:${index}`}>
                 {copy.blocker(blocker)}
-                {blocker === "rate_limited" &&
+                {blocker.kind === "rate_limited" &&
                 preflight.retryAfterSeconds !== undefined
                   ? ` ${copy.retryAfter(preflight.retryAfterSeconds)}`
                   : ""}
@@ -1309,13 +1319,17 @@ function operationErrorMessage(error: BatchOperationError, copy: Copy): string {
     return copy.resultUnknown;
   }
   if (error.code === "RATE_LIMITED" || error.code === "GITHUB_RATE_LIMITED") {
-    return withRequestId(`${copy.blocker("rate_limited")}${retry}`);
+    return withRequestId(
+      `${copy.blocker({ kind: "rate_limited", slug: error.slug ?? "github" })}${retry}`,
+    );
   }
   if (error.scope === "preflight") {
     return withRequestId(`${copy.preflightFailed}${retry}`);
   }
   if (error.code === "MODEL_UNAVAILABLE" || error.code === "PROVIDER_TIMEOUT") {
-    return withRequestId(`${copy.blocker("provider_unavailable")}${retry}`);
+    return withRequestId(
+      `${copy.blocker({ kind: "provider_unavailable", slug: error.slug ?? "provider" })}${retry}`,
+    );
   }
   const recovery = copy.recoveryFailure(error.code);
   if (recovery) return withRequestId(`${recovery}${retry}`);

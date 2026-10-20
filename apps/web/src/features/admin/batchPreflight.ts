@@ -1,6 +1,7 @@
 import type {
   BatchDurationEstimate,
   BatchPreflightBlocker,
+  BatchPreflightBlockerKind,
   BatchPreflightState,
 } from "./BatchAnalysisPanel";
 
@@ -68,7 +69,9 @@ export function batchDuration(
   };
 }
 
-function preflightBlocker(code: string): BatchPreflightBlocker {
+function preflightBlockerKind(code: string): BatchPreflightBlockerKind {
+  if (code === "ARCHIVED_NOT_ALLOWED") return "archived";
+  if (code === "NOT_FOUND") return "not_found";
   if (code === "MODEL_UNAVAILABLE") return "provider_unavailable";
   if (code === "GITHUB_RATE_LIMITED" || code === "RATE_LIMITED") {
     return "rate_limited";
@@ -102,14 +105,21 @@ function retryAfterSeconds(
 }
 
 export function preflightState(plan: BatchPreflightBody): BatchPreflightState {
-  const blockers = plan.blockers.map((blocker) =>
-    preflightBlocker(blocker.code),
+  const blockers: BatchPreflightBlocker[] = plan.blockers.map(
+    ({ code, slug }) => ({
+      kind: preflightBlockerKind(code),
+      slug,
+    }),
   );
   if (blockers.length > 0) {
-    const retryAfterSecondsValues = [
-      retryAfterSeconds(plan.core_budget.reset_at),
-      retryAfterSeconds(plan.secondary_retry_at),
-    ].filter((value): value is number => value !== undefined);
+    const retryAfterSecondsValues = blockers.some(
+      (blocker) => blocker.kind === "rate_limited",
+    )
+      ? [
+          retryAfterSeconds(plan.core_budget.reset_at),
+          retryAfterSeconds(plan.secondary_retry_at),
+        ].filter((value): value is number => value !== undefined)
+      : [];
     return {
       status: "blocked",
       blockers,

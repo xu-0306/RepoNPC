@@ -231,6 +231,84 @@ function selectedState() {
 }
 
 describe("guidedOnboardingReducer", () => {
+  it.each(["octocat/demo", "somebody/different-project"])(
+    "refuses archived repository toggles using metadata for %s",
+    (slug) => {
+      const initial = selectedState();
+      const archived = {
+        ...initial,
+        repositories: initial.repositories.map((repository) => ({
+          ...repository,
+          selected: false,
+          metadata: { ...repository.metadata, slug, is_archived: true },
+        })),
+      };
+      expect(
+        guidedOnboardingReducer(archived, { type: "TOGGLE_REPOSITORY", slug }),
+      ).toEqual(archived);
+      expect(
+        guidedOnboardingReducer(initial, {
+          type: "TOGGLE_REPOSITORY",
+          slug: metadata.slug,
+        }).repositories[0].selected,
+      ).toBe(false);
+    },
+  );
+
+  it("drops archived restored selections on confirm and rejects an archived-only selection", () => {
+    const initial = selectedState();
+    const archived = {
+      ...initial.repositories[0],
+      metadata: {
+        ...metadata,
+        slug: "someone/archived",
+        html_url: "https://github.com/someone/archived",
+        is_archived: true,
+      },
+    };
+    const restored = {
+      ...initial,
+      repositories: [...initial.repositories, archived],
+    };
+    const confirmed = guidedOnboardingReducer(restored, {
+      type: "CONFIRM_SELECTION",
+    });
+    expect(confirmed.selectionConfirmed).toBe(true);
+    expect(confirmed.repositories[0].selected).toBe(true);
+    expect(confirmed.repositories[1].selected).toBe(false);
+    expect(confirmed.repositories[1].confirmedSelectionFingerprint).toBeNull();
+    expect(() =>
+      guidedOnboardingReducer(
+        { ...initial, repositories: [archived] },
+        { type: "CONFIRM_SELECTION" },
+      ),
+    ).toThrow("ONBOARDING_SELECTION_REQUIRED");
+    const resumed = guidedOnboardingReducer(initialGuidedOnboardingState(), {
+      type: "RESTORE_DRAFT",
+      state: restored,
+    });
+    expect(resumed.repositories[1].selected).toBe(false);
+    const legacy = serializeGuidedOnboarding({
+      ...restored,
+      repositories: restored.repositories.map((repository) => ({
+        ...repository,
+        metadata: { ...repository.metadata, is_archived: false },
+      })),
+    });
+    const parsed = parseGuidedOnboarding(legacy, [metadata, archived.metadata]);
+    expect(parsed?.repositories[1].selected).toBe(false);
+    expect(parsed?.repositories[1].confirmedSelectionFingerprint).toBeNull();
+  });
+
+  it("drops a selected repository when discovery marks it archived", () => {
+    const next = guidedOnboardingReducer(selectedState(), {
+      type: "MERGE_REPOSITORIES",
+      repositories: [{ ...metadata, is_archived: true }],
+      page: 1,
+      hasMore: false,
+    });
+    expect(next.repositories[0].selected).toBe(false);
+  });
   it.each([true, false])(
     "restores a draft without overwriting server readiness %s in either response order",
     (modelsConfigured) => {

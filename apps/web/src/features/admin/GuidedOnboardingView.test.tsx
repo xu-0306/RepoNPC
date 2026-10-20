@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   initialGuidedOnboardingState,
+  guidedOnboardingReducer,
   type ContributionProposal,
   type GuidedOnboardingState,
   type GuidedOnboardingViewProps,
@@ -22,6 +23,7 @@ import {
   GuidedOnboardingView,
 } from "./GuidedOnboardingView";
 import { ConfirmButton } from "./ConfirmDialog";
+import type { AnalysisSelectionView } from "./AnalysisSelectionPanel";
 import { Dialog, DialogTrigger, Popover } from "react-aria-components";
 
 // Keep server rendering real; direct handler checks opt into the shared hook pattern.
@@ -171,13 +173,13 @@ function props(
     state: initialGuidedOnboardingState(),
     busy: false,
     errorCode: "",
-    providerStatus: null,
-    providerStatusPending: false,
+    analysisSelection: null,
+    analysisSelectionPending: false,
     onAction: vi.fn(),
     onDiscover: vi.fn(),
     onResolve: vi.fn(),
     onAnalyze: vi.fn(),
-    onRefreshProviderStatus: vi.fn(),
+    onRefreshAnalysisSelection: vi.fn(),
     onSuggestContribution: vi.fn(),
     onCreateDraft: vi.fn(),
     onCopyDraft: vi.fn(),
@@ -186,7 +188,193 @@ function props(
   };
 }
 
+const confirmedModels: AnalysisSelectionView = {
+  selection: {
+    chat_profile_id: "private-chat-profile",
+    embedding_profile_id: "private-search-profile",
+    generation: 1,
+    updated_at: "1970-01-01T00:00:00Z",
+  },
+  eligible: true,
+  reason: "READY",
+  chat: {
+    profile_id: "private-chat-profile",
+    model_id: "confirmed-chat-model",
+    status: "ready",
+    connection_revision: 3,
+    tested: true,
+  },
+  embedding: {
+    profile_id: "private-search-profile",
+    model_id: "confirmed-search-model",
+    status: "ready",
+    connection_revision: 5,
+    tested: true,
+  },
+};
+
 describe("GuidedOnboardingView", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "disables archived selection with its accessible name and visible label in %s",
+    (locale) => {
+      const archived = repository({
+        selected: false,
+        metadata: { ...metadata, is_archived: true },
+      });
+      const input = props({
+        locale,
+        state: state({
+          step: "repositories",
+          selectionConfirmed: false,
+          repositories: [archived],
+        }),
+      });
+      const markup = renderToStaticMarkup(<GuidedOnboardingView {...input} />);
+      expect(markup).toMatch(
+        /<input[^>]*disabled=""[^>]*type="checkbox"|<input[^>]*type="checkbox"[^>]*disabled=""/,
+      );
+      expect(markup).toContain(`<strong>${metadata.name}</strong>`);
+      expect(markup).toContain(`<code>${metadata.slug}</code>`);
+      expect(markup).toMatch(/<label[^>]*for="guided-repository-[^"]+"/);
+      expect(markup).toContain(locale === "zh-TW" ? "已封存" : "archived");
+      expect(
+        guidedOnboardingReducer(input.state, {
+          type: "TOGGLE_REPOSITORY",
+          slug: metadata.slug,
+        }),
+      ).toEqual(input.state);
+      directHooks.values = [];
+      try {
+        const tree = GuidedOnboardingView(input);
+        const step = elements(tree).find(
+          (node) =>
+            typeof node.type === "function" &&
+            node.props.onDiscover === input.onDiscover,
+        )!;
+        const stepTree = (step.type as (value: typeof step.props) => ReactNode)(
+          step.props,
+        );
+        const row = elements(stepTree).find(
+          (node) => node.props.repository === archived,
+        )!;
+        const rowTree = (row.type as (value: typeof row.props) => ReactNode)(
+          row.props,
+        );
+        const checkbox = elements(rowTree).find(
+          (node) => node.props.id && node.props.onChange,
+        )!;
+        expect(checkbox.props.disabled).toBe(true);
+        (checkbox.props.onChange as () => void)();
+        expect(input.onAction).not.toHaveBeenCalled();
+      } finally {
+        directHooks.values = null;
+      }
+    },
+  );
+
+  it.each(["zh-TW", "en"] as const)(
+    "shows confirmed tested model ids from the current selection in %s",
+    (locale) => {
+      const input = props({
+        locale,
+        state: state({ step: "analysis" }),
+        analysisSelection: confirmedModels,
+      });
+      const markup = renderToStaticMarkup(<GuidedOnboardingView {...input} />);
+      expect(markup).toContain(
+        locale === "zh-TW" ? "分析與回答模型" : "Analysis and chat",
+      );
+      expect(markup).toContain(
+        locale === "zh-TW" ? "資料查找模型" : "Content finder",
+      );
+      expect(markup).toContain(
+        `confirmed-chat-model · ${locale === "zh-TW" ? "已測試" : "Tested"}`,
+      );
+      expect(markup).toContain(
+        `confirmed-search-model · ${locale === "zh-TW" ? "已測試" : "Tested"}`,
+      );
+      expect(markup).not.toContain("1970");
+      expect(markup).not.toContain("private-chat-profile");
+      expect(markup).not.toContain("private-search-profile");
+      const refreshed = renderToStaticMarkup(
+        <GuidedOnboardingView
+          {...input}
+          analysisSelection={{
+            ...confirmedModels,
+            chat: { ...confirmedModels.chat, model_id: "new-confirmed-chat" },
+          }}
+        />,
+      );
+      expect(refreshed).toContain("new-confirmed-chat");
+      expect(refreshed).not.toContain("confirmed-chat-model");
+    },
+  );
+
+  it.each(["zh-TW", "en"] as const)(
+    "shows not selected for generation zero or an empty selection in %s",
+    (locale) => {
+      for (const selection of [
+        { ...confirmedModels.selection, generation: 0 },
+        {
+          ...confirmedModels.selection,
+          chat_profile_id: null,
+          embedding_profile_id: null,
+        },
+      ]) {
+        const markup = renderToStaticMarkup(
+          <GuidedOnboardingView
+            {...props({
+              locale,
+              state: state({ step: "analysis" }),
+              analysisSelection: {
+                ...confirmedModels,
+                selection,
+                eligible: false,
+                reason: "CHAT_MODEL_NOT_SELECTED",
+              },
+            })}
+          />,
+        );
+        expect(markup).toContain(
+          locale === "zh-TW" ? "尚未選擇" : "Not selected",
+        );
+        expect(markup).not.toContain("1970");
+        expect(markup).not.toContain("confirmed-chat-model");
+      }
+    },
+  );
+
+  it("rechecks the shared analysis selection", () => {
+    directHooks.values = [];
+    try {
+      const input = props({ state: state({ step: "analysis" }) });
+      const tree = GuidedOnboardingView(input);
+      const step = elements(tree).find(
+        (node) =>
+          typeof node.type === "function" &&
+          node.props.onRefreshAnalysisSelection ===
+            input.onRefreshAnalysisSelection,
+      )!;
+      const stepTree = (step.type as (value: typeof step.props) => ReactNode)(
+        step.props,
+      );
+      const panel = elements(stepTree).find(
+        (node) =>
+          typeof node.type === "function" &&
+          node.props.onRefresh === input.onRefreshAnalysisSelection,
+      )!;
+      const panelTree = (
+        panel.type as (value: typeof panel.props) => ReactNode
+      )(panel.props);
+      const button = elements(panelTree).find(
+        (node) => node.type === "button",
+      )!;
+      (button.props.onClick as () => void)();
+      expect(input.onRefreshAnalysisSelection).toHaveBeenCalledOnce();
+    } finally {
+      directHooks.values = null;
+    }
+  });
   it("renders the unnumbered welcome outcome and advanced path", () => {
     const markup = renderToStaticMarkup(<GuidedOnboardingView {...props()} />);
 
@@ -620,30 +808,41 @@ describe("GuidedOnboardingView", () => {
     },
   );
 
-  it("shows a server-owned provider preflight without exposing connection details", () => {
-    const markup = renderToStaticMarkup(
-      <GuidedOnboardingView
-        {...props({
-          state: state({ step: "analysis" }),
-          providerStatus: {
-            ready: false,
-            provider: "openai_compatible",
-            lastCheckedAt: "2026-08-15T01:02:03Z",
-          },
-        })}
-      />,
-    );
+  it.each(["zh-TW", "en"] as const)(
+    "shows the analysis selection reason without exposing connection details in %s",
+    (locale) => {
+      const markup = renderToStaticMarkup(
+        <GuidedOnboardingView
+          {...props({
+            locale,
+            state: state({ step: "analysis" }),
+            analysisSelection: {
+              ...confirmedModels,
+              eligible: false,
+              reason: "CHAT_MODEL_NOT_READY",
+              chat: { ...confirmedModels.chat, tested: false },
+            },
+          })}
+        />,
+      );
 
-    expect(markup).toContain("Model connection");
-    expect(markup).toContain(
-      "OpenAI-compatible (including vLLM) is not ready.",
-    );
-    expect(markup).toContain("OpenAI-compatible connection details");
-    expect(markup).toContain("Recheck");
-    expect(markup).toContain('dateTime="2026-08-15T01:02:03Z"');
-    expect(markup).not.toContain("api_key");
-    expect(markup).not.toContain("base_url");
-  });
+      expect(markup).toContain(
+        locale === "zh-TW" ? "分析模型" : "Analysis models",
+      );
+      expect(markup).toContain(
+        locale === "zh-TW"
+          ? "回答模型尚未通過測試"
+          : "Chat model has not passed testing",
+      );
+      expect(markup).toContain(locale === "zh-TW" ? "重新檢查" : "Recheck");
+      expect(markup).not.toContain("1970");
+      expect(markup).not.toContain("<time");
+      expect(markup).not.toContain("connection_id");
+      expect(markup).not.toContain("private-chat-profile");
+      expect(markup).not.toContain("api_key");
+      expect(markup).not.toContain("base_url");
+    },
+  );
 
   it("allows an unavailable analysis to continue to manual contribution", () => {
     const markup = renderToStaticMarkup(

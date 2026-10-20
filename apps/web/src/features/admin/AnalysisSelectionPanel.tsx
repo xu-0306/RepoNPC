@@ -5,6 +5,14 @@ import type { ChatProfileView } from "./ChatProfilePanel";
 import type { EmbeddingProfileView } from "./EmbeddingProfilePanel";
 import type { ModelConnectionView } from "./ModelConnectionPanel";
 
+export type AnalysisSelectionRoleView = {
+  profile_id: string | null;
+  model_id: string | null;
+  status: string;
+  connection_revision?: number;
+  tested?: boolean;
+};
+
 export type AnalysisSelectionView = {
   selection: {
     chat_profile_id: string | null;
@@ -14,6 +22,8 @@ export type AnalysisSelectionView = {
   };
   eligible: boolean;
   reason: string;
+  chat: AnalysisSelectionRoleView;
+  embedding: AnalysisSelectionRoleView;
 };
 
 export function AnalysisSelectionPanel({

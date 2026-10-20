@@ -14,10 +14,60 @@ import {
 import { analysisModelConfirmationMessage } from "./analysisModelConfirmation";
 import { modelConnectionFailureMessage } from "./modelConnectionFeedback";
 import { adminErrorStateReducer, initialAdminErrorState } from "./adminErrors";
-import { preflightState } from "./batchPreflight";
+import { preflightState, type BatchPreflightBody } from "./batchPreflight";
 import safeModelPair from "./__fixtures__/analysisModelPair.safe.json";
 
 describe("batch preflight mapping", () => {
+  it.each([
+    ["ARCHIVED_NOT_ALLOWED", "archived"],
+    ["NOT_FOUND", "not_found"],
+    ["CONFIRMATION_REQUIRED", "selection_changed"],
+    ["FUTURE_UNKNOWN_CODE", "selection_changed"],
+    ["MODEL_UNAVAILABLE", "provider_unavailable"],
+    ["NO_REPOSITORIES", "no_repositories"],
+    ["GITHUB_ERROR", "github_unavailable"],
+  ])("maps %s with its slug and no rate-limit countdown", (code, kind) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-09T00:00:00Z"));
+    try {
+      const plan: BatchPreflightBody = {
+        plan_id: "plan-safe-identifier",
+        expires_at: "2026-09-09T00:05:00Z",
+        selection_hash: "a".repeat(64),
+        repositories: [],
+        cache_predictions: {},
+        core_budget: {
+          remaining: 46,
+          limit: 60,
+          reset_at: "2026-09-09T01:00:00Z",
+        },
+        secondary_retry_at: null,
+        provider_ready: true,
+        capacity: {
+          github_requests: 1,
+          archive_staging: 1,
+          index_work: 1,
+          generation: 1,
+          whole_job_items: 1,
+        },
+        maximum_generation_attempts: 1,
+        duration: null,
+        blockers: [{ slug: "someone/arbitrary-project", code }],
+        warnings: [],
+      };
+      expect(preflightState(plan)).toEqual({
+        status: "blocked",
+        blockers: [{ kind, slug: "someone/arbitrary-project" }],
+        retryAfterSeconds: undefined,
+      });
+      // A secondary retry timestamp alone must not block a non-rate-limit retry.
+      expect(
+        preflightState({ ...plan, secondary_retry_at: "2026-09-09T02:00:00Z" }),
+      ).toEqual(preflightState(plan));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("preserves the longest safe retry time and transient GitHub state", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-09T00:00:00Z"));
@@ -53,7 +103,10 @@ describe("batch preflight mapping", () => {
         }),
       ).toEqual({
         status: "blocked",
-        blockers: ["rate_limited", "github_unavailable"],
+        blockers: [
+          { kind: "rate_limited", slug: "github" },
+          { kind: "github_unavailable", slug: "github" },
+        ],
         retryAfterSeconds: 90,
       });
     } finally {
@@ -378,6 +431,30 @@ function renderAccessPanel(
 }
 
 describe("AdminAccessPanel", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "shows deployment-host setup commands without launcher copy in %s",
+    (locale) => {
+      const markup = renderAccessPanel({
+        locale,
+        setupStatus: { setup_required: true, setup_code_available: false },
+      });
+      expect(markup).toContain('data-mode="setup"');
+      expect(markup).toContain("<code>reponpc admin setup-code</code>");
+      expect(markup).toContain(
+        "<code>docker compose exec app reponpc admin setup-code</code>",
+      );
+      expect(markup).toContain(
+        locale === "zh-TW" ? "部署主機" : "deployment host",
+      );
+      expect(markup).not.toContain("一鍵啟動");
+      expect(markup.toLowerCase()).not.toContain("launcher");
+      expect(markup).toContain(
+        locale === "zh-TW"
+          ? "這裡沒有預設帳密。"
+          : "There are no default credentials.",
+      );
+    },
+  );
   it("keeps public drafts resumable while rejecting secret-bearing content", () => {
     expect(
       safeDraftForSessionStorage("profile:\n  display_name: Demo\n"),

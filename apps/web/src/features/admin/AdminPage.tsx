@@ -106,7 +106,6 @@ import {
   serializeGuidedOnboarding,
   type ContributionProposal,
   type GuidedOnboardingAction,
-  type GuidedProviderStatus,
   type ModelInference,
   type RepositoryAnalysis,
   type RepositoryFact,
@@ -940,8 +939,8 @@ export function AdminAccessPanel({
           <p className="admin-auth__intro">
             {copyFor(
               locale,
-              "這裡沒有預設帳密。請使用啟動視窗顯示的一次性設定碼，建立只屬於這個本機資料目錄的管理員。",
-              "There are no default credentials. Use the one-time code shown by the launcher to create the administrator for this local data directory.",
+              "這裡沒有預設帳密。請使用部署主機產生的一次性設定碼，建立這個資料目錄的管理員。",
+              "There are no default credentials. Use the one-time code generated on the deployment host to create the administrator for this data directory.",
             )}
           </p>
           <p className="admin-auth__status" role="status">
@@ -953,10 +952,20 @@ export function AdminAccessPanel({
                 )
               : copyFor(
                   locale,
-                  "尚未產生設定碼。請重新執行一鍵啟動腳本取得一次性設定碼。",
-                  "No setup code is available. Run the one-click launcher again to obtain one.",
+                  "請在部署主機執行下列命令之一，產生一次性設定碼。",
+                  "Run one of these commands on the deployment host to generate a one-time setup code.",
                 )}
           </p>
+          {!setupStatus?.setup_code_available && (
+            <>
+              <div>
+                <code>reponpc admin setup-code</code>
+              </div>
+              <div>
+                <code>docker compose exec app reponpc admin setup-code</code>
+              </div>
+            </>
+          )}
           <form className="admin-auth__form" onSubmit={onSetupOwner}>
             <div className="admin-auth__field">
               <label htmlFor="admin-setup-code">
@@ -1137,9 +1146,6 @@ export function AdminPage({
     content: "",
     sprite_base64: null as string | null,
   });
-  const [providerStatus, setProviderStatus] =
-    useState<GuidedProviderStatus | null>(null);
-  const [providerStatusPending, setProviderStatusPending] = useState(true);
   const [embeddingProfiles, setEmbeddingProfiles] = useState<
     EmbeddingProfileView[]
   >([]);
@@ -1688,6 +1694,7 @@ export function AdminPage({
   }
 
   const refreshAnalysisSelection = useCallback(async () => {
+    setAnalysisSelectionPending(true);
     try {
       await modelRequests.current.selection.read(
         () => request<AnalysisSelectionView>("/api/admin/analysis-selection"),
@@ -1717,6 +1724,8 @@ export function AdminPage({
           value: false,
         }),
       );
+    } finally {
+      setAnalysisSelectionPending(false);
     }
   }, [locale, request]);
 
@@ -1767,24 +1776,6 @@ export function AdminPage({
       setAnalysisSelectionPending(false);
     }
   }
-
-  const refreshProviderStatus = useCallback(async () => {
-    setProviderStatusPending(true);
-    try {
-      const currentStatus = await request<AnalysisSelectionView>(
-        "/api/admin/analysis-selection",
-      );
-      setProviderStatus({
-        ready: currentStatus.eligible,
-        provider: null,
-        lastCheckedAt: currentStatus.selection.updated_at,
-      });
-    } catch {
-      setProviderStatus(null);
-    } finally {
-      setProviderStatusPending(false);
-    }
-  }, [request]);
 
   useEffect(() => {
     if (authenticated || accessBootstrapStarted.current) return;
@@ -1858,11 +1849,6 @@ export function AdminPage({
       );
     setGuidedResumeReady(true);
   }, [authenticated]);
-
-  useEffect(() => {
-    if (!authenticated) return;
-    void refreshProviderStatus();
-  }, [authenticated, refreshProviderStatus]);
 
   useEffect(() => {
     if (!authenticated) return;
@@ -3384,8 +3370,9 @@ export function AdminPage({
     setValidation(null);
     setPreview(null);
     setStatus(null);
-    setProviderStatus(null);
-    setProviderStatusPending(true);
+    setAnalysisSelection(null);
+    setAnalysisSelectionPending(false);
+    setAnalysisSelectionError("");
     setSnippet(null);
     setConflict(false);
     setGitHubOperationsReady(false);
@@ -3916,8 +3903,8 @@ export function AdminPage({
             busy={busy}
             errorCode={adminErrors.guidedCode}
             locale={locale}
-            providerStatus={providerStatus}
-            providerStatusPending={providerStatusPending}
+            analysisSelection={analysisSelection}
+            analysisSelectionPending={analysisSelectionPending}
             onAction={applyGuidedAction}
             onAnalyze={(slug) => void analyzeRepository(slug)}
             onCreateBatch={() => void createAnalysisBatch()}
@@ -3930,7 +3917,7 @@ export function AdminPage({
             onResolve={(repository, ref) =>
               void resolveRepository(repository, ref)
             }
-            onRefreshProviderStatus={() => void refreshProviderStatus()}
+            onRefreshAnalysisSelection={() => void refreshAnalysisSelection()}
             onSuggestContribution={(slug) => void suggestContribution(slug)}
             state={guidedState}
           />

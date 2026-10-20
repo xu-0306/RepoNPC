@@ -1,3 +1,9 @@
+import {
+  Children,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -7,6 +13,14 @@ import {
   type BatchJobSnapshot,
   type BatchPreflightState,
 } from "./BatchAnalysisPanel";
+
+function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
+  return Children.toArray(node).flatMap((child) =>
+    isValidElement<Record<string, unknown>>(child)
+      ? [child, ...elements(child.props.children as ReactNode)]
+      : [],
+  );
+}
 
 const preflight: BatchPreflightState = {
   status: "ready",
@@ -427,13 +441,77 @@ describe("BatchAnalysisPanel", () => {
     expect(markup).toContain("重試需要確認的項目");
   });
 
+  it.each(["zh-TW", "en"] as const)(
+    "renders repo blocker slugs and permits retry without rate limiting in %s",
+    (locale) => {
+      const consoleError = vi.spyOn(console, "error");
+      try {
+        const input = props({
+          locale,
+          preflight: {
+            status: "blocked",
+            blockers: [
+              { kind: "archived", slug: "alice/project-one" },
+              { kind: "archived", slug: "bob/project-two" },
+              { kind: "not_found", slug: "carol/project-three" },
+              { kind: "selection_changed", slug: "dave/project-four" },
+            ],
+          },
+          job: null,
+          progress: null,
+        });
+        const markup = renderToStaticMarkup(<BatchAnalysisPanel {...input} />);
+        const blocked = markup
+          .split('data-preflight-status="blocked"')[1]
+          .split("</section>")[0];
+        expect(blocked.match(/<li>/g)).toHaveLength(4);
+        const summary = elements(BatchAnalysisPanel(input)).find(
+          (node) => node.props.preflight === input.preflight,
+        )!;
+        const summaryTree = (
+          summary.type as (value: typeof summary.props) => ReactNode
+        )(summary.props);
+        const list = elements(summaryTree).find((node) => node.type === "ul")!;
+        const items = Children.toArray(list.props.children as ReactNode).filter(
+          isValidElement,
+        );
+        expect(items).toHaveLength(4);
+        expect(new Set(items.map((item) => item.key)).size).toBe(items.length);
+        for (const slug of ["alice/project-one", "bob/project-two"]) {
+          expect(blocked).toContain(
+            locale === "zh-TW"
+              ? `${slug} 已封存，無法分析`
+              : `${slug} is archived and can&#x27;t be analyzed`,
+          );
+        }
+        expect(blocked).toContain(
+          locale === "zh-TW"
+            ? "carol/project-three 不存在或無法存取"
+            : "carol/project-three was not found or is inaccessible",
+        );
+        expect(blocked).toContain("dave/project-four");
+        expect(blocked).toContain(
+          locale === "zh-TW"
+            ? '<button type="button">重新執行分析前檢查</button>'
+            : '<button type="button">Run preflight again</button>',
+        );
+        expect(blocked).not.toContain(
+          locale === "zh-TW" ? "請在約" : "Try again in about",
+        );
+        expect(consoleError).not.toHaveBeenCalled();
+      } finally {
+        consoleError.mockRestore();
+      }
+    },
+  );
+
   it("shows anonymous rate-limit blockers before a batch exists", () => {
     const markup = renderToStaticMarkup(
       <BatchAnalysisPanel
         {...props({
           preflight: {
             status: "blocked",
-            blockers: ["rate_limited"],
+            blockers: [{ kind: "rate_limited", slug: "github" }],
             retryAfterSeconds: 90,
           },
           job: null,
@@ -454,7 +532,7 @@ describe("BatchAnalysisPanel", () => {
         {...props({
           preflight: {
             status: "blocked",
-            blockers: ["github_unavailable"],
+            blockers: [{ kind: "github_unavailable", slug: "github" }],
           },
           job: null,
           progress: null,

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { Locale } from "../../i18n/messages";
+import type { AnalysisSelectionView } from "./AnalysisSelectionPanel";
 
 export type LocalizedText = Record<Locale, string>;
 
@@ -209,24 +210,18 @@ export interface GuidedOnboardingViewProps {
   batchCreatePending?: boolean;
   modelSetupView?: ReactNode;
   modelSetupReturn?: boolean;
-  providerStatus: GuidedProviderStatus | null;
-  providerStatusPending: boolean;
+  analysisSelection: AnalysisSelectionView | null;
+  analysisSelectionPending: boolean;
   onAction: (action: GuidedOnboardingAction) => void;
   onDiscover: (account: string, page: number) => void;
   onResolve: (repository: string, ref: string | null) => void;
   onAnalyze: (slug: string) => void;
   onCreateBatch?: () => void;
-  onRefreshProviderStatus: () => void;
+  onRefreshAnalysisSelection: () => void;
   onSuggestContribution: (slug: string) => void;
   onCreateDraft: () => void;
   onCopyDraft: () => void;
   onDownloadDraft: () => void;
-}
-
-export interface GuidedProviderStatus {
-  ready: boolean;
-  provider: "ollama" | "openai_compatible" | null;
-  lastCheckedAt: string | null;
 }
 
 interface PersistedRepository {
@@ -373,7 +368,9 @@ export function guidedOnboardingFromConfig(
 export function selectedRepositories(
   state: GuidedOnboardingState,
 ): GuidedRepository[] {
-  return state.repositories.filter((repository) => repository.selected);
+  return state.repositories.filter(
+    (repository) => repository.selected && !repository.metadata.is_archived,
+  );
 }
 
 export function guidedOnboardingReducer(
@@ -467,7 +464,7 @@ export function guidedOnboardingReducer(
       requireUnconfirmedSelection(state);
       return updateRepository(state, action.slug, (repository) => ({
         ...repository,
-        selected: !repository.selected,
+        selected: !repository.metadata.is_archived && !repository.selected,
       }));
     case "SET_REPOSITORY_OPTIONS":
       requireUnconfirmedSelection(state);
@@ -487,14 +484,20 @@ export function guidedOnboardingReducer(
         step: state.route === "manual" ? "contributions" : "analysis",
         selectionConfirmed: true,
         repositories: state.repositories.map((repository) => {
-          const nextFingerprint = repository.selected
+          const selected =
+            repository.selected && !repository.metadata.is_archived;
+          const nextFingerprint = selected
             ? selectionFingerprint(repository)
             : null;
-          if (nextFingerprint === repository.confirmedSelectionFingerprint) {
+          if (
+            selected === repository.selected &&
+            nextFingerprint === repository.confirmedSelectionFingerprint
+          ) {
             return repository;
           }
           return {
             ...repository,
+            selected,
             confirmedSelectionFingerprint: nextFingerprint,
             analysisStatus: "idle",
             analysis: null,
@@ -771,7 +774,19 @@ export function guidedOnboardingReducer(
         rawYamlHasUnmappedChanges: action.value,
       };
     case "RESTORE_DRAFT":
-      return { ...action.state, modelsConfigured: state.modelsConfigured };
+      return {
+        ...action.state,
+        modelsConfigured: state.modelsConfigured,
+        repositories: action.state.repositories.map((repository) =>
+          repository.metadata.is_archived
+            ? {
+                ...repository,
+                selected: false,
+                confirmedSelectionFingerprint: null,
+              }
+            : repository,
+        ),
+      };
     case "RESET":
       return {
         ...initialGuidedOnboardingState(),
@@ -853,12 +868,14 @@ export function parseGuidedOnboarding(
         ref: persisted.ref,
         include: persisted.include,
         exclude: persisted.exclude,
-        selected: true,
-        confirmedSelectionFingerprint: selectionFingerprint({
-          ref: persisted.ref,
-          include: persisted.include,
-          exclude: persisted.exclude,
-        }),
+        selected: !repositoryMetadata.is_archived,
+        confirmedSelectionFingerprint: repositoryMetadata.is_archived
+          ? null
+          : selectionFingerprint({
+              ref: persisted.ref,
+              include: persisted.include,
+              exclude: persisted.exclude,
+            }),
         analysisStatus: "idle",
         analysis: null,
         ownerStatement: persisted.ownerStatement,
@@ -1041,7 +1058,11 @@ function mergeRepositories(
       indexes.set(metadata.slug, result.length);
       result.push(newGuidedRepository(metadata));
     } else {
-      result[index] = { ...result[index], metadata };
+      result[index] = {
+        ...result[index],
+        metadata,
+        selected: result[index].selected && !metadata.is_archived,
+      };
     }
   }
   return result;

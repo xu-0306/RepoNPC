@@ -201,6 +201,18 @@ describe("local publication operation feedback", () => {
         selection: {
           eligible: true,
           reason: "",
+          chat: {
+            profile_id: "chat",
+            model_id: "chat-model",
+            status: "ready",
+            tested: true,
+          },
+          embedding: {
+            profile_id: "search",
+            model_id: "search-model",
+            status: "ready",
+            tested: true,
+          },
           selection: {
             chat_profile_id: "chat",
             embedding_profile_id: "search",
@@ -321,6 +333,18 @@ function workspace(
     selection: {
       eligible: true,
       reason: "",
+      chat: {
+        profile_id: "chat",
+        model_id: "chat-model",
+        status: "ready",
+        tested: true,
+      },
+      embedding: {
+        profile_id: "search",
+        model_id: "search-model",
+        status: "ready",
+        tested: true,
+      },
       selection: {
         chat_profile_id: "chat",
         embedding_profile_id: "search",

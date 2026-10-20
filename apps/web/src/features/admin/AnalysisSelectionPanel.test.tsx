@@ -52,6 +52,20 @@ const selected = {
   },
   eligible: true,
   reason: "READY",
+  chat: {
+    profile_id: "chat-a",
+    model_id: "same-model",
+    status: "ready",
+    connection_revision: 1,
+    tested: true,
+  },
+  embedding: {
+    profile_id: "finder",
+    model_id: "finder-model",
+    status: "ready",
+    connection_revision: 1,
+    tested: true,
+  },
 };
 
 describe("AnalysisSelectionPanel", () => {
