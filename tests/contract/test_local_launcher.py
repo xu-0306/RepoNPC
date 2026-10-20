@@ -35,6 +35,12 @@ def test_local_launcher_preserves_launch_and_secret_boundaries() -> None:
     assert "REPONPC_GITHUB_OAUTH_CLIENT_SECRET_FILE" not in script
     assert "REPONPC_CREDENTIAL_ENCRYPTION_KEY_FILE" not in script
     assert "optional capability remains disabled" in script
+    assert "format_environment_error" in script
+    assert "except EnvironmentValidationError as exc:" in script
+    assert "print(format_environment_error(exc), file=sys.stderr)" in script
+    assert "sys.exit(check_environment())" in script
+    assert "$environmentOutput = @(& $pythonExe -c $environmentCheck 2>&1)" in script
+    assert 'throw (($environmentOutput -join "`n") + ". Review .env and try again.")' in script
 
 
 def test_local_launcher_builds_same_origin_app_and_checks_real_health_route() -> None:

@@ -51,3 +51,35 @@ def test_compose_forwards_the_documented_application_environment() -> None:
     assert "replace-with-an-argon2id-phc-hash" not in compose
     assert "REPONPC_ADMIN_USERNAME: ${REPONPC_ADMIN_USERNAME:-}" in compose
     assert "REPONPC_ADMIN_USERNAME:-admin" not in compose
+
+
+# Per-deployment identity and secret paths: .env.example shows placeholders the
+# operator must replace, while Compose keeps a safe local fallback (or none).
+DEPLOYMENT_PLACEHOLDERS = {
+    "REPONPC_PUBLIC_BASE_URL",
+    "REPONPC_TRUSTED_HOSTS",
+    "REPONPC_CONFIG_REPOSITORY",
+    "REPONPC_INDEX_MANIFEST_URL",
+    "REPONPC_IP_HASH_KEY_FILE",
+}
+
+
+def test_compose_fallbacks_match_documented_environment_values() -> None:
+    documented = dict(
+        re.findall(r"^(REPONPC_[A-Z0-9_]+)=(.*)$", read(".env.example"), re.MULTILINE)
+    )
+    forwarded_fallbacks = dict(
+        re.findall(
+            r"^      (REPONPC_[A-Z0-9_]+): \${\1:-([^}]*)}$",
+            read("compose.yml"),
+            re.MULTILINE,
+        )
+    )
+
+    assert forwarded_fallbacks
+    differing = {
+        name
+        for name, fallback in forwarded_fallbacks.items()
+        if name in documented and fallback != documented[name]
+    }
+    assert differing == DEPLOYMENT_PLACEHOLDERS

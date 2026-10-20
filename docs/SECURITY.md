@@ -271,6 +271,8 @@ The reverse proxy/firewall is part of the admin trust boundary: public visitor r
 - Active and previous valid bundles remain; older bundles may be cleaned locally, while GitHub Release retention is an operator policy.
 - Owners must understand that public profile configuration, claims, selected source excerpts, generated cards, and release bundles are publicly downloadable.
 
+Environment startup diagnostics (ADR-069) may print only deduplicated, sorted issue names and codes. Names must fully match `[A-Z][A-Z0-9_]*`, codes `[a-z][a-z0-9_]*`; invalid fields become `UNKNOWN_VARIABLE` / `unknown_code`. Never print `EnvironmentIssue.message`, values or paths.
+
 ## 12. Security verification and disclosure
 
 Before release, CI and manual review must include dependency/secret/container scanning; hostile repository fixtures; FTS injection; XSS/Markdown/SVG payloads; URL/redirect/SSRF cases; archive/path traversal; forged evidence; login/session/CSRF/backoff; GitHub allowlist/conflicts; provider error leakage; safe-log canaries; budgets/timeouts; and last-known-good recovery.

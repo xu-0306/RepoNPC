@@ -33,6 +33,8 @@ Set-Location RepoNPC
 
 啟動器會準備依賴與前端，開啟只供本機使用的管理頁。不必先設定模型、GitHub token、帳號或密碼。重新整理可延續有效登入；若工作階段過期，重新開啟 RepoNPC。既有 `.env` 設定會保留。
 
+Windows 啟動器與安裝版只供本機試用；第 4–6 步的公開分享需要 Linux Compose 正式部署，目前不支援 Windows 正式模式。
+
 Linux／自行管理 HTTPS 的部署與備份操作，請讀 [操作手冊](docs/OPERATIONS.md) 和下方進階整合。
 
 ## 從草稿到分享
@@ -40,9 +42,9 @@ Linux／自行管理 HTTPS 的部署與備份操作，請讀 [操作手冊](docs
 1. **建立內容：**選 AI 或手動路線，挑選公開專案，填寫並確認自己的雙語貢獻與個人介紹。不會從程式碼推定你的職位或成果。
 2. **本機預覽：**進入「預覽與分享」，預覽作品集與卡片、儲存草稿。角色可使用內建素材；自訂角色與外觀都是選填。
 3. **準備並試聊：**兩種模型都已測試且選用後，按「準備 NPC 並套用」。缺少模型時按「前往設定模型」，草稿會保留；完成後返回準備。成功後開啟目前版本試聊。
-4. **設定訪客連線：**準備 Tailscale Funnel 聊天入口與 GitHub Pages 網域，儲存後明確啟動訪客連線，並在 Tailscale 完成 Funnel 設定。管理頁及模型服務保持私人連線。
-5. **上傳網站：**填 Pages 完整網址（例如 `https://account.github.io/project/`），下載、解壓縮靜態網站，依 [雙語分享指南](docs/PAGES_SHARING_GUIDE.md)手動上傳。發布後返回「核對已上傳網站」。
-6. **下載 README.md：**核對完整 README 內容預覽，再下載包含已確認公開介紹、作品、NPC 名片與對話連結的檔案。README.md 必須放在「與 GitHub 帳號同名的公開儲存庫」根目錄，才能顯示在個人首頁。卡片使用已核對 Pages 的公開圖片，不必另上傳；已有 README 時先保留原文，也可用原有圖片上傳與複製區塊追加名片。再從 GitHub 點開網站確認。外觀、涵蓋檢查及 FAQ 可在選填區調整。
+4. **設定訪客連線（需 Linux 正式部署）：**準備 Tailscale Funnel 聊天入口與 GitHub Pages 網域，儲存後明確啟動訪客連線，並在 Tailscale 完成 Funnel 設定。管理頁及模型服務保持私人連線。
+5. **上傳網站（需 Linux 正式部署）：**填 Pages 完整網址（例如 `https://account.github.io/project/`），下載、解壓縮靜態網站，依 [雙語分享指南](docs/PAGES_SHARING_GUIDE.md)手動上傳。發布後返回「核對已上傳網站」。
+6. **下載 README.md（需 Linux 正式部署）：**核對完整 README 內容預覽，再下載包含已確認公開介紹、作品、NPC 名片與對話連結的檔案。README.md 必須放在「與 GitHub 帳號同名的公開儲存庫」根目錄，才能顯示在個人首頁。卡片使用已核對 Pages 的公開圖片，不必另上傳；已有 README 時先保留原文，也可用原有圖片上傳與複製區塊追加名片。再從 GitHub 點開網站確認。外觀、涵蓋檢查及 FAQ 可在選填區調整。
 
 **Pages 網域與完整網址不同：**訪客連線欄位只填 `https://account.github.io`；網站上傳欄位要包含 `/project/` 等路徑。Pages 核對與外網聊天檢查各自記錄；儲存網址或本機準備成功，都不代表已經公開上線。
 
@@ -50,13 +52,25 @@ Linux／自行管理 HTTPS 的部署與備份操作，請讀 [操作手冊](docs
 
 聊天等待時間預設 **180 秒，最高 300 秒**，既有明確較低設定保留。畫面顯示實際處理階段並可停止；輸出仍須通過引用與內容驗證。兩種生成預算各自預設／最高 16,384 token，包含推理與答案，不等於 16k 個可見字元。
 
-設定 YAML 僅供公開內容備份；自訂角色需連同 PNG 保存。完整還原另需私人資料目錄、模型及加密金鑰，請依 [備份說明](docs/OPERATIONS.md#11-backup-and-recovery)操作。
+要把內容帶到正式主機，可下載 `reponpc.yml`、保存自訂角色 PNG，在正式管理頁的進階 YAML 編輯器貼上並驗證，再到「角色與動畫」上傳、套用 PNG。模型連線與金鑰需在新主機重新設定。維護備份只供相同版本、同一原資料目錄還原；完整資料搬移請讀 [備份說明](docs/OPERATIONS.md#11-backup-and-recovery)。
 
 ## English quick start
+
+With a Windows installer candidate, open RepoNPC from the Start menu; see the [Windows guide](packaging/windows/README.md) for build/checksum instructions and pending acceptance. For source evaluation, install Git, PowerShell, [uv](https://docs.astral.sh/uv/) and Node.js/Corepack; use the pinned pnpm version. uv prepares Python 3.14 automatically, then run:
+
+```powershell
+git clone https://github.com/xu-0306/RepoNPC.git
+Set-Location RepoNPC
+.\start-reponpc.cmd
+```
+
+The launcher prepares dependencies and the frontend, then opens local administration. No model, GitHub token, account or password is needed to enter; existing `.env` settings are preserved. Refresh resumes a valid session; reopen RepoNPC after it expires. Windows launcher/installer use is local trial only. Visitor access, Pages sharing and the README with a public card (steps 4–6 above) require Linux Compose production deployment; Windows production mode is not supported yet.
 
 Open RepoNPC and choose **Build manually first** to write, preview, save and back up content without a model. For AI analysis or live chat, bring your own Ollama or compatible API service, test both the answer and content finder models, then confirm the selection. The verified answer-model catalog is currently empty; the optional built-in bge-m3 content finder requires an explicit download.
 
 In **Preview & share**, prepare and try locally, configure visitor access, download and manually upload the Pages site, verify it, then preview and **Download README.md**. The complete file uses the verified site's public card image. Upload README.md to the root of a public repository with the same name as your GitHub account to display it on your profile. Preserve existing README text or append the copied card block with the manual image-upload path. Use the domain without a path for visitor access and the full project URL for Pages. Follow the [bilingual sharing guide](docs/PAGES_SHARING_GUIDE.md). This is an evaluation candidate, not an accepted v1 release; no public connection or GitHub upload happens automatically.
+
+To move public content to production, download `reponpc.yml`, keep custom character PNGs, paste and validate the YAML in the production admin's advanced editor, then upload/apply the PNGs in Character & animation. Set up model connections and keys again on the new host. Maintenance restore is for the same version and original data directory only; see [backup instructions](docs/OPERATIONS.md#11-backup-and-recovery) for full-data moves.
 
 ## 給開發者與自行部署者
 
@@ -101,9 +115,12 @@ chmod 700 secrets
 chmod 600 secrets/reponpc_ip_hash_key
 ```
 
+Windows Docker Desktop 從 Windows 檔案系統 bind mount 的 secret，在 Linux 容器內會呈現群組／其他使用者可讀權限，因而被拒絕為 `unsafe_secret_permissions`。支援的正式主機是 Linux；僅供本機 Docker Desktop 評估時，可用直接的 `REPONPC_GITHUB_TOKEN`、`REPONPC_CHAT_API_KEY`、`REPONPC_EMBEDDING_API_KEY`、`REPONPC_IP_HASH_KEY`，並清空各自的 `_FILE`，兩種形式不可並用。
+
 接著至少修改 `.env` 中這些設定：
 
 - `REPONPC_PUBLIC_BASE_URL`、`REPONPC_TRUSTED_HOSTS`
+- `REPONPC_ADMIN_ORIGINS`：正式部署的私人管理 origin；啟用訪客 gateway 必須明確填寫。
 - `REPONPC_CONFIG_REPOSITORY`、`REPONPC_INDEX_MANIFEST_URL`
 - `REPONPC_CHAT_PROVIDER`、`REPONPC_CHAT_BASE_URL`、`REPONPC_CHAT_MODEL`
 - `REPONPC_EMBEDDING_PROVIDER`、`REPONPC_EMBEDDING_BASE_URL`、`REPONPC_EMBEDDING_MODEL`
@@ -151,6 +168,8 @@ curl --fail http://127.0.0.1:8000/readyz
 curl --fail http://127.0.0.1:8000/api/public/status
 ```
 
+Compose 容器固定監聽 `8000`；主機發布埠由 `REPONPC_HOST_PORT` 設定（預設 `8000`），修改 `REPONPC_PORT` 不會改變 Compose 的監聽埠。
+
 `healthz` 只表示程序有回應；`readyz` 成功才代表索引、runtime 與模型已相容並可服務。
 
 ### 5. 進入管理介面並分享卡片
@@ -172,7 +191,7 @@ docker compose exec app reponpc admin setup-code
 
 管理工作區的「維護」可建立密碼加密的 `.reponpc-backup`，檢查並確認還原、
 回復保留的前一份網站資料，以及停止訪客 gateway。備份密碼每次輸入，送出後清除。
-這只還原同一原資料目錄的 SQLite 設定；請另外保留密鑰、bundles、模型與圖片／
+這只還原相同版本、同一原資料目錄的 SQLite 設定，不是跨主機搬移；請另外保留密鑰、bundles、模型與圖片／
 本機作品集檔案。還原前會自動保存目前狀態的加密備份，完成後須重新登入，gateway
 保持關閉。完整搬移與災難復原依 [備份操作說明](docs/OPERATIONS.md#11-backup-and-recovery)。
 Windows 安裝包建置與仍待驗收項目見 [Windows packaging 指南](packaging/windows/README.md)。

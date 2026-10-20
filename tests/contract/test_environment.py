@@ -20,6 +20,7 @@ from reponpc.config.environment import (
     EnvironmentIssue,
     EnvironmentValidationError,
     SecretValue,
+    format_environment_error,
     load_environment,
 )
 from reponpc.runtime.database import RuntimeDatabase
@@ -688,5 +689,70 @@ def test_production_entrypoint_reports_environment_failure_without_values(
     with pytest.raises(SystemExit) as raised:
         main.run()
 
-    assert str(raised.value) == "deployment environment is invalid"
+    assert str(raised.value) == (
+        "deployment environment is invalid: REPONPC_GITHUB_TOKEN (secret_source_collision)"
+    )
     assert canary not in str(raised.value)
+
+
+def test_environment_error_format_deduplicates_and_sorts_names_and_codes() -> None:
+    failure = EnvironmentValidationError(
+        [
+            EnvironmentIssue("REPONPC_PORT", "out_of_range", "ignored"),
+            EnvironmentIssue("REPONPC_ENV", "invalid_choice", "ignored"),
+            EnvironmentIssue("REPONPC_PORT", "invalid_integer", "ignored"),
+            EnvironmentIssue("REPONPC_ENV", "invalid_choice", "different message"),
+        ]
+    )
+
+    assert format_environment_error(failure) == (
+        "deployment environment is invalid: REPONPC_ENV (invalid_choice), "
+        "REPONPC_PORT (invalid_integer), REPONPC_PORT (out_of_range)"
+    )
+
+
+def test_environment_error_format_omits_untrusted_messages_and_values() -> None:
+    message_canary = "MESSAGE_CANARY/private/path"
+    value_canary = "secret-value-canary=123"
+    failure = EnvironmentValidationError(
+        [EnvironmentIssue("REPONPC_GITHUB_TOKEN", "invalid_choice", message_canary)]
+    )
+
+    formatted = format_environment_error(failure)
+    assert formatted == "deployment environment is invalid: REPONPC_GITHUB_TOKEN (invalid_choice)"
+    assert message_canary not in formatted
+    assert value_canary not in formatted
+
+    with pytest.raises(EnvironmentValidationError) as raised:
+        load_environment(deployment_environment(REPONPC_PORT=value_canary))
+    formatted = format_environment_error(raised.value)
+    assert "REPONPC_PORT (invalid_integer)" in formatted
+    assert value_canary not in formatted
+    assert message_canary not in formatted
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["REPONPC_BAD NAME", "REPONPC_BAD\nINJECTED", "REPONPC_BAD\n", "é", ""],
+)
+def test_environment_error_format_replaces_unsafe_names(name: str) -> None:
+    failure = EnvironmentValidationError([EnvironmentIssue(name, "unknown_variable", "ignored")])
+
+    assert format_environment_error(failure) == (
+        "deployment environment is invalid: UNKNOWN_VARIABLE (unknown_variable)"
+    )
+
+
+@pytest.mark.parametrize("code", ["bad code", "bad\ninjected", "invalid_choice\n", "BAD", ""])
+def test_environment_error_format_replaces_unsafe_codes(code: str) -> None:
+    failure = EnvironmentValidationError([EnvironmentIssue("REPONPC_PORT", code, "ignored")])
+
+    assert format_environment_error(failure) == (
+        "deployment environment is invalid: REPONPC_PORT (unknown_code)"
+    )
+
+
+def test_environment_error_format_handles_no_issues() -> None:
+    assert format_environment_error(EnvironmentValidationError([])) == (
+        "deployment environment is invalid"
+    )

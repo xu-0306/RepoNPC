@@ -86,6 +86,7 @@ from reponpc.config.environment import (
     EnvironmentSettings,
     EnvironmentValidationError,
     _canonical_origin,
+    format_environment_error,
     load_environment,
 )
 from reponpc.i18n.catalog import translate
@@ -611,7 +612,7 @@ def run() -> None:
     try:
         settings = load_environment()
     except EnvironmentValidationError as exc:
-        raise SystemExit("deployment environment is invalid") from exc
+        raise SystemExit(format_environment_error(exc)) from exc
     application = prepare_application(settings)
     uvicorn.run(
         getattr(application.state, "maintenance_host", application),

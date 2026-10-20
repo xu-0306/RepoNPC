@@ -499,9 +499,32 @@ function Invoke-RepoNpcLauncher {
     }
 
     Write-Step "Validating the local deployment environment."
-    & $pythonExe -c "from reponpc.config.environment import load_environment; load_environment()"
-    if ($LASTEXITCODE -ne 0) {
-        throw "The local deployment environment is invalid. Review .env and try again."
+    $environmentCheck = @"
+import sys
+from reponpc.config.environment import EnvironmentValidationError, format_environment_error, load_environment
+
+def check_environment():
+    try:
+        load_environment()
+    except EnvironmentValidationError as exc:
+        print(format_environment_error(exc), file=sys.stderr)
+        return 2
+    return 0
+
+sys.exit(check_environment())
+"@
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell treats native stderr as an error record.
+        $ErrorActionPreference = "Continue"
+        $environmentOutput = @(& $pythonExe -c $environmentCheck 2>&1)
+        $environmentExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($environmentExitCode -ne 0) {
+        throw (($environmentOutput -join "`n") + ". Review .env and try again.")
     }
 
     $startedHere = $false

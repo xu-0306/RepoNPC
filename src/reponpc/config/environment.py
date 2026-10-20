@@ -144,6 +144,24 @@ class EnvironmentValidationError(ValueError):
         super().__init__("deployment environment is invalid")
 
 
+def format_environment_error(
+    error: EnvironmentValidationError,
+    *,
+    prefix: str = "deployment environment is invalid",
+) -> str:
+    """Format only validated issue names and codes, never messages or values."""
+
+    issues = {
+        (
+            issue.name if re.fullmatch(r"[A-Z][A-Z0-9_]*", issue.name) else "UNKNOWN_VARIABLE",
+            issue.code if re.fullmatch(r"[a-z][a-z0-9_]*", issue.code) else "unknown_code",
+        )
+        for issue in error.issues
+    }
+    details = ", ".join(f"{name} ({code})" for name, code in sorted(issues))
+    return f"{prefix}: {details}" if details else prefix
+
+
 class SecretValue:
     """An opaque server-only secret whose normal representations are redacted.
 

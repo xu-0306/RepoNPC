@@ -21,7 +21,11 @@ from reponpc.admin.auth import (
     validate_new_admin_password,
 )
 from reponpc.bundles.manager import BundleManager
-from reponpc.config.environment import EnvironmentValidationError, load_environment
+from reponpc.config.environment import (
+    EnvironmentValidationError,
+    format_environment_error,
+    load_environment,
+)
 from reponpc.config.models import ConfigValidationError, load_public_config
 from reponpc.indexing.github import GitHubSourceResolver
 from reponpc.indexing.pipeline import (
@@ -207,8 +211,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ConfigValidationError:
         print("reponpc: configuration_invalid", file=sys.stderr)
         return 2
-    except EnvironmentValidationError:
-        print("reponpc: deployment_environment_invalid", file=sys.stderr)
+    except EnvironmentValidationError as exc:
+        print(
+            format_environment_error(exc, prefix="reponpc: deployment_environment_invalid"),
+            file=sys.stderr,
+        )
         return 2
     except (IndexPipelineError, PublicationError) as exc:
         print(f"reponpc: {exc.code}", file=sys.stderr)

@@ -67,7 +67,7 @@ Before the opt-in Linux recipe, run `python scripts/funnel_compose_preflight.py`
 
 **2026-09-28 A4 runtime upgrade:** Migration 29 adds reviewed FAQ state and saved rewrite associations to `runtime.sqlite`; ordinary runtime backup/reopen includes them. Back up the existing private data directory before upgrade. Approval is exact-bundle-bound and never changes bundle bytes; after a new bundle, regenerate/review stale FAQ candidates. Regeneration replaces the latest candidate and does not preserve older approvals for automatic rollback restoration. The explicit check uses models but never blocks preparation/sharing. JSON download contains approved-current public answer/citations only. See [A4 routes and continuation](A4_COVERAGE_FAQ_IMPLEMENTATION.md); Pages/offline export remains A5.
 
-**2026-09-26 completion direction (ADR-048, Technical Specification 0.4.0):** Planned operations add a Windows PyInstaller onedir + Inno Setup per-user installer (unsigned, SHA-256 published, data preserved across upgrade/uninstall; Docker remains the Linux path), a first-use choice to download the built-in `bge-m3` embedding model or configure another service, a manually uploaded GitHub Pages export with `.nojekyll` and a hashed manifest, and the Funnel visitor gateway for live chat. None of these is implemented yet; see [the completion direction contract](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md).
+**Completion-direction status (2026-10-20, ADR-048):** The Windows installer, explicit built-in bge-m3 download, Pages export and A1 visitor gateway are implemented locally; release acceptance remains pending. See [the completion direction contract](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md), [Windows packaging](../packaging/windows/README.md) and the [Linux Funnel recipe](../README.md#linux訪客-gateway-與主機-tailscale).
 
 **2026-09-22 local-publication amendment (ADR-046):** The owner authorized implementation of the local-first NPC and guided GitHub card journey. [Local publication contract](LOCAL_PUBLICATION_CONTRACT_2026-09-22.md) supersedes GitHub-only configuration/build/activation transport; all validation, attribution, privacy and last-known-good requirements remain. Implementation/acceptance evidence must distinguish local tests from actual public deployment.
 
@@ -169,6 +169,10 @@ Store GitHub/provider/IP-HMAC values in separate files in the repository-local `
 set both direct and file forms. Create the directory and files before starting Compose, and restrict
 their permissions to the deployment operator.
 
+Windows Docker Desktop bind mounts from a Windows filesystem appear group/world-readable inside the Linux container and fail with `unsafe_secret_permissions`. Linux is the supported production host. For local Docker Desktop evaluation only, the direct `REPONPC_GITHUB_TOKEN`, `REPONPC_CHAT_API_KEY`, `REPONPC_EMBEDDING_API_KEY` and `REPONPC_IP_HASH_KEY` forms are accepted; clear each corresponding `_FILE` and never set both forms.
+
+Startup environment errors list only sorted, deduplicated variable names and codes, for example `deployment environment is invalid: REPONPC_IP_HASH_KEY_FILE (unsafe_secret_permissions)` (ADR-069). No issue message, value or path is printed.
+
 For `production`, start the application after configuring the IP-HMAC key, then issue a setup code against the persistent runtime volume:
 
 ```bash
@@ -237,7 +241,7 @@ When a saved connection's provider, URL, or key changes, RepoNPC automatically m
 
 No-model startup must still reach health and protected administration. Manual drafting/preview/export remains usable. A tested chat service does not imply embeddings. Admin project analysis requires an explicitly selected tested chat/embedding pair but does not require a published bundle; it uses bounded temporary derived-index work and must not publish or activate that index. Public visitor chat remains unavailable until the separately validated compatible bundle and public model lifecycle are ready. A runtime connection does not imply the index runner can reach it. Index-builder credentials are provisioned independently; no UI export contains them. Figma and a managed GGUF/Hugging Face runtime are outside this implementation package.
 
-**Current-source status (2026-09-10):** Managed connection, Chat profile and Embedding profile code/panels exist, so earlier text saying the form is wholly absent is obsolete. The guided flow still hides those panels, goes from repository confirmation to analysis, and projects public model status into the analysis step. Clean no-model startup can leave no usable provider runtime after later selection. Do not advertise the model-first flow, same-process first analysis, or full 0.2.2/0.2.3 acceptance until AC-053 through AC-060 pass. Use `ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md` for the correction.
+**Historical checkpoint:** The 2026-09-10 model-flow defects and correction plan are recorded in `ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md`; they are not the current-source status or a release-acceptance result.
 
 ### Private Ollama
 
@@ -327,11 +331,11 @@ The launcher requires Python 3.14 or newer and runs `uv sync --frozen` when its 
 
 The launcher reads existing `REPONPC_*` overrides from `.env`, adapts container secret-file paths to ignored files below `secrets/`, forces and validates `loopback_evaluation`, binds only `127.0.0.1`, uses same-origin `http://localhost:8090`, builds stale Web assets, starts the server in the background, and waits for `/healthz`. It then creates a fresh two-minute one-use launch grant and opens `/admin#local-launch=<grant>`; re-running replaces any prior unused grant. It never prints or creates a username/password and never requires GitHub configuration to enter settings. On startup it compares the managed process state with the latest backend/frontend inputs; a stale process is stopped through its recorded process tree and replaced. Before stopping, it verifies the recorded PID and configured RepoNPC Python executable. If Windows rejects tree termination because of an elevation-context mismatch, the launcher falls back to directly stopping that same verified PID. An unknown process occupying the port is never terminated automatically.
 
-The default local chat model is `qwen3.5:9b` when `.env` does not select another model. Provider readiness requires an external embedding profile compatible with the active bundle. The launcher never installs or downloads a local embedding runtime; use the Ollama model center/provider host or configure vLLM/OpenAI-compatible embeddings explicitly. It never fabricates a bundle or silently falls back to another provider. Logs and mutable state are kept below ignored `runtime-data/local/`. Use `-Port`, `-DataDir`, `-ChatModel`, `-SkipBuild`, `-NoBrowser`, or `-NoPause` for terminal-driven evaluation. This launcher is a development/evaluation convenience only; the supported production topology remains Docker Compose on x86_64 Linux behind HTTPS.
+The launcher selects no chat model unless configured in `.env` or passed with `-ChatModel`. There is no silent model download: built-in bge-m3 downloads only after an explicit owner choice; external services remain available. It never fabricates a bundle or silently switches providers. Logs and mutable state are below ignored `runtime-data/local/`; terminal options include `-Port`, `-DataDir`, `-ChatModel`, `-SkipBuild`, `-NoBrowser` and `-NoPause`.
+
+Both the Windows source launcher and installer are local trial only. Public visitor access, Pages and the README with a public card require Docker Compose production on x86_64 Linux; Windows production mode is not supported yet.
 
 ### Production Compose startup
-
-The preceding launcher defaults describe the existing code, not the 0.2.2 target. The implementation must remove implicit model defaults in the launcher and environment loader together; deleting `.env.example` values alone would still leave hidden defaults. Explicit overrides and existing working profiles must survive.
 
 Prepare `.env` from `.env.example`, mount secrets, verify the exact manifest/public base URLs, then:
 
@@ -340,6 +344,8 @@ docker compose build --pull
 docker compose up -d
 docker compose ps
 ```
+
+Compose fixes the container listener at `8000`; `REPONPC_HOST_PORT` selects the host-side published port (default `8000`), while `REPONPC_PORT` does not override the Compose listener.
 
 The release implementation must document image name/tag pinning. Avoid `latest` in production. The container starts as non-root, owns only its data directory, and reports setup-required until a valid compatible bundle activates.
 
@@ -355,7 +361,7 @@ curl --fail https://portfolio.example.com/api/public/status
 
 ## 8. HTTPS reverse proxy
 
-**Planned no-purchase entry (ADR-047; not yet an operational recipe):** The owner selected Tailscale Funnel with a `*.ts.net` HTTPS visitor URL. [The focused plan](TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md) requires a visitor-only gateway between Funnel and this admin-capable app, private production administration, proxy/IP and SSE verification, and real external acceptance. Do not point Funnel at the present full application port or use the Windows loopback launcher as a public server. The operator-domain recipe below remains the current documented production reference until the Funnel implementation and clean-host tests pass.
+**No-purchase visitor entry (ADR-047/053):** The A1 visitor-only gateway and [Linux host-network Compose recipe](../README.md#linux訪客-gateway-與主機-tailscale) are implemented locally. Configure explicit private `REPONPC_ADMIN_ORIGINS`; keep management private and point Funnel only at the visitor gateway. Windows launchers are local trial only. Real external and release acceptance remain pending.
 
 - Forward the original HTTPS host/proto and client address only from a trusted proxy included in `REPONPC_TRUSTED_PROXY_CIDRS`.
 - Reject unknown hosts; redirect HTTP to HTTPS.
@@ -410,7 +416,7 @@ press **Download the encrypted backup** to save the already-created file using
 your current owner session. Verify the file in your downloads; the creation
 message does not itself prove that the browser saved it.
 
-This file restores SQLite settings to the **same original data directory**.
+This file restores SQLite settings to the **same original data directory and exact application version**, not across hosts.
 It does not include model weights, host keys, retained bundle files, appearance
 or local-portfolio assets. Keep these resources and their permissions separately.
 For full disaster recovery or moving hosts, use the protected stopped-service

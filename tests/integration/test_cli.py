@@ -21,6 +21,7 @@ import reponpc.main as runtime_main
 from reponpc import cli
 from reponpc.admin.auth import AdminSessionService
 from reponpc.cards.assets import validate_sprite
+from reponpc.config.environment import EnvironmentIssue, EnvironmentValidationError
 from reponpc.indexing.github import GitHubSourceResolver
 from reponpc.indexing.pipeline import (
     PENDING_MANIFEST_NAME,
@@ -39,6 +40,34 @@ from tests.integration.test_index_build import (
     DeterministicEmbeddingProvider,
     _fixture_snapshot,
 )
+
+
+def test_cli_environment_failure_reports_names_and_codes_without_values(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    canary = "CLI_SECRET_CANARY/private/path"
+    failure = EnvironmentValidationError(
+        [
+            EnvironmentIssue("REPONPC_PORT", "invalid_integer", canary),
+            EnvironmentIssue("REPONPC_GITHUB_TOKEN", "secret_source_collision", canary),
+            EnvironmentIssue("REPONPC_BAD " + canary, "unknown_variable", canary),
+        ]
+    )
+
+    def invalid_environment(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(cli, "load_environment", invalid_environment)
+
+    assert cli.main(["admin", "launch-token"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (
+        "reponpc: deployment_environment_invalid: "
+        "REPONPC_GITHUB_TOKEN (secret_source_collision), REPONPC_PORT (invalid_integer), "
+        "UNKNOWN_VARIABLE (unknown_variable)\n"
+    )
+    assert canary not in captured.err
 
 
 class FixtureResolver:
