@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import stat
+import subprocess
+import sys
 from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,6 +25,7 @@ from reponpc.config.environment import (
     format_environment_error,
     load_environment,
 )
+from reponpc.config.private_files import is_owner_only
 from reponpc.runtime.database import RuntimeDatabase
 
 
@@ -168,6 +171,22 @@ def test_deployment_profile_is_explicit_and_accepts_only_loopback_endpoints(
         secret_roots=(tmp_path,),
     )
     assert loopback.deployment_profile == "loopback_evaluation"
+
+
+def test_production_allows_empty_index_repository_and_manifest_for_local_publication(
+    tmp_path: Path,
+) -> None:
+    settings = load_environment(
+        deployment_environment(
+            REPONPC_CONFIG_REPOSITORY="",
+            REPONPC_INDEX_MANIFEST_URL="",
+        ),
+        secret_roots=(tmp_path,),
+    )
+
+    assert settings.deployment_profile == "production"
+    assert settings.config_repository == ""
+    assert settings.index_manifest_url == ""
 
 
 @pytest.mark.parametrize(
@@ -756,3 +775,135 @@ def test_environment_error_format_handles_no_issues() -> None:
     assert format_environment_error(EnvironmentValidationError([])) == (
         "deployment environment is invalid"
     )
+
+
+windows_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows DACL behavior only")
+
+
+def _grant_users_read(path: Path, inheritance: str = "") -> None:
+    subprocess.run(
+        ["icacls", str(path), "/grant", f"*S-1-5-32-545:{inheritance}(R)"],
+        check=True,
+        capture_output=True,
+    )
+
+
+@windows_only
+def test_windows_production_rejects_a_secret_file_another_account_can_read(
+    tmp_path: Path,
+) -> None:
+    canary = "WINDOWS_SECRET_CANARY_c41d"
+    secret_file = tmp_path / "github-token"
+    secret_file.write_text(canary, encoding="utf-8")
+    values = deployment_environment(REPONPC_GITHUB_TOKEN_FILE=str(secret_file))
+    settings = load_environment(values, secret_roots=(tmp_path,))
+    assert settings.secrets["github_token"].reveal() == canary
+
+    _grant_users_read(secret_file)
+
+    with pytest.raises(EnvironmentValidationError) as raised:
+        load_environment(values, secret_roots=(tmp_path,))
+    assert "unsafe_secret_permissions" in issue_codes(raised.value)
+    assert canary not in repr(raised.value.issues)
+
+
+@windows_only
+def test_windows_evaluation_keeps_reading_a_secret_file_other_accounts_can_read(
+    tmp_path: Path,
+) -> None:
+    canary = "WINDOWS_TRIAL_SECRET_CANARY_5e02"
+    secret_file = tmp_path / "github-token"
+    secret_file.write_text(canary, encoding="utf-8")
+    _grant_users_read(secret_file)
+
+    settings = load_environment(
+        deployment_environment(
+            REPONPC_DEPLOYMENT_PROFILE="loopback_evaluation",
+            REPONPC_HOST="127.0.0.1",
+            REPONPC_PUBLIC_BASE_URL="http://127.0.0.1:8000",
+            REPONPC_GITHUB_TOKEN_FILE=str(secret_file),
+        ),
+        secret_roots=(tmp_path,),
+    )
+
+    assert settings.secrets["github_token"].reveal() == canary
+
+
+@windows_only
+def test_windows_default_secret_root_is_the_private_data_directory(tmp_path: Path) -> None:
+    canary = "WINDOWS_ROOT_SECRET_CANARY_9a7b"
+    data_dir = tmp_path / "data"
+    (data_dir / "private").mkdir(parents=True)
+    inside = data_dir / "private" / "github-token"
+    inside.write_text(canary, encoding="utf-8")
+    outside = tmp_path / "github-token"
+    outside.write_text(canary, encoding="utf-8")
+
+    settings = load_environment(
+        deployment_environment(
+            REPONPC_DATA_DIR=str(data_dir), REPONPC_GITHUB_TOKEN_FILE=str(inside)
+        )
+    )
+    assert settings.secrets["github_token"].reveal() == canary
+    with pytest.raises(EnvironmentValidationError) as raised:
+        load_environment(
+            deployment_environment(
+                REPONPC_DATA_DIR=str(data_dir), REPONPC_GITHUB_TOKEN_FILE=str(outside)
+            )
+        )
+    assert "secret_file_outside_root" in issue_codes(raised.value)
+
+
+@windows_only
+def test_windows_production_creates_a_missing_data_directory_owner_only(tmp_path: Path) -> None:
+    data_dir = tmp_path / "missing" / "data"
+
+    main._require_private_data_directory(data_dir)
+
+    assert data_dir.is_dir()
+    assert is_owner_only(data_dir, posix_forbidden_mode=0)
+
+
+@windows_only
+def test_windows_production_startup_names_a_data_directory_other_accounts_can_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reponpc_logger: object,
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _grant_users_read(data_dir)
+    settings = load_environment(
+        deployment_environment(REPONPC_DATA_DIR=str(data_dir), REPONPC_IP_HASH_KEY="ip-canary"),
+        secret_roots=(tmp_path,),
+    )
+    monkeypatch.setattr(main, "load_environment", lambda: settings)
+    monkeypatch.setattr(main, "app", main.create_app())
+
+    with pytest.raises(SystemExit) as raised:
+        main.run()
+
+    assert str(raised.value) == (
+        "deployment environment is invalid: REPONPC_DATA_DIR (unsafe_secret_permissions)"
+    )
+    assert not (data_dir / "runtime.sqlite").exists()
+
+
+@windows_only
+def test_windows_evaluation_starts_with_a_data_directory_other_accounts_can_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reponpc_logger: object,
+) -> None:
+    from reponpc.windows_launcher import _environment, _identity_key
+
+    _grant_users_read(tmp_path, "(OI)(CI)")
+    settings = load_environment(
+        _environment(tmp_path, _identity_key(tmp_path), 18241),
+        secret_roots=(tmp_path / "private",),
+    )
+    monkeypatch.setattr(main, "app", main.create_app())
+
+    application = main.prepare_application(settings)
+
+    assert application.state.deployment_profile == "loopback_evaluation"

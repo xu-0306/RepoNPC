@@ -12,6 +12,7 @@ import math
 import os
 import re
 import stat
+import sys
 import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -19,6 +20,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final
 from urllib.parse import urlsplit
+
+from reponpc.config.private_files import is_owner_only
 
 SECRET_MAX_BYTES: Final = 64 * 1024
 DEFAULT_SECRET_ROOTS: Final = (Path("/run/secrets"),)
@@ -527,6 +530,7 @@ def _read_secret_file(
     roots: Sequence[Path],
     issues: list[EnvironmentIssue],
     max_secret_bytes: int,
+    production_profile: bool,
 ) -> SecretValue | None:
     try:
         candidate = Path(raw_path)
@@ -562,7 +566,12 @@ def _read_secret_file(
     if not stat.S_ISREG(file_stat.st_mode):
         _issue(issues, name, "unsafe_secret_file", "the secret file is not an allowed regular file")
         return None
-    if os.name == "posix" and file_stat.st_mode & (stat.S_IRGRP | stat.S_IROTH):
+    if sys.platform == "win32":
+        # Windows checks the DACL only in production, so trial data keeps working (ADR-070).
+        too_broad = production_profile and not is_owner_only(resolved, posix_forbidden_mode=0)
+    else:
+        too_broad = bool(file_stat.st_mode & (stat.S_IRGRP | stat.S_IROTH))
+    if too_broad:
         _issue(
             issues,
             name,
@@ -595,6 +604,7 @@ def _load_secret(
     roots: Sequence[Path],
     issues: list[EnvironmentIssue],
     max_secret_bytes: int,
+    production_profile: bool,
 ) -> SecretValue | None:
     direct = _present(values.get(name))
     file_path = _present(values.get(file_name))
@@ -616,13 +626,14 @@ def _load_secret(
         roots=roots,
         issues=issues,
         max_secret_bytes=max_secret_bytes,
+        production_profile=production_profile,
     )
 
 
 def load_environment(
     environ: Mapping[str, str] | None = None,
     *,
-    secret_roots: Sequence[Path] = DEFAULT_SECRET_ROOTS,
+    secret_roots: Sequence[Path] | None = None,
     max_secret_bytes: int = SECRET_MAX_BYTES,
 ) -> EnvironmentSettings:
     """Load documented deployment settings with safe, aggregate validation.
@@ -654,7 +665,22 @@ def load_environment(
         )
     if max_secret_bytes <= 0:
         raise ValueError("max_secret_bytes must be positive")
-    roots = _resolve_roots(secret_roots)
+    deployment_profile = _text(source, "REPONPC_DEPLOYMENT_PROFILE", "production", issues)
+    if deployment_profile not in {"loopback_evaluation", "production"}:
+        _issue(
+            issues,
+            "REPONPC_DEPLOYMENT_PROFILE",
+            "invalid_choice",
+            "loopback_evaluation or production is required",
+        )
+    data_dir = Path(_text(source, "REPONPC_DATA_DIR", "/var/lib/reponpc", issues))
+    if secret_roots is None:
+        selected_roots: Sequence[Path] = (
+            (data_dir / "private",) if sys.platform == "win32" else DEFAULT_SECRET_ROOTS
+        )
+    else:
+        selected_roots = secret_roots
+    roots = _resolve_roots(selected_roots)
     if not roots:
         raise ValueError("at least one secret root is required")
 
@@ -666,6 +692,7 @@ def load_environment(
             roots=roots,
             issues=issues,
             max_secret_bytes=max_secret_bytes,
+            production_profile=deployment_profile == "production",
         )
         for logical_name, (direct_name, file_name) in _SECRET_PAIRS.items()
     }
@@ -678,14 +705,6 @@ def load_environment(
             "REPONPC_ENV",
             "invalid_choice",
             "development, production, or test is required",
-        )
-    deployment_profile = _text(source, "REPONPC_DEPLOYMENT_PROFILE", "production", issues)
-    if deployment_profile not in {"loopback_evaluation", "production"}:
-        _issue(
-            issues,
-            "REPONPC_DEPLOYMENT_PROFILE",
-            "invalid_choice",
-            "loopback_evaluation or production is required",
         )
     host = _text(source, "REPONPC_HOST", "127.0.0.1", issues)
     public_base_url = _text(source, "REPONPC_PUBLIC_BASE_URL", "", issues)
@@ -771,7 +790,7 @@ def load_environment(
         "REPONPC_CONFIG_REPOSITORY",
         "",
         issues,
-        allow_empty=deployment_profile == "loopback_evaluation",
+        allow_empty=deployment_profile in {"loopback_evaluation", "production"},
     )
     if config_repository and not _REPOSITORY_SLUG_RE.fullmatch(config_repository):
         _issue(issues, "REPONPC_CONFIG_REPOSITORY", "invalid_repository", "owner/name is required")
@@ -833,7 +852,7 @@ def load_environment(
         public_base_url=public_base_url,
         host=host,
         port=port,
-        data_dir=Path(_text(source, "REPONPC_DATA_DIR", "/var/lib/reponpc", issues)),
+        data_dir=data_dir,
         log_level=log_level,
         trusted_hosts=_csv(source, "REPONPC_TRUSTED_HOSTS", ""),
         allowed_origins=_csv(source, "REPONPC_ALLOWED_ORIGINS", ""),
@@ -850,7 +869,7 @@ def load_environment(
             "REPONPC_INDEX_MANIFEST_URL",
             "",
             issues,
-            allow_empty=deployment_profile == "loopback_evaluation",
+            allow_empty=deployment_profile in {"loopback_evaluation", "production"},
         ),
         index_poll_seconds=_integer(source, "REPONPC_INDEX_POLL_SECONDS", 300, issues),
         max_bundle_bytes=_integer(

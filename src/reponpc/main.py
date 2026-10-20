@@ -83,12 +83,14 @@ from reponpc.bundles.updater import BundleUpdater, UrllibBundleTransport
 from reponpc.chat.limits import ChatLimits
 from reponpc.chat.service import GroundedChatService
 from reponpc.config.environment import (
+    EnvironmentIssue,
     EnvironmentSettings,
     EnvironmentValidationError,
     _canonical_origin,
     format_environment_error,
     load_environment,
 )
+from reponpc.config.private_files import is_owner_only, restrict_owner_only
 from reponpc.i18n.catalog import translate
 from reponpc.indexing.github import GitHubSourceResolver
 from reponpc.indexing.sources import EmbeddingIdentity, EmbeddingProvider
@@ -611,9 +613,9 @@ def run() -> None:
 
     try:
         settings = load_environment()
+        application = prepare_application(settings)
     except EnvironmentValidationError as exc:
         raise SystemExit(format_environment_error(exc)) from exc
-    application = prepare_application(settings)
     uvicorn.run(
         getattr(application.state, "maintenance_host", application),
         host=settings.host,
@@ -622,6 +624,27 @@ def run() -> None:
         proxy_headers=settings.deployment_profile != "loopback_evaluation",
         forwarded_allow_ips=",".join(getattr(settings, "trusted_proxy_cidrs", ())),
     )
+
+
+def _require_private_data_directory(data_dir: Path) -> None:
+    """Create or verify the Windows production data directory as owner-only (ADR-070)."""
+
+    try:
+        if not data_dir.exists():
+            data_dir.mkdir(parents=True)
+            restrict_owner_only(data_dir)
+        elif not data_dir.is_dir() or not is_owner_only(data_dir, posix_forbidden_mode=0):
+            raise OSError
+    except OSError:
+        raise EnvironmentValidationError(
+            [
+                EnvironmentIssue(
+                    "REPONPC_DATA_DIR",
+                    "unsafe_secret_permissions",
+                    "the data directory is not owner-only",
+                )
+            ]
+        ) from None
 
 
 def prepare_application(
@@ -633,6 +656,8 @@ def prepare_application(
     app.state.deployment_profile = settings.deployment_profile
     app.state.admin_origins = getattr(settings, "admin_origins", ())
     try:
+        if sys.platform == "win32" and settings.deployment_profile == "production":
+            _require_private_data_directory(settings.data_dir)
         runtime_database = RuntimeDatabase(
             settings.data_dir,
             busy_timeout_ms=settings.sqlite_busy_timeout_ms,
@@ -709,7 +734,12 @@ def _configure_maintenance(
         return result
 
     def resource_check(path: Path) -> None:
-        validate_restore_resources(path, runtime_database, settings.data_dir)
+        validate_restore_resources(
+            path,
+            runtime_database,
+            settings.data_dir,
+            production=settings.deployment_profile == "production",
+        )
         with closing(
             sqlite3.connect(path.as_uri() + "?mode=ro&immutable=1", uri=True)
         ) as connection:
@@ -770,7 +800,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         global_concurrency=settings.global_chat_concurrency,
     )
     github = None
-    if github_token is not None:
+    if github_token is not None and settings.config_repository:
         github = GitHubAdminClient(
             repository=settings.config_repository,
             branch=settings.config_branch,
@@ -955,7 +985,10 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
     )
     model_connections = ModelConnectionRegistry(
         runtime_database,
-        ProtectedModelSecretStore(settings.data_dir / "model-secrets" / "master.key"),
+        ProtectedModelSecretStore(
+            settings.data_dir / "model-secrets" / "master.key",
+            production=settings.deployment_profile == "production",
+        ),
     )
     environment_embedding_connection = None
     for role, provider, base_url, secret_name, model in (

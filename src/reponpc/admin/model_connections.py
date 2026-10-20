@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import ipaddress
 import json
-import os
 import socket
 import sqlite3
 import stat
+import sys
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -18,6 +18,7 @@ from urllib.parse import unquote, urlsplit
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from reponpc.config.private_files import is_owner_only, restrict_owner_only
 from reponpc.runtime.database import RuntimeDatabase
 
 _PROVIDERS: Final = frozenset({"ollama", "openai_compatible", "vllm"})
@@ -143,8 +144,10 @@ class ModelConnectionRevision:
 class ProtectedModelSecretStore:
     """Fernet-backed store with host-local key material separate from SQLite."""
 
-    def __init__(self, key_path: Path) -> None:
+    def __init__(self, key_path: Path, *, production: bool = False) -> None:
         self._key_path = key_path
+        # Windows enforces the owner-only DACL only in production (ADR-070).
+        self._enforce_owner_only = production or sys.platform != "win32"
 
     def encrypt(self, secret: ModelConnectionSecret) -> bytes:
         payload = _secret_payload(secret)
@@ -201,7 +204,7 @@ class ProtectedModelSecretStore:
         try:
             self._key_path.parent.mkdir(parents=True, exist_ok=True)
             temporary.write_bytes(value)
-            _restrict_file(temporary)
+            restrict_owner_only(temporary)
             temporary.replace(self._key_path)
         except OSError:
             raise ModelSecretStoreError("MODEL_SECRET_STORAGE_UNAVAILABLE") from None
@@ -220,7 +223,7 @@ class ProtectedModelSecretStore:
             try:
                 with self._key_path.open("xb") as handle:
                     handle.write(value)
-                _restrict_file(self._key_path)
+                restrict_owner_only(self._key_path)
             except FileExistsError:
                 return self._read_or_create_key()
             return value
@@ -237,7 +240,10 @@ class ProtectedModelSecretStore:
                 or not self._key_path.is_file()
             ):
                 raise OSError
-            _check_file_permissions(self._key_path)
+            if self._enforce_owner_only and not is_owner_only(
+                self._key_path, posix_forbidden_mode=stat.S_IRGRP | stat.S_IROTH
+            ):
+                raise ModelSecretStoreError("MODEL_SECRET_STORAGE_UNAVAILABLE")
             value = self._key_path.read_bytes()
             Fernet(value)
             return value
@@ -827,16 +833,6 @@ def _connection(row: sqlite3.Row) -> ModelConnection:
 
 def _now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
-
-
-def _restrict_file(path: Path) -> None:
-    if os.name == "posix":
-        path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-
-
-def _check_file_permissions(path: Path) -> None:
-    if os.name == "posix" and path.stat().st_mode & (stat.S_IRGRP | stat.S_IROTH):
-        raise ModelSecretStoreError("MODEL_SECRET_STORAGE_UNAVAILABLE")
 
 
 def _rollback(connection: sqlite3.Connection) -> None:

@@ -101,7 +101,9 @@ def _owner(connection: sqlite3.Connection) -> str | None:
     return None if row is None else str(row[0])
 
 
-def _secrets(connection: sqlite3.Connection, data_directory: Path) -> None:
+def _secrets(
+    connection: sqlite3.Connection, data_directory: Path, *, production: bool = False
+) -> None:
     rows = connection.execute("SELECT ciphertext FROM model_connection_secrets")
     row = rows.fetchone()
     if row is None:
@@ -110,7 +112,7 @@ def _secrets(connection: sqlite3.Connection, data_directory: Path) -> None:
         key = data_directory / "model-secrets" / "master.key"
         if len(_read(key, 64)) != 44:
             raise ValueError("invalid resource")
-        store = ProtectedModelSecretStore(key)
+        store = ProtectedModelSecretStore(key, production=production)
         while row is not None:
             store.decrypt(bytes(row[0]))
             row = rows.fetchone()
@@ -243,7 +245,11 @@ def _resources(connection: sqlite3.Connection, data_directory: Path) -> None:
 
 
 def validate_restore_resources(
-    candidate: Path, current: RuntimeDatabase, data_directory: Path
+    candidate: Path,
+    current: RuntimeDatabase,
+    data_directory: Path,
+    *,
+    production: bool = False,
 ) -> None:
     """Validate retained host resources without activating, repairing or creating any.
 
@@ -260,7 +266,7 @@ def validate_restore_resources(
             live.execute("BEGIN")
             if _owner(proposed) != _owner(live):
                 raise BackupResourceError("RESTORE_OWNER_MISMATCH")
-            _secrets(proposed, data_directory)
+            _secrets(proposed, data_directory, production=production)
             _resources(proposed, data_directory)
     except BackupResourceError:
         raise

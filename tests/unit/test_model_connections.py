@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import socket
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,7 @@ from reponpc.admin.model_connections import (
     validate_provider_base_url,
     validate_resolved_provider_addresses,
 )
+from reponpc.config.private_files import is_owner_only
 from reponpc.providers.contracts import ProviderError, ProviderFailureCode
 from reponpc.providers.http_transport import UrllibProviderHttpTransport
 from reponpc.runtime.database import RuntimeDatabase
@@ -632,3 +635,25 @@ def test_secret_repr_is_redacted() -> None:
     secret = ModelConnectionSecret(CANARY_URL, CANARY_KEY)
     assert repr(secret) == "ModelConnectionSecret(<redacted>)"
     assert CANARY_KEY not in repr(secret)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows DACL behavior only")
+def test_windows_production_store_rejects_a_key_other_accounts_can_read(tmp_path: Path) -> None:
+    key_path = tmp_path / "secrets" / "model.key"
+    store = ProtectedModelSecretStore(key_path, production=True)
+    ciphertext = store.encrypt(ModelConnectionSecret(CANARY_URL, CANARY_KEY))
+    assert is_owner_only(key_path, posix_forbidden_mode=0)
+    assert store.decrypt(ciphertext).api_key == CANARY_KEY
+
+    subprocess.run(
+        ["icacls", str(key_path), "/grant", "*S-1-5-32-545:(R)"],
+        check=True,
+        capture_output=True,
+    )
+
+    with pytest.raises(ModelSecretStoreError) as raised:
+        ProtectedModelSecretStore(key_path, production=True).decrypt(ciphertext)
+    assert raised.value.code == "MODEL_SECRET_STORAGE_UNAVAILABLE"
+    assert CANARY_KEY not in repr(raised.value)
+    # Trial data keeps working until the owner switches to production (ADR-070).
+    assert ProtectedModelSecretStore(key_path).decrypt(ciphertext).api_key == CANARY_KEY

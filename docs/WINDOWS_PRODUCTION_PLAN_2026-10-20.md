@@ -61,6 +61,7 @@ Windows 正式模式就是 `production` profile 加上以下設定，不新增 p
   - POSIX：沿用 0600/0700。
   - Windows：以 ctypes 呼叫 advapi32，不新增相依套件（見 D4）。
 - **允許的 SID：** 目前程序的使用者、SYSTEM（`S-1-5-18`）、Administrators（`S-1-5-32-544`）。
+  - `OWNER RIGHTS`（`S-1-3-4`）只授權給物件擁有者；擁有者已限定為目前使用者或 Administrators，所以也允許。Python 3.13 以後的 `mkdir(mode=0o700)` 在 Windows 上就是用它（W1 實作時確認）。
   - 任何其他 SID 的允許 ACE 一律拒絕，包括 Everyone、Authenticated Users、Users，以及沙箱或 AppContainer SID。
   - 擁有者必須是目前使用者或 Administrators。
 - **建立時：** 關閉繼承（protected DACL），只放上述三個 SID。
