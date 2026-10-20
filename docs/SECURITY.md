@@ -211,7 +211,7 @@ The admin listener follows the same private-network rule. A high/non-standard po
 
 - Prefer mounted secret files over `.env` for GitHub/provider/IP-HMAC secrets.
 - If both value and `_FILE` are supplied for one secret, startup fails rather than choosing precedence.
-- Secret files must be regular files, within configured secret mounts, not group/world readable where the platform exposes modes, and bounded in size. On Windows (ADR-070) the same owner-only rule is checked on the DACL: only the current user, SYSTEM and Administrators may have allow entries, and inherited entries are rejected.
+- Secret files must be regular files, within configured secret mounts, not group/world readable where the platform exposes modes, and bounded in size. On Windows (ADR-070) the same owner-only rule is checked on the DACL: only the current user, SYSTEM and Administrators may have allow entries, whether explicit or inherited. Windows enforces this in `production` only, so trial data keeps working.
 - Setup-code plaintext is returned once to the host CLI and exists only in operator/request memory. Runtime SQLite stores its SHA-256 digest, expiry, and no raw code; reissue invalidates the prior code and successful owner creation deletes it.
 - Password plaintext exists only during setup, optional local hash generation, and login verification. Dynamic owners persist only an Argon2id hash in protected runtime SQLite.
 - Session and CSRF raw values exist only in request/browser memory; the database stores hashes.

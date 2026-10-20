@@ -742,7 +742,7 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
   - **D6:** in both profiles, `REPONPC_CONFIG_REPOSITORY` and `REPONPC_INDEX_MANIFEST_URL` may be empty; the runtime then does not poll.
   - **D7:** Windows production rejects direct secret values from `.env`.
 - **Private files:** One shared helper creates and checks owner-only files and directories, replacing the per-module POSIX-only checks.
-  - **D4:** on Windows, it uses advapi32 through ctypes, with no new dependency. The DACL may grant access only to the current user, SYSTEM and Administrators. Inheritance is disabled at creation, and any other allow entry or inherited entry is rejected.
+  - **D4:** on Windows, it uses advapi32 through ctypes, with no new dependency. The DACL may grant access only to the current user, SYSTEM and Administrators. Inheritance is disabled at creation, and an allow entry for any other account, explicit or inherited, is rejected. Windows enforces the check only in `production`, so existing trial data keeps working; POSIX checks are unchanged.
   - It applies to secret files (`unsafe_secret_permissions`), the model secret key (`MODEL_SECRET_STORAGE_UNAVAILABLE`) and, in Windows production, the data directory root (`REPONPC_DATA_DIR` with the existing `unsafe_secret_permissions`).
   - The Windows secret root defaults to `<data_dir>\private`. Launchers pass `_FILE` paths instead of copying secret values into the environment.
   - **D5:** for an existing over-broad data directory, the launcher stops and shows one `icacls` command for the owner to run; it does not change ACLs itself.
