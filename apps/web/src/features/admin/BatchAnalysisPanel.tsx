@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 
 import type { Locale } from "../../i18n/messages";
 import { batchMutationResultUnknown } from "./batchMutationRecovery";
+import {
+  formatDuration,
+  githubRateLimitLabel,
+  retryAfter,
+} from "./githubRetry";
 
 export type BatchPreflightStatus =
   | "idle"
@@ -306,7 +311,7 @@ const COPY: Record<Locale, Copy> = {
     blocker: ({ kind, slug }) =>
       ({
         provider_unavailable: "模型 provider 尚未就緒，無法開始分析。",
-        rate_limited: "GitHub 目前限制新的工作；請依重試時間再試。",
+        rate_limited: `${githubRateLimitLabel("zh-TW")}；請依重試時間再試。`,
         github_unavailable: "GitHub 暫時無法使用，請稍後重新檢查。",
         selection_changed: `${slug} 的選擇已變更，請重新檢查`,
         archived: `${slug} 已封存，無法分析`,
@@ -407,8 +412,7 @@ const COPY: Record<Locale, Copy> = {
     repositoryErrorCode: "錯誤代碼",
     repositoryErrorReason: "失敗原因",
     failureStage: "失敗階段",
-    retryAfter: (seconds) =>
-      `請在約 ${formatDuration(seconds, "zh-TW")} 後再試。`,
+    retryAfter: (seconds) => retryAfter(seconds, "zh-TW"),
     batchStatus: (status) => batchStatusLabel(status, "zh-TW"),
   },
   en: {
@@ -444,8 +448,7 @@ const COPY: Record<Locale, Copy> = {
       ({
         provider_unavailable:
           "The model provider is not ready, so analysis cannot begin.",
-        rate_limited:
-          "GitHub is limiting new work. Try again after its retry window.",
+        rate_limited: `${githubRateLimitLabel("en")}. Try again after its retry window.`,
         github_unavailable:
           "GitHub is temporarily unavailable. Run preflight again later.",
         selection_changed: `${slug} selection changed. Run preflight again`,
@@ -556,8 +559,7 @@ const COPY: Record<Locale, Copy> = {
     repositoryErrorCode: "Error code",
     repositoryErrorReason: "Failure reason",
     failureStage: "Failure stage",
-    retryAfter: (seconds) =>
-      `Try again in about ${formatDuration(seconds, "en")}.`,
+    retryAfter: (seconds) => retryAfter(seconds, "en"),
     batchStatus: (status) => batchStatusLabel(status, "en"),
   },
 };
@@ -1433,14 +1435,4 @@ function formatDurationRange(
   locale: Locale,
 ): string {
   return `${formatDuration(estimate.minimumSeconds, locale)}–${formatDuration(estimate.maximumSeconds, locale)}`;
-}
-
-function formatDuration(seconds: number, locale: Locale): string {
-  const boundedSeconds = Math.max(0, Math.round(seconds));
-  const minutes = Math.floor(boundedSeconds / 60);
-  const remainder = boundedSeconds % 60;
-  if (locale === "zh-TW") {
-    return minutes > 0 ? `${minutes} 分 ${remainder} 秒` : `${remainder} 秒`;
-  }
-  return minutes > 0 ? `${minutes}m ${remainder}s` : `${remainder}s`;
 }

@@ -13,10 +13,12 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from functools import partial
 from pathlib import Path
 from typing import Protocol
 
+from reponpc.admin.batch_resolver import BatchResolverError
 from reponpc.admin.embedding_profiles import (
     EmbeddingProfile,
     EmbeddingProfileError,
@@ -38,6 +40,56 @@ from reponpc.indexing.sources import (
     ResolvedRepository,
 )
 from reponpc.providers.contracts import ProviderError
+
+
+class SourceFailureCode(StrEnum):
+    GITHUB_RATE_LIMITED = "GITHUB_RATE_LIMITED"
+    GITHUB_ERROR = "GITHUB_ERROR"
+    GITHUB_TIMEOUT = "GITHUB_TIMEOUT"
+    NOT_FOUND = "NOT_FOUND"
+    ARCHIVED_NOT_ALLOWED = "ARCHIVED_NOT_ALLOWED"
+    ARCHIVE_TOO_LARGE = "ARCHIVE_TOO_LARGE"
+    ARCHIVE_INVALID = "ARCHIVE_INVALID"
+    ARCHIVE_UNSAFE = "ARCHIVE_UNSAFE"
+
+
+_SOURCE_RESOLUTION_CODES = {
+    "github_rate_limited": SourceFailureCode.GITHUB_RATE_LIMITED,
+    "github_request_failed": SourceFailureCode.GITHUB_ERROR,
+    "github_timeout": SourceFailureCode.GITHUB_TIMEOUT,
+    "github_not_found": SourceFailureCode.NOT_FOUND,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class SourceFailure:
+    code: SourceFailureCode
+    retry_after_seconds: int | None
+
+
+def _source_failure(error: Exception) -> SourceFailure | None:
+    """Classify only typed, closed source codes; never inspect exception text."""
+
+    if not isinstance(error, (BatchResolverError, SourceResolutionError)):
+        return None
+    code = (
+        _SOURCE_RESOLUTION_CODES.get(error.code)
+        if isinstance(error, SourceResolutionError)
+        else None
+    )
+    if code is None:
+        try:
+            code = SourceFailureCode(error.code)
+        except ValueError:
+            return None
+    return SourceFailure(code, error.retry_after_seconds)
+
+
+@dataclass(frozen=True, slots=True)
+class ReindexOutcome:
+    bundle_id: str | None
+    error_code: str | None
+    retry_at: str | None = None
 
 
 class ReindexCancelled(RuntimeError):
@@ -88,6 +140,7 @@ class EmbeddingReindexCoordinator:
         timeout_seconds: float = 30 * 60,
         monotonic: Callable[[], float] = time.monotonic,
         on_activated: Callable[[EmbeddingProfile, str], None] | None = None,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         if timeout_seconds <= 0:
             raise ValueError("reindex timeout must be positive")
@@ -97,6 +150,7 @@ class EmbeddingReindexCoordinator:
         self._provider_transition = provider_transition
         self._timeout_seconds = timeout_seconds
         self._monotonic = monotonic
+        self._now = now or (lambda: datetime.now(UTC))
         self._on_activated = on_activated
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="embedding-reindex")
         self._lock = threading.RLock()
@@ -117,7 +171,8 @@ class EmbeddingReindexCoordinator:
         force: bool = False,
         transition: Callable[[EmbeddingProfile, EmbeddingProvider], Callable[[], None]]
         | None = None,
-        on_finished: Callable[[str | None, str | None], None] | None = None,
+        on_finished: Callable[[ReindexOutcome], None] | None = None,
+        source_failures_reported_by_caller: bool = False,
     ) -> EmbeddingProfile:
         """Probe and either switch a compatible profile or queue a frozen reindex."""
 
@@ -180,6 +235,7 @@ class EmbeddingReindexCoordinator:
                     builder or self._builder,
                     transition or self._provider_transition,
                     on_finished,
+                    source_failures_reported_by_caller,
                 )
             return self._registry.get(profile_id)
 
@@ -226,7 +282,8 @@ class EmbeddingReindexCoordinator:
         cancellation: threading.Event,
         builder: FrozenProfileBuilder,
         provider_transition: Callable[[EmbeddingProfile, EmbeddingProvider], Callable[[], None]],
-        on_finished: Callable[[str | None, str | None], None] | None,
+        on_finished: Callable[[ReindexOutcome], None] | None,
+        source_failures_reported_by_caller: bool,
     ) -> None:
         candidate: ReindexCandidate | None = None
         activated_bundle_id: str | None = None
@@ -295,15 +352,24 @@ class EmbeddingReindexCoordinator:
             if self._on_activated is not None:
                 self._on_activated(self._registry.get(profile.profile_id), bundle_id)
             if on_finished is not None:
-                on_finished(bundle_id, None)
+                on_finished(ReindexOutcome(bundle_id, None))
         except Exception as exc:
             # Record only code locations and closed typed failures; never exception text.
+            source_failure = _source_failure(exc)
+            error_code = _safe_reindex_error(exc)
+            retry_at = None
+            if source_failure is not None and source_failure.retry_after_seconds is not None:
+                retry_at = datetime.fromtimestamp(
+                    math.ceil(self._now().timestamp() + source_failure.retry_after_seconds), UTC
+                ).isoformat()
             frames = traceback.extract_tb(exc.__traceback__)
             logging.getLogger(__name__).warning(
                 "Reindex failed type=%s code=%s cause=%s location=%s",
                 type(exc).__name__,
-                _safe_reindex_error(exc),
-                (
+                error_code,
+                source_failure.code.value
+                if source_failure is not None
+                else (
                     exc.__cause__.code
                     if isinstance(exc.__cause__, BundleError)
                     else type(exc.__cause__).__name__
@@ -313,15 +379,17 @@ class EmbeddingReindexCoordinator:
             # Notification failures cannot undo a committed verified activation.
             if activated_bundle_id is not None:
                 if on_finished is not None:
-                    on_finished(activated_bundle_id, None)
+                    on_finished(ReindexOutcome(activated_bundle_id, None))
                 return
             self._registry.fail_reindex(
                 profile.profile_id,
                 profile.reindex_generation,
-                _safe_reindex_error(exc),
+                None
+                if source_failures_reported_by_caller and source_failure is not None
+                else error_code,
             )
             if on_finished is not None:
-                on_finished(None, _safe_reindex_error(exc))
+                on_finished(ReindexOutcome(None, error_code, retry_at))
         finally:
             if candidate is not None:
                 shutil.rmtree(candidate.workspace, ignore_errors=True)
@@ -508,6 +576,9 @@ def _raise_if_stopped(
 
 
 def _safe_reindex_error(error: Exception) -> str:
+    source_failure = _source_failure(error)
+    if source_failure is not None:
+        return source_failure.code.value
     if isinstance(error, ReindexCancelled):
         return "EMBEDDING_REINDEX_CANCELLED"
     if isinstance(error, ReindexTimedOut):

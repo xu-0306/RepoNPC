@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 import base64
+import json
+import threading
 import time
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
+from reponpc.admin.analysis_selection import AnalysisSelectionRegistry
+from reponpc.admin.batch_resolver import BatchResolverError
 from reponpc.admin.embedding_reindex import EmbeddingReindexCoordinator
 from reponpc.admin.local_portfolio import LocalPortfolioStore
 from reponpc.admin.local_publication import LocalPortfolioBuilder, LocalPublication
+from reponpc.indexing.github import SourceResolutionError
 from reponpc.indexing.sources import ParticipationCommit, RepositoryParticipation
 from reponpc.main import create_app
+from reponpc.providers.contracts import ProviderError, ProviderFailureCode
 from tests.integration.test_bundle_producer_consumer import _fixture_snapshot
 from tests.integration.test_embedding_reindex import _profile, _system
 from tests.integration.test_index_build import FIXTURE_CONFIG
@@ -70,7 +78,9 @@ def test_local_build_reuses_vectors_and_serves_truthful_assertion_citations(tmp_
     completed = []
     try:
         coordinator.queue(
-            profile.profile_id, force=True, on_finished=lambda b, e: completed.append((b, e))
+            profile.profile_id,
+            force=True,
+            on_finished=lambda outcome: completed.append((outcome.bundle_id, outcome.error_code)),
         )
         activated = coordinator.wait(profile.profile_id, timeout=30)
         assert activated.active and completed[-1][1] is None
@@ -93,7 +103,7 @@ def test_local_build_reuses_vectors_and_serves_truthful_assertion_citations(tmp_
             profile.profile_id,
             force=True,
             builder=updated_builder,
-            on_finished=lambda b, e: completed.append((b, e)),
+            on_finished=lambda outcome: completed.append((outcome.bundle_id, outcome.error_code)),
         )
         coordinator.wait(profile.profile_id, timeout=30)
         assert len(calls) == initial_calls
@@ -131,7 +141,7 @@ def test_local_build_reuses_vectors_and_serves_truthful_assertion_citations(tmp_
             profile.profile_id,
             force=True,
             builder=broken,
-            on_finished=lambda b, e: completed.append((b, e)),
+            on_finished=lambda outcome: completed.append((outcome.bundle_id, outcome.error_code)),
         )
         coordinator.wait(profile.profile_id, timeout=30)
         assert completed[-1] == (None, "EMBEDDING_REINDEX_FAILED")
@@ -187,7 +197,11 @@ def test_local_publication_receipt_recovers_interruption(tmp_path: Path):
             transition_factory=lambda _: transition,
             stop_remote=lambda: None,
         )
-        publication.job = {"state": "preparing", "revision": "f" * 64}
+        publication.job = {
+            "state": "preparing",
+            "revision": "f" * 64,
+            "retry_at": "2026-10-20T00:02:00+00:00",
+        }
         publication._persist()
         recovered = LocalPublication(
             store=store,
@@ -202,6 +216,7 @@ def test_local_publication_receipt_recovers_interruption(tmp_path: Path):
         )
         assert recovered.status()["error_code"] == "EMBEDDING_REINDEX_INTERRUPTED"
         assert recovered.status()["index_ready"] is False
+        assert recovered.status()["retry_at"] is None
     finally:
         coordinator.shutdown()
 
@@ -327,11 +342,12 @@ def test_local_archive_resolver_pins_snapshot_and_stops_before_fetch():
         resolver.resolve(slug=repository.slug, ref=None, cancel_requested=lambda: True)
     assert len(calls) == 1
     metadata.result = MetadataResolution(
-        (), (ResolutionBlocker(repository.slug, "GITHUB_RATE_LIMITED"),)
+        (), (ResolutionBlocker(repository.slug, "GITHUB_RATE_LIMITED", 120),)
     )
     with pytest.raises(BatchResolverError) as error:
         resolver.resolve(slug=repository.slug, ref=None)
     assert error.value.code == "GITHUB_RATE_LIMITED"
+    assert error.value.retry_after_seconds == 120
 
 
 def test_local_embedding_cancellation_checks_after_inflight_batch():
@@ -419,3 +435,204 @@ def test_local_bundle_does_not_require_fixture_topic_and_restores(tmp_path):
     )
     assert restored.index.lexical_smoke_test()
     restored.close()
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_code", "retry_seconds"),
+    [
+        (
+            BatchResolverError("GITHUB_RATE_LIMITED", retry_after_seconds=120),
+            "GITHUB_RATE_LIMITED",
+            120,
+        ),
+        (BatchResolverError("ARCHIVE_TOO_LARGE"), "ARCHIVE_TOO_LARGE", None),
+        (SourceResolutionError("github_rate_limited", 120), "GITHUB_RATE_LIMITED", 120),
+    ],
+)
+def test_local_source_failure_keeps_probe_selection_and_allows_retry(
+    tmp_path, monkeypatch, caplog, error, expected_code, retry_seconds
+):
+    from tests.unit.test_analysis_selection import Profile, Profiles, _persist_references
+
+    database, providers, manager, registry, _, transition = _system(tmp_path)
+    profile = registry.probe(registry.create(_profile(providers["a"])).profile_id)
+    _persist_references(database)
+    selection = AnalysisSelectionRegistry(
+        database, Profiles(Profile("chat-a", 3, "chat")), registry
+    )
+    assert selection.select(
+        chat_profile_id="chat-a", embedding_profile_id=profile.profile_id
+    ).eligible
+    now = datetime(2026, 10, 20, 1, 0, 0, tzinfo=UTC)
+    retry_at = (now + timedelta(seconds=retry_seconds)).isoformat() if retry_seconds else None
+    canary = "private-source-body-token-url-canary"
+    error.args = (canary,)
+    error.__cause__ = RuntimeError(canary)
+    entered = threading.Event()
+    release = threading.Event()
+
+    class Resolver(FixtureResolver):
+        failure = error
+
+        def resolve(self, **kwargs):
+            if self.failure is not None:
+                raise self.failure
+            entered.set()
+            assert release.wait(20)
+            return super().resolve(**kwargs)
+
+    resolver = Resolver()
+    store = LocalPortfolioStore(tmp_path / "data")
+    draft = store.save(
+        content=FIXTURE_CONFIG.read_text(encoding="utf-8"),
+        sprite_base64=None,
+        expected_revision=None,
+    )
+    coordinator = EmbeddingReindexCoordinator(
+        registry=registry,
+        manager=manager,
+        builder=lambda *args: None,
+        provider_transition=transition,
+        now=lambda: now,
+    )
+
+    def publication():
+        return LocalPublication(
+            store=store,
+            data_directory=tmp_path / "data",
+            coordinator=coordinator,
+            registry=registry,
+            manager=manager,
+            resolver=resolver,
+            max_bundle_bytes=10 * 1024 * 1024,
+            transition_factory=lambda _: transition,
+            stop_remote=lambda: None,
+        )
+
+    def unexpected_probe(*args):
+        pytest.fail("Local source retry must reuse the successful model probe")
+
+    monkeypatch.setattr(registry, "probe", unexpected_probe)
+    try:
+        current = publication()
+        assert current.status()["retry_at"] is None
+        preparing = current.prepare(
+            expected_revision=draft.revision,
+            embedding_profile_id=profile.profile_id,
+            chat_profile_id="chat-a",
+        )
+        assert preparing["state"] == "preparing"
+        assert preparing["retry_at"] is None
+        failed = coordinator.wait(profile.profile_id, timeout=20)
+        status = current.status()
+        assert status["state"] == "failed"
+        assert status["error_code"] == expected_code
+        assert status["retry_at"] == retry_at
+        assert failed.status == "reindex_required"
+        assert failed.last_error_code is None
+        assert failed.last_error_message is None
+        for field in (
+            "last_probed_at",
+            "observed_adapter",
+            "observed_model_id",
+            "observed_dimension",
+            "dimension",
+            "normalized",
+            "query_prefix",
+            "passage_prefix",
+            "connection_revision",
+        ):
+            assert getattr(failed, field) == getattr(profile, field)
+        assert selection.view().eligible
+        assert selection.view().embedding["tested"] is True
+        assert canary not in json.dumps(status)
+        assert canary not in caplog.text
+        assert f"code={expected_code} cause={expected_code}" in caplog.text
+        assert current.cancel()["retry_at"] == retry_at
+        saved = json.loads(current.path.read_text(encoding="utf-8"))
+        assert saved["retry_at"] == retry_at
+        recovered = publication()
+        assert recovered.status()["retry_at"] == retry_at
+        assert recovered.status()["error_code"] == expected_code
+        resolver.failure = None
+        accepted = recovered.prepare(
+            expected_revision=draft.revision,
+            embedding_profile_id=profile.profile_id,
+            chat_profile_id="chat-a",
+        )
+        assert entered.wait(10)
+        assert accepted["state"] == "preparing"
+        assert accepted["retry_at"] is None
+        assert json.loads(recovered.path.read_text(encoding="utf-8"))["retry_at"] is None
+        release.set()
+        ready = coordinator.wait(profile.profile_id, timeout=30)
+        assert ready.active
+        assert ready.last_probed_at == profile.last_probed_at
+        assert recovered.status()["state"] == "ready"
+        assert recovered.status()["error_code"] is None
+        assert recovered.status()["retry_at"] is None
+        assert publication().status()["retry_at"] is None
+        assert selection.view().eligible
+    finally:
+        release.set()
+        coordinator.shutdown()
+
+
+def test_local_provider_failure_still_writes_profile_error(tmp_path, monkeypatch, caplog):
+    _database, providers, manager, registry, _, transition = _system(tmp_path)
+    provider = providers["a"]
+    profile = registry.probe(registry.create(_profile(provider)).profile_id)
+    canary = "private-provider-response-canary"
+
+    def unavailable(texts):
+        raise ProviderError(ProviderFailureCode.UNAVAILABLE, upstream_message=canary)
+
+    monkeypatch.setattr(provider, "embed_passages", unavailable)
+    store = LocalPortfolioStore(tmp_path / "data")
+    draft = store.save(
+        content=FIXTURE_CONFIG.read_text(encoding="utf-8"),
+        sprite_base64=None,
+        expected_revision=None,
+    )
+    coordinator = EmbeddingReindexCoordinator(
+        registry=registry,
+        manager=manager,
+        builder=lambda *args: None,
+        provider_transition=transition,
+    )
+    publication = LocalPublication(
+        store=store,
+        data_directory=tmp_path / "data",
+        coordinator=coordinator,
+        registry=registry,
+        manager=manager,
+        resolver=FixtureResolver(),
+        max_bundle_bytes=10 * 1024 * 1024,
+        transition_factory=lambda _: transition,
+        stop_remote=lambda: None,
+    )
+    try:
+        publication.prepare(
+            expected_revision=draft.revision,
+            embedding_profile_id=profile.profile_id,
+            chat_profile_id="chat",
+        )
+        failed = coordinator.wait(profile.profile_id, timeout=20)
+        assert failed.status == "reindex_required"
+        assert failed.last_error_code == "EMBEDDING_REINDEX_FAILED"
+        assert publication.status()["error_code"] == "EMBEDDING_REINDEX_FAILED"
+        assert publication.status()["retry_at"] is None
+        assert canary not in caplog.text
+        assert canary not in json.dumps(publication.status())
+    finally:
+        coordinator.shutdown()
+
+
+def test_portfolio_status_retry_at_http_contract_without_local_preparation(tmp_path):
+    app = _application_without_github(tmp_path)
+    with TestClient(app, base_url=ORIGIN) as client:
+        _login(client)
+        response = client.get("/api/admin/portfolio/status", headers={"Origin": ORIGIN})
+        assert response.status_code == 200
+        assert response.json()["retry_at"] is None
+        assert response.headers["cache-control"] == "no-store"

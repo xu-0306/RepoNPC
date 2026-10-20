@@ -314,6 +314,25 @@ def test_archive_cache_prediction_controls_immediate_capacity_blocker() -> None:
     )
     assert not hit.blockers
     assert [blocker.code for blocker in miss.blockers] == ["GITHUB_RATE_LIMITED"]
+    assert miss.blockers[0].retry_after_seconds == 3600
+
+    # Metadata admission failures also retain retry time, without changing the API shape.
+    cache.discard((selection,))
+    blocked = planner.create(
+        selections=(selection,),
+        cache_prediction=lambda _repository: CachePrediction(False, False),
+        provider=ProviderReadiness(True),
+        capacity=BatchCapacity(1, 1, 1, 1, 1),
+    )
+    assert [(item.slug, item.code, item.retry_after_seconds) for item in blocked.blockers] == [
+        ("github", "GITHUB_RATE_LIMITED", 3600)
+    ]
+    from reponpc.api.admin import _preflight_payload
+
+    for plan in (miss, blocked):
+        assert _preflight_payload(plan)["blockers"] == [
+            {"slug": "github", "code": "GITHUB_RATE_LIMITED"}
+        ]
 
 
 class FakeResponse:

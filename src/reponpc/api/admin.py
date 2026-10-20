@@ -2420,7 +2420,9 @@ def create_admin_router(
                     code="SERVICE_NOT_READY",
                     message="Local preparation is unavailable.",
                 )
-            result = await asyncio.to_thread(operation) if operation is not None else {}
+            result = (
+                await asyncio.to_thread(operation) if operation is not None else {"retry_at": None}
+            )
             if request.method == "GET":
                 configured_scene = scene_supplier()
                 if configured_scene is not None:

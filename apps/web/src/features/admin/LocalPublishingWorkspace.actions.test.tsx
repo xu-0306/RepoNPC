@@ -403,7 +403,30 @@ it.each(["zh-TW", "en"] as const)(
   },
 );
 
+const sourceFailureCodes = new Set([
+  "GITHUB_RATE_LIMITED",
+  "GITHUB_ERROR",
+  "GITHUB_TIMEOUT",
+  "NOT_FOUND",
+  "ARCHIVED_NOT_ALLOWED",
+  "ARCHIVE_TOO_LARGE",
+  "ARCHIVE_INVALID",
+  "ARCHIVE_UNSAFE",
+]);
+
 const publicationErrors = [
+  ["GITHUB_RATE_LIMITED", "GitHub 目前限制", "GitHub is limiting"],
+  ["GITHUB_ERROR", "GitHub 暫時無法使用", "GitHub is temporarily unavailable"],
+  [
+    "GITHUB_TIMEOUT",
+    "GitHub 暫時無法使用",
+    "GitHub is temporarily unavailable",
+  ],
+  ["NOT_FOUND", "找不到儲存庫", "Repository not found"],
+  ["ARCHIVED_NOT_ALLOWED", "儲存庫已封存", "repository is archived"],
+  ["ARCHIVE_TOO_LARGE", "封存檔超過大小限制", "archive exceeds the size limit"],
+  ["ARCHIVE_INVALID", "封存檔無效", "archive is invalid"],
+  ["ARCHIVE_UNSAFE", "未通過安全檢查", "archive failed safety checks"],
   ["PORTFOLIO_CONFLICT", "核對最新草稿", "compare the latest draft"],
   ["PORTFOLIO_BUSY", "取消準備", "cancel preparation"],
   ["PORTFOLIO_MODEL_CHANGED", "重新測試", "retest"],
@@ -441,6 +464,7 @@ it.each(["zh-TW", "en"] as const)(
             index_ready: true,
             draft_changed: true,
             error_code: code,
+            retry_at: null,
             revision: "saved",
             active_bundle_id: "previous",
           };
@@ -467,6 +491,10 @@ it.each(["zh-TW", "en"] as const)(
           .join("");
         expect(text).toContain(locale === "zh-TW" ? zh : en);
         expect(text).not.toContain(code);
+        if (sourceFailureCodes.has(code)) {
+          expect(text).not.toMatch(/維護|Maintenance/);
+          expect(text).not.toMatch(/重新測試|retest/);
+        }
         expect(view.input.content).toBe("retained draft");
       };
       (
@@ -514,3 +542,60 @@ it("maps a native network failure without showing the exception", async () => {
   });
   expect(view.button("Save local draft").props["aria-disabled"]).toBe(false);
 });
+
+it.each(["zh-TW", "en"] as const)(
+  "shows stored GitHub retry waits only while retry_at is in the future in %s",
+  (locale) => {
+    const now = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(Date.parse("2026-10-20T00:00:00Z"));
+    try {
+      for (const retryAt of [
+        "2026-10-20T00:02:00Z",
+        null,
+        "2026-10-19T23:59:59Z",
+      ]) {
+        hooks.values = [];
+        const view = workspace(locale, async <T,>() => ({}) as T);
+        view.render();
+        hooks.values[1] = {
+          state: "failed",
+          index_ready: true,
+          draft_changed: true,
+          error_code: "GITHUB_RATE_LIMITED",
+          retry_at: retryAt,
+          revision: "saved",
+          active_bundle_id: "previous",
+          message: "private-upstream-exception-canary",
+        };
+        const alerts = view
+          .render()
+          .filter((node) => node.props.role === "alert");
+        expect(alerts).toHaveLength(1);
+        const text = elements(alerts[0])
+          .flatMap((node) =>
+            Children.toArray(node.props.children as ReactNode).filter(
+              (child) => typeof child === "string",
+            ),
+          )
+          .join("");
+        expect(text).toContain(
+          locale === "zh-TW" ? "GitHub 目前限制" : "GitHub is limiting",
+        );
+        if (retryAt === "2026-10-20T00:02:00Z") {
+          expect(text).toContain(
+            locale === "zh-TW"
+              ? "請在約 2 分 0 秒 後再試。"
+              : "Try again in about 2m 0s.",
+          );
+        } else {
+          expect(text).not.toMatch(/請在約|Try again in about/);
+        }
+        expect(text).not.toMatch(/維護|Maintenance|重新測試|retest/);
+        expect(text).not.toContain("private-upstream-exception-canary");
+      }
+    } finally {
+      now.mockRestore();
+    }
+  },
+);

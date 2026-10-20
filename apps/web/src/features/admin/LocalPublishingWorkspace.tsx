@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { guidedErrorMessage } from "./guidedOnboarding";
+import { githubRateLimitMessage } from "./githubRetry";
 import { CoverageFaqPanel } from "./CoverageFaqPanel";
 import type { ClaimKind } from "./ClaimEditor";
 import type {
@@ -35,6 +36,7 @@ interface PublicationStatus {
   index_ready: boolean;
   draft_changed: boolean;
   error_code: string | null;
+  retry_at: string | null;
   revision: string | null;
   active_bundle_id: string | null;
   scene_state?: SceneAppearanceState | null;
@@ -50,7 +52,11 @@ interface ShareMetadata {
 }
 type Request = <T>(path: string, options?: RequestInit) => Promise<T>;
 
-function publicationErrorMessage(locale: AdminLocale, error: unknown): string {
+function publicationErrorMessage(
+  locale: AdminLocale,
+  error: unknown,
+  retryAt: string | null = null,
+): string {
   const zh = locale === "zh-TW";
   const code =
     error instanceof TypeError
@@ -61,9 +67,40 @@ function publicationErrorMessage(locale: AdminLocale, error: unknown): string {
   switch (code) {
     case "SERVICE_NOT_READY":
     case "REQUEST_FAILED":
-    case "GITHUB_ERROR":
     case "RATE_LIMITED":
       return guidedErrorMessage(locale, code);
+    case "GITHUB_RATE_LIMITED":
+      return githubRateLimitMessage(
+        locale,
+        retryAt === null
+          ? undefined
+          : Math.ceil((Date.parse(retryAt) - Date.now()) / 1000),
+      );
+    case "GITHUB_ERROR":
+    case "GITHUB_TIMEOUT":
+      return zh
+        ? "GitHub 暫時無法使用，請稍後再試。"
+        : "GitHub is temporarily unavailable; try again later.";
+    case "NOT_FOUND":
+      return zh
+        ? "找不到儲存庫或無法存取。"
+        : "Repository not found or inaccessible.";
+    case "ARCHIVED_NOT_ALLOWED":
+      return zh
+        ? "儲存庫已封存，無法準備 NPC。"
+        : "The repository is archived and cannot be used to prepare the NPC.";
+    case "ARCHIVE_TOO_LARGE":
+      return zh
+        ? "儲存庫封存檔超過大小限制。"
+        : "The repository archive exceeds the size limit.";
+    case "ARCHIVE_INVALID":
+      return zh
+        ? "儲存庫封存檔無效，請稍後再試。"
+        : "The repository archive is invalid; try again later.";
+    case "ARCHIVE_UNSAFE":
+      return zh
+        ? "儲存庫封存檔未通過安全檢查。"
+        : "The repository archive failed safety checks.";
     case "PORTFOLIO_CONFLICT":
       return zh
         ? "草稿版本已變更。請先保留目前編輯內容，再重新載入並核對最新草稿後儲存；不要直接覆蓋。"
@@ -657,7 +694,11 @@ export function LocalPublishingWorkspace({
         {status?.error_code && (
           <p role="alert">
             {zh ? "上次準備未完成" : "Last preparation failed"}:{" "}
-            {publicationErrorMessage(locale, new Error(status.error_code))}
+            {publicationErrorMessage(
+              locale,
+              new Error(status.error_code),
+              status.retry_at,
+            )}
           </p>
         )}
         {status?.index_ready && (

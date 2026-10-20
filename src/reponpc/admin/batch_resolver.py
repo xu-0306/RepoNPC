@@ -123,6 +123,7 @@ class GitHubResolutionCache(Protocol):
 class ResolutionBlocker:
     slug: str
     code: str
+    retry_after_seconds: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1019,7 +1020,7 @@ class BatchPreflightPlanner:
             try:
                 resolution = self._resolver.resolve_all(selections=selections)
             except BatchResolverError as exc:
-                blockers.append(ResolutionBlocker("github", exc.code))
+                blockers.append(ResolutionBlocker("github", exc.code, exc.retry_after_seconds))
         blockers.extend(resolution.blockers)
         if not provider.ready:
             blockers.append(
@@ -1039,7 +1040,11 @@ class BatchPreflightPlanner:
         if archive_requests:
             admission = self._limiter.admit_cost(GitHubRateResource.CORE, 1)
             if not admission.allowed:
-                blockers.append(ResolutionBlocker("github", "GITHUB_RATE_LIMITED"))
+                blockers.append(
+                    ResolutionBlocker(
+                        "github", "GITHUB_RATE_LIMITED", admission.retry_after_seconds
+                    )
+                )
         if not any(
             blocker.slug == "github"
             and blocker.code in {"GITHUB_ERROR", "GITHUB_RATE_LIMITED", "GITHUB_TIMEOUT"}

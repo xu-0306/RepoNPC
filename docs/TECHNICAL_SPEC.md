@@ -1027,6 +1027,19 @@ JSON failures use:
 |  503 | `INDEX_UNAVAILABLE` / `MODEL_UNAVAILABLE` / `SERVICE_NOT_READY`                  | Required capability unavailable.                                                                                                   |
 |  504 | `REQUEST_TIMEOUT` / `PROVIDER_TIMEOUT`                                           | Chat uses generic REQUEST_TIMEOUT (terminal SSE after headers); other model operations retain PROVIDER_TIMEOUT.                    |
 
+Portfolio job failures are returned in the status body's `error_code` (HTTP 200 for status/cancel, HTTP 202 for an accepted prepare), rather than as a new HTTP error envelope (ADR-068):
+
+| HTTP | Code | Meaning in portfolio status `error_code` |
+| ---: | --- | --- |
+| 200 | `GITHUB_RATE_LIMITED` | GitHub admission or quota limit; `retry_at` reports the known UTC retry time. |
+| 200 | `GITHUB_ERROR` | GitHub source request failed temporarily. |
+| 200 | `GITHUB_TIMEOUT` | GitHub source operation timed out. |
+| 200 | `NOT_FOUND` | The selected public repository/ref was not found or is inaccessible. |
+| 200 | `ARCHIVED_NOT_ALLOWED` | The selected repository is archived and disallowed by the existing policy. |
+| 200 | `ARCHIVE_TOO_LARGE` | The source archive exceeds an existing resource bound. |
+| 200 | `ARCHIVE_INVALID` | The source archive is invalid. |
+| 200 | `ARCHIVE_UNSAFE` | The source archive failed existing safety validation. |
+
 `GITHUB_RATE_LIMITED` is a safe recoverable result when anonymous REST capacity is exhausted. It includes only a sanitized retry time, never triggers credential collection or writeback-token fallback, and leaves manual continuation available.
 
 ## 11. Admin contract
@@ -1053,6 +1066,8 @@ JSON failures use:
 - `POST /api/admin/github/connections/oauth/start` creates one bounded authenticated connection transaction and redirects to GitHub with PKCE. Legacy `POST /api/admin/session/github/start` and `POST /api/admin/setup/github/start` MUST return `410 GITHUB_LOGIN_REMOVED`, MUST NOT redirect, create an owner/session, or consume setup/local-launch proof. One fixed `GET /api/admin/github/callback` validates only the connection intent.
 - Legacy OAuth callback/start, connection, PAT, setup-guide, and identity endpoints MUST become non-redirecting, non-mutating `410 GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED` responses during the compatibility window and MUST be removed after that window. They MUST NOT accept, decrypt, return, or log credential material.
 - Embedding profile endpoints (`GET/POST /api/admin/embedding-profiles`, `GET/PUT/DELETE /api/admin/embedding-profiles/{id}`, `POST /api/admin/embedding-profiles/{id}/probe`, and `POST /api/admin/embedding-profiles/{id}/activate`) expose only safe metadata. They enforce one active profile, never return credentials/private URLs, and report `probe`, `reindex_required`, `reindexing`, `ready`, or `last_known_good` states. Ollama model pull/delete actions are separate provider-native operations and require explicit confirmation.
+- Local preparation (ADR-046/068, owner-approved 2026-10-20) uses `POST /api/admin/portfolio/prepare`, `GET /api/admin/portfolio/status` and `DELETE /api/admin/portfolio/prepare`. The shared status shape includes `state` (`idle | preparing | ready | failed`), nullable `revision` and `error_code`, `retry_at` (ISO-8601 UTC string or null), nullable `active_bundle_id` and `draft_revision`, and boolean `index_ready` and `draft_changed`. Recorded jobs additionally include `profile_id`, `chat_profile_id` and nullable `bundle_id`; GET may also include nullable `scene_state`. `retry_at` is always present, including old receipts without that key. It persists in the existing `publication.json` receipt and clears on a new prepare, success or `EMBEDDING_REINDEX_INTERRUPTED` recovery.
+- In that local-publication path only, `queue(..., source_failures_reported_by_caller=True)` treats the closed source codes in §10 as publication failures: an inactive candidate ends in `reindex_required`, with null profile error code/message and unchanged successful probe fields, so it remains eligible for analysis and explicit preparation retry without probing again. Classify `BatchResolverError` / `SourceResolutionError` by type and code; the latter's lower-case aliases are `github_rate_limited` → `GITHUB_RATE_LIMITED`, `github_request_failed` → `GITHUB_ERROR`, `github_timeout` → `GITHUB_TIMEOUT` and `github_not_found` → `NOT_FOUND`. Other codes, model errors, bundle/activation failures and the default 「重建並啟用」 path retain existing handling. Typed retry seconds propagate through metadata blockers and a frozen completion outcome; the coordinator computes UTC now plus delay and rounds up to whole seconds. Logs expose safe codes/locations only. The 25-request reserve, admission semantics, preflight `{slug, code}` payload and last-known-good protection are unchanged; no schema migration or automatic retry is introduced.
 
 ### 11.2 Endpoints
 

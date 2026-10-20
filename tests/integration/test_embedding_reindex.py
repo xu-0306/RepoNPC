@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
 
+from reponpc.admin.batch_resolver import BatchResolverError
 from reponpc.admin.embedding_profiles import (
     EmbeddingProfile,
     EmbeddingProfileInput,
@@ -22,14 +23,17 @@ from reponpc.admin.embedding_reindex import (
     ReindexCandidate,
     ReindexTimedOut,
 )
-from reponpc.bundles.archive import build_bundle, verify_bundle_archive
+from reponpc.bundles.archive import BundleError, build_bundle, verify_bundle_archive
 from reponpc.bundles.manager import ActivationTransition, BundleManager
 from reponpc.bundles.manifest import bundle_id_for
 from reponpc.config.models import load_public_config
 from reponpc.indexing.exclusions import SourceEntryKind
+from reponpc.indexing.github import SourceResolutionError
 from reponpc.indexing.index_database import IndexDatabaseBuilder
+from reponpc.indexing.pipeline import IndexPipelineError
 from reponpc.indexing.sources import EmbeddingIdentity, RepositoryBlob, ResolvedRepository
 from reponpc.providers import ProviderHealth
+from reponpc.providers.contracts import ProviderError, ProviderFailureCode
 from reponpc.runtime.database import RuntimeDatabase
 from tests.integration.test_bundle_producer_consumer import (
     _configuration_source,
@@ -691,3 +695,81 @@ def test_production_builder_uses_frozen_profile_over_public_yaml_embedding(
         assert candidate.verified.index.embedding == profile.identity
     finally:
         candidate.verified.close()
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (BatchResolverError("GITHUB_RATE_LIMITED", retry_after_seconds=120), "GITHUB_RATE_LIMITED"),
+        (SourceResolutionError("github_not_found"), "NOT_FOUND"),
+    ],
+)
+def test_default_queue_source_failure_still_writes_profile_error(tmp_path, error, expected):
+    _database, providers, manager, registry, _, transition = _system(tmp_path)
+    profile = registry.create(_profile(providers["a"]))
+
+    def builder(*args):
+        raise error
+
+    outcomes = []
+    now = datetime(2026, 10, 20, 8, 0, 0, 500000, tzinfo=timezone(timedelta(hours=8)))
+    coordinator = EmbeddingReindexCoordinator(
+        registry=registry,
+        manager=manager,
+        builder=builder,
+        provider_transition=transition,
+        now=lambda: now,
+    )
+    try:
+        coordinator.queue(profile.profile_id, on_finished=outcomes.append)
+        failed = coordinator.wait(profile.profile_id, timeout=10)
+        assert outcomes[-1].error_code == expected
+        assert outcomes[-1].retry_at == (
+            "2026-10-20T00:02:01+00:00" if error.retry_after_seconds is not None else None
+        )
+        assert failed.status == "reindex_required"
+        assert failed.last_error_code == expected
+        assert failed.last_error_message is None
+        assert manager.status().active_bundle_id is None
+    finally:
+        coordinator.shutdown()
+
+
+@pytest.mark.parametrize("reported_by_caller", [False, True])
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (ProviderError(ProviderFailureCode.UNAVAILABLE), "EMBEDDING_REINDEX_FAILED"),
+        (ProviderError(ProviderFailureCode.TIMEOUT), "EMBEDDING_REINDEX_TIMEOUT"),
+        (IndexPipelineError("embedding_output_invalid"), "EMBEDDING_REINDEX_FAILED"),
+        (BundleError("bundle_embedding_incompatible"), "EMBEDDING_ACTIVATION_FAILED"),
+    ],
+)
+def test_model_and_bundle_failures_remain_profile_errors_with_source_opt_in(
+    tmp_path, reported_by_caller, error, expected
+):
+    _database, providers, manager, registry, _, transition = _system(tmp_path)
+    profile = registry.create(_profile(providers["a"]))
+    outcomes = []
+
+    def builder(*args):
+        raise error
+
+    coordinator = EmbeddingReindexCoordinator(
+        registry=registry, manager=manager, builder=builder, provider_transition=transition
+    )
+    try:
+        coordinator.queue(
+            profile.profile_id,
+            source_failures_reported_by_caller=reported_by_caller,
+            on_finished=outcomes.append,
+        )
+        failed = coordinator.wait(profile.profile_id, timeout=10)
+        assert failed.status == "reindex_required"
+        assert failed.last_error_code == expected
+        assert outcomes[-1].bundle_id is None
+        assert outcomes[-1].error_code == expected
+        assert outcomes[-1].retry_at is None
+        assert manager.status().active_bundle_id is None
+    finally:
+        coordinator.shutdown()

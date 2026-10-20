@@ -534,10 +534,12 @@ class EmbeddingProfileRegistry:
                     raise RuntimeDatabaseError("runtime_embedding_profile_failed") from exc
             return self.get(profile_id)
 
-    def fail_reindex(self, profile_id: str, generation: int, error_code: str) -> EmbeddingProfile:
-        """Fail one exact generation without changing the active last-known-good."""
+    def fail_reindex(
+        self, profile_id: str, generation: int, error_code: str | None
+    ) -> EmbeddingProfile:
+        """Fail one exact generation; a caller-reported source error may omit its code."""
 
-        if not _SAFE_ERROR_CODE.fullmatch(error_code):
+        if error_code is not None and not _SAFE_ERROR_CODE.fullmatch(error_code):
             error_code = "EMBEDDING_REINDEX_FAILED"
         now = _time(self._now())
         with self._database.connection() as connection:

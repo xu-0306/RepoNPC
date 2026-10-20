@@ -32,6 +32,7 @@ from reponpc.admin.embedding_reindex import (
     CancellableSourceResolver,
     EmbeddingReindexCoordinator,
     ReindexCandidate,
+    ReindexOutcome,
     _BoundedResolver,
     _collect_participation,
     _raise_if_stopped,
@@ -81,7 +82,11 @@ class LocalArchiveResolver:
         _raise_if_stopped(cancelled, expires, time.monotonic)
         result = self.metadata.resolve_all(selections=(RepositorySelection(slug, ref),))
         if result.blockers or len(result.repositories) != 1:
-            raise BatchResolverError(result.blockers[0].code if result.blockers else "NOT_FOUND")
+            blocker = result.blockers[0] if result.blockers else None
+            raise BatchResolverError(
+                blocker.code if blocker is not None else "NOT_FOUND",
+                retry_after_seconds=blocker.retry_after_seconds if blocker is not None else None,
+            )
         with self.gates.archive_staging():
             _raise_if_stopped(cancelled, expires, time.monotonic)
             return self.source.fetch(
@@ -277,13 +282,16 @@ class LocalPublication:
                             "state",
                             "revision",
                             "error_code",
+                            "retry_at",
                             "profile_id",
                             "chat_profile_id",
                             "bundle_id",
                         )
                     }
                 if self.job.get("state") == "preparing":
-                    self.job.update(state="failed", error_code="EMBEDDING_REINDEX_INTERRUPTED")
+                    self.job.update(
+                        state="failed", error_code="EMBEDDING_REINDEX_INTERRUPTED", retry_at=None
+                    )
                     self._persist()
             except OSError, ValueError:
                 self.job = {"state": "failed", "error_code": "PORTFOLIO_CORRUPT", "revision": None}
@@ -294,6 +302,7 @@ class LocalPublication:
             draft = self.store.read()
             return {
                 **self.job,
+                "retry_at": self.job.get("retry_at"),
                 "active_bundle_id": active,
                 "draft_revision": draft.revision if draft else None,
                 "index_ready": active is not None,
@@ -331,6 +340,7 @@ class LocalPublication:
                 "profile_id": embedding_profile_id,
                 "chat_profile_id": chat_profile_id,
                 "error_code": None,
+                "retry_at": None,
                 "bundle_id": None,
             }
             self._persist()
@@ -347,6 +357,7 @@ class LocalPublication:
                     ),
                     transition=transition,
                     on_finished=self._finished,
+                    source_failures_reported_by_caller=True,
                 )
             except Exception:
                 self.job.update(state="failed", error_code="PORTFOLIO_PREPARE_FAILED")
@@ -360,10 +371,13 @@ class LocalPublication:
                 self.coordinator.cancel(str(self.job.get("profile_id", "")))
             return self.status()
 
-    def _finished(self, bundle_id: str | None, error_code: str | None) -> None:
+    def _finished(self, outcome: ReindexOutcome) -> None:
         with self.lock:
             self.job.update(
-                state="ready" if bundle_id else "failed", bundle_id=bundle_id, error_code=error_code
+                state="ready" if outcome.bundle_id else "failed",
+                bundle_id=outcome.bundle_id,
+                error_code=outcome.error_code,
+                retry_at=outcome.retry_at,
             )
             self._persist()
 
