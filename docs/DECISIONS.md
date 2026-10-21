@@ -3,7 +3,7 @@
 ## ADR-053: Freeze A1 visitor gateway and private administration contracts
 
 **Owner-approved B5 amendment (2026-10-02; implemented locally 2026-10-03):**
-[Simplification plan §11.6](A5_PAGES_SHARING_SIMPLIFICATION_HANDOFF_2026-10-02.md)
+[Simplification plan §11.6](../legacy/docs/A5_PAGES_SHARING_SIMPLIFICATION_HANDOFF_2026-10-02.md)
 supersedes the earlier derived verification comparisons and local-chat error
 behavior: verify accepts only revision/confirmation, uses verified_at plus
 listener readiness, and clears the five report fields on configuration/lifecycle
@@ -534,7 +534,7 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
 
 - **Status:** Accepted 2026-10-03; local implementation and verification in progress.
 - **Authorization:** After reviewing the backup boundary and UX recommendation,
-  the owner said 「好，那採用A」. See [the concrete decision](A11_BACKUP_BOUNDARY_DECISION_2026-10-03.md), OR-028 and Technical Specification §11.7.
+  the owner said 「好，那採用A」. See [the concrete decision](../legacy/docs/A11_BACKUP_BOUNDARY_DECISION_2026-10-03.md), OR-028 and Technical Specification §11.7.
 - **Evidence:** The existing online SQLite backup contains the owner authentication
   hash and encrypted connection revisions; host encryption keys and referenced
   resources live outside SQLite. Raw Web download conflicts with the browser
@@ -571,7 +571,7 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
 ## ADR-056: Align the two-facts validation question with its unchanged oracle
 
 - **Status:** Accepted 2026-10-03 (OR-030); validation-fixture clarification only. Approved Specification remains 0.4.8.
-- **Authorization:** The owner explicitly approved the [two-facts correction](A7_TWO_FACTS_FIXTURE_REVIEW_2026-10-03.md), after the unchanged reasoning-ON/16k suite returned 10/12. The original question asked only about storage, while its reviewed oracle required retrieval fusion and storage.
+- **Authorization:** The owner explicitly approved the [two-facts correction](../legacy/docs/A7_TWO_FACTS_FIXTURE_REVIEW_2026-10-03.md), after the unchanged reasoning-ON/16k suite returned 10/12. The original question asked only about storage, while its reviewed oracle required retrieval fusion and storage.
 - **Decision:** Change only `supported_two_facts.question` in the committed answer-quality fixture to ask both parts explicitly; use the prescribed matching Traditional Chinese question in the new bilingual runner. Preserve evidence, source IDs, raw fixture answers, all expected claims/citations/refusal rules, thresholds, case count and all other questions. No production prompt, model-name branch or provider setting changes.
 - **Evidence boundary:** Retain the original fixture bytes and old 10/12 reports unchanged. The corrected fixture fingerprint identifies a separate suite revision. Run the complete fixed 12 bilingual cases once; catalog admission still requires all cases passing and the existing verified model revision/source/license/quantization provenance. Approval of the question does not predict a pass or establish release acceptance.
 - **Consequences:** Supplemental AC-057 evaluation guidance records this owner-approved semantic alignment. No FR/AC ID, schema, threshold, public API or specification-version expansion is needed; ADR-055 reasoning and budget controls remain unchanged.

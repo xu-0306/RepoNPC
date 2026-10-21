@@ -4,7 +4,7 @@ This guide covers FR-048 / AC-069 and the Windows host portion of FR-053 /
 AC-076. It describes the local build and remaining release checks; it does not
 mark either acceptance criterion as passed. Runtime recovery policy remains in
 [OPERATIONS.md](../../docs/OPERATIONS.md) and the approved
-[A11 backup boundary decision](../../docs/A11_BACKUP_BOUNDARY_DECISION_2026-10-03.md).
+[A11 backup boundary decision](../../legacy/docs/A11_BACKUP_BOUNDARY_DECISION_2026-10-03.md).
 
 ## Recorded status on 2026-10-03
 

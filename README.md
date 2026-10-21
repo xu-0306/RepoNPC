@@ -5,7 +5,7 @@
 
 RepoNPC 是自託管的 GitHub 作品集。你選擇公開專案、確認自己的貢獻，NPC 便能依據作品內容回答訪客，並附上可核對的程式碼引用。GitHub 個人頁上的卡片會連到你的作品集網站。
 
-**目前是開發／評估候選版，尚未完成正式 v1 驗收。** Windows 安裝候選已有本機測試；乾淨 Windows、完整無障礙、素材權利與真實外網等發布檢查仍未完成。最新範圍見 [UX 優化與驗證紀錄](docs/OPTIMIZATION_PLAN_2026-10-11.md)，發布缺口見 [專案記憶](docs/PROJECT_CONTEXT.md)。
+**目前是開發／評估候選版，尚未完成正式 v1 驗收。** Windows 安裝候選已有本機測試；乾淨 Windows、完整無障礙、素材權利與真實外網等發布檢查仍未完成。最新範圍見 [UX 優化與驗證紀錄](legacy/docs/OPTIMIZATION_PLAN_2026-10-11.md)，發布缺口見 [專案記憶](docs/PROJECT_CONTEXT.md)。
 
 ## 先選你要走的路
 
@@ -244,8 +244,8 @@ RepoNPC 只顯示操作說明；關閉 gateway 不代表 Funnel 已停用。管�
 | ---------------------------------------- | ---------------------------------------------------------------------- |
 | 完整安裝、HTTPS、備份、恢復與 rollback   | [操作手冊](docs/OPERATIONS.md)                                         |
 | API、資料結構與功能契約                  | [技術規格](docs/TECHNICAL_SPEC.md)                                     |
-| 先設定模型再分析的引導修正               | [模型優先引導實作交接](docs/ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md) |
-| 中立模型設定、API 金鑰安全與前置引導改版 | [實作交接](docs/MODEL_SETUP_IMPLEMENTATION_HANDOFF.md)                 |
+| 先設定模型再分析的引導修正               | [模型優先引導實作交接](legacy/docs/ONBOARDING_FLOW_IMPLEMENTATION_HANDOFF.md) |
+| 中立模型設定、API 金鑰安全與前置引導改版 | [實作交接](legacy/docs/MODEL_SETUP_IMPLEMENTATION_HANDOFF.md)                 |
 | 每項需求如何判定完成                     | [驗收標準](docs/ACCEPTANCE_CRITERIA.md)                                |
 | 威脅、秘密管理與管理介面限制             | [安全模型](docs/SECURITY.md)                                           |
 | 重要架構選擇及其理由                     | [架構決策](docs/DECISIONS.md)                                          |
@@ -305,13 +305,13 @@ Repository AI 分析會同時使用兩個已選角色：Embedding 模型負責�
 
 只改服務名稱時保留原網址與金鑰；更換網址是獨立選項。同一連線方式且協定、主機與有效連接埠不變時，只修正路徑（例如補上 `/v1`）可沿用已儲存的金鑰；更換 origin 或連線方式仍須替換或移除金鑰。所有服務新增、更新、刪除與清單更新失敗都會在實際操作的面板顯示單一錯誤摘要，說明安全原因、原設定是否保留及下一步，並在可用時提供診斷代碼。新輸入的金鑰會在送出或收合表單後清除，失敗重試時會明確提醒重新填入。
 
-此次資料庫升級包含 runtime migration 19 與後續 migration 20，首次載入新版後端時交易式升級。保留舊資料與模型選擇，失敗會回復；正式 bundle 格式不變。完整修復清單與證據見 [UI／UX 修復紀錄](docs/UI_UX_REVIEW_2026-09-12.md)。
+此次資料庫升級包含 runtime migration 19 與後續 migration 20，首次載入新版後端時交易式升級。保留舊資料與模型選擇，失敗會回復；正式 bundle 格式不變。完整修復清單與證據見 [UI／UX 修復紀錄](legacy/docs/UI_UX_REVIEW_2026-09-12.md)。
 
 Runtime migration 22 會修復舊版在服務更新後仍停留於舊 revision 的安全候選模型，並保存歷史 revision 的 provider 資訊。升級本身不會呼叫模型；重新啟動新版後端後，受影響的模型會顯示需要重新測試，按一次「測試模型」即可驗證新服務。
 
 Runtime migration 23 為失敗的批次項目新增安全、封閉集合的 `error_reason`。分析頁重新整理後仍會顯示錯誤代碼、原因與建議動作；原始 repository／prompt／模型回覆、私人網址與憑證不會寫入錯誤欄位。
 
-模型測試失敗會顯示實際 HTTP 狀態碼與服務商錯誤原文，不翻譯或推測原因。原文會遮蔽已知金鑰及私人網址，並限制長度；無可顯示文字時會明確提示。舊版本未保存的原文需按「測試模型」重新取得。詳見 [錯誤原文修正紀錄](docs/PROVIDER_ERROR_MESSAGES_2026-09-12.md)。
+模型測試失敗會顯示實際 HTTP 狀態碼與服務商錯誤原文，不翻譯或推測原因。原文會遮蔽已知金鑰及私人網址，並限制長度；無可顯示文字時會明確提示。舊版本未保存的原文需按「測試模型」重新取得。詳見 [錯誤原文修正紀錄](legacy/docs/PROVIDER_ERROR_MESSAGES_2026-09-12.md)。
 
 ### Visitor chat processing (2026-10-04)
 
@@ -330,9 +330,9 @@ OR-032 / ADR-058 / Specification 0.4.10 adopts the [public summary contract](doc
 <details>
 <summary>歷史實作紀錄（以各日期範圍為準）</summary>
 
-**2026-10-03 接續實作：**正式 builtin 檢索基準 AC-009 已通過；已補600組實際雙語／明暗browser對比與隔離已安裝版維護／資料保留證據。聊天與分析預設／最大生成預算為16,384 token，支援推理的Ollama保持推理開啟，並檢查輸入與生成額度的context空間；較低的明確舊設定保留。此日紀錄的公開聊天期限後來由 ADR-057 更新為預設 180 秒、最高 300 秒；20s 模型探測與 300s 分析 provider 期限維持。最終Python2613項通過／2項既有Windows略過，完整Windows候選已重建。擁有者批准只修正兩事實測題、保留判分；新12題重驗9/12，兩個修正案例均通過，另三題未通過，正式catalog維持空白。Man最終圖像／權利、clean Windows、完整無障礙與外部驗收仍未完成；16k包含推理與答案，不保證生成16k字。詳見[最新接續交接](docs/CONTINUATION_HANDOFF_2026-10-03.md)；下列舊進度保留原範圍。
+**2026-10-03 接續實作：**正式 builtin 檢索基準 AC-009 已通過；已補600組實際雙語／明暗browser對比與隔離已安裝版維護／資料保留證據。聊天與分析預設／最大生成預算為16,384 token，支援推理的Ollama保持推理開啟，並檢查輸入與生成額度的context空間；較低的明確舊設定保留。此日紀錄的公開聊天期限後來由 ADR-057 更新為預設 180 秒、最高 300 秒；20s 模型探測與 300s 分析 provider 期限維持。最終Python2613項通過／2項既有Windows略過，完整Windows候選已重建。擁有者批准只修正兩事實測題、保留判分；新12題重驗9/12，兩個修正案例均通過，另三題未通過，正式catalog維持空白。Man最終圖像／權利、clean Windows、完整無障礙與外部驗收仍未完成；16k包含推理與答案，不保證生成16k字。詳見[最新接續交接](legacy/docs/CONTINUATION_HANDOFF_2026-10-03.md)；下列舊進度保留原範圍。
 
-**A5 本機檢查後暫停（2026-09-30）：**ChatGPT 第六輪接受先前修補，另指出 FAQ 技術路徑與點號可錯配；Luna max 已修正，Main 以六個失敗案例重測。最終 Web 377 項、格式、lint（0 錯誤／19 警告）、型別、正式建置、來源防護及新建映像的 Docker 2 項通過；62 個未改動的後端輸入沿用 Python 1,638 通過／2 項略過。最後修補尚未交 ChatGPT 再審；靜態聊天傳送仍待明確授權，A5 尚未完成。詳見[交接指南](docs/A5_HANDOFF_2026-09-30.md)。
+**A5 本機檢查後暫停（2026-09-30）：**ChatGPT 第六輪接受先前修補，另指出 FAQ 技術路徑與點號可錯配；Luna max 已修正，Main 以六個失敗案例重測。最終 Web 377 項、格式、lint（0 錯誤／19 警告）、型別、正式建置、來源防護及新建映像的 Docker 2 項通過；62 個未改動的後端輸入沿用 Python 1,638 通過／2 項略過。最後修補尚未交 ChatGPT 再審；靜態聊天傳送仍待明確授權，A5 尚未完成。詳見[交接指南](legacy/docs/A5_HANDOFF_2026-09-30.md)。
 
 **訪客頁與外觀（A5／R08，本機檢查中）：**共用聊天頁、五套雙版本配色、私人圖片草稿與預覽、無模型外觀套用／取消、已核准 FAQ 替代問法與離線比對，以及只包含公開內容的 Pages ZIP 已實作。管理頁保存 Pages 完整網址；匯出使用需登入且無副作用的原生下載，核對時重新建立本機 manifest 並逐位元組比對入口頁與 manifest，成功後才產生卡片連結。請依[雙語手動分享指南](docs/PAGES_SHARING_GUIDE.md)操作；[A5 契約與檢查範圍](docs/A5_VISITOR_APPEARANCE_EXPORT_CONTRACT.md)記錄進度。第六輪指出的 FAQ 技術片段碰撞已本機修正並重測；Pages 即時問答仍待明確的傳送內容／目的地授權，原生 ZIP 落盤與真正 200% zoom 未確認，A5 尚未結案。沒有公開部署。
 

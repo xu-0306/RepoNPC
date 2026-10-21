@@ -4,22 +4,22 @@
 
 **2026-10-03 最新並行批次：** 三位 GPT-6.1 Sol 已交付 A6 真實固定模型與本機 Ollama 證據、A8 開發機隔離安裝／合成 patch 升級／移除／資料保留及已安裝 A11 API 還原、A9 私有 Man／A5 fixtures。Root 完成 A7 模型卡片與明確填入、LICENSE／notices／compiler 版本修復和整合驗證：Web484／42、affected Python226、Ruff258／mypy103、wheel／installer build、300 checksums 通過。見[最新交接](PARALLEL_IMPLEMENTATION_HANDOFF_2026-10-03.md)。正式 catalog 仍空，Man 仍需修圖和來源授權；formal AC009 baseline、clean Windows／installed native browser、完整 A5 輔助技術／真正200%zoom 及外部 A12 仍未驗收。下方舊「最新」紀錄是當時快照；沒有提升 ledger AC。
 
-**2026-09-29 A1 本機完成：** [A1/F0 契約](A1_FUNNEL_GATEWAY_CONTRACT.md)（OR-027／ADR-053，規格 0.4.6）由 gpt-6-luna max 實作，Main 審核並修正共用安全邊界與競態。Python 1,260 passed／2 skipped、Web 230 passed、Docker 2 項與原生瀏覽器 8 組檢查通過；詳見契約 §10 與[本機紀錄](../release-evidence/a1/local-checks.md)。未啟用 Funnel，外網驗收仍屬 A12；下一主線是 A5。
+**2026-09-29 A1 本機完成：** [A1/F0 契約](../../docs/A1_FUNNEL_GATEWAY_CONTRACT.md)（OR-027／ADR-053，規格 0.4.6）由 gpt-6-luna max 實作，Main 審核並修正共用安全邊界與競態。Python 1,260 passed／2 skipped、Web 230 passed、Docker 2 項與原生瀏覽器 8 組檢查通過；詳見契約 §10 與[本機紀錄](../../release-evidence/a1/local-checks.md)。未啟用 Funnel，外網驗收仍屬 A12；下一主線是 A5。
 
-狀態：**實作中**。本文件彙整 ADR-046 之後所有尚未實作或尚未驗收的工作，作為交給其他 agent 的單一入口。決策依據以 [完成方向契約](COMPLETION_DIRECTION_CONTRACT_2026-09-26.md)、Approved `TECHNICAL_SPEC.md` 0.4.7、`DECISIONS.md` ADR-046～ADR-054 與 `ACCEPTANCE_CRITERIA.md` 為準；A11 選項 A 已由 OR-028 核准。本文件只負責排序、相依與分派，不新增產品決策。
+狀態：**實作中**。本文件彙整 ADR-046 之後所有尚未實作或尚未驗收的工作，作為交給其他 agent 的單一入口。決策依據以 [完成方向契約](../../docs/COMPLETION_DIRECTION_CONTRACT_2026-09-26.md)、Approved `TECHNICAL_SPEC.md` 0.4.7、`DECISIONS.md` ADR-046～ADR-054 與 `ACCEPTANCE_CRITERIA.md` 為準；A11 選項 A 已由 OR-028 核准。本文件只負責排序、相依與分派，不新增產品決策。
 
 ## 0. 目前基準
 
 - 擁有者授權的 A1～A4／formatter 提交已於 2026-09-29 推送，基準為 `main@877c6d6`。2026-10-03 本機 A5～A12 批次保留 dirty working tree，尚未以本文件宣稱 commit／push；新批次 push 需另行授權。提交數與工作樹狀態以當次 `git status` 為準。
 - 已完成並有本機證據：ADR-046 本機草稿／索引啟用／本機試聊／三步驟 GitHub 卡片引導；R01–R07、R09、R10、R12-A、R14 訪客聊天與卡片長文字子批次；R13 的 64px canonical、converter 與「角色與動畫」工作區。
-- ADR-048～ADR-052（規格 0.4.0～0.4.5、FR-043～FR-053、AC-062～AC-079）已開始實作：A2 回答政策 v2、A3 參與事實與 A4 覆蓋檢查／FAQ 已取得本機證據；A10/R11 近期批次恢復、A10/R12-B passage cache 重用量測與公開路由／bundle 匯出／runtime backup 排除測試亦已完成本機驗證。A3 已保存於 `1e82ee8`，實際 bounded 本機／reindex 建置的參與事實修正為 `cf948f8`（58 項 focused checks）；A4 已完成本機實作與 Main 審核；完成提交為新增 A4 實作文件的 `feat(admin): add coverage checks and reviewed FAQ`，驗證見[本機紀錄](../release-evidence/a4/local-checks.md)。正式驗收帳本與發布閘門待 A12。
-- 歷史驗收帳本 `release-evidence/acceptance-ledger.json` 保持 byte-identical：只涵蓋 AC-001～AC-061（3 pass、6 blocked、52 not-run），`source_identity` 仍是 2026-09-10 的髒工作樹。新的 [A11 候選快照](../release-evidence/a11/acceptance-ledger-candidate-20261003.json)涵蓋 AC-001～AC-079，76 not-run、3 blocked（AC-020／037／069），保留 AC-041～043 退役歷史說明；列舉完整不代表實際 AC pass。Root 最終 source fingerprint 另記，不得以任一帳本計算完成百分比。
+- ADR-048～ADR-052（規格 0.4.0～0.4.5、FR-043～FR-053、AC-062～AC-079）已開始實作：A2 回答政策 v2、A3 參與事實與 A4 覆蓋檢查／FAQ 已取得本機證據；A10/R11 近期批次恢復、A10/R12-B passage cache 重用量測與公開路由／bundle 匯出／runtime backup 排除測試亦已完成本機驗證。A3 已保存於 `1e82ee8`，實際 bounded 本機／reindex 建置的參與事實修正為 `cf948f8`（58 項 focused checks）；A4 已完成本機實作與 Main 審核；完成提交為新增 A4 實作文件的 `feat(admin): add coverage checks and reviewed FAQ`，驗證見[本機紀錄](../../release-evidence/a4/local-checks.md)。正式驗收帳本與發布閘門待 A12。
+- 歷史驗收帳本 `release-evidence/acceptance-ledger.json` 保持 byte-identical：只涵蓋 AC-001～AC-061（3 pass、6 blocked、52 not-run），`source_identity` 仍是 2026-09-10 的髒工作樹。新的 [A11 候選快照](../../release-evidence/a11/acceptance-ledger-candidate-20261003.json)涵蓋 AC-001～AC-079，76 not-run、3 blocked（AC-020／037／069），保留 AC-041～043 退役歷史說明；列舉完整不代表實際 AC pass。Root 最終 source fingerprint 另記，不得以任一帳本計算完成百分比。
 
-**2026-10-03 最新本機交接：** A6／A7 模型設定、A8 frozen host 與 A11 維護功能已有本機實作及 partial evidence；A11 選項 A（加密 SQLite-only、同主機同資料目錄還原）已獲 owner／ADR-054／OR-028 核准。最新 Web **480 tests／42 files passed** 並完成 production build；Python baseline **2,497 passed／2 existing Windows skips**（新增 protected native GET 前），其後 affected subset **181 passed／1 warning**，兩者不可相加；Ruff **260 files**、mypy **103 source files** 與最新 wheel build 通過。詳見 [Web](../release-evidence/a6/web-a11-native-download-final-20261003.log)、[Python baseline](../release-evidence/a6/python-a11-final-20261003.log)、[affected subset](../release-evidence/a6/python-a11-native-root-final-20261003.log)、[Ruff](../release-evidence/a6/ruff-a11-native-final-20261003.log)、[mypy](../release-evidence/a6/mypy-a11-native-final-20261003.log)及 [wheel](../release-evidence/a6/wheel-a11-native-final-20261003.log)。
+**2026-10-03 最新本機交接：** A6／A7 模型設定、A8 frozen host 與 A11 維護功能已有本機實作及 partial evidence；A11 選項 A（加密 SQLite-only、同主機同資料目錄還原）已獲 owner／ADR-054／OR-028 核准。最新 Web **480 tests／42 files passed** 並完成 production build；Python baseline **2,497 passed／2 existing Windows skips**（新增 protected native GET 前），其後 affected subset **181 passed／1 warning**，兩者不可相加；Ruff **260 files**、mypy **103 source files** 與最新 wheel build 通過。詳見 [Web](../../release-evidence/a6/web-a11-native-download-final-20261003.log)、[Python baseline](../../release-evidence/a6/python-a11-final-20261003.log)、[affected subset](../../release-evidence/a6/python-a11-native-root-final-20261003.log)、[Ruff](../../release-evidence/a6/ruff-a11-native-final-20261003.log)、[mypy](../../release-evidence/a6/mypy-a11-native-final-20261003.log)及 [wheel](../../release-evidence/a6/wheel-a11-native-final-20261003.log)。
 
-完整 `build_windows.ps1 -SkipInstaller` 的 [A11 native-download build](../release-evidence/a6/windows-build-a11-native-download-final-20261003.log)成功；outside-checkout frozen smoke **2.3415 秒／exit 0**，僅驗證無模型 health 與 owned shutdown，見 [JSON receipt](../release-evidence/a6/windows-frozen-smoke-a11-native-final-20261003.json)及[摘要 log](../release-evidence/a6/windows-frozen-smoke-a11-native-final-20261003.log)。EXE SHA-256 為 `12cb22f65be4a66fae8006f263452659be537a2a40e06c2c3f70407c29ced2ff`。中英文 in-app browser 均完成 protected native GET 的相同密文下載，下載檔 upload／inspect／cancel 成功，見 [download receipt](../release-evidence/a11/browser-native-download-20261003.json)；Root 已保存 real Main／MaintenanceHost 還原與八組雙語 responsive profile 的局部本機證據，尚未關閉 AC-076。
+完整 `build_windows.ps1 -SkipInstaller` 的 [A11 native-download build](../../release-evidence/a6/windows-build-a11-native-download-final-20261003.log)成功；outside-checkout frozen smoke **2.3415 秒／exit 0**，僅驗證無模型 health 與 owned shutdown，見 [JSON receipt](../../release-evidence/a6/windows-frozen-smoke-a11-native-final-20261003.json)及[摘要 log](../../release-evidence/a6/windows-frozen-smoke-a11-native-final-20261003.log)。EXE SHA-256 為 `12cb22f65be4a66fae8006f263452659be537a2a40e06c2c3f70407c29ced2ff`。中英文 in-app browser 均完成 protected native GET 的相同密文下載，下載檔 upload／inspect／cancel 成功，見 [download receipt](../../release-evidence/a11/browser-native-download-20261003.json)；Root 已保存 real Main／MaintenanceHost 還原與八組雙語 responsive profile 的局部本機證據，尚未關閉 AC-076。
 
-[Restore state](../release-evidence/a11/browser-native-restore-state-20261003.json)記錄 keyboard Space→Tab→Enter 經真實 host 將 synthetic CURRENT sentinel 還原為 BASELINE，sessions／previews 均為 0、gateway off、integrity ok，三份 host ciphertext backups 全部 authenticate；reload 確實要求 production login，保留 synthetic owner 帳密可重新登入。[Interactions](../release-evidence/a11/browser-native-interactions-20261003.json)包含下載檔 upload／inspect／cancel、wrong password、password cleared、disabled confirm 與 error logs 空陣列；[responsive record](../release-evidence/a11/browser-native-responsive-20261003.json)覆蓋 375／768／1024／1440 × zh-TW／en，八組 main language 正確且無橫向 overflow，手機與 final screenshots 已保存。仍未 actual 200% zoom、assistive technology／完整 browser matrix、installed retained-bundle／gateway browser 與 frozen restore walkthrough；這些局部結果不關閉 AC-076。
+[Restore state](../../release-evidence/a11/browser-native-restore-state-20261003.json)記錄 keyboard Space→Tab→Enter 經真實 host 將 synthetic CURRENT sentinel 還原為 BASELINE，sessions／previews 均為 0、gateway off、integrity ok，三份 host ciphertext backups 全部 authenticate；reload 確實要求 production login，保留 synthetic owner 帳密可重新登入。[Interactions](../../release-evidence/a11/browser-native-interactions-20261003.json)包含下載檔 upload／inspect／cancel、wrong password、password cleared、disabled confirm 與 error logs 空陣列；[responsive record](../../release-evidence/a11/browser-native-responsive-20261003.json)覆蓋 375／768／1024／1440 × zh-TW／en，八組 main language 正確且無橫向 overflow，手機與 final screenshots 已保存。仍未 actual 200% zoom、assistive technology／完整 browser matrix、installed retained-bundle／gateway browser 與 frozen restore walkthrough；這些局部結果不關閉 AC-076。
 
 仍缺 ISCC／實際 installer、clean-account install／upgrade／uninstall／資料保留與 frozen restore walkthrough、root LICENSE／native notices 最終審核、真實模型品質及 reviewed catalog、A9 最終美術／授權與外部 Funnel／Pages／GitHub 驗收。無模型下載、公開入口或發布成功的推論；AC-069／076 仍未全面驗收。
 
@@ -56,7 +56,7 @@
 
 ## 3. A1 的已核准 F0 契約
 
-[A1/F0 契約](A1_FUNNEL_GATEWAY_CONTRACT.md)（OR-027／ADR-053、規格 0.4.6）已定稿：同一程序內的第二個 loopback listener、明確封閉路由與 Vite 靜態 import 資源清單、唯一 Pages origin 的無憑證 CORS、私人管理 Host／Origin、預設共用額度與實際工作上限、選用且嚴格的 loopback proxy 身分、每次啟動重新確認的擁有者外網回報，以及選用 Linux host-network Compose。設定保存不代表 Pages 託管、GitHub 卡片或外網驗收通過。
+[A1/F0 契約](../../docs/A1_FUNNEL_GATEWAY_CONTRACT.md)（OR-027／ADR-053、規格 0.4.6）已定稿：同一程序內的第二個 loopback listener、明確封閉路由與 Vite 靜態 import 資源清單、唯一 Pages origin 的無憑證 CORS、私人管理 Host／Origin、預設共用額度與實際工作上限、選用且嚴格的 loopback proxy 身分、每次啟動重新確認的擁有者外網回報，以及選用 Linux host-network Compose。設定保存不代表 Pages 託管、GitHub 卡片或外網驗收通過。
 
 Windows 安裝版由 A8 處理。Funnel 的安裝、登入、授權與啟用／停用仍由擁有者操作；RepoNPC 只顯示官方指令，憑證不進入表單、日誌或匯出。
 
@@ -81,7 +81,7 @@ Windows 安裝版由 A8 處理。Funnel 的安裝、登入、授權與啟用／�
 
 ### A1 閘道
 
-本機狀態（2026-09-29）：[契約 §10](A1_FUNNEL_GATEWAY_CONTRACT.md#10-local-implementation-checkpoint-2026-09-29)記錄完整實作與 Main 審核。設定／啟動／停止／擁有者回報可由私人管理頁操作；重啟、版本與就緒失效會撤銷目前回報。外網、真實 provider、乾淨主機與正式帳本由 A12 驗收；完整 Pages 匯出／離線比對由 A5 實作。
+本機狀態（2026-09-29）：[契約 §10](../../docs/A1_FUNNEL_GATEWAY_CONTRACT.md#10-local-implementation-checkpoint-2026-09-29)記錄完整實作與 Main 審核。設定／啟動／停止／擁有者回報可由私人管理頁操作；重啟、版本與就緒失效會撤銷目前回報。外網、真實 provider、乾淨主機與正式帳本由 A12 驗收；完整 Pages 匯出／離線比對由 A5 實作。
 
 > 實作 RepoNPC 的 Tailscale Funnel 訪客專用閘道（ADR-047 F0／F2，ADR-048 §4.1–4.2，FR-047，AC-071）。先把 `docs/IMPLEMENTATION_BACKLOG_2026-09-26.md` §3 的待定項寫成契約並更新 `TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md`、`SECURITY.md`、`OPERATIONS.md`，再實作：預設拒絕的路由白名單、Pages origin 限定且不帶憑證的 CORS、管理與模型路徑 404、代理後限流與每日上限、真實 SSE 逾時、訪客回應無主機／模型／費用欄位，以及管理端「本機可用／入口已設定／外網已驗證」三種狀態。不要實際啟用 Funnel。測試需涵蓋路徑編碼與大小寫變體、未知路由、非白名單 origin、帶憑證請求。
 
@@ -97,7 +97,7 @@ Windows 安裝版由 A8 處理。Funnel 的安裝、登入、授權與啟用／�
 
 ### A4 覆蓋檢查與 FAQ
 
-本機狀態（2026-09-28）：[A4 實作契約與驗證範圍](A4_COVERAGE_FAQ_IMPLEMENTATION.md)記錄標準問題 registry、實際驗證回答的資訊性檢查、四種審核動作、保存 claim 後更新真實索引再生成、精確 bundle 綁定、runtime migration 29，以及核准項 JSON 匯出／訪客即時問題按鈕。完整 Pages 靜態殼與離線比對由 A5 處理；公開部署由 A12 追蹤。
+本機狀態（2026-09-28）：[A4 實作契約與驗證範圍](../../docs/A4_COVERAGE_FAQ_IMPLEMENTATION.md)記錄標準問題 registry、實際驗證回答的資訊性檢查、四種審核動作、保存 claim 後更新真實索引再生成、精確 bundle 綁定、runtime migration 29，以及核准項 JSON 匯出／訪客即時問題按鈕。完整 Pages 靜態殼與離線比對由 A5 處理；公開部署由 A12 追蹤。
 
 > 依契約 §3、§4.3 實作 FR-046（AC-067）：發布前的資訊性覆蓋檢查（絕不阻擋發布）；FAQ 產生與審核，動作只有核准／拒絕／重產／改寫成自述（不提供自由編輯）；只有核准項會被匯出或提供；綁定 bundle ID，bundle 變更時顯示「需要重新確認」。FAQ 回答必須通過 A2 驗證器。
 
@@ -105,7 +105,7 @@ Windows 安裝版由 A8 處理。Funnel 的安裝、登入、授權與啟用／�
 
 2026-09-29 狀態：依擁有者要求，ChatGPT 已先查閱 GitHub 上與本機相同的
 `main@877c6d6`，再取得 A5 前後文並給出[分批計劃](A5_CHATGPT_PLAN_2026-09-29.md)。
-單一 gpt-6-luna max 實作者依[整合契約](A5_VISITOR_APPEARANCE_EXPORT_CONTRACT.md)
+單一 gpt-6-luna max 實作者依[整合契約](../../docs/A5_VISITOR_APPEARANCE_EXPORT_CONTRACT.md)
 順序實作，Main 獨立審查與驗證。第一批已通過 Main 審查與 81 項相關測試，
 第二批私人預覽、背景草稿與無模型外觀套用已通過 Main 審查；
 另已驗證故障回復、兩次完整建置、工作階段隔離及過期檔案清理。
@@ -135,7 +135,7 @@ Pages 即時問答因自動審核要求明確授權傳送內容與目的地而�
 
 ### A8 Windows 安裝器
 
-2026-10-03 本機狀態：[Windows 指南](../packaging/windows/README.md)連結最新 A11 onedir build、outside-checkout frozen health／shutdown receipt、checksums 與 license gates。無 ISCC，實際 installer、clean-account launch、upgrade／uninstall 保留資料與 frozen restore walkthrough 未驗收，AC-069 不標 pass。
+2026-10-03 本機狀態：[Windows 指南](../../packaging/windows/README.md)連結最新 A11 onedir build、outside-checkout frozen health／shutdown receipt、checksums 與 license gates。無 ISCC，實際 installer、clean-account launch、upgrade／uninstall 保留資料與 frozen restore walkthrough 未驗收，AC-069 不標 pass。
 
 > 依契約 §5 實作 FR-048（AC-069）：PyInstaller onedir（含 onnxruntime、uvicorn 與預建前端）、Inno Setup 個人安裝（免系統管理員權限、開始功能表與桌面捷徑、解除安裝時預設保留資料）、啟動器等待 health 後開啟管理頁並提供「開啟管理頁面」「結束」、使用者資料放在安裝目錄外、SHA-256 與 SmartScreen 說明頁。bge-m3 不打包。在乾淨 Windows 主機（無 Python、無 Docker）驗證安裝、啟動、更新與解除安裝。
 
@@ -157,6 +157,6 @@ Pages 即時問答因自動審核要求明確授權傳送內容與目的地而�
 
 ### A12 發布驗收
 
-2026-10-03 狀態：[新候選帳本](../release-evidence/a11/acceptance-ledger-candidate-20261003.json)已完整列舉 79 rows（76 not-run／3 blocked），[候選說明](../release-evidence/a11/acceptance-candidate-notes-20261003.md)記錄局部證據與退役欄位。歷史 ledger byte-identical；局部 automated／browser／build 成功不提升為完整 AC pass。Root 應另記最後 source fingerprint 與更新後 evidence scope。
+2026-10-03 狀態：[新候選帳本](../../release-evidence/a11/acceptance-ledger-candidate-20261003.json)已完整列舉 79 rows（76 not-run／3 blocked），[候選說明](../../release-evidence/a11/acceptance-candidate-notes-20261003.md)記錄局部證據與退役欄位。歷史 ledger byte-identical；局部 automated／browser／build 成功不提升為完整 AC pass。Root 應另記最後 source fingerprint 與更新後 evidence scope。
 
 > 在新候選快照逐項以完整實際證據更新 AC-001～079 狀態與 `source_identity`，保留歷史 ledger；執行乾淨主機、獨立外網、真實 GitHub Profile、瀏覽器與無障礙矩陣；補驗 UI 卡片下載落盤與瀏覽器開啟本人陳述來源。需要公開入口、GitHub 寫入或 push 的步驟先取得擁有者當次授權；D8 使用者實測由擁有者執行並提供紀錄。

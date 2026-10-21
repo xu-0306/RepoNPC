@@ -1,7 +1,7 @@
 # 離線人物歸屬診斷與 Man 七像素修整交接 — 2026-10-03
 
 **後續更新：**擁有者未批准正式schema變更，先要求確認訪客UX，並批准隔離對照。
-[訪客報告](../release-evidence/a7/visitor-ux-comparison-20261003/REPORT.zh-TW.md)已完成24組；
+[訪客報告](../../release-evidence/a7/visitor-ux-comparison-20261003/REPORT.zh-TW.md)已完成24組；
 有資料10題完整正確由1題變4題，但候選5題超時、1題引用缺口，因此建議暫不正式整合。
 82檢查／四腳本static checks／241檔fingerprint與分析重現通過。以下記錄保留前一輪範圍；
 前一輪無model calls不代表後續實驗沒有，後續實際25次本機generation、24次預定輸入。
@@ -19,7 +19,7 @@ source、production prompt／schema／lexicon、provider／deadline、oracle、c
   資料表描述被雙語 recall reclassification，共16個案例。32個不受證據支持的
   人物正例均被阻擋，六個 anchor／selected-ID 結構案例符合預期。這是
   **AC-064 合成輸入缺陷證據**，不是先前 live labeled-inference 原文的重建或
-  原因證明。[診斷與提案](../release-evidence/a7/offline-attribution-20261003/README.md)。
+  原因證明。[診斷與提案](../../release-evidence/a7/offline-attribution-20261003/README.md)。
 - **A7 schema review：**沿用既有 wire schema，產出四種 request-local source-ID
   enum 樣本；唯一差異是 `source_ids.items.enum`。驗證 membership、未知 ID
   不在 enum、跨 request 隔離、順序一致、深拷貝及序列化大小。只是可審查資料，
@@ -30,7 +30,7 @@ source、production prompt／schema／lexicon、provider／deadline、oracle、c
   19個 Man／Orange 來源檔未變。256×448／binary alpha／canonical validation
   通過，候選 SHA-256 為
   `a88572ec58ac715c1a933a51025f01915db125b2cea5734153e5856814c8ef35`。
-  [私有成果及完整證據](../release-evidence/a9/seven-pixel-review-20261003/README.md)。
+  [私有成果及完整證據](../../release-evidence/a9/seven-pixel-review-20261003/README.md)。
 - **A9 重現：**兩份私有建置各23檔（sheet／contact sheet／七GIF／提案YAML／
   13卡片資產）逐位元組一致。最終腳本另在 fresh disposable 目錄重跑，兩份
   receipt、schema 樣本及四次素材建置均一致；沒有覆寫歷史 receipts。
@@ -43,7 +43,7 @@ source、production prompt／schema／lexicon、provider／deadline、oracle、c
 - 三支本輪 owned scripts：Ruff lint、format check、mypy 全通過。
   初次 mypy 的 source-path／locale typing 問題已修正；最後以
   `MYPYPATH=src`及`--follow-imports=silent`檢查。
-- [最終重現核對](../release-evidence/a7/offline-attribution-20261003/verification.json)
+- [最終重現核對](../../release-evidence/a7/offline-attribution-20261003/verification.json)
   確認六個受保護 production／fixture 檔案與19個原素材檔保持原 hash。
 
 98案例是**診斷**，其中24個 mismatch仍存在；不可寫成98通過。本輪沒有

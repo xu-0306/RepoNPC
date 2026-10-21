@@ -1,14 +1,14 @@
 # Windows candidate license review — 2026-10-03
 
 The owner review already selected an open-source MIT project. Root now supplies
-the standard [software license](../LICENSE), using the collective RepoNPC
+the standard [software license](../../LICENSE), using the collective RepoNPC
 contributors notice and no invented personal copyright holder. The text follows
 the [OSI MIT license](https://opensource.org/license/mit). This removes the
 missing-file blocker; it does not grant rights to third-party artwork or weights.
 
 The existing offline generator still follows the installed locked runtime graph,
 collects package/native license files and pinned supplements, and includes the
-font OFL. A pinned [source-availability notice](../packaging/windows/licenses/SOURCE_AVAILABILITY.txt)
+font OFL. A pinned [source-availability notice](../../packaging/windows/licenses/SOURCE_AVAILABILITY.txt)
 is now included in the generated third-party notices. The unmodified tqdm 4.70.0
 source and its own MIT/MPL notices are available at the linked upstream tag.
 [MPL section 3.2](https://www.mozilla.org/en-US/MPL/2.0/) requires recipients of

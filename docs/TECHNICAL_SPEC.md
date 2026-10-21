@@ -26,7 +26,7 @@ Explicitly configured lower budgets remain valid. Sections 4.3 and 13.3 govern
 context reservation and provider controls; deadlines and validation remain unchanged.
 
 **Owner-approved A11 backup boundary (2026-10-03, ADR-054 / OR-028):**
-The owner chose option A in the [backup decision](A11_BACKUP_BOUNDARY_DECISION_2026-10-03.md).
+The owner chose option A in the [backup decision](../legacy/docs/A11_BACKUP_BOUNDARY_DECISION_2026-10-03.md).
 Section 11.7 defines password-encrypted Web backups and same-data-directory
 restoration. This authorizes implementation; it does not close AC-076 or release gates.
 
@@ -35,7 +35,7 @@ cancel/resume downloader, CPU provider lifetime, nullable local profile binding
 and explicit device check are wired through the existing private model workspace.
 Migration 34 preserves profile/selection/switch-intent references. Synthetic
 integration and in-app browser evidence are recorded in the
-[parallel handoff](PARALLEL_IMPLEMENTATION_HANDOFF_2026-10-03.md). Real pinned
+[parallel handoff](../legacy/docs/PARALLEL_IMPLEMENTATION_HANDOFF_2026-10-03.md). Real pinned
 weights and retrieval quality were pending at that checkpoint. The next parallel
 run on 2026-10-03 now records real fixed-artifact CPU evaluation and reviewed
 per-model cards in the handoff. Verified catalog admission and release acceptance
@@ -47,7 +47,7 @@ The [implementation contract](A7_MODEL_CARDS_IMPLEMENTATION_2026-10-03.md) recor
 the additive fields and explicit handoff to the existing Chat model form. Choosing
 a card makes no download/provider call or activation and preserves unsaved inputs.
 
-**Implementation checkpoint (2026-09-30, A5/R08):** The approved visitor/appearance/Pages scope is being implemented under the [A5 integration contract](A5_VISITOR_APPEARANCE_EXPORT_CONTRACT.md). ChatGPT review6 accepted prior repairs and identified a technical path/dot FAQ collision; Luna max repaired it and Main reproduced six failures before repair. Final Web377/37 files, frontend format/lint/type/build, registry/source guard and Docker/Compose2 passed; earlier native phone drawer checks at host1440/375 remain applicable to unchanged CSS. The unchanged 62 Python inputs retain Python1,638/2 Windows skips, mypy91 and Ruff221 checks. The final FAQ repair has not received another ChatGPT review; the owner requested a [pause and handoff](A5_HANDOFF_2026-09-30.md). This evidence does not change Approved status or close release acceptance. Static live chat remains incomplete pending explicit payload/destination authorization; native ZIP completion and actual200% zoom are unverified.
+**Implementation checkpoint (2026-09-30, A5/R08):** The approved visitor/appearance/Pages scope is being implemented under the [A5 integration contract](A5_VISITOR_APPEARANCE_EXPORT_CONTRACT.md). ChatGPT review6 accepted prior repairs and identified a technical path/dot FAQ collision; Luna max repaired it and Main reproduced six failures before repair. Final Web377/37 files, frontend format/lint/type/build, registry/source guard and Docker/Compose2 passed; earlier native phone drawer checks at host1440/375 remain applicable to unchanged CSS. The unchanged 62 Python inputs retain Python1,638/2 Windows skips, mypy91 and Ruff221 checks. The final FAQ repair has not received another ChatGPT review; the owner requested a [pause and handoff](../legacy/docs/A5_HANDOFF_2026-09-30.md). This evidence does not change Approved status or close release acceptance. Static live chat remains incomplete pending explicit payload/destination authorization; native ZIP completion and actual200% zoom are unverified.
 
 **Approved A1 gateway amendment (2026-09-28, OR-027 / ADR-053; FR-047, AC-068/071):** [The frozen A1/F0 contract](A1_FUNNEL_GATEWAY_CONTRACT.md) is normative for gateway routing, environment fields, runtime migration 30, private API/Host/Origin authentication, identity protection, SSE and operator lifecycle. The owner approved the reviewed design and requested gpt-6-luna max implementation with Main review/takeover. Implementation is in progress; no public activation or external acceptance is implied.
 

@@ -55,7 +55,7 @@ framefit有應用程式碼但無README，anti-hardcode有README。資料存在�
 
 S4完整832字支持原子寫入／版本衝突及key／路徑規則；引用preview只顯示500字，
 不代表完整來源不支持。S1是live-subtitle視覺參考資料，不能證明其他repo無資料。
-依據：[正式訪客結果與唯讀定位](../release-evidence/a7/waiting-ux-20261004/OWNER_VISITOR_RESPONSES_RESULT.zh-TW.md)。
+依據：[正式訪客結果與唯讀定位](../../release-evidence/a7/waiting-ux-20261004/OWNER_VISITOR_RESPONSES_RESULT.zh-TW.md)。
 
 ### 執行順序與最小方案
 
@@ -140,20 +140,20 @@ overview補強列為可選，不阻擋這次檢索核心修正；未同意的sch
 
 ---
 
-**後續唯讀定位（2026-10-04）：**三專案均已索引，證據數2291／91／6；同一63字中文題被編成一個長詞組，正式FTS唯讀回放0候選。未追加embedding／chat，未重播完整hybrid，不能斷言實際候選分布。完整S4已確認原子寫入／版本衝突及key／路徑規則有支持，先前500字preview疑點解除。建議先改善安全詞彙召回及目標專案分組召回／打包，再改善比較覆蓋與引用預覽；尚未改程式／契約。見[訪客結果追加定位](../release-evidence/a7/waiting-ux-20261004/OWNER_VISITOR_RESPONSES_RESULT.zh-TW.md)。
+**後續唯讀定位（2026-10-04）：**三專案均已索引，證據數2291／91／6；同一63字中文題被編成一個長詞組，正式FTS唯讀回放0候選。未追加embedding／chat，未重播完整hybrid，不能斷言實際候選分布。完整S4已確認原子寫入／版本衝突及key／路徑規則有支持，先前500字preview疑點解除。建議先改善安全詞彙召回及目標專案分組召回／打包，再改善比較覆蓋與引用預覽；尚未改程式／契約。見[訪客結果追加定位](../../release-evidence/a7/waiting-ux-20261004/OWNER_VISITOR_RESPONSES_RESULT.zh-TW.md)。
 
 **最新正式訪客實測（2026-10-04）：**擁有者對精確作品集資料傳送回答「同意」，
 已只送出一題至既有coderelay／gpt-5.6-terra；41秒完成，2段公開摘要／102字元、3個固定版本引用。
 摘要在完成答案前已出現；雙語Enter展開／收起與完成耗時凍結核對通過，未保存摘要正文。
 答案只具體介紹live-subtitle，另外兩個專案資料不足；部分細節與引用支持度仍須定位，
 不提升跨專案品質／資格／release驗收，未測真實取消。此題授權已使用，沒有重試或追加生成。
-[正式訪客結果與限制](../release-evidence/a7/waiting-ux-20261004/OWNER_VISITOR_RESPONSES_RESULT.zh-TW.md)。下方等待傳送授權是此前歷史，已由本段取代。
+[正式訪客結果與限制](../../release-evidence/a7/waiting-ux-20261004/OWNER_VISITOR_RESPONSES_RESULT.zh-TW.md)。下方等待傳送授權是此前歷史，已由本段取代。
 
 **最新實際服務（2026-10-04）：**正式備份／schema35／原資料保留、localhost:8090啟動、
 同服務gpt-5.6-terra Responses revision9正式probe／啟用及ready/chat可用已完成。
 原revision8為last_known_good，Embedding／bundle不變；沒有application source改動。
 正式訪客比較題已取得精確資料傳送授權並完成，詳見上方最新實測。
-見[正式啟用結果與待答覆事項](../release-evidence/a7/waiting-ux-20261004/OWNER_RUNTIME_ACTIVATION_RESULT.zh-TW.md)。
+見[正式啟用結果與待答覆事項](../../release-evidence/a7/waiting-ux-20261004/OWNER_RUNTIME_ACTIVATION_RESULT.zh-TW.md)。
 
 **最新白話問題與進度（2026-10-04）：**擁有者要求將六項使用情境寫入交接及記憶；
 接續請先讀[目前還剩什麼：使用者情境與進度](CONTINUATION_HANDOFF_2026-10-03.md#目前還剩什麼使用者情境與進度2026-10-04)。
@@ -168,17 +168,17 @@ overview補強列為可選，不阻擋這次檢索核心修正；未同意的sch
 建議接著處理跨專案覆蓋、回答原因／引用通用修正及API／大型repo品質；
 前次單次合成追加呼叫已完成；本輪另依「繼續」完成正式資料升級、probe、啟用及服務啟動，未改application source。
 後續額外生成不能延用已使用的一次合成呼叫額度；實際訪客題已同意並完成，授權已使用。
-見[最新較複雜摘要結果](../release-evidence/a7/waiting-ux-20261004/LIVE_COMPLEX_SUMMARY_RESULT.zh-TW.md)。
+見[最新較複雜摘要結果](../../release-evidence/a7/waiting-ux-20261004/LIVE_COMPLEX_SUMMARY_RESULT.zh-TW.md)。
 Approved0.4.10／OR-032／ADR-058公開摘要實作已完成；下方「真實API未呼叫」與舊規格版本
-保留原輪範圍，現況以本段、主交接及[真實API結果](../release-evidence/a7/waiting-ux-20261004/LIVE_RESPONSES_RESULT.zh-TW.md)為準。
+保留原輪範圍，現況以本段、主交接及[真實API結果](../../release-evidence/a7/waiting-ux-20261004/LIVE_RESPONSES_RESULT.zh-TW.md)為準。
 
-**最新判讀修正（2026-10-04）：**[服務商／設計歸因審查](../release-evidence/a7/rag-paired-20261004/ATTRIBUTION_REVIEW.zh-TW.md)完成4例離線控制（provider／embedding0），新腳本static通過。no-match與空discarded_segments不能排除envelope拒收，需先补安全的內部原因判別；缺SQLite不必然是訪客問題。前輪技術完整性5/10與7/10、正式門檻／catalog／帳本均保留，沒有新模型推論或正式修正。
+**最新判讀修正（2026-10-04）：**[服務商／設計歸因審查](../../release-evidence/a7/rag-paired-20261004/ATTRIBUTION_REVIEW.zh-TW.md)完成4例離線控制（provider／embedding0），新腳本static通過。no-match與空discarded_segments不能排除envelope拒收，需先补安全的內部原因判別；缺SQLite不必然是訪客問題。前輪技術完整性5/10與7/10、正式門檻／catalog／帳本均保留，沒有新模型推論或正式修正。
 
-**最新定位（2026-10-04）：**[實際搜尋與直接提供資料對照](../release-evidence/a7/rag-paired-20261004/README.md)完成24次生成，未重跑失敗題。10題有資料：檢索5完整正確／1部分／1誤拒答／3超時；直接7正確／1誤拒答／2超時；無資料各2題均拒答。
+**最新定位（2026-10-04）：**[實際搜尋與直接提供資料對照](../../release-evidence/a7/rag-paired-20261004/README.md)完成24次生成，未重跑失敗題。10題有資料：檢索5完整正確／1部分／1誤拒答／3超時；直接7正確／1誤拒答／2超時；無資料各2題均拒答。
 檢索必要文件覆蓋8/10，儲存雙語題已在搜尋輸出漏掉；兩組各3題有文件仍失敗。搜尋相關耗時中位54.102ms、生成等待數十秒，後續需分開查選資料品質與回答穩定性；未證明embedding唯一成因或改善幅度。
 120相關檢查＋10新報告控制、四脚本static、三JSON replay及241受保護檔一致通過。測試tabs與18768／18769已關閉，停止PTY exit1。正式整合／完整資格／真實API與大型repo仍未完成，schema批准／9/12／catalog空白／帳本／Man權利不變。
 
-**最新候選（2026-10-04）：**[通用引用修正及驗證](../release-evidence/a7/citation-fix-20261004/README.md)
+**最新候選（2026-10-04）：**[通用引用修正及驗證](../../release-evidence/a7/citation-fix-20261004/README.md)
 已完成隔離實作：共用提示／來源映射通過Ollama、OpenAI相容與vLLM實際adapter的合成控制，
 API不送Ollama專用預載／think欄位；尚未呼叫真實API模型。
 165相關檢查＋最後55新控制重驗均通過（重疊不相加），三腳本Ruff／format／mypy及三檔replay通過。
@@ -188,12 +188,12 @@ API不送Ollama專用預載／think欄位；尚未呼叫真實API模型。
 以下研究及舊對照保留原時點；它們不是本次新測試或正式模型資格。
 
 **最新研究（2026-10-04）：**完成擁有者要求的
-[外部設計比較及 Luna max 獨立查核](../release-evidence/a7/citation-design-review-20261003/README.md)。
+[外部設計比較及 Luna max 獨立查核](../../release-evidence/a7/citation-design-review-20261003/README.md)。
 候選的事前來源限制方向較合理，但不保證語意引用或速度，現有候選暫不正式整合。
 原後端來源／人物／URL 控制全部保留；不增加第二模型 pass，亦未修改程式或進行新推論。
 後續需分開定位逾時與引用支持度，正式 schema 變更仍未取得批准。
 
-**最新新增交付：**[實際訪客問答對照](../release-evidence/a7/visitor-ux-comparison-20261003/REPORT.zh-TW.md)
+**最新新增交付：**[實際訪客問答對照](../../release-evidence/a7/visitor-ux-comparison-20261003/REPORT.zh-TW.md)
 完成24組預定問答；25次本機generation含1筆不同輸入的偏離，已保留排除。
 有資料10題，完整正確原版1／候選4；候選另1題引用缺口、5題超時，原版6題誤報無資料／3題超時。
 兩組無資料各2題均正確拒答。只證明合成作品集上的UX影響及混合結果，未估計真實發生率；

@@ -4,9 +4,9 @@
 **來源：** 2026-10-02 以 anti-complexity-engineering 審查目前 A5 未提交工作的結論。
 **讀者：** 接手的實作／審查 Agent。開工前仍須依 `AGENTS.md` §1 讀完必讀文件。
 
-**最新執行進度（2026-10-02；覆蓋下方歷史狀態描述）：** Pages §7 步驟 0–5 已完成，步驟 6 本機閘門也通過。原聊天已唯讀確認擁有者 launcher runtime 為 schema 27，未套用 33；本輪不修改真實資料。Pages 專項 86 通過、完整 Python 1,658 通過／2 Windows 略過（另補 6 個回歸案例已專項通過）、Web 388 通過、格式／lint／型別／build／registry／source guard 通過，Docker 2 通過。繁中與英文原生 ZIP 均已完成落盤，23 個 manifest 檔案雜湊全數相符。完整命令、變更範圍與限制見 [本機驗證證據](../release-evidence/a5/pages-simplification-2026-10-02.md)。下一批為 §11 B1；B1–B5 與步驟 7 尚未完成。200% zoom、完整手動／輔助技術矩陣及 A12 仍開放；沒有 commit／push／部署。
+**最新執行進度（2026-10-02；覆蓋下方歷史狀態描述）：** Pages §7 步驟 0–5 已完成，步驟 6 本機閘門也通過。原聊天已唯讀確認擁有者 launcher runtime 為 schema 27，未套用 33；本輪不修改真實資料。Pages 專項 86 通過、完整 Python 1,658 通過／2 Windows 略過（另補 6 個回歸案例已專項通過）、Web 388 通過、格式／lint／型別／build／registry／source guard 通過，Docker 2 通過。繁中與英文原生 ZIP 均已完成落盤，23 個 manifest 檔案雜湊全數相符。完整命令、變更範圍與限制見 [本機驗證證據](../../release-evidence/a5/pages-simplification-2026-10-02.md)。下一批為 §11 B1；B1–B5 與步驟 7 尚未完成。200% zoom、完整手動／輔助技術矩陣及 A12 仍開放；沒有 commit／push／部署。
 
-**最新交接（2026-10-03；覆蓋上述歷史進度）：** Pages 與 §11 B1–B5 的指定簡化均完成本機閘門，§7 步驟 7 已完成。最終 Python 1703 passed／2 skipped、Web 388 passed、Docker 2 passed；原生 FAQ 19 項、gateway 11 項與雙語 ZIP 落盤／23 records 雜湊通過。B1–B5 應用程式實測淨減 1156 行，沒有新增產品概念或 domain state。見 [總交接](../release-evidence/a5/simplification-handoff-2026-10-03.md) 與新 current-state-2026-10-03 記憶；200% zoom、完整手動／輔助技術矩陣及 A12 仍開放。沒有 commit／push／部署或真實資料遷移。
+**最新交接（2026-10-03；覆蓋上述歷史進度）：** Pages 與 §11 B1–B5 的指定簡化均完成本機閘門，§7 步驟 7 已完成。最終 Python 1703 passed／2 skipped、Web 388 passed、Docker 2 passed；原生 FAQ 19 項、gateway 11 項與雙語 ZIP 落盤／23 records 雜湊通過。B1–B5 應用程式實測淨減 1156 行，沒有新增產品概念或 domain state。見 [總交接](../../release-evidence/a5/simplification-handoff-2026-10-03.md) 與新 current-state-2026-10-03 記憶；200% zoom、完整手動／輔助技術矩陣及 A12 仍開放。沒有 commit／push／部署或真實資料遷移。
 
 ---
 
@@ -287,7 +287,7 @@ INSERT INTO pages_sharing_state(singleton_id) VALUES (1);
 
 **步驟 7：交回**（§11 的批次全部完成後才執行；一份報告涵蓋 Pages 與 §11）
 
-**已完成（2026-10-03）：** [總交接](../release-evidence/a5/simplification-handoff-2026-10-03.md) 包含需求／AC、逐批實測刪除量、最終閘門、限制與下一步；新 current-state-2026-10-03 記憶為 START HERE。沒有 commit。
+**已完成（2026-10-03）：** [總交接](../../release-evidence/a5/simplification-handoff-2026-10-03.md) 包含需求／AC、逐批實測刪除量、最終閘門、限制與下一步；新 current-state-2026-10-03 記憶為 START HERE。沒有 commit。
 
 - 依 `AGENTS.md` §7 撰寫最終報告；
 - 更新專案記憶 `current-state-*.md`；
@@ -357,7 +357,7 @@ INSERT INTO pages_sharing_state(singleton_id) VALUES (1);
 
 ### 11.2 B1：未提交的 A5 FAQ 層與雙 resolver 欄位（沒有 migration 成本）
 
-**2026-10-02 完成：** B1 文件、程式、測試及全部本機閘門通過。應用程式淨減 56 行；測試淨增 75 行，補上雙語一致快照、拒絕寫入與雙 resolver 計數邊界。Python 1,677 通過／2 Windows 略過、Web 完整閘門、Docker 2、雙語原生 ZIP 與 23 個 manifest 記錄核對通過。刪除清單、概念預算及完整命令見 [B1 證據](../release-evidence/a5/b1-simplification-2026-10-02.md)。下一批 B2；B2–B5 與整體步驟 7 尚未完成。
+**2026-10-02 完成：** B1 文件、程式、測試及全部本機閘門通過。應用程式淨減 56 行；測試淨增 75 行，補上雙語一致快照、拒絕寫入與雙 resolver 計數邊界。Python 1,677 通過／2 Windows 略過、Web 完整閘門、Docker 2、雙語原生 ZIP 與 23 個 manifest 記錄核對通過。刪除清單、概念預算及完整命令見 [B1 證據](../../release-evidence/a5/b1-simplification-2026-10-02.md)。下一批 B2；B2–B5 與整體步驟 7 尚未完成。
 
 | 項目 | 做法 |
 |---|---|
@@ -371,7 +371,7 @@ INSERT INTO pages_sharing_state(singleton_id) VALUES (1);
 
 ### 11.3 B2：A2 回答政策（A2-1b、A2-4、死碼、政策資料）
 
-**完成（2026-10-03）：** 單一 v2 驗證入口，移除 v1、代名詞改寫與不可達檢查；14 筆品質評估改走正式路徑並全數通過。應用程式淨減 420 行；Python 1682 pass／2 skip、Web 388／38、Docker 2 pass 及雙語原生 ZIP 下載通過。完整證據：[B2 報告](../release-evidence/a5/b2-simplification-2026-10-03.md)。
+**完成（2026-10-03）：** 單一 v2 驗證入口，移除 v1、代名詞改寫與不可達檢查；14 筆品質評估改走正式路徑並全數通過。應用程式淨減 420 行；Python 1682 pass／2 skip、Web 388／38、Docker 2 pass 及雙語原生 ZIP 下載通過。完整證據：[B2 報告](../../release-evidence/a5/b2-simplification-2026-10-03.md)。
 
 1. **完全移除 v1 封包（A2-1b，取代審查的 A2 #1、#2）。**
    - 刪除下列項目：
@@ -421,7 +421,7 @@ INSERT INTO pages_sharing_state(singleton_id) VALUES (1);
 
 ### 11.4 B3：A3 參與事實（A3-2 與內部項目）
 
-**已完成（2026-10-03）：** 明確傳入 collector，移除隱含轉送、重複 unavailable 與未讀取 metadata；沒有 collector 與 unavailable 分開驗證。全 Python 1685 passed／2 skipped、Web 388 passed、Docker 2 passed、雙語原生 ZIP 下載通過。應用程式淨增 32 行（保留取消與期限邊界的明確配線），詳細清單與證據見 [B3 完成紀錄](../release-evidence/a5/b3-simplification-2026-10-03.md)。
+**已完成（2026-10-03）：** 明確傳入 collector，移除隱含轉送、重複 unavailable 與未讀取 metadata；沒有 collector 與 unavailable 分開驗證。全 Python 1685 passed／2 skipped、Web 388 passed、Docker 2 passed、雙語原生 ZIP 下載通過。應用程式淨增 32 行（保留取消與期限邊界的明確配線），詳細清單與證據見 [B3 完成紀錄](../../release-evidence/a5/b3-simplification-2026-10-03.md)。
 
 1. **明確傳遞參與收集器（根因修正）。**
    - `build_index_bundle` 新增一個明確的參數，接收參與收集器。
@@ -444,7 +444,7 @@ INSERT INTO pages_sharing_state(singleton_id) VALUES (1);
 
 ### 11.5 B4：A4 FAQ 審核（A4-1、A4-3、A4-4、A4-5、內部項目）
 
-**已完成（2026-10-03）：** 改用既有貢獻編輯器與一般生成，移除 rewrite 協定、續接輪詢與訪客選取時重查；revision CAS、bundle 檢查與公開安全投影保留。完整 Python 1686 passed／2 skipped、Web 388 passed、Docker 2 passed、原生 FAQ 19 項與雙語 ZIP 通過。應用程式淨減 469 行、測試淨減 48 行（Web .test. 歸入測試），見 [B4 完成紀錄](../release-evidence/a5/b4-simplification-2026-10-03.md)。
+**已完成（2026-10-03）：** 改用既有貢獻編輯器與一般生成，移除 rewrite 協定、續接輪詢與訪客選取時重查；revision CAS、bundle 檢查與公開安全投影保留。完整 Python 1686 passed／2 skipped、Web 388 passed、Docker 2 passed、原生 FAQ 19 項與雙語 ZIP 通過。應用程式淨減 469 行、測試淨減 48 行（Web .test. 歸入測試），見 [B4 完成紀錄](../../release-evidence/a5/b4-simplification-2026-10-03.md)。
 
 1. **改寫流程改用既有的編輯器（A4-1；A4-3 隨之消失）。**
    - 新流程：
@@ -488,7 +488,7 @@ INSERT INTO pages_sharing_state(singleton_id) VALUES (1);
 
 ### 11.6 B5：A1 訪客閘道（A1-1、A1-4、內部項目）
 
-**已完成（2026-10-03）：** verified_at/listener 取代 epoch／association，訪客不讀寫擁有者閘道設定；嚴格來源與 heartbeat 聊天共用，身分、投影、額度、取消／期限與閘道禁止重試保留。Python 1703 passed／2 skipped、Web 388 passed、Docker 2 passed、原生面板 11 項與雙語 ZIP 通過。應用程式淨減 243 行、測試／harness 淨增 177 行，見 [B5 完成紀錄](../release-evidence/a5/b5-simplification-2026-10-03.md)。
+**已完成（2026-10-03）：** verified_at/listener 取代 epoch／association，訪客不讀寫擁有者閘道設定；嚴格來源與 heartbeat 聊天共用，身分、投影、額度、取消／期限與閘道禁止重試保留。Python 1703 passed／2 skipped、Web 388 passed、Docker 2 passed、原生面板 11 項與雙語 ZIP 通過。應用程式淨減 243 行、測試／harness 淨增 177 行，見 [B5 完成紀錄](../../release-evidence/a5/b5-simplification-2026-10-03.md)。
 
 1. **驗證縮成單一 `verified_at`（A1-1）。**
    - **請求：**

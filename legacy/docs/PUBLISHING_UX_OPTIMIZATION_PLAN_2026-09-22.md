@@ -2,7 +2,7 @@
 
 日期：2026-09-22。狀態：擁有者已於同日明確授權 Luna Max 實作、Main 審核；依 ADR-046 與 LOCAL_PUBLICATION_CONTRACT_2026-09-22.md 分批實作中。
 
-**2026-09-24 接續決策（ADR-047）：** 擁有者選定 Tailscale Funnel 作為不購買網域的預設公開訪客入口。具體的 Docker／公開閘道／引導／驗收批次見 [Tailscale Funnel 部署計劃](TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md)。本機主流程已實作，公開入口仍未實作或驗收；下文 2026-09-22 的缺口與規劃階段敘述保留其歷史日期。
+**2026-09-24 接續決策（ADR-047）：** 擁有者選定 Tailscale Funnel 作為不購買網域的預設公開訪客入口。具體的 Docker／公開閘道／引導／驗收批次見 [Tailscale Funnel 部署計劃](../../docs/TAILSCALE_FUNNEL_DEPLOYMENT_PLAN_2026-09-24.md)。本機主流程已實作，公開入口仍未實作或驗收；下文 2026-09-22 的缺口與規劃階段敘述保留其歷史日期。
 
 本文件取代同日稍早以 Actions／Release 為主要發布路徑的提案。擁有者明確指出：專案分析、首次與更新後的 embedding 都由本機使用者端完成；GitHub 的產品用途是展示卡片，讓外部訪客點進來與使用者主機上的 NPC 對話。本文件保留原分析；後續明確實作授權已啟動，對外部署與 GitHub 寫入仍依實際目標另行處理。
 
