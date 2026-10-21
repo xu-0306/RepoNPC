@@ -52,10 +52,7 @@ unchanged. The earlier compatibility statement below is historical for chat.
 
 ## ADR-005: Publish immutable bundles through GitHub Releases
 
-- **Status:** Accepted
-- **Decision:** GitHub Actions publishes a versioned `tar.zst` bundle as a GitHub Release asset. A stable manifest on the dedicated `reponpc-index` branch points to the active release asset and its checksum.
-- **Why:** Readers need a stable discovery URL while citations and bundle contents remain immutable.
-- **Consequences:** Publication writes the immutable asset before changing the stable manifest. Runtime activation is checksum-verified and atomic, with rollback to the last known-good bundle.
+Superseded by ADR-071 (2026-10-20). Full text: [legacy](../legacy/docs/DECISIONS_SUPERSEDED.md#adr-005-publish-immutable-bundles-through-github-releases).
 
 ## ADR-006: Abstract both chat and embedding providers
 
@@ -87,11 +84,7 @@ unchanged. The earlier compatibility statement below is historical for chat.
 
 ## ADR-010: Keep public presentation configuration in Git
 
-- **Status:** Accepted
-- **0.2.2 amendment:** ADR-029 supersedes only the prohibition on authenticated entry of model connection credentials. Public presentation stays in Git; model credentials remain deployment-local and cannot be written into public YAML.
-- **Decision:** `reponpc.yml` and approved character assets are the source of truth. The admin UI edits them through GitHub's contents API using blob-SHA conflict detection; it does not maintain a competing configuration database.
-- **Why:** Git provides reviewability, rollback, and a natural trigger for index rebuilding.
-- **Consequences:** Concurrent edits return a conflict for manual resolution. Secrets are environment-only and cannot be written through the admin UI.
+Superseded by ADR-071 (2026-10-20). Full text: [legacy](../legacy/docs/DECISIONS_SUPERSEDED.md#adr-010-keep-public-presentation-configuration-in-git).
 
 ## ADR-011: Serve the built web application from FastAPI under one origin
 
@@ -161,11 +154,7 @@ unchanged. The earlier compatibility statement below is historical for chat.
 
 ## ADR-020: Add GitHub OAuth identity without broadening ownership or writeback (legacy; superseded by ADR-028)
 
-- **Status:** Accepted on 2026-08-16.
-- **Supersedes:** ADR-009/ADR-016 only where they require password-only authentication, and ADR-018 only where it excludes OAuth/public-read credentials. The GitHub-only first-owner/recovery clause is superseded by ADR-025.
-- **Decision:** GitHub OAuth Web Application Flow with PKCE is an alternative authentication method for the sole RepoNPC owner. Setup still requires the host-issued code followed by local username/password creation; an authenticated local owner may then link GitHub. Login/link use distinct one-time transactions; the GitHub numeric user ID is the stable link. OAuth requests no repository scope, supports public-read only, and its encrypted credential is never reused for writeback. Explicit fine-grained PAT public-read credentials are a non-login fallback. Writeback remains the configured separate fine-grained credential.
-- **Why:** The owner needs a familiar sign-in and a safe public-read connection without creating open registration, multi-user accounts, or broader repository permissions.
-- **Consequences:** Runtime schema adds authentication methods, encrypted credentials, and OAuth transactions. Password/pre-provisioned login remains compatible and is always retained as break-glass recovery; removal of the local method is rejected. Later GraphQL/archive and durable batch work are explicitly outside this amendment.
+Superseded by ADR-071 (2026-10-20). Full text: [legacy](../legacy/docs/DECISIONS_SUPERSEDED.md#adr-020-add-github-oauth-identity-without-broadening-ownership-or-writeback-legacy-superseded-by-adr-028).
 
 ## ADR-021: Resolve selected public repositories through immutable archives and durable batches (partially superseded by ADR-028)
 
@@ -176,11 +165,7 @@ unchanged. The earlier compatibility statement below is historical for chat.
 
 ## ADR-022: Keep GitHub OAuth entry points actionable before host configuration (legacy; superseded by ADR-028)
 
-- **Status:** Accepted on 2026-08-30.
-- **Supersedes:** ADR-020 only where its dual-authentication UI is described as disabled before OAuth configuration.
-- **Decision:** GitHub setup, sign-in, link, and reauthentication entry points remain keyboard-operable when the deployment has not configured OAuth. Activating one opens a same-origin host-side setup guide dialog and does not submit an OAuth start request or redirect to GitHub. Once the server reports OAuth as configured, the same shared GitHub button performs the existing top-level Authorization Code Flow with PKCE S256. A public `GET /api/admin/github/oauth/setup-guide` returns only configured state, the canonical fixed callback URL, the fixed GitHub OAuth-App documentation URL, and a next-step label, with `Cache-Control: no-store`.
-- **Why:** A disabled button gives ordinary users no actionable explanation and makes a deployment-only setup prerequisite look like a user-registration failure. An actionable guide preserves the security boundary while making the next safe step discoverable.
-- **Consequences:** AC-043 and FR-031 gain the unconfigured-button/dialog behavior; frontend tests must cover icon/label uniqueness, focus management, bilingual copy, responsive layout, and no-secret rendering. The guide never accepts or returns client secrets, encryption keys, tokens, secret-file paths, or owner identity. OAuth token lifecycle/refresh remains a separate follow-up until explicitly implemented.
+Superseded by ADR-071 (2026-10-20). Full text: [legacy](../legacy/docs/DECISIONS_SUPERSEDED.md#adr-022-keep-github-oauth-entry-points-actionable-before-host-configuration-legacy-superseded-by-adr-028).
 
 ## ADR-023: Use external, provider-managed embedding profiles
 
@@ -233,13 +218,13 @@ unchanged. The earlier compatibility statement below is historical for chat.
 
 ## ADR-028: Retire GitHub OAuth and public-read PATs in favor of anonymous public REST resolution
 
-- **Status:** Accepted on 2026-09-08; deterministic implementation recorded in `GITHUB_PUBLIC_READ_CREDENTIAL_REMOVAL_HANDOFF.md` on 2026-09-09; external release evidence remains pending.
+- **Status:** Accepted on 2026-09-08; deterministic implementation recorded in [GITHUB_PUBLIC_READ_CREDENTIAL_REMOVAL_HANDOFF.md](../legacy/docs/GITHUB_PUBLIC_READ_CREDENTIAL_REMOVAL_HANDOFF.md) on 2026-09-09; external release evidence remains pending.
 - **Supersedes:** ADR-020 and ADR-022 in full; ADR-021 where it requires GraphQL or an `identity_public_read` / `public_read` credential; ADR-027 only for its GitHub connection/setup/PKCE/encrypted-public-read behavior. ADR-027's loopback launch, production password, recovery, session, CSRF, origin/host, and private-admin decisions remain accepted.
 - **Context:** First-run use demonstrated that OAuth configuration adds deployment ceremony unrelated to RepoNPC ownership. Moving OAuth behind authentication removed the login dead end but left a prominent optional connection surface, client-secret/callback/encryption-key configuration, and a second public-read PAT path. For a single-owner application that supports only public repositories, this operational and secret-management cost is disproportionate. GitHub's GraphQL API requires authentication, while its REST API permits unauthenticated public-data access with a documented per-IP limit.
 - **Decision:** Remove GitHub OAuth and browser-entered public-read PATs from the product. Public discovery and selected-repository analysis use bounded, fixed-origin unauthenticated GitHub REST requests, resolve a full immutable commit SHA, and fetch only the archive addressed by that SHA. Rate exhaustion produces a safe retry time and preserves manual authoring/export. Discovery and analysis never receive or fall back to the independent writeback token. Legacy OAuth/PAT routes become non-mutating `410` responses during a bounded compatibility window; runtime migration removes their transactions, identities, and encrypted public-read credential rows without decrypting or logging them.
 - **Why:** This removes an OAuth App, callback, client secret, encryption key, token lifecycle, and PAT form from the normal self-hosting journey while retaining the public-repository use case. The accepted trade-off is GitHub's lower anonymous REST capacity, which matches the intended low-frequency personal deployment and must degrade recoverably.
 - **Consequences:** FR-030/FR-034 and AC-041 through AC-043 become legacy; FR-031 is narrowed to deployment-aware local administration with no GitHub credential surface; FR-032/AC-044 move from credentialed GraphQL to anonymous REST; FR-037 and AC-051/AC-052 govern retirement and replacement. OAuth/PAT UI, API, environment variables, launcher mappings, services, tests, and operational instructions are removed in an ordered migration. Historical schema migrations remain readable. The separately configured least-privilege writeback token and its exact path/operation allowlist remain unchanged.
-- **Implementation plan:** `docs/GITHUB_PUBLIC_READ_CREDENTIAL_REMOVAL_PLAN.md`.
+- **Implementation plan:** [GITHUB_PUBLIC_READ_CREDENTIAL_REMOVAL_PLAN.md](../legacy/docs/GITHUB_PUBLIC_READ_CREDENTIAL_REMOVAL_PLAN.md).
 - **References:** [GitHub REST API rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api), [GitHub GraphQL authentication](https://docs.github.com/en/graphql/guides/forming-calls-with-graphql).
 
 ## ADR-029: Configure model services through a provider-neutral owner workflow
@@ -739,7 +724,7 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
   - **D1:** both the installer and the source launcher support Windows production mode.
   - **D2:** the source launcher honours `REPONPC_DEPLOYMENT_PROFILE` from `.env`; the installer adds a 「RepoNPC（正式模式）」 shortcut passing `--profile production`. Nothing upgrades automatically.
   - **D3:** the launcher prints a host setup code (ADR-016) for a new data directory, or runs the host-only `set-password` console flow for a passwordless trial owner, before opening the browser. The production password policy (ADR-024) applies.
-  - **D6:** in both profiles, `REPONPC_CONFIG_REPOSITORY` and `REPONPC_INDEX_MANIFEST_URL` may be empty; the runtime then does not poll.
+  - **D6:** in both profiles, `REPONPC_CONFIG_REPOSITORY` and `REPONPC_INDEX_MANIFEST_URL` may be empty; the runtime then does not poll. Moot after ADR-071: the variables no longer exist.
   - **D7:** Windows production rejects direct secret values from `.env`.
 - **Private files:** One shared helper creates and checks owner-only files and directories, replacing the per-module POSIX-only checks.
   - **D4:** on Windows, it uses advapi32 through ctypes, with no new dependency. The DACL may grant access only to the current user, SYSTEM and Administrators. Inheritance is disabled at creation, and an allow entry for any other account, explicit or inherited, is rejected. Windows enforces the check only in `production`, so existing trial data keeps working; POSIX checks are unchanged.
@@ -755,3 +740,10 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
   - AC-081 adds the Windows production acceptance; external Funnel evidence stays under A12.
   - FR-048 gains the production option.
 - **Requirements:** FR-017/029/047/048, NFR-002/003, AC-069/071 and new AC-081.
+
+## ADR-071: Archive legacy paths and documents
+
+- **Status:** Accepted 2026-10-20 (owner).
+- **Decision:** Archive the obsolete paths listed in [legacy/README.md](../legacy/README.md) under `legacy/`; archived code is not imported. The README card links only to the verified Pages chat page. Historical handoffs and fully superseded ADRs and ACs move to `legacy/docs/`; superseded ADRs and ACs keep one-line stubs.
+- **Supersedes:** ADR-005, ADR-010, ADR-020 and ADR-022 in full. It also supersedes the GitHub writeback, GitHub Release publication, remote manifest polling and operator-managed visitor URL clauses of ADR-009, ADR-015, ADR-016, ADR-018, ADR-021, ADR-027, ADR-028, ADR-040, ADR-042 through ADR-047 and ADR-070; their other decisions remain in force.
+- **Consequences:** Removed `REPONPC_*` names are rejected as unknown, so existing `.env` files must delete them. ADR-070 D6 is moot.

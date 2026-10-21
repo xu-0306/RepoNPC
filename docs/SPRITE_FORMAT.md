@@ -57,7 +57,7 @@ All four frames must be present and every one of the 28 cells must contain at le
 
 ## 4. Validation contract
 
-Admin preview/writeback and the index build perform the same validation:
+Admin preview and the index build perform the same validation:
 
 1. enforce the configured byte limit (default 1 MiB, hard maximum 2 MiB) before decode;
 2. verify PNG signature and decode successfully with bounded pixel/memory work;
@@ -67,9 +67,9 @@ Admin preview/writeback and the index build perform the same validation:
 6. require at least one transparent pixel in the sheet and every one of the 28 frames to be non-empty;
 7. strip text, ICC, EXIF, timestamps, and other ancillary metadata;
 8. re-encode deterministically to a normal non-interlaced PNG;
-9. calculate content SHA-256 and use only the re-encoded bytes for preview, GitHub writeback, and bundle generation.
+9. calculate content SHA-256 and use only the re-encoded bytes for preview and bundle generation.
 
-MIME type and filename extension alone are never trusted. Valid writeback paths match exactly `assets/character/*.png`; filenames are lowercase ASCII matching `^[a-z][a-z0-9_-]{0,63}\.png$`.
+MIME type and filename extension alone are never trusted. Valid local asset paths match exactly `assets/character/*.png`; filenames are lowercase ASCII matching `^[a-z][a-z0-9_-]{0,63}\.png$`.
 
 Stable validation codes should include `WRONG_DIMENSIONS`, `FILE_TOO_LARGE`, `NOT_PNG`, `ANIMATED_PNG`, `UNSUPPORTED_COLOR_MODE`, `MISSING_TRANSPARENCY`, `EMPTY_FRAME`, `UNSAFE_PNG`, and `INVALID_FILENAME` with localized safe messages.
 
@@ -87,13 +87,13 @@ Single PNG/ZIP payloads are capped at 16 MiB. ZIP/folder material is capped at 6
 
 `pixel_exact` uses nearest-neighbor scaling only for integer scale ratios. `pixelize` supports non-integer high-resolution material by deterministic bounded resampling, at most 64 output colors, and binary alpha thresholding. Non-square manifest frames are contained on a transparent bottom-centered square. The report identifies affected frames for partial-alpha removal, palette reduction, padding and edge contact; it also reports mixed source dimensions and bounded unreferenced members.
 
-Conversion output is a draft canonical PNG, not proof of artistic quality. The owner must inspect every state/frame. Conversion never creates a missing pose, writes automatically, preserves source metadata, or treats ZIP content as executable code. Download and GitHub writeback are separate explicit actions; writeback revalidates the canonical bytes.
+Conversion output is a draft canonical PNG, not proof of artistic quality. The owner must inspect every state/frame. Conversion never creates a missing pose, writes automatically, preserves source metadata, or treats ZIP content as executable code. Download and local bundle generation are separate explicit actions; bundle generation revalidates the canonical bytes.
 
-For structural grid PNGs, a conservative edge-spill check may additionally produce a separately validated cleaned version. It targets only a shallow strip at the top of a cell that continues the preceding row's bottom pixels and is separated from the current character by a transparent gap. This is geometry, not recognition of a species, body part, color or filename. Uncertain, deep, or connected artwork remains untouched; manifest frames are not altered. The normal conversion remains available. The owner compares the same state/frame, then explicitly chooses the cleaned or original version before download or writeback; source bytes are never overwritten. If position alignment is used afterward, it starts with that selected version.
+For structural grid PNGs, a conservative edge-spill check may additionally produce a separately validated cleaned version. It targets only a shallow strip at the top of a cell that continues the preceding row's bottom pixels and is separated from the current character by a transparent gap. This is geometry, not recognition of a species, body part, color or filename. Uncertain, deep, or connected artwork remains untouched; manifest frames are not altered. The normal conversion remains available. The owner compares the same state/frame, then explicitly chooses the cleaned or original version before download; source bytes are never overwritten. If position alignment is used afterward, it starts with that selected version.
 
 ### 4.2 Frame-position repair
 
-After conversion and any original/cleaned choice, the workspace automatically examines each state's four frames. It auto-corrects horizontal drift only when a bounded, non-clipping column pattern agrees across at least half of the seven states, then passes the composed PNG through the protected canonical validator before offering download or writeback. Isolated movement and ambiguous patterns remain unaltered suggestions. The owner can preview all suggestions, enter each frame's X/Y integer-pixel offset, use one-pixel controls, and restore the chosen unaligned version. Invalid or clipping offsets are rejected. Manual edits remain drafts until explicitly applied and validated. The source file is never overwritten; repeated deliberate motion can look like layout drift, so the owner still inspects all states.
+After conversion and any original/cleaned choice, the workspace automatically examines each state's four frames. It auto-corrects horizontal drift only when a bounded, non-clipping column pattern agrees across at least half of the seven states, then passes the composed PNG through the protected canonical validator before offering download. Isolated movement and ambiguous patterns remain unaltered suggestions. The owner can preview all suggestions, enter each frame's X/Y integer-pixel offset, use one-pixel controls, and restore the chosen unaligned version. Invalid or clipping offsets are rejected. Manual edits remain drafts until explicitly applied and validated. The source file is never overwritten; repeated deliberate motion can look like layout drift, so the owner still inspects all states.
 
 ## 5. Animation behavior
 

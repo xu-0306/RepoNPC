@@ -32,9 +32,9 @@ All of them remain not-run.
 
 **Owner-approved automatic alignment and pixel-offset amendment (2026-09-22, ADR-045; FR-015/018, AC-020/023):** After choosing a converted asset, consistent non-clipping column drift across at least half of the seven states is automatically composed and accepted only after protected canonical validation. An isolated moving state, ambiguous competing patterns, clipped/excessive offsets, and already stable frames do not receive automatic correction. Every frame has labeled integer X/Y pixel fields with safe limits, live preview, invalid-entry feedback, manual apply/validation, and restore. Edge-cleanup version choice precedes alignment; source files and GitHub remain untouched without separate owner action.
 
-**Owner-approved edge-spill cleanup amendment (2026-09-22, ADR-044; FR-015/018, AC-020/023):** A structural grid with a shallow, preceding-row-continuous fragment and transparent gap offers a separately validated cleaned preview, while the original remains available. The owner compares the same state/frame and explicitly chooses a version before download/writeback. Unrelated detached effects, art connected to the current frame, deeper or ambiguous boundary content, manifest frames, unfamiliar species and filenames, and stable grids receive no invented cleanup. Source bytes remain unchanged; selected cleanup and subsequent alignment never bypass canonical validation or ordinary writeback security.
+**Owner-approved edge-spill cleanup amendment (2026-09-22, ADR-044; FR-015/018, AC-020/023):** A structural grid with a shallow, preceding-row-continuous fragment and transparent gap offers a separately validated cleaned preview, while the original remains available. The owner compares the same state/frame and explicitly chooses a version before download. Unrelated detached effects, art connected to the current frame, deeper or ambiguous boundary content, manifest frames, unfamiliar species and filenames, and stable grids receive no invented cleanup. Source bytes remain unchanged; selected cleanup and subsequent alignment never bypass canonical validation or ordinary bundle security.
 
-**Owner-approved frame-position repair amendment (2026-09-22, ADR-043; FR-015/018, AC-020/023):** Converted sprites with unintended frame-to-frame horizontal drift offer a reversible visual alignment suggestion and non-clipping per-frame X/Y adjustment. Draft adjustments do not change download/writeback until explicit apply passes the existing protected canonical validation endpoint. Stable frames receive no invented motion, arbitrary species and filenames behave identically, invalid/cropping edits fail safely, and bilingual keyboard/reduced-motion behavior remains intact.
+**Owner-approved frame-position repair amendment (2026-09-22, ADR-043; FR-015/018, AC-020/023):** Converted sprites with unintended frame-to-frame horizontal drift offer a reversible visual alignment suggestion and non-clipping per-frame X/Y adjustment. Draft adjustments do not change download until explicit apply passes the existing protected canonical validation endpoint. Stable frames receive no invented motion, arbitrary species and filenames behave identically, invalid/cropping edits fail safely, and bilingual keyboard/reduced-motion behavior remains intact.
 
 **Owner-approved ordinary-owner character-workspace amendment (2026-09-22, ADR-042; FR-015/018, NFR-003/009, AC-020/023):** Character setup is a first-level authenticated admin destination, not hidden under raw YAML. The default flow is plain-language upload, visual selection, seven-state animation preview, and download/save; conversion policies and diagnostics use progressive disclosure and reduced motion remains effective.
 
@@ -247,9 +247,9 @@ ADR-066 regression (owner-approved 2026-10-19; both locales): every closed no-ma
 - **When** the authenticated owner opens the first-level Character & animation workspace, drops/selects a PNG or ZIP, selects a folder, chooses a returned candidate when required, switches among seven animated state previews, or runs preview/build/rendering,
 - **Then** no raw-YAML knowledge is required; default copy and actions describe the owner's task rather than canonical-grid internals, while conversion policies/full sheets/diagnostics are progressively disclosed; both packs compile through the same species-agnostic registry path without modifying core configuration/composition; grid cell size is structurally derived rather than matched to examples; no filename/folder/species/content heuristic chooses meaning; one discovered candidate converts automatically, several return visual choices, none fail actionably, and a selected candidate is rebound to the submitted path/bytes; `pixel_exact` accepts only integer ratios while `pixelize` returns deterministic 64px frames plus bounded review warnings; manifest paths/counts/frames/images and all archive/folder security ceilings are validated before decode/use; missing frames are never synthesized; discovery/conversion performs no write; only a separately confirmed canonical PNG can be downloaded or written; all valid built-in/custom modes expose all seven four-frame states; configured frame duration and movement are honored within bounds; unknown pack/version/options, legacy fields, unsafe archives, stale/forged selection and invalid assets fail without fallback or mutation; and reduced motion displays stable first frames.
 
-Frame-position regression: unseen sheets with a repeated column-displacement pattern across at least half of the states receive non-clipping automatic correction after protected validation, independent of species, filename, pose, or source cell size. One isolated moving state, incompatible patterns, excessive or clipping offsets, and an already aligned sheet do not auto-correct. The owner can inspect the animation, enter integer X/Y pixels for every frame, use keyboard one-pixel controls, restore the original, and explicitly apply later edits. Before successful protected validation, adjusted download/writeback remains unavailable; after validation it uses only returned canonical bytes. Invalid input and failed validation preserve the chosen original asset. The seven-state preview and reduced-motion first-frame rule still apply.
+Frame-position regression: unseen sheets with a repeated column-displacement pattern across at least half of the states receive non-clipping automatic correction after protected validation, independent of species, filename, pose, or source cell size. One isolated moving state, incompatible patterns, excessive or clipping offsets, and an already aligned sheet do not auto-correct. The owner can inspect the animation, enter integer X/Y pixels for every frame, use keyboard one-pixel controls, restore the original, and explicitly apply later edits. Before successful protected validation, adjusted download remains unavailable; after validation it uses only returned canonical bytes. Invalid input and failed validation preserve the chosen original asset. The seven-state preview and reduced-motion first-frame rule still apply.
 
-Edge-spill regression: source grids of more than one previously unseen cell size with a shallow top fragment continuous with the preceding row and separated from the present sprite yield original and cleaned canonical bytes, affected frame coordinates, and a no-write comparison in the same conversion flow. Download/writeback is unavailable until the owner chooses one version. Selecting either version and later position alignment uses exactly that version. Unrelated floating art, art connected to this frame, ambiguous or deep edge content, and explicit manifest packs do not trigger deletion; the uploaded bytes remain unchanged. Both locales, keyboard actions, reduced motion, and narrow layouts remain usable.
+Edge-spill regression: source grids of more than one previously unseen cell size with a shallow top fragment continuous with the preceding row and separated from the present sprite yield original and cleaned canonical bytes, affected frame coordinates, and a no-write comparison in the same conversion flow. Download is unavailable until the owner chooses one version. Selecting either version and later position alignment uses exactly that version. Unrelated floating art, art connected to this frame, ambiguous or deep edge content, and explicit manifest packs do not trigger deletion; the uploaded bytes remain unchanged. Both locales, keyboard actions, reduced motion, and narrow layouts remain usable.
 
 ### AC-021 — Card outputs are static-safe and injection-safe
 
@@ -298,19 +298,11 @@ Edge-spill regression: source grids of more than one previously unseen cell size
 
 ### AC-026 — Configuration writeback detects conflicts
 
-**Maps to:** FR-019, NFR-001, NFR-003
-
-- **Given** a valid expected blob SHA and then a concurrent GitHub edit,
-- **When** the owner first saves against the original SHA and later retries stale content,
-- **Then** the first operation commits only `reponpc.yml`, the stale operation returns `409 CONFIG_CONFLICT` with current blob SHA, and no overwrite or auto-merge occurs.
+Archived (ADR-071). Full text: [legacy](../legacy/docs/ACCEPTANCE_SUPERSEDED.md#ac-026--configuration-writeback-detects-conflicts).
 
 ### AC-027 — Asset writeback is strictly allowlisted
 
-**Maps to:** FR-018, FR-019, NFR-001
-
-- **Given** valid PNG bytes plus attempts at traversal, nested paths, non-PNG/polyglot data, oversized/decompression-bomb images, deletion, or non-character target paths,
-- **When** upload/writeback is requested,
-- **Then** only a decoded/re-encoded `assets/character/*.png` target can commit and every other case is rejected before GitHub mutation.
+Archived (ADR-071). Full text: [legacy](../legacy/docs/ACCEPTANCE_SUPERSEDED.md#ac-027--asset-writeback-is-strictly-allowlisted).
 
 ### AC-028 — README snippet generation is copy-ready
 
@@ -340,11 +332,7 @@ real GitHub render, native download completion or external release acceptance.
 
 ### AC-029 — Publication advances the manifest last
 
-**Maps to:** FR-020, NFR-003, NFR-011
-
-- **Given** successful and deliberately failed builds/uploads,
-- **When** the GitHub Action executes the real `config validate`, `index build`, `index publish`, and `index publish-manifest` commands,
-- **Then** a successful run validates and publishes one immutable checksummed asset, verifies it, records a local pending manifest, and only then updates `stable-manifest.json`; any failure before the final command leaves the prior stable manifest unchanged and surfaces a failed Action.
+Archived (ADR-071). Full text: [legacy](../legacy/docs/ACCEPTANCE_SUPERSEDED.md#ac-029--publication-advances-the-manifest-last).
 
 ### AC-030 — Bundle validation rejects every unsafe candidate
 
@@ -423,7 +411,7 @@ The following criteria are normative release requirements under the owner-approv
 
 - **Given** an authenticated owner enters a valid username/profile URL, an unknown account, a hostile/non-GitHub URL, a manual public slug/URL, and GitHub pagination/rate-limit fixtures,
 - **When** discovery or resolution runs,
-- **Then** RepoNPC returns at most 50 public metadata rows per page for at most five pages, normalizes only GitHub.com identities, exposes actionable safe errors, performs no source/tree download or model call, sends no configured writeback token, and does not analyze any repository until the owner checks and confirms it.
+- **Then** RepoNPC returns at most 50 public metadata rows per page for at most five pages, normalizes only GitHub.com identities, exposes actionable safe errors, performs no source/tree download or model call, sends no credential, and does not analyze any repository until the owner checks and confirms it.
 
 ### AC-039 — Analysis is selected-only, batch-backed, and evidence-safe
 
@@ -441,7 +429,7 @@ The following criteria are normative release requirements under the owner-approv
 
 **Maps to:** FR-025, FR-028, FR-018, FR-022, NFR-002, NFR-003, NFR-009
 
-- **Given** bilingual owner statements; model suggestions that omit or strengthen the statement; accept/edit/reject actions; provider-not-ready, missing public-read connection, preflight blocker, analysis failure, and missing GitHub writeback states; backward navigation and repository/ref/include/exclude edits; invalid generated YAML; reload/logout/save; keyboard-only use; and 375/768/1024/1440-pixel viewports,
+- **Given** bilingual owner statements; model suggestions that omit or strengthen the statement; accept/edit/reject actions; provider-not-ready, missing public-read connection, preflight blocker, and analysis failure states; backward navigation and repository/ref/include/exclude edits; invalid generated YAML; reload/logout/save; keyboard-only use; and 375/768/1024/1440-pixel viewports,
 - **When** the owner completes guided setup,
 - **Then** the owner can skip analysis and enter contributions before any preflight or failed request; loading an existing configuration hydrates the guided profile/repository fields for return editing; the original statement remains visible; unconfirmed proposals never become `OWNER_ASSERTION`; Back/Edit preserves profile and unaffected repository input while invalidating only changed selection-bound plans/results; destructive Start over requires confirmation; confirmed role/summary/claims produce valid schema-v1 YAML while validated non-guided fields are preserved; raw edits with unknown/unmappable YAML remain in advanced mode instead of being silently discarded; ordinary validation/preview makes no model or GitHub call; copy/download works without a token; every blocked primary action and failed repository exposes its safe code/reason, cause, next action, and safe alternative; resume stores only approved public draft state and clears it on logout/save; raw YAML remains an advanced path; both locales are materially equivalent; focus/error/status behavior is accessible; and no horizontal content loss occurs.
 
@@ -502,11 +490,11 @@ For contribution-model assistance, the request keeps the fixed 700-token output 
 | FR-015      | AC-020, AC-037                                                                                                              |
 | FR-016      | AC-021, AC-022, AC-028, AC-034                                                                                              |
 | FR-017      | AC-024, AC-049, AC-050                                                                                                      |
-| FR-018      | AC-001, AC-025, AC-027, AC-034, AC-040                                                                                      |
-| FR-019      | AC-026, AC-027                                                                                                              |
-| FR-020      | AC-003, AC-029, AC-037                                                                                                      |
+| FR-018      | AC-001, AC-025, archived (AC-027), AC-034, AC-040                                                                                      |
+| FR-019      | archived (AC-026), archived (AC-027)                                                                                                              |
+| FR-020      | AC-003, archived (AC-029), AC-037                                                                                                      |
 | FR-021      | AC-030–AC-032, AC-037                                                                                                       |
-| FR-022      | AC-008, AC-019, AC-023, AC-025, AC-040, AC-043                                                                              |
+| FR-022      | AC-008, AC-019, AC-023, AC-025, AC-040, archived (AC-043)                                                                              |
 | FR-023      | AC-016, AC-019, AC-032, AC-035                                                                                              |
 | FR-024      | AC-022, AC-028                                                                                                              |
 | FR-025      | AC-038, AC-040                                                                                                              |
@@ -514,22 +502,22 @@ For contribution-model assistance, the request keeps the fixed 700-token output 
 | FR-027      | AC-039, AC-045                                                                                                              |
 | FR-028      | AC-039, AC-040                                                                                                              |
 | FR-029      | AC-050                                                                                                                      |
-| FR-030      | Legacy; AC-051 proves retirement                                                                                            |
-| FR-031      | AC-051                                                                                                                      |
+| FR-030      | Legacy; archived (AC-051) proves retirement                                                                                            |
+| FR-031      | archived (AC-051)                                                                                                                      |
 | FR-032      | AC-044, AC-052                                                                                                              |
 | FR-033      | AC-045, AC-046                                                                                                              |
-| FR-034      | Legacy; AC-051 proves retirement                                                                                            |
+| FR-034      | Legacy; archived (AC-051) proves retirement                                                                                            |
 | FR-035      | AC-047, AC-048                                                                                                              |
 | FR-036      | AC-049, AC-050                                                                                                              |
-| FR-037      | AC-051, AC-052                                                                                                              |
+| FR-037      | archived (AC-051), AC-052                                                                                                              |
 | FR-038      | AC-053, AC-054, AC-056                                                                                                      |
 | FR-039      | AC-054, AC-055, AC-056                                                                                                      |
 | FR-040      | AC-053, AC-057                                                                                                              |
 | FR-041      | AC-058, AC-060                                                                                                              |
 | FR-042      | AC-059, AC-060                                                                                                              |
-| NFR-001     | AC-002, AC-004, AC-014, AC-016, AC-024, AC-027, AC-030, AC-033, AC-034, AC-037–AC-040, AC-044–AC-046, AC-048–AC-052, AC-059 |
-| NFR-002     | AC-004, AC-016, AC-024, AC-035, AC-038–AC-040, AC-044–AC-046, AC-048, AC-051, AC-052, AC-059, AC-060                        |
-| NFR-003     | AC-019, AC-025, AC-026, AC-029–AC-032, AC-040, AC-047, AC-050–AC-053, AC-056–AC-060                                         |
+| NFR-001     | AC-002, AC-004, AC-014, AC-016, AC-024, archived (AC-027), AC-030, AC-033, AC-034, AC-037–AC-040, AC-044–AC-046, AC-048–AC-052, AC-059 |
+| NFR-002     | AC-004, AC-016, AC-024, AC-035, AC-038–AC-040, AC-044–AC-046, AC-048, archived (AC-051), AC-052, AC-059, AC-060                        |
+| NFR-003     | AC-019, AC-025, archived (AC-026), archived (AC-029), AC-030–AC-032, AC-040, AC-047, AC-050–AC-053, AC-056–AC-060                                         |
 | NFR-004     | AC-009                                                                                                                      |
 | NFR-005     | AC-015, AC-017                                                                                                              |
 | NFR-006     | AC-007–AC-009                                                                                                               |
@@ -537,9 +525,9 @@ For contribution-model assistance, the request keeps the fixed 700-token output 
 | NFR-008     | AC-008, AC-009, AC-023, AC-057, AC-058                                                                                      |
 | NFR-009     | AC-019–AC-023, AC-038, AC-040, AC-049–AC-052, AC-057, AC-058, AC-060                                                        |
 | NFR-010     | AC-001, AC-036, AC-037                                                                                                      |
-| NFR-011     | AC-003, AC-005, AC-006, AC-029, AC-036, AC-046, AC-047, AC-056, AC-059, AC-060                                              |
+| NFR-011     | AC-003, AC-005, AC-006, archived (AC-029), AC-036, AC-046, AC-047, AC-056, AC-059, AC-060                                              |
 | NFR-012     | AC-017, AC-032, AC-035, AC-044, AC-045, AC-050, AC-052                                                                      |
-| NFR-013     | AC-001, AC-005, AC-015, AC-036, AC-037, AC-051, AC-053–AC-060                                                               |
+| NFR-013     | AC-001, AC-005, AC-015, AC-036, AC-037, archived (AC-051), AC-053–AC-060                                                               |
 | NFR-014     | AC-018, AC-039, AC-045, AC-052, AC-054, AC-055, AC-059                                                                      |
 
 Version 0.1.9 additions:
@@ -548,29 +536,29 @@ Version 0.1.9 additions:
 | --------------------------------------------------------------- | ------------------------------ |
 | External embedding profiles and provider-aware model management | AC-008, AC-032, AC-047, AC-048 |
 | Deployment-aware password/private administration                | AC-024, AC-036, AC-049         |
-| Local-first GitHub binding and host recovery                    | AC-041, AC-042, AC-050         |
+| Local-first GitHub binding and host recovery                    | archived (AC-041), archived (AC-042), AC-050         |
 | Bounded operations CLI                                          | AC-049, AC-050                 |
 
 Version 0.2.0 corrections:
 
 | Requirement                                          | Acceptance criteria            |
 | ---------------------------------------------------- | ------------------------------ |
-| Passwordless one-use loopback launch                 | AC-024, AC-043, AC-049, AC-050 |
-| Production password/setup preservation and migration | AC-024, AC-042, AC-049, AC-050 |
-| GitHub OAuth connection-only behavior                | AC-041, AC-042, AC-043         |
+| Passwordless one-use loopback launch                 | AC-024, archived (AC-043), AC-049, AC-050 |
+| Production password/setup preservation and migration | AC-024, archived (AC-042), AC-049, AC-050 |
+| GitHub OAuth connection-only behavior                | archived (AC-041), archived (AC-042), archived (AC-043)         |
 
 Version 0.2.1 retirement amendment:
 
 | Requirement                                                                 | Acceptance criteria    |
 | --------------------------------------------------------------------------- | ---------------------- |
-| Remove OAuth and browser-entered public-read PAT product surfaces           | AC-051                 |
-| Migrate encrypted public-read state without affecting owner/writeback state | AC-051                 |
+| Remove OAuth and browser-entered public-read PAT product surfaces           | archived (AC-051)                 |
+| Migrate encrypted public-read state without affecting owner/writeback state | archived (AC-051)                 |
 | Anonymous REST exact-SHA public-repository analysis                         | AC-044, AC-052         |
 | Recoverable anonymous GitHub rate exhaustion and manual continuation        | AC-052, AC-039, AC-040 |
 
 Version 0.2.2 model-setup amendment additionally maps FR-006/FR-012/FR-035 to AC-054/AC-056, FR-025/FR-022 to AC-053/AC-057, NFR-001/002 to AC-055, NFR-003/011 to AC-056, NFR-008/009 to AC-057, NFR-012/014 to AC-054/AC-055, and NFR-013 to AC-053 through AC-057. Earlier evidence does not establish these new results.
 
-AC-041 through AC-043 are historical 0.1.6–0.2.0 criteria and are not 0.2.1 release gates. Their still-applicable owner/session/recovery/accessibility controls are covered by AC-024, AC-049 through AC-052. OAuth/PAT-specific behavior is superseded by ADR-028.
+AC-041 through AC-043 (archived) are historical 0.1.6–0.2.0 criteria and are not 0.2.1 release gates. Their still-applicable owner/session/recovery/accessibility controls are covered by AC-024, AC-049 through AC-052. OAuth/PAT-specific behavior is superseded by ADR-028.
 
 Version 0.1.4 additions:
 
@@ -583,39 +571,21 @@ Version 0.1.4 additions:
 
 Version 0.1.5 strengthens existing FR-012/AC-015 with the named vLLM preset; it adds no requirement ID, browser endpoint, or bundle schema.
 
-Version 0.1.8 strengthens FR-031/AC-043 with actionable OAuth setup guidance and the safe setup-guide endpoint; configured OAuth flow, credential purposes, and writeback isolation do not change.
+Version 0.1.8 strengthens FR-031/AC-043 (archived) with actionable OAuth setup guidance and the safe setup-guide endpoint; configured OAuth flow, credential purposes, and writeback isolation do not change.
 
 The 2026-08-30 usability clarification strengthens existing FR-025, FR-027, FR-028, NFR-003, AC-019, AC-025, AC-032, and AC-040 without changing an endpoint, credential boundary, provider fallback rule, or schema: optional analysis has an immediate manual path, guided navigation is reversible with selective invalidation, and unavailable capabilities explain their cause/recovery without disabling unrelated local work.
 
 ### AC-041 — Legacy: GitHub OAuth connects only from the authenticated sole owner
 
-**Legacy status:** Superseded by AC-051 under Technical Specification 0.2.1; retained only to identify behavior that must be removed safely.
-
-**Maps to:** FR-017, FR-029, NFR-001, NFR-002
-
-- **Given** configured and unavailable OAuth operators; valid/invalid, expired, replayed, cross-browser, and wrong-intent OAuth state/PKCE transactions; local-launch and password sessions; renamed GitHub accounts; legacy login/setup OAuth requests; and missing/expired RepoNPC sessions,
-- **When** an authenticated owner connects GitHub or any unauthenticated/legacy route attempts OAuth,
-- **Then** only an existing valid RepoNPC session can start and finish the connection, `/user` numeric identity is stored as connection metadata, legacy login/setup routes return `410 GITHUB_LOGIN_REMOVED` without redirect or state change, OAuth never creates an owner or RepoNPC session, callback/transaction cookies carry the required scoped attributes, removing/revoking GitHub affects only GitHub-backed work, and no token, verifier, secret, state plaintext, or identity-disclosure detail reaches browser storage, APIs, logs, fixtures, or runtime plaintext.
+Archived (ADR-071). Full text: [legacy](../legacy/docs/ACCEPTANCE_SUPERSEDED.md#ac-041--legacy-github-oauth-connects-only-from-the-authenticated-sole-owner).
 
 ### AC-042 — Legacy: OAuth/PAT credential purposes and migration fail closed
 
-**Legacy status:** Superseded by AC-050/AC-051 under Technical Specification 0.2.1. Local password recovery remains normative in AC-050; OAuth/PAT persistence does not.
-
-**Maps to:** FR-030, NFR-001, NFR-002, NFR-013
-
-- **Given** existing password/pre-provisioned and GitHub-linked deployments, a passwordless loopback owner switching to production, absent/invalid encryption keys, OAuth credentials with no scope or unsafe broad scope, expired/revoked credentials, PAT submissions, and writeback credentials,
-- **When** migrations, OAuth/PAT persistence, validation, linking, unlinking, and GitHub-backed work run,
-- **Then** existing password sign-in remains valid in production, encrypted OAuth public-read credentials migrate without plaintext, identity-only login state is retired, OAuth/PAT credentials retain their explicit read-only purpose, writeback is never reused, a `401` requires explicit reconnection without fallback, GitHub cannot authenticate or recover the owner, host-only `reponpc admin set-password` makes a passwordless local owner production-capable without reopening setup or changing GitHub credentials, and a failed migration preserves the last usable authentication state.
+Archived (ADR-071). Full text: [legacy](../legacy/docs/ACCEPTANCE_SUPERSEDED.md#ac-042--legacy-oauthpat-credential-purposes-and-migration-fail-closed).
 
 ### AC-043 — Legacy: Profile-aware access with GitHub connection UI
 
-**Legacy status:** Superseded by AC-049 through AC-051 under Technical Specification 0.2.1. Deployment-aware access remains normative; the GitHub connection UI must be removed.
-
-**Maps to:** FR-031, FR-034, FR-022, NFR-001, NFR-009
-
-- **Given** loopback launch/missing-grant, production setup/password, unavailable/configured OAuth, denial/callback-error, PAT, and connection-required states in `zh-TW` and `en`,
-- **When** keyboard and assistive-technology users operate `/admin` at 375, 768, 1024, and 1440 pixels,
-- **Then** loopback mode exchanges and removes a valid launch fragment without rendering registration/password/GitHub login controls, while a missing/failed grant presents one relaunch action; production alone renders setup or password login; GitHub controls appear only inside the authenticated settings surface; unconfigured OAuth opens a labeled host guide without redirecting or submitting secrets; recheck reports status and, only when configured, enables a distinct **Continue to GitHub** top-level PKCE action; the dialog exposes only the authoritative callback URL, fixed GitHub documentation link, host-secret/restart/recheck steps, and a no-secret warning; focus trap/Escape/focus return/status-alert/reduced-motion semantics hold; PAT input is a labeled password control cleared after submit; and no credential or launch-grant value appears in DOM after exchange, persistent storage, screenshots, or tests.
+Archived (ADR-071). Full text: [legacy](../legacy/docs/ACCEPTANCE_SUPERSEDED.md#ac-043--legacy-profile-aware-access-with-github-connection-ui).
 
 ### AC-044 — GitHub preflight is immutable, bounded, and anonymous
 
@@ -646,11 +616,7 @@ The 2026-08-30 usability clarification strengthens existing FR-025, FR-027, FR-0
 
 ### AC-051 — OAuth and public-read PAT surfaces retire without damaging owner or writeback state
 
-**Maps to:** FR-017, FR-019, FR-029 through FR-031, FR-034, FR-037, NFR-001 through NFR-003, NFR-009, NFR-013
-
-- **Given** clean and upgraded runtimes containing no legacy connection, a pending OAuth transaction, an encrypted `identity_public_read` credential, an encrypted `public_read` PAT, active owner/session/local-launch/password state, and an independently configured writeback token,
-- **When** the 0.2.1 migration and admin/API/configuration flows run,
-- **Then** no OAuth/public-read PAT card, input, guide, callback, redirect, start/check/delete action, or client-secret/callback/encryption-key requirement remains reachable; legacy routes return the bounded non-mutating `410` compatibility response; OAuth transactions/identities/public-read credential rows are removed without decryption or secret output; owner authentication, recovery, sessions, drafts, bundles, and writeback configuration remain valid; and no legacy secret value appears in the DOM, API, logs, fixtures, snapshots, or migration diagnostics.
+Archived (ADR-071). Full text: [legacy](../legacy/docs/ACCEPTANCE_SUPERSEDED.md#ac-051--oauth-and-public-read-pat-surfaces-retire-without-damaging-owner-or-writeback-state).
 
 ### AC-052 — Anonymous GitHub resolution is exact-SHA, rate-aware, and never borrows writeback authority
 

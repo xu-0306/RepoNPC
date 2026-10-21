@@ -98,7 +98,7 @@ The supported production shape is:
 - one persistent data volume containing runtime SQLite, downloaded bundles, active/previous pointers, and safe update state;
 - a public HTTPS reverse proxy/load balancer supplied by the operator;
 - an explicitly configured external OpenAI-compatible service, private vLLM service, or private Ollama service;
-- GitHub Actions/GitHub Releases providing immutable index bundles.
+- a manually uploaded GitHub Pages static shell containing the verified visitor chat page;
 
 The application listener is private to the host/container network. The reverse proxy may publish visitor routes, but `/admin` and `/api/admin/*` MUST be denied to public Internet networks and exposed only through loopback, a private LAN/VPN, or an allowlisted management network. For a headless host, the preferred path is an SSH tunnel to the same Web Admin; do not publish a second management port.
 
@@ -106,20 +106,19 @@ No PostgreSQL, Redis, vector database, or indexer process is required in the pub
 
 ## 2. Prerequisites
 
-- A public GitHub account/profile and repository containing `reponpc.yml`.
+- A public GitHub account/profile and same-name repository for the README card.
 - Owner-selected public GitHub repositories.
 - Docker Engine with Compose v2 on x86_64 Linux (reference host: 4 CPU cores, 8 GB RAM plus chat-model needs).
 - A public domain and HTTPS termination.
 - A supported chat model plus at least one external embedding provider (`ollama`, `vllm`, or generic `openai_compatible`) compatible with the built index. The local sentence-transformers runtime is not a production prerequisite.
-- For GitHub-backed admin configuration/custom-asset reads, writeback, and dispatch only: a fine-grained GitHub token scoped to the configuration repository. It is not required to create the owner, sign in, validate pasted YAML or character uploads, preview a built-in character, generate README snippets, or inspect local bundle status.
-- For bundle publication: GitHub Actions enabled with workflow `contents: write` permission in the configuration/deployment repository.
+- A GitHub Pages repository where the owner can upload the exported static shell. No GitHub token is required by the local admin flow.
 
 ## 3. Prepare public configuration
 
 1. Copy `reponpc.example.yml` to `reponpc.yml` in the configured repository.
 2. Replace placeholder profile, including the required confirmed `github_login` and optional `aliases`, repository slugs, owner claims, links, and character/card values.
 3. Keep only public information. Never add tokens, password hashes, API keys, internal URLs, or private-repository names.
-4. Validate the same file through the index workflow/CLI before publication.
+4. Validate the same file through the local CLI before preparation.
 5. Review every owner claim as a public statement that may be cited verbatim by visitors.
 
 The default configuration repository may be the GitHub Profile repository (`owner/owner`) or a separate public deployment repository.
@@ -131,13 +130,13 @@ Existing `reponpc.yml` files created before FR-045 need a confirmed `profile.git
 An authenticated new owner normally uses the guided flow instead of authoring YAML first:
 
 1. Enter a GitHub username/profile URL or manually add a public repository slug/URL. The profile step prefills `github_login` from the configured repository owner when available, otherwise from the entered account; confirm or correct it before generating the draft.
-2. Select from public metadata. Discovery uses unauthenticated GitHub API capacity, does not use the fine-grained writeback token, and may ask the owner to retry after GitHub rate limiting.
+2. Select from public metadata. Discovery uses unauthenticated GitHub API capacity and may ask the owner to retry after GitHub rate limiting.
 3. Confirm the exact selected repositories before any source is downloaded or model capacity is consumed.
 4. Choose either `Analyze for suggestions` or `Continue manually`. Analysis is optional and consumes GitHub/provider capacity; the manual action is available before preflight and on every blocker/failure, without requiring a failed request. The current 0.1.7 implementation may analyze the confirmed set as one durable bounded batch.
 5. Explain personal contribution and review facts, model inferences, and proposed owner assertions separately. Confirm or edit role/summary/claims before draft generation. Model unavailability never blocks manual contribution entry.
    Contribution suggestions use a fixed 700-token output allowance; visitor and repository-analysis budget settings do not tune it. If the provider reports an output limit, returns an invalid structure, or cannot safely fit the request in context, the UI shows a bounded bilingual error and keeps manual entry available. Do not treat partial output as a draft. Editing an already confirmed proposal requires confirming the edited version again.
 6. Use Back/Edit selection when needed. Changing a repository/ref/include/exclude identity invalidates only its selection-bound plan/result; removed repositories lose only their own contribution data, while profile and unaffected repository input remain. `Start over` is a separate confirmed destructive action.
-7. Validate and preview with the existing model-free local operations. With no GitHub writeback token, copy or download `reponpc.yml`; with the token, review the exact configured repository/branch/path before saving and separately dispatching publication.
+7. Validate and preview with the existing model-free local operations, then copy or download `reponpc.yml` for the local preparation flow.
 
 Existing saved configuration is loaded into the guided editor for return editing. Unsaved guided state is limited to the current authenticated browser session and clears on logout or successful save. Saving or downloading does not make private data safe: the resulting configuration is intended to become public. Raw repository bodies, provider prompts/outputs, credentials, tokens, and private provider URLs are never saved in browser storage; guided draft generation preserves configuration fields outside the guided surface.
 
@@ -150,8 +149,7 @@ Treat connections as independent capabilities rather than one global ready flag:
 - **Sign in:** local-launch or production password access is independent of GitHub.
 - **Read public repositories for analysis:** anonymous REST capacity affects discovery/analysis; no OAuth or public-read PAT is requested.
 - **AI analysis:** provider readiness affects suggestions, not owner-entered contribution text.
-- **Save to GitHub:** writeback readiness affects remote save, not validate/preview/copy/download.
-- **Publish portfolio:** workflow/publication readiness affects dispatch/activation, not the local draft.
+- **Prepare locally:** local validation and bundle readiness affect activation, not draft authoring or copy/download.
 
 Every unavailable primary action must state which capability is missing, how to configure/recheck it, and which unaffected local action remains available. Cache hits, semaphore counts, rate-budget internals, and predictive estimates belong in Advanced diagnostics rather than the first-run critical path.
 
@@ -169,7 +167,7 @@ Store GitHub/provider/IP-HMAC values in separate files in the repository-local `
 set both direct and file forms. Create the directory and files before starting Compose, and restrict
 their permissions to the deployment operator.
 
-Windows Docker Desktop bind mounts from a Windows filesystem appear group/world-readable inside the Linux container and fail with `unsafe_secret_permissions`. Linux is the supported production host. For local Docker Desktop evaluation only, the direct `REPONPC_GITHUB_TOKEN`, `REPONPC_CHAT_API_KEY`, `REPONPC_EMBEDDING_API_KEY` and `REPONPC_IP_HASH_KEY` forms are accepted; clear each corresponding `_FILE` and never set both forms.
+Windows Docker Desktop bind mounts from a Windows filesystem appear group/world-readable inside the Linux container and fail with `unsafe_secret_permissions`. Linux is the supported production host. For local Docker Desktop evaluation only, the direct `REPONPC_CHAT_API_KEY`, `REPONPC_EMBEDDING_API_KEY` and `REPONPC_IP_HASH_KEY` forms are accepted; clear each corresponding `_FILE` and never set both forms.
 
 Startup environment errors list only sorted, deduplicated variable names and codes, for example `deployment environment is invalid: REPONPC_IP_HASH_KEY_FILE (unsafe_secret_permissions)` (ADR-069). No issue message, value or path is printed.
 
@@ -187,21 +185,11 @@ There is no RepoNPC default username or password. For automated/pre-provisioned 
 
 Restarting preserves the durable owner plus only hashed session and CSRF values in runtime SQLite. Refresh rotates the session and CSRF token, logout revokes the current session, and logout-all verifies the local password before incrementing the durable session epoch.
 
-### GitHub token permissions
-
-Create a fine-grained token for exactly `REPONPC_CONFIG_REPOSITORY`:
-
-- Metadata: read;
-- Contents: read/write;
-- Actions: write only when admin workflow dispatch is enabled.
-
-No organization, issue, pull-request, package, secret, or unrelated repository access is needed.
-
 ### GitHub public-read credential removal (0.2.1)
 
-GitHub OAuth and browser-entered public-read PATs are retired. Do not create OAuth Apps or configure the retired client, callback, or encryption-key variables. Legacy routes return `410 GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED`. Existing runtimes apply migration 14, which removes OAuth/public-read rows without decrypting them; protected backups may still contain encrypted legacy bytes. Migration 15 adds only bounded anonymous metadata/exact-SHA resolution cache rows and contains no token, archive, repository body, prompt, or provider body.
+GitHub OAuth and browser-entered public-read PATs are retired. Do not create OAuth Apps; the retired client, callback and encryption-key variables are now rejected as unknown (ADR-071). Existing runtimes apply migration 14, which removes OAuth/public-read rows without decrypting them; protected backups may still contain encrypted legacy bytes. Migration 15 adds only bounded anonymous metadata/exact-SHA resolution cache rows and contains no token, archive, repository body, prompt, or provider body.
 
-Public repository discovery and analysis use anonymous, fixed-origin REST requests and exact full commit SHA archives. Completed immutable resolution is reused after a rate reset, so a large 1–50 selection makes durable forward progress instead of restarting at repository one. Anonymous rate limits can pause work; the UI reports a safe retry time and permits manual continuation. `REPONPC_GITHUB_TOKEN` and `REPONPC_GITHUB_TOKEN_FILE` remain independent writeback credentials for explicit config/material writes and workflow dispatch only.
+Public repository discovery and analysis use anonymous, fixed-origin REST requests and exact full commit SHA archives. Completed immutable resolution is reused after a rate reset, so a large 1–50 selection makes durable forward progress instead of restarting at repository one. Anonymous rate limits can pause work; the UI reports a safe retry time and permits manual continuation. No GitHub token is used.
 
 ### Headless/private administration
 
@@ -221,7 +209,7 @@ If the owner forgets the password while the runtime volume is intact, run the ho
 docker compose exec app reponpc admin set-password --data-dir /var/lib/reponpc
 ```
 
-The command creates or updates only the local Argon2id hash and applies the production policy. It does not reopen first-owner setup, alter writeback credentials, or print the password. Use it before moving a passwordless loopback runtime to production, or when a production password is forgotten. If the runtime database is lost, restore the protected backup first.
+The command creates or updates only the local Argon2id hash and applies the production policy. It does not reopen first-owner setup or print the password. Use it before moving a passwordless loopback runtime to production, or when a production password is forgotten. If the runtime database is lost, restore the protected backup first.
 
 ## 5. Configure the provider
 
@@ -285,7 +273,7 @@ The model-list readiness check cannot prove that the chat model has a valid temp
 
 Official references: [vLLM OpenAI-compatible server](https://docs.vllm.ai/en/stable/serving/online_serving/openai_compatible_server/), [structured outputs](https://docs.vllm.ai/en/stable/features/structured_outputs/), [embedding/pooling models](https://docs.vllm.ai/en/stable/models/pooling_models/embed/), and [API server security](https://docs.vllm.ai/en/stable/usage/security/).
 
-## 6. Publish the first index
+## 6. Prepare the first local bundle
 
 The installed entrypoint is intentionally dual-purpose:
 
@@ -294,24 +282,11 @@ reponpc                         # start the application
 reponpc serve                   # explicit equivalent
 reponpc config validate reponpc.yml
 reponpc index build --config reponpc.yml --output dist
-reponpc index publish --bundle-dir dist
-reponpc index publish-manifest --bundle-dir dist
 ```
 
-Help and index/config commands do not load unrelated deployment startup settings. `index build` generates `public/profile.json`, the canonical character PNG, and all twelve locale/theme/format card variants from validated configuration. Built-in character composition and custom uploads both pass the same canonical `256x448` sprite validator before the exact bytes reach preview, GitHub writeback, card rendering, or bundle production. The authenticated material converter may preview arbitrary square-cell 4x7 PNG grids, strict 28-frame manifest ZIPs, ordinary manifestless ZIPs, or browser-selected folders. Manifestless material is discovered structurally: one candidate converts automatically, several require an explicit visual choice, and none fail with guidance. Conversion alone performs no write; only separately confirmed, revalidated canonical PNG bytes may enter GitHub. Missing or invalid inputs fail the build; production placeholders are never fabricated.
+Help and index/config commands do not load unrelated deployment startup settings. `index build` generates `public/profile.json`, the canonical character PNG, and all twelve locale/theme/format card variants from validated configuration. Built-in character composition and custom uploads both pass the same canonical `256x448` sprite validator before the exact bytes reach preview, card rendering, or bundle production. The authenticated material converter may preview arbitrary square-cell 4x7 PNG grids, strict 28-frame manifest ZIPs, ordinary manifestless ZIPs, or browser-selected folders. Manifestless material is discovered structurally: one candidate converts automatically, several require an explicit visual choice, and none fail with guidance. Conversion alone performs no write; only separately confirmed, revalidated canonical PNG bytes may enter a local bundle. Missing or invalid inputs fail the build; production placeholders are never fabricated.
 
-The `build-index.yml` workflow must:
-
-1. validate configuration and repository allowlists;
-2. resolve exact commits and index within limits;
-3. run database/bundle/retrieval smoke checks;
-4. publish immutable release asset `reponpc-index-{bundle_id}.tar.zst`;
-5. verify asset reachability/checksum;
-6. update `stable-manifest.json` on `reponpc-index` last.
-
-The workflow may be run manually for first setup and is triggered by relevant configuration changes. A failed run must leave the prior stable manifest untouched. Do not hand-edit an immutable release asset under the same tag/name.
-
-The final two commands enforce publication-last across separate workflow steps. `index publish` creates/uploads/verifies the Release asset and writes a local pending manifest below `dist`; it cannot update the remote pointer. `index publish-manifest` refuses to run without that verified pending artifact and performs the sole stable-branch mutation.
+The live bundle is prepared in the running application through authenticated Preview & share, which verifies it before activation and keeps the last-known-good bundle on failure (section 10). The `dist` output of `index build` is for local checks; the runtime does not read it.
 
 ### Phase 2 formal benchmark
 
@@ -337,7 +312,7 @@ Both the Windows source launcher and installer are local trial only. Public visi
 
 ### Production Compose startup
 
-Prepare `.env` from `.env.example`, mount secrets, verify the exact manifest/public base URLs, then:
+Prepare `.env` from `.env.example`, mount secrets, and verify the exact public base URL, then:
 
 ```bash
 docker compose build --pull
@@ -381,15 +356,15 @@ After readiness:
 5. test through the actual GitHub image proxy and click target;
 6. increment `card.revision` after visible asset changes when cache invalidation is needed.
 
-The image is not interactive. It links to the public HTTPS site.
+The image is not interactive. It links only to the verified GitHub Pages chat page.
 
 The raster card renderer uses the bundled Noto Sans CJK TC font to keep Traditional Chinese output deterministic. Its SIL Open Font License and source notes ship beside the font under `src/reponpc/cards/fonts/`; preserve both files when redistributing a source or wheel build.
 
 ## 10. Updates, pinning, and rollback
 
-The application polls the stable manifest with ETag at the configured interval. It downloads into staging, validates everything, smoke-tests, and atomically activates. It retains the active and previous valid bundle.
+The application activates only a verified local bundle. It stages candidates, validates checksums/schema/model compatibility and SQLite integrity, smoke-tests, and switches the active pointer atomically. It retains the active and previous valid bundle.
 
-Admin index status must show active/previous/pinned/candidate version, last check, publication time, and a safe failure reason. An owner can pin a locally retained compatible bundle by ID; while pinned, newer versions are reported but not activated. Unpinning resumes normal activation.
+Admin index status must show active/previous/pinned/candidate version and a safe failure reason. An owner can pin a locally retained compatible bundle by ID. Unpinning clears the pin so another verified local bundle can be activated.
 
 Required v1 CLI equivalents for recovery:
 
@@ -456,7 +431,7 @@ Back up:
 - the protected secret source/vault, outside RepoNPC data backups;
 - persistent data directory or at minimum `runtime.sqlite` plus active/previous bundles/pointers.
 
-`runtime.sqlite` contains the sole owner record, optional production Argon2id hash, hashed session/proof state, and profile metadata. Before the 0.2.1 migration it may also contain encrypted legacy OAuth/PAT connection records; older protected backups retain those encrypted bytes under the normal retention policy. Losing the database removes local authentication and embedding-profile continuity. The product intentionally has no unauthenticated Web password reset or setup reopening path. Protect and test this backup.
+`runtime.sqlite` contains the sole owner record, optional production Argon2id hash, hashed session/proof state, and profile metadata. Older protected backups may contain historical encrypted credential bytes under the normal retention policy; current runtime paths do not read them. Losing the database removes local authentication and embedding-profile continuity. The product intentionally has no unauthenticated Web password reset or setup reopening path. Protect and test this backup.
 
 Before copying SQLite, use the verified online backup command or stop the application cleanly and back up the protected persistent data directory as one unit. The backup command refuses to overwrite an existing target and runs SQLite integrity verification before publishing the copy.
 
@@ -465,9 +440,11 @@ docker compose exec app reponpc runtime backup /var/lib/reponpc/backups/runtime.
 docker compose exec app reponpc runtime check
 ```
 
-Recovery order: restore secrets with correct permissions, restore/verify runtime database, start the pinned application version, validate local bundles, fetch manifest if necessary, and check health/readiness/admin access/card/chat plus the active embedding profile. Since configuration and immutable releases are in GitHub, runtime conversation data does not need recovery. Loopback evaluation restores access by minting a new launcher grant. Production uses host-only `reponpc admin set-password --data-dir <dir> [--username <owner>]`; it does not reopen setup or alter GitHub connections. Recovery readiness is established by clean-host tests for both profile paths.
+Recovery order: restore secrets with correct permissions, restore/verify runtime database, start the pinned application version, validate local bundles, check health/readiness/admin access/card/chat plus the active embedding profile. Runtime conversation data remains separate from local bundle recovery. Loopback evaluation restores access by minting a new launcher grant. Production uses host-only `reponpc admin set-password --data-dir <dir> [--username <owner>]`; it does not reopen setup or alter GitHub connections. Recovery readiness is established by clean-host tests for both profile paths.
 
 ## 12. Upgrades
+
+If your `.env` still contains `REPONPC_CONFIG_REPOSITORY` or `REPONPC_INDEX_MANIFEST_URL`, delete those lines (ADR-071). The other removed names are listed in [legacy/README.md](../legacy/README.md#existing-env-migration).
 
 The Windows onedir build and Inno Setup recipe are documented in
 [the Windows packaging guide](../packaging/windows/README.md). Run the newer
@@ -487,11 +464,11 @@ If the application fails before a migration commits, restore the old image. Runt
 
 ## 13. Credential rotation
 
-- GitHub/provider key: create replacement, update secret file atomically, restart/reload as documented, verify health/writeback, then revoke old key.
+- GitHub/provider key: create replacement, update secret file atomically, restart/reload as documented, verify provider health, then revoke old key.
 - Pre-provisioned admin password: generate a new hash, update the paired username/hash secret, restart, use logout-all/session epoch revocation, verify login.
 - An unauthenticated Web password reset or setup reopening path is not exposed. The host-only `reponpc admin set-password --data-dir <dir> [--username <owner>]` command is the approved break-glass procedure; it must be run on the host and tested against a production-like backup. Do not delete `admin_owner` or reopen `admin_setup` manually.
 - IP-HMAC key: rotate during a maintenance window; existing pseudonymous rate rows no longer match and may be cleared safely without touching audit/bundle data.
-- Suspected compromise: follow `SECURITY.md`, disable chat/writeback if needed, rotate all affected secrets, inspect Git/release/audit history, restore known-good image/bundle.
+- Suspected compromise: follow `SECURITY.md`, disable chat if needed, rotate all affected secrets, inspect Git/release/audit history, restore known-good image/bundle.
 
 ## 14. Capacity and cost controls
 
@@ -511,7 +488,7 @@ Monitor safe aggregate accepted/rejected counts, retrieval/model latency, provid
 
 | Symptom                       | Check                                                                                                      | Safe action                                                                                                                                                                        |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `setup_required`              | manifest URL/host, first workflow, bundle state                                                            | publish/fix a new bundle; do not bypass validation                                                                                                                                 |
+| `setup_required`              | local bundle state                                                                                         | prepare/fix a new local bundle; do not bypass validation                                                                                                                            |
 | `readyz` 503, profile works   | model/embedding status and compatibility                                                                   | fix configured provider/model; no cloud fallback                                                                                                                                   |
 | Update failed                 | checksum/schema/model/SQLite/smoke safe error                                                              | keep active bundle, republish corrected immutable bundle                                                                                                                           |
 | GitHub save 409               | current blob SHA and recent Git change                                                                     | reload/reapply manually; never force overwrite                                                                                                                                     |
@@ -570,13 +547,13 @@ Chat probe parser follow-up (2026-09-12, amended 2026-09-14): load the matching 
 
 ## Local portfolio operation (ADR-046)
 
-Use authenticated Preview & share to save a draft, prepare/apply, and try the local visitor page. Preparation anonymously resolves fresh project commits and downloads bounded exact-SHA archives through the shared archive lane; it reuses valid passage vectors. No workflow dispatch, Release or GitHub write token is required. The selected tested chat and embedding profiles are frozen for activation; there is no provider fallback.
+Use authenticated Preview & share to save a draft, prepare/apply, and try the local visitor page. Preparation anonymously resolves fresh project commits and downloads bounded exact-SHA archives through the shared archive lane; it reuses valid passage vectors. No remote publication credential is required. The selected tested chat and embedding profiles are frozen for activation; there is no provider fallback.
 
-`local-portfolio/draft.json` contains public YAML and canonical PNG; `local-portfolio/publication.json` records safe job status. Explicit preparation writes `local-portfolio/source-local` before queueing, disabling Release polling even when the build fails. Failed or cancelled work retains the previously activated bundle. After a crash, an unfinished receipt becomes interrupted and may be retried. A missing provider requires testing the configured model before retrying. The `passage-cache` folder is disposable (30-day TTL, 256 MiB cap); it contains vectors and digests, not raw passages. New question embeddings are still computed during chat.
+`local-portfolio/draft.json` contains public YAML and canonical PNG; `local-portfolio/publication.json` records safe job status. Explicit preparation writes `local-portfolio/source-local` before queueing. Failed or cancelled work retains the previously activated bundle. After a crash, an unfinished receipt becomes interrupted and may be retried. A missing provider requires testing the configured model before retrying. The `passage-cache` folder is disposable (30-day TTL, 256 MiB cap); it contains vectors and digests, not raw passages. New question embeddings are still computed during chat.
 
 ADR-052 R12-B work-count tests show that a failed analysis and a restarted service reuse unchanged passage vectors; a corrupted entry is discarded and only that passage is embedded again. Source resolution, transient index construction, query embedding and generation still run on retry. The cache is under the data directory, outside the runtime SQLite backup and the verified bundle/public export payloads. R11 keeps failed and `completed_with_errors` batch metadata for seven days so an owner can resume an actionable terminal batch after reload; the owner can dismiss that recovery without deleting the batch. Other terminal batches retain the 24-hour expiration.
 
-Stop the service before a full data-directory backup, which includes runtime database, secret encryption material and retained immutable bundles. Keep this backup private. A portable YAML backup must include the canonical custom PNG at its configured relative path. To return to legacy Release polling, stop the service, back up the directory, explicitly restore legacy transport configuration, remove only `local-portfolio/source-local`, then restart. Do not run two writers against the same data directory.
+Stop the service before a full data-directory backup, which includes runtime database, secret encryption material and retained immutable bundles. Keep this backup private. A portable YAML backup must include the canonical custom PNG at its configured relative path. Do not run two writers against the same data directory.
 
 The Windows launcher remains loopback-only. The owner currently has no public HTTPS destination (2026-09-23); retain the sharing setup and complete local tests first. Public deployment later requires the existing visitor-only HTTPS reverse-proxy recipe; the admin API and direct model ports remain private. Creating or updating Profile README files is a separate explicit GitHub action by the owner.
 
@@ -597,4 +574,4 @@ The thinking-text request remains unfinished; see the processing contract.
 
 To enable public summaries, explicitly select Responses in the existing OpenAI-compatible service form, save, then probe/select the model through the existing workflow. Existing active/frozen profiles retain their previous connection revision. No startup variable changes are required. The provider/model must accept the summary option; no automatic parameter or protocol retry occurs. [Local verification](../release-evidence/a7/waiting-ux-20261004/PUBLIC_SUMMARY_RESULT.zh-TW.md) used a synthetic upstream, not a real service. Back up through the existing protected workflow before upgrading runtime schema 35; old encrypted payloads retain Chat Completions semantics.
 
-OR-032 / ADR-058 / Specification 0.4.10 adopts the [public summary contract](CHAT_PUBLIC_SUMMARY_CONTRACT_2026-10-04.md). FR-040/043/044/047, NFR-005/009/014 and AC-019/023/057/062/063/064/068/071 retain their thresholds. Explicit Responses selection, legacy/revision compatibility, bounded untrusted plain text, prompt/secret negative tests, final-answer separation, cancellation and bilingual keyboard-accessible display require verification. No real provider invocation, publication, catalog admission or release acceptance is implied. Previous pending-summary notes are historical and superseded by this approval.
+OR-032 / ADR-058 / Specification 0.4.10 adopts the [public summary contract](CHAT_PUBLIC_SUMMARY_CONTRACT_2026-10-04.md). FR-040/043/044/047, NFR-005/009/014 and AC-019/023/057/062/063/064/068/071 retain their thresholds. Explicit Responses selection, legacy/revision compatibility, bounded untrusted plain text, prompt/secret negative tests, final-answer separation, cancellation and bilingual keyboard-accessible display require verification. No real provider invocation, publication, catalog admission or release acceptance is implied. Previous pending-summary notes are historical and superseded by this approval.### Anonymous repository resolution

@@ -25,9 +25,7 @@ ADR-048 與 [A1 閘道契約](A1_FUNNEL_GATEWAY_CONTRACT.md) §1 已核准「Win
   - `%LOCALAPPDATA%` 也有額外繼承的權限項目（沙箱群組、AppContainer SID）。
   
   所以正式模式不能依賴繼承來的權限，必須自己設定受保護的 ACL。
-- `production` 要求 `REPONPC_CONFIG_REPOSITORY`、`REPONPC_INDEX_MANIFEST_URL` 不可為空（`environment.py:770-776`、`:848-854`）。但執行期遇到空值、或已轉為本機來源時，就不會輪詢（`main.py:1240-1241`）。
-  - 原始碼啟動器補的是範例值，8090 的 `update_error=bundle_request_failed` 就是輪詢範例網址失敗。
-  - 安裝版填空字串，所以若直接切到 `production`，啟動時就會驗證失敗。
+ - D6 已因 [ADR-071](DECISIONS.md#adr-071-archive-legacy-paths-and-documents) 失效：舊的索引變數已移除，設定了會被當成未知變數而無法啟動。
 - 以下已經可以使用：
   - `production` 接受 `http://localhost:<port>` 這類 loopback 管理來源；
   - `reponpc admin setup-code`；
@@ -102,7 +100,7 @@ Windows 正式模式就是 `production` profile 加上以下設定，不新增 p
 | D3 | 首次登入 | (a) 啟動器在主控台代為取得 setup code，並執行 `set-password` 流程；(b) 只寫文件，請擁有者自己執行 CLI | (a)：安裝版的 CLI 不在 PATH 上，新手不易操作 |
 | D4 | ACL 實作與資料目錄錯誤碼 | 實作：(a) ctypes，不新增相依；(b) 新增 `pywin32` 相依。錯誤碼：(c) 在 `REPONPC_DATA_DIR` 上沿用 `unsafe_secret_permissions`；(d) 新增 `unsafe_data_directory_permissions`（新的錯誤碼需要核准） | (a)＋(c)：資料目錄本身就存放 `master.key` 與擁有者密碼 hash，不必新增錯誤碼 |
 | D5 | 既有資料目錄的權限過寬 | (a) 啟動器停止並顯示一行 `icacls` 指令，由擁有者自己執行；(b) 啟動器先詢問，再代為收緊 | (a)：權限變更由擁有者明確執行；安裝版的新資料目錄建立時已受保護，不會遇到這個情況 |
-| D6 | 舊的 GitHub 索引變數 | (a) `production` 允許兩者為空，Linux 也適用，執行期本來就不會輪詢；(b) 維持必填，Windows 啟動器填範例值，輪詢失敗會一直顯示 `bundle_request_failed` | (a)：ADR-046 之後，本機發布才是一般流程 |
+| D6 | 舊的 GitHub 索引變數 | 已由 [ADR-071](DECISIONS.md#adr-071-archive-legacy-paths-and-documents) 封存；變數現在視為未知設定並必須刪除。 | 不適用 |
 | D7 | `.env` 中的直接 secret 值 | (a) Windows 正式模式拒絕，改放 `private\` 檔；(b) 允許，但另外檢查 `.env` 的 ACL | (a)：只有一個需要檢查的位置；模型金鑰本來就從 GUI 輸入並加密保存 |
 
 不需要另外決定、直接沿用的項目：
@@ -119,7 +117,6 @@ Windows 正式模式就是 `production` profile 加上以下設定，不新增 p
 - 共用的 private-file helper（POSIX＋Windows），並替換上述所有呼叫點。
 - 在 Windows 上，secret root 預設為 `<data_dir>\private`，因此要先解析 data_dir。
 - 正式模式啟動時，在 Windows 上檢查資料目錄 ACL。
-- 若 D6=(a)，`production` 允許兩個索引變數為空。
 - 測試：
   - Windows 上用真實檔案測試：helper 建立的檔案可以通過；加入 Everyone、Users 或 Authenticated Users ACE 會被拒絕；繼承來的 ACE 會被拒絕；擁有者不符會被拒絕。
   - POSIX 維持原本的測試。

@@ -36,8 +36,8 @@ The owner approved this minimal F0 realization:
 5. The existing visitor `/` entry plus its exact reproducible build-manifest
    dependencies, without the admin dynamic chunk or SPA fallback. The existing
    same-origin visitor page remains available on the application listener for
-   local preview and existing operator-managed ingress. A5 still supplies the
-   separately exported Pages shell and its offline functionality.
+   local preview. A5 supplies the separately exported Pages shell and its offline
+   functionality.
 
 Approved MVP Pages origins: exactly `https://<validlabel>.github.io`,
 with one valid DNS label before `github.io`. Custom domains require a later

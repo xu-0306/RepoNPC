@@ -80,11 +80,11 @@ FAQ-only output does not constitute completed A5 scope.
 
 **2026-09-22 local-publication amendment (ADR-046):** The owner authorized implementation of the local-first NPC and guided GitHub card journey. [Local publication contract](LOCAL_PUBLICATION_CONTRACT_2026-09-22.md) supersedes GitHub-only configuration/build/activation transport; all validation, attribution, privacy and last-known-good requirements remain. Implementation/acceptance evidence must distinguish local tests from actual public deployment.
 
-**Automatic alignment amendment (2026-09-22, ADR-045; FR-015/018, AC-020):** Only a chosen, already canonical owner preview is analyzed. Repeated cross-state alpha-geometry agreement may trigger automatic browser-side composition, but its bytes become downloadable/writeable only after the existing authenticated same-origin canonical validator returns them. Per-frame integer X/Y input is constrained to the original cell's opaque bounds; invalid drafts cannot be applied. Failure preserves the chosen unaligned asset, and source files, cleanup alternatives, CSP, authorization, and ordinary GitHub writeback remain unchanged. This supersedes ADR-043's opt-in timing, not its validation boundary.
+**Automatic alignment amendment (2026-09-22, ADR-045; FR-015/018, AC-020):** Only a chosen, already canonical owner preview is analyzed. Repeated cross-state alpha-geometry agreement may trigger automatic browser-side composition, but its bytes become downloadable/writeable only after the existing authenticated same-origin canonical validator returns them. Per-frame integer X/Y input is constrained to the original cell's opaque bounds; invalid drafts cannot be applied. Failure preserves the chosen unaligned asset, and source files, cleanup alternatives, CSP, and authorization remain unchanged. This supersedes ADR-043's opt-in timing, not its validation boundary.
 
-**Edge-spill cleanup amendment (2026-09-22, ADR-044; FR-015/018, AC-020):** The server proposes an alternative only for an authenticated, bounded structural grid whose shallow top fragment is continuous with the preceding row and separated from current-frame content. The original result remains unchanged; the alternative is independently re-encoded and canonical-validated. Both remain response-only until the owner explicitly chooses a version, and ordinary GitHub writeback revalidates it. No source persistence, arbitrary image URL, extra endpoint, silent deletion, or relaxation of upload/archive/CSP limits is introduced.
+**Edge-spill cleanup amendment (2026-09-22, ADR-044; FR-015/018, AC-020):** The server proposes an alternative only for an authenticated, bounded structural grid whose shallow top fragment is continuous with the preceding row and separated from current-frame content. The original result remains unchanged; the alternative is independently re-encoded and canonical-validated. Both remain response-only until the owner explicitly chooses a version, and local bundle generation revalidates it. No source persistence, arbitrary image URL, extra endpoint, silent deletion, or relaxation of upload/archive/CSP limits is introduced.
 
-**Frame-position repair amendment (2026-09-22, ADR-043; FR-015/018, AC-020):** Alignment analysis and compositing operate only on an already canonical, authenticated preview. Browser-side edits remain drafts; adjusted download and GitHub writeback are blocked until the composed PNG passes the existing same-origin protected `/assets/character/validate` route and the server returns canonical bytes. Opaque pixels cannot be cropped or shifted into another cell. No uploaded source is persisted or overwritten, and CSP, authentication, image limits, and writeback checks are unchanged.
+**Frame-position repair amendment (2026-09-22, ADR-043; FR-015/018, AC-020):** Alignment analysis and compositing operate only on an already canonical, authenticated preview. Browser-side edits remain drafts; adjusted download is blocked until the composed PNG passes the existing same-origin protected `/assets/character/validate` route and the server returns canonical bytes. Opaque pixels cannot be cropped or shifted into another cell. No uploaded source is persisted or overwritten, and CSP, authentication, image limits, and upload/bundle checks are unchanged.
 
 **Novice material discovery amendment (2026-09-21, ADR-041; FR-015/018, AC-020):** PNG, ZIP, and browser-folder inputs normalize into one bounded server-side bundle model. Manifestless bundles are scanned only for the closed 4-by-7 structural shape; filenames, paths, species, and visual content are not semantic signals. Candidate IDs bind normalized path and bytes and are recomputed for selection. Entry/member/expanded-byte/path/pixel/candidate ceilings, path normalization, static-image validation, authenticated same-origin access, and the no-write inspection boundary apply equally to ZIP and folder uploads.
 
@@ -106,7 +106,7 @@ FAQ-only output does not constitute completed A5 scope.
 
 Independent fault injection also identified and repaired the existing master-key rotation rollback path: database rollback now runs before its connection closes, and any write failure restores the prior master key before returning `MODEL_SECRET_STORAGE_UNAVAILABLE`. Historical and current encrypted revisions must remain decryptable after failed BEGIN, ciphertext UPDATE, or COMMIT. Synthetic regression probes cover these three failure points; this does not claim crash-atomic file/database rotation across process termination.
 
-**Status:** Security contract aligned with approved Technical Specification 0.3.8; ADR-045 adds validated automatic alignment and bounded pixel inputs without changing writeback trust boundaries
+**Status:** Security contract aligned with approved Technical Specification 0.3.8; ADR-045 adds validated automatic alignment and bounded pixel inputs without changing trust boundaries
 **Audience:** implementation Agents, operators, reviewers, security researchers
 
 ## 1. Security goals
@@ -197,15 +197,14 @@ Crossing a boundary requires schema validation, size/time bounds, context-specif
 
 The application may initiate only configured traffic needed for:
 
-- the stable manifest and bundle asset on the configured GitHub repository/allowed hosts;
-- GitHub API calls for authenticated admin reads/writes/workflow dispatch;
+- anonymous fixed-origin GitHub REST metadata and exact-SHA archive requests for selected public repositories;
 - the explicitly configured chat/embedding provider.
 
 It never fetches visitor URLs, repository links, `avatar_url` from the server, Markdown images, citation URLs, or model-requested destinations. Redirects are bounded and every hop/final address is revalidated. Production operators should enforce equivalent egress policy where their platform supports it.
 
 Ollama and vLLM should be reachable through private Docker/network addresses and must not be published to the Internet merely for RepoNPC. For vLLM, a network proxy must allowlist only RepoNPC's required `/v1/models`, `/v1/chat/completions`, and `/v1/embeddings` routes because provider API-key enforcement does not protect every operational endpoint. Public status shows the normalized adapter/health only, not base URLs.
 
-The admin listener follows the same private-network rule. A high/non-standard port is not an access control and does not prevent Internet exposure. Bind the host port to loopback for local use, then use an SSH local-port tunnel (`ssh -N -L 8090:127.0.0.1:8000 user@host`) or a firewall-restricted LAN/VPN (such as Tailscale/WireGuard). When a reverse proxy serves a public visitor site, it MUST deny `/admin` and `/api/admin/*` to public networks and allow them only from the private management network. The proxy may expose visitor routes and the fixed OAuth callback only according to the configured origin and state/PKCE checks.
+The admin listener follows the same private-network rule. A high/non-standard port is not an access control and does not prevent Internet exposure. Bind the host port to loopback for local use, then use an SSH local-port tunnel (`ssh -N -L 8090:127.0.0.1:8000 user@host`) or a firewall-restricted LAN/VPN (such as Tailscale/WireGuard). When a reverse proxy serves a public visitor site, it MUST deny `/admin` and `/api/admin/*` to public networks and allow them only from the private management network. The proxy may expose visitor routes only according to the configured Pages origin and gateway checks.
 
 ## 7. Secret and credential handling
 
@@ -247,19 +246,13 @@ External GitHub/demo/profile links accept `https` only, render with safe `rel="n
 
 ## 10. Admin and GitHub permissions
 
-Admin authentication and GitHub authorization are separate capabilities. In `loopback_evaluation`, possession and successful same-origin exchange of a fresh host-minted local-launch grant creates the normal protected session; production uses setup proof plus a local password. A missing GitHub token or OAuth configuration leaves authentication plus local YAML validation, built-in-character preview, character upload validation, README snippet generation, embedding-profile CRUD/probe, and local bundle status available. Only the affected GitHub-backed operations fail closed with `SERVICE_NOT_READY`.
+Admin authentication is separate from anonymous public-repository access. In `loopback_evaluation`, possession and successful same-origin exchange of a fresh host-minted local-launch grant creates the normal protected session; production uses setup proof plus a local password. Authentication, local YAML validation, built-in-character preview, character upload validation, README snippet generation, embedding-profile CRUD/probe, and local bundle status need no GitHub credential.
 
 Embedding profile management is owner-authenticated and server-side. Exactly one external profile may be active; a changed profile cannot replace the last-known-good bundle until probe, reindex, checksum, schema, model/dimension, and smoke checks pass. Model pull/delete is available only for curated Ollama IDs and is never a browser-to-provider direct request.
 
-The production fine-grained GitHub token is scoped to the single configuration repository. It needs only:
+Local preparation and activation use owner-authenticated server state; no remote publication credential is part of the live contract.
 
-- Contents: read/write for `reponpc.yml` and character assets;
-- Actions: write only if the admin dispatch endpoint is enabled;
-- Metadata: read (implicit).
-
-It does not need organization administration, issues, pull requests, packages, secrets, workflows-file write, or access to unrelated repositories. The index-building Action uses its workflow-scoped `GITHUB_TOKEN` and public read access for selected repositories.
-
-Admin audit entries record action/path/commit/outcome/request ID but no body. The application allowlist is enforced even if the GitHub token itself has wider accidental scope.
+Admin audit entries record action/path/commit/outcome/request ID but no body. The application allowlist is enforced independently of upstream GitHub permissions.
 
 The reverse proxy/firewall is part of the admin trust boundary: public visitor routes may be exposed, but `/admin` and `/api/admin/*` are private-management routes. SSH/VPN/LAN access is preferred; a non-standard port is not considered an authorization control.
 
@@ -268,7 +261,7 @@ The reverse proxy/firewall is part of the admin trust boundary: public visitor r
 - Conversation persistence is unsupported/disabled in v1.
 - Rate identifiers are HMAC-SHA-256 pseudonyms and expire with their windows; raw IPs are not stored by RepoNPC.
 - Safe operational/audit retention defaults should be documented and configurable, with 30 days recommended for a personal deployment.
-- Active and previous valid bundles remain; older bundles may be cleaned locally, while GitHub Release retention is an operator policy.
+- Active and previous valid bundles remain; older bundles may be cleaned locally according to the retention policy.
 - Owners must understand that public profile configuration, claims, selected source excerpts, generated cards, and release bundles are publicly downloadable.
 
 Environment startup diagnostics (ADR-069) may print only deduplicated, sorted issue names and codes. Names must fully match `[A-Z][A-Z0-9_]*`, codes `[a-z][a-z0-9_]*`; invalid fields become `UNKNOWN_VARIABLE` / `unknown_code`. Never print `EnvironmentIssue.message`, values or paths.
@@ -307,7 +300,7 @@ This section is normative under the owner-approved OR-010 and Technical Specific
 
 ADR-021 and Technical Specification 0.1.7 supersede only this section's original synchronous/ephemeral execution lifecycle. The selected-only source boundary, explicit owner action, untrusted-input handling, no-fallback rule, owner-confirmation boundary, and raw-data cleanup remain normative. Current lifecycle and durable-safe-state rules are in section 16.
 
-- Public repository listing is authenticated admin functionality but uses unauthenticated GitHub public metadata requests. The configured writeback token is never sent for discovery and its repository scope is not broadened.
+- Public repository listing is authenticated admin functionality but uses unauthenticated GitHub public metadata requests. No credential is sent for discovery and no repository scope is broadened.
 - Username/profile and manual repository inputs normalize only GitHub.com identities. Every API URL, redirect, final host, response size, page number, and request deadline is server-validated. Missing/private/inaccessible repositories share one non-disclosing result.
 - Metadata listing is not consent to fetch source. Only exact checkbox-confirmed slug/ref/include/exclude identities may cross into source resolution. A batch contains 1–50 confirmed repositories; the legacy compatibility route accepts one and delegates it to a one-item batch.
 - Each item creates unique bounded staging, reuses mandatory exclusions/secret detection/symlink and binary rules, and removes staging after every terminal or recovery path. Runtime SQLite stores no archive, repository body/tree, prompt, provider body, incomplete output, or staging path. It may store only the bounded safe batch metadata/events/cache identities and validated normalized terminal results defined by section 16.
@@ -325,19 +318,12 @@ ADR-021 and Technical Specification 0.1.7 supersede only this section's original
 
 ## 15. Legacy GitHub identity and connection extension (0.1.6–0.2.0; superseded by 0.2.1)
 
-This section records the migration source. ADR-028 removes these reachable OAuth/PAT behaviors; section 20 is normative for the replacement.
-
-- OAuth Web Application Flow uses a fixed allowlisted GitHub authorization/token/user endpoint set, a random one-use state hash, PKCE S256, server-side code exchange, an existing RepoNPC session binding, and a connection-intent short-lived cookie. The normal session cookie is not the sole proof during GitHub's cross-site return.
-- OAuth state, PKCE verifier, local session binding, and connection metadata are encrypted or hashed at rest. Tokens and PATs use a dedicated authenticated-encryption key that is independent of IP hashing, provider keys, OAuth client secret, and writeback token.
-- OAuth requests no repository scope. Reported broad scopes, token/user endpoint errors, invalid user IDs, redirects, expiry, replay, wrong intent, missing RepoNPC session, and legacy login/setup starts all fail closed without issuing a session or consuming production setup/local-launch proof.
-- The browser receives an authorization redirect and safe connection state only. It never receives access/refresh tokens, PATs, encryption keys, client secret, transaction verifier/state, token fingerprints, or raw upstream payloads.
-- `identity_public_read`, `public_read`, and `writeback` are distinct credential purposes. A revoked/401 read credential requires explicit reconnection and cannot trigger selection of another credential. The configured writeback token is never copied into runtime credentials or used for identity/read preflight.
-- GitHub is connection-only. It cannot create, authenticate, or recover the RepoNPC owner. Disconnecting it affects only public-read work. Production recovery uses host-only `reponpc admin set-password --data-dir <dir>`; loopback recovery mints a new local-launch grant through the launcher.
+Historical migration text is archived in [SECURITY_HISTORY.md](../legacy/docs/SECURITY_HISTORY.md).
 
 ## 16. Bounded GitHub resolver and batch extension (0.1.7)
 
 - Batch analysis is public-repository-only. Bounded unauthenticated REST metadata is an eligibility gate, not merely a hint: missing, private, inaccessible, unconfirmed, duplicate, or policy-disallowed archived repositories are rejected before archive access.
-- Discovery, resolution, and archive requests carry no OAuth/PAT/writeback authorization. The separate writeback credential is structurally unavailable to the resolver and cannot be selected as a fallback.
+- Discovery, resolution, and archive requests carry no OAuth/PAT authorization. Credentials are structurally unavailable to the resolver and cannot be selected as a fallback.
 - Resolver archives are requested only by a validated full commit SHA. Every redirect and final URL must match the exact allowlisted codeload owner/repository/archive-format/full-SHA identity; unrelated repositories, SHAs, malformed paths, query/fragment/userinfo, hostile hosts, and second redirects fail before body consumption. Archive readers also reject absolute/parent/backslash paths, duplicate normalized paths, non-regular entries, symbolic/hard links, devices, oversized compressed/expanded streams, excessive entries/files, and deadline/cancellation violations. No raw archive or staging path is included in an API response, event, log, or runtime row.
 - GitHub rate metadata is sanitized and stored centrally. Anonymous REST/core budgets, reset timestamps, `Retry-After`, and secondary-limit pauses govern admission; the scheduler does not spin, repeatedly probe rate endpoints, or leak upstream headers to the browser.
 - Durable batch state and the bounded resolution cache store only safe IDs/metadata, immutable commits, stage/state, bounded counts/timestamps, retry reason, event payloads, expiry, and validated normalized terminal results. They never store repository bodies, archive bytes, prompt bodies, provider bodies, credentials, or raw incomplete model output. Cached exact-SHA resolution permits forward progress across anonymous rate resets without ref drift.
@@ -347,7 +333,7 @@ This section records the migration source. ADR-028 removes these reachable OAuth
 
 ## 17. Legacy GitHub OAuth setup (0.1.8–0.2.0; removed in 0.2.1)
 
-This historical section is retained only to explain migration scope. OAuth setup, callback, connection, and browser-entered public-read PAT controls are removed; compatibility routes return `410 GITHUB_PUBLIC_READ_CREDENTIALS_REMOVED` and never process credentials.
+Historical migration text is archived in [SECURITY_HISTORY.md](../legacy/docs/SECURITY_HISTORY.md).
 
 ## 18. External embedding and private-admin extension (0.1.9)
 
@@ -367,10 +353,9 @@ This historical section is retained only to explain migration scope. OAuth setup
 ## 20. GitHub public-read credential retirement (0.2.1)
 
 - The product accepts no GitHub OAuth authorization code, OAuth token, public-read PAT, client secret, callback configuration, or browser-entered GitHub read credential.
-- Legacy OAuth/PAT endpoints are non-redirecting and non-mutating during their bounded `410` compatibility window. They never parse/decrypt credential bodies, issue owner sessions, or disclose whether legacy encrypted state existed.
-- Runtime migration deletes OAuth transactions, GitHub connection identities, and `identity_public_read` / `public_read` credential rows without decrypting or logging them. Authentication, local-launch, password, session, draft, bundle, and independent writeback state are preserved transactionally.
+- Runtime migration deletes OAuth transactions, GitHub connection identities, and `identity_public_read` / `public_read` credential rows without decrypting or logging them. Authentication, local-launch, password, session, draft, and bundle state are preserved transactionally.
 - Public discovery and analysis use only fixed-origin unauthenticated REST metadata and immutable-full-SHA archives. Redirect/SSRF, response-size, timeout, path, link, archive-bomb, staging-cleanup, selected-only, and untrusted-content controls remain mandatory.
-- No discovery, resolution, preflight, or archive request may contain an authorization header or receive the writeback credential. Tests use writeback-secret canaries across every normal, retry, error, and cancellation path.
+- No discovery, resolution, preflight, or archive request may contain an authorization header. Tests use secret canaries across every normal, retry, error, and cancellation path.
 - Anonymous primary/secondary rate exhaustion produces only sanitized capacity/retry state, never a credential prompt. Manual authoring, validation, preview, copy, and download remain available immediately.
 - Pre-migration backups may contain encrypted legacy records and remain protected by the existing backup-retention and destruction policy.
 - Grant consumption, sole-owner creation/reuse, session creation, and competing-grant invalidation are one transaction. The durable owner may have no password in loopback mode. Moving that runtime to production fails readiness until the operator uses the host-only password command.

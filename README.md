@@ -72,11 +72,13 @@ In **Preview & share**, prepare and try locally, configure visitor access, downl
 
 To move public content to production, download `reponpc.yml`, keep custom character PNGs, paste and validate the YAML in the production admin's advanced editor, then upload/apply the PNGs in Character & animation. Set up model connections and keys again on the new host. Maintenance restore is for the same version and original data directory only; see [backup instructions](docs/OPERATIONS.md#11-backup-and-recovery) for full-data moves.
 
+Upgrade note (ADR-071): If an existing `.env` still contains `REPONPC_CONFIG_REPOSITORY` or `REPONPC_INDEX_MANIFEST_URL`, delete those lines.
+
 ## 給開發者與自行部署者
 
-## 進階：既有 CLI／GitHub Release 整合
+## 進階：CLI 與自行部署整合
 
-下列手動發布方式保留給既有部署；一般本機流程不需完成這些步驟。啟用本機模式後 Release 自動輪詢會停止，切回方式見 Operations。
+下列命令列步驟給自行部署到 Linux 正式主機的使用者；一般管理頁流程不需完成這些步驟。
 
 ### 1. 寫下你想展示的內容
 
@@ -115,13 +117,14 @@ chmod 700 secrets
 chmod 600 secrets/reponpc_ip_hash_key
 ```
 
-Windows Docker Desktop 從 Windows 檔案系統 bind mount 的 secret，在 Linux 容器內會呈現群組／其他使用者可讀權限，因而被拒絕為 `unsafe_secret_permissions`。支援的正式主機是 Linux；僅供本機 Docker Desktop 評估時，可用直接的 `REPONPC_GITHUB_TOKEN`、`REPONPC_CHAT_API_KEY`、`REPONPC_EMBEDDING_API_KEY`、`REPONPC_IP_HASH_KEY`，並清空各自的 `_FILE`，兩種形式不可並用。
+Windows Docker Desktop 從 Windows 檔案系統 bind mount 的 secret，在 Linux 容器內會呈現群組／其他使用者可讀權限，因而被拒絕為 `unsafe_secret_permissions`。支援的正式主機是 Linux；僅供本機 Docker Desktop 評估時，可用直接的 `REPONPC_CHAT_API_KEY`、`REPONPC_EMBEDDING_API_KEY`、`REPONPC_IP_HASH_KEY`，並清空各自的 `_FILE`，兩種形式不可並用。
 
 接著至少修改 `.env` 中這些設定：
 
+升級提醒（ADR-071）：若既有 `.env` 仍含 `REPONPC_CONFIG_REPOSITORY` 或 `REPONPC_INDEX_MANIFEST_URL`，請刪除這些行。
+
 - `REPONPC_PUBLIC_BASE_URL`、`REPONPC_TRUSTED_HOSTS`
 - `REPONPC_ADMIN_ORIGINS`：正式部署的私人管理 origin；啟用訪客 gateway 必須明確填寫。
-- `REPONPC_CONFIG_REPOSITORY`、`REPONPC_INDEX_MANIFEST_URL`
 - `REPONPC_CHAT_PROVIDER`、`REPONPC_CHAT_BASE_URL`、`REPONPC_CHAT_MODEL`
 - `REPONPC_EMBEDDING_PROVIDER`、`REPONPC_EMBEDDING_BASE_URL`、`REPONPC_EMBEDDING_MODEL`
 
@@ -141,18 +144,9 @@ uv run reponpc index build --config reponpc.yml --output dist
 
 索引所使用的 embedding provider、模型、維度與前綴必須和 runtime 完全一致，否則 bundle 不會啟用。
 
-### 4. 發布索引並啟動網站
+### 4. 啟動網站並準備本機 bundle
 
-建議在自己的部署 repository 建立 GitHub Actions workflow，驗證並發布 bundle 到 GitHub Release；確認資產可讀與 checksum 正確後，最後才更新 `stable-manifest.json`。公開 source 不附帶 `.github/workflows/`，手動執行相同兩階段發布的命令為：
-
-```bash
-uv run reponpc index publish --bundle-dir dist
-uv run reponpc index publish-manifest --bundle-dir dist
-```
-
-這兩個命令需要先依 [操作手冊](docs/OPERATIONS.md) 設好 GitHub repository、權限與發布環境。不要覆寫既有 release asset，也不要在 bundle 尚未驗證前更新 stable manifest。
-
-有可用 manifest 後，在正式 Linux 主機啟動應用程式：
+在正式 Linux 主機啟動應用程式，再到管理介面的 Preview & share 準備並驗證本機 bundle；驗證失敗時會保留上一個可用 bundle。上一步 `index build` 的輸出只供本機檢查，正式主機不會讀取。
 
 ```bash
 docker compose build --pull
@@ -187,7 +181,7 @@ docker compose exec app reponpc admin setup-code
 > [!WARNING]
 > 不要把 `/admin` 或 `/api/admin/*` 直接公開到 Internet。特殊或高編號 port 不是安全控制；正式環境應由 reverse proxy 只公開訪客路由，並把管理路由限制在私人網路。
 
-完整的 HTTPS、GitHub 寫回權限、匿名讀取額度、備份、更新、rollback 與故障排除方式請參閱 [操作手冊](docs/OPERATIONS.md)。
+完整的 HTTPS、匿名讀取額度、備份、更新、rollback 與故障排除方式請參閱 [操作手冊](docs/OPERATIONS.md)。
 
 管理工作區的「維護」可建立密碼加密的 `.reponpc-backup`，檢查並確認還原、
 回復保留的前一份網站資料，以及停止訪客 gateway。備份密碼每次輸入，送出後清除。
@@ -228,11 +222,11 @@ RepoNPC 只顯示操作說明；關閉 gateway 不代表 Funnel 已停用。管�
 
 ### 模型可以修改我的程式碼嗎？
 
-不可以。LLM 沒有 shell、工具、檔案系統、repository 寫入或任意網路能力。GitHub 設定回寫由後端以獨立權限和衝突檢查處理。
+不可以。LLM 沒有 shell、工具、檔案系統、repository 寫入或任意網路能力。公開設定必須由擁有者在管理頁確認後下載或發布。
 
 ### GitHub 匿名讀取額度或模型不可用時，還能編輯作品集嗎？
 
-可以。你仍可手動輸入貢獻、驗證、預覽、複製或下載 YAML。模型分析是可選的建議功能，GitHub writeback 也不是本機編輯的必要條件；匿名 GitHub REST 達到限制時只需稍後重試分析。
+可以。你仍可手動輸入貢獻、驗證、預覽、複製或下載 YAML。模型分析是可選的建議功能，本機編輯不需要額外 GitHub 權限；匿名 GitHub REST 達到限制時只需稍後重試分析。
 
 ### 更新索引失敗會讓網站壞掉嗎？
 
@@ -260,7 +254,7 @@ RepoNPC 只顯示操作說明；關閉 gateway 不代表 Funnel 已停用。管�
 - 搜尋：SQLite FTS5、NumPy、向量檢索、RRF
 - 程式碼解析：Tree-sitter（Python、JavaScript／TypeScript、Go、Rust）
 - 模型：Ollama、vLLM、OpenAI-compatible chat／embedding profiles
-- 發布：本機驗證與啟用；GitHub Actions／Releases／stable manifest 為既有進階整合
+- 發布：本機驗證、啟用與手動 Pages 分享；遠端 Release 與 manifest 路徑已由 ADR-071 移除
 - 部署：單一 RepoNPC application image、Docker Compose、持久化 SQLite
 
 ## v1 刻意不做的事

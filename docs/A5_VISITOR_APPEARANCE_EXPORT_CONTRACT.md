@@ -426,8 +426,7 @@ The owner-approved 2026-10-12 [README export amendment](PROFILE_README_EXPORT_CO
 makes complete README download the final sharing primary action. It uses the
 verified snapshot and checked Pages GIF, while the manual card-image upload and
 copy-block path remains available. A5 Markdown points to the corresponding
-verified Pages URL. Retain the explicit legacy operator-managed sharing path
-without labeling it as verified A5. No GitHub write or public activation occurs.
+verified Pages URL only. No GitHub write or public activation occurs.
 
 Migration 33, `pages_sharing_state`, stores the configured Pages URL and the
 three fields describing the last successful remote verification. It has no
