@@ -10,7 +10,7 @@ import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Final
+from typing import Final, Literal
 
 from argon2 import PasswordHasher, Type
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
@@ -731,6 +731,28 @@ class AdminSessionService:
 
 def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def admin_owner_state(
+    database: RuntimeDatabase,
+) -> Literal["setup_required", "password_required", "ready"]:
+    """Return host onboarding state without exposing owner credentials."""
+
+    try:
+        with database.connection() as connection:
+            if (
+                connection.execute(
+                    "SELECT 1 FROM admin_owner WHERE state_key = 'current'"
+                ).fetchone()
+                is None
+            ):
+                return "setup_required"
+            method = connection.execute(
+                "SELECT 1 FROM admin_auth_methods WHERE method = 'local_password'"
+            ).fetchone()
+    except sqlite3.Error as exc:
+        raise RuntimeDatabaseError("runtime_admin_setup_failed") from exc
+    return "ready" if method is not None else "password_required"
 
 
 def issue_admin_setup_code(

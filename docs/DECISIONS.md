@@ -712,7 +712,7 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
 
 ## ADR-070: Windows production mode on the owner's own computer
 
-- **Status:** Accepted; owner-approved 2026-10-20 with decisions D1–D7 as recommended in [the Windows production plan](WINDOWS_PRODUCTION_PLAN_2026-10-20.md). Implementation rounds W1–W3 and the real-host test are pending.
+- **Status:** Accepted; owner-approved 2026-10-20 with decisions D1–D7 as recommended in [the Windows production plan](WINDOWS_PRODUCTION_PLAN_2026-10-20.md). W1 and W2 are implemented; W3 and the real-host test are pending.
 - **Why:** ADR-048 and the A1 gateway contract approve a Windows installation whose owner enables Funnel, but both Windows entry points force `loopback_evaluation`, and the visitor gateway starts only in `production`. Windows also skips every private-file permission check: secret files, `model-secrets/master.key`, the IP key and the 0600/0700 writes are enforced only where POSIX modes exist. A data directory inside a checkout inherits `Authenticated Users` and `Users` access from a non-system drive root.
 - **Decision:** Windows production is the existing `production` profile with:
   - the application on `127.0.0.1`;
@@ -730,7 +730,7 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
   - **D4:** on Windows, it uses advapi32 through ctypes, with no new dependency. The DACL may grant access only to the current user, SYSTEM and Administrators. Inheritance is disabled at creation, and an allow entry for any other account, explicit or inherited, is rejected. Windows enforces the check only in `production`, so existing trial data keeps working; POSIX checks are unchanged.
   - It applies to secret files (`unsafe_secret_permissions`), the model secret key (`MODEL_SECRET_STORAGE_UNAVAILABLE`) and, in Windows production, the data directory root (`REPONPC_DATA_DIR` with the existing `unsafe_secret_permissions`).
   - The Windows secret root defaults to `<data_dir>\private`. Launchers pass `_FILE` paths instead of copying secret values into the environment.
-  - **D5:** for an existing over-broad data directory, the launcher stops and shows one `icacls` command for the owner to run; it does not change ACLs itself.
+  - **D5:** for an existing over-broad data directory, the launcher stops and shows one `icacls` command for the owner to run; it does not change ACLs itself. The command is built from the path's DACL: the data directory root gets the protected three-account grant plus `/remove:g` for any other explicit account; a child path under an owner-only root gets `/reset /T`.
 - **Boundaries:**
   - No new profile, public bind, API field, error code or Tailscale automation.
   - Windows Docker Desktop production, Windows services and non-loopback administration remain unsupported.

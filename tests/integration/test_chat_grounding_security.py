@@ -188,14 +188,19 @@ def test_prepared_public_no_match_reaches_json_stream_once(
     import reponpc.main as runtime_main
     from reponpc.api.public import SetupState
     from reponpc.config.environment import load_environment
-    from reponpc.windows_launcher import _environment, _identity_key
+    from reponpc.windows_launcher import _environment, prepare_data_directory
 
     question_canary = "QUESTION_CANARY_a617"
     answer_canary = "OUTPUT_CANARY_b728"
     stream = io.StringIO()
     monkeypatch.setattr(sys, "stderr", stream)
     settings = load_environment(
-        _environment(tmp_path, _identity_key(tmp_path), 18240),
+        _environment(
+            tmp_path,
+            prepare_data_directory(tmp_path, production=False),
+            18240,
+            "loopback_evaluation",
+        ),
         secret_roots=(tmp_path / "private",),
     )
     monkeypatch.setattr(runtime_main, "app", runtime_main.create_app())

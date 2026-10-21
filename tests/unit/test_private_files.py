@@ -8,9 +8,11 @@ from pathlib import Path
 import pytest
 
 from reponpc.config.private_files import (
+    _disallowed_explicit_sids,
     _evaluate_owner_only_acl,
     is_owner_only,
     restrict_owner_only,
+    windows_owner_only_repair,
 )
 
 USER = "S-1-5-21-100-200-300-400"
@@ -35,6 +37,43 @@ def test_acl_logic_accepts_owner_rights_only_with_an_allowed_owner() -> None:
     entries = [(0, 3, SYSTEM), (0, 3, ADMINS), (0, 3, "S-1-3-4")]
     assert _evaluate_owner_only_acl(USER, entries, USER) is True
     assert _evaluate_owner_only_acl("S-1-5-32-545", entries, USER) is False
+
+
+def test_repair_removes_only_explicit_entries_for_other_accounts() -> None:
+    entries = [
+        (0, 0, USER),
+        (0, 0, SYSTEM),
+        (0, 0, ADMINS),
+        (0, 0, "S-1-3-4"),
+        (0, 0, "S-1-5-32-545"),
+        (0, 0x10, "S-1-5-11"),
+        (1, 0, "S-1-1-0"),
+        (0, 8, CREATOR),
+        (0, 3, "S-1-5-32-545"),
+    ]
+    assert _disallowed_explicit_sids(entries, USER) == ["S-1-5-32-545", CREATOR]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows DACL behavior only")
+@pytest.mark.parametrize("inheritance", ["", "(OI)(CI)"])
+def test_windows_repair_command_makes_a_broadened_directory_owner_only(
+    tmp_path: Path, inheritance: str
+) -> None:
+    directory = tmp_path / "data"
+    directory.mkdir()
+    (directory / "child.txt").write_text("x", encoding="utf-8")
+    for sid in ("S-1-5-32-545", "S-1-5-11"):
+        subprocess.run(
+            ["icacls", str(directory), "/grant", f"*{sid}:{inheritance}(R)"],
+            check=True,
+            capture_output=True,
+        )
+    assert not is_owner_only(directory, posix_forbidden_mode=0)
+
+    subprocess.run(windows_owner_only_repair(directory), check=True, capture_output=True)
+
+    assert is_owner_only(directory, posix_forbidden_mode=0)
+    assert is_owner_only(directory / "child.txt", posix_forbidden_mode=0)
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows DACL behavior only")

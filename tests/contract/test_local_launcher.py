@@ -91,6 +91,95 @@ def test_local_launcher_reconciles_only_owned_stale_processes() -> None:
     assert "[string]$State.started_at" in script
 
 
+def test_local_launcher_selects_only_explicit_supported_profiles() -> None:
+    script = POWERSHELL_LAUNCHER.read_text(encoding="utf-8")
+    profile_read = script.index(
+        '$deploymentProfile = Get-ProcessEnvironmentValue "REPONPC_DEPLOYMENT_PROFILE"'
+    )
+    assert script.index('Import-RepoNpcDotEnv (Join-Path $repoRoot ".env")') < profile_read
+    assert "if ([string]::IsNullOrEmpty($deploymentProfile)) {" in script
+    assert '$deploymentProfile = "loopback_evaluation"' in script
+    assert '$deploymentProfile -cnotin @("loopback_evaluation", "production")' in script
+    assert 'throw "REPONPC_DEPLOYMENT_PROFILE must be loopback_evaluation or production."' in script
+    assert 'Set-ProcessEnvironmentValue "REPONPC_DEPLOYMENT_PROFILE" $deploymentProfile' in script
+    assert (
+        'Set-ProcessEnvironmentValue "REPONPC_DEPLOYMENT_PROFILE" "loopback_evaluation"'
+        not in script
+    )
+
+
+def test_local_launcher_separates_trial_and_production_preparation() -> None:
+    script = POWERSHELL_LAUNCHER.read_text(encoding="utf-8")
+    start = script.index('    if ($deploymentProfile -eq "loopback_evaluation") {')
+    end = script.index("    $pythonExe = Join-Path", start)
+    trial, production = script[start:end].split("    else {", 1)
+    for statement in (
+        "[IO.Directory]::CreateDirectory($resolvedDataDir)",
+        'Set-ProcessEnvironmentValue "REPONPC_ENV" "development"',
+        "Import-LocalSecretFiles",
+        "Ensure-LocalIpHashKey",
+    ):
+        assert statement in trial and statement not in production
+    assert 'Set-ProcessEnvironmentValue "REPONPC_ENV" "production"' in production
+    assert 'Set-ProcessEnvironmentValue "REPONPC_ADMIN_ORIGINS" $baseUrl' in production
+    for name in ("REPONPC_CHAT_API_KEY", "REPONPC_EMBEDDING_API_KEY", "REPONPC_IP_HASH_KEY"):
+        assert f'"{name}"' in production
+    assert "$configuredDirectSecrets = @($directSecretNames | Where-Object {" in production
+    assert "IsNullOrEmpty((Get-ProcessEnvironmentValue $_))" in production
+    assert '$configuredDirectSecrets -join ", "' in production
+    assert "file under $resolvedDataDir\\private and use the _FILE variable." in production
+    assert '$fileName = $name + "_FILE"' in production
+    assert "Join-Path $repoRoot $fileValue" in production
+    assert (
+        "Set-ProcessEnvironmentValue $fileName ([IO.Path]::GetFullPath($fileValue))" in production
+    )
+
+
+def test_local_launcher_production_uses_shared_helpers_after_python_sync() -> None:
+    script = POWERSHELL_LAUNCHER.read_text(encoding="utf-8")
+    preparation_start = script.index('    if ($deploymentProfile -eq "production") {')
+    preparation_end = script.index("    if (-not $SkipBuild", preparation_start)
+    preparation = script[preparation_start:preparation_end]
+    assert script.index("& $uv @syncArguments") < preparation_start
+    assert "prepare_data_directory(Path(sys.argv[1]), production=True)" in preparation
+    assert "except UnsafeDataDirectory as exc:" in preparation
+    assert "print(owner_only_fix_command(exc.path, root=exc.root))" in preparation
+    assert "sys.exit(3)" in preparation
+    assert "$preparationExitCode -eq 3" in preparation
+    assert "$pythonExe -c $prepareDataDirectory $resolvedDataDir" in preparation
+    assert (
+        'Set-ProcessEnvironmentValue "REPONPC_IP_HASH_KEY_FILE" ([string]$preparationOutput[0])'
+        in preparation
+    )
+    assert 'IsNullOrEmpty((Get-ProcessEnvironmentValue "REPONPC_IP_HASH_KEY_FILE"))' in preparation
+    console_start = script.index(
+        '    if ($deploymentProfile -eq "production" -and -not $SmokeTest) {'
+    )
+    console_end = script.index("    $startedHere", console_start)
+    console = script[console_start:console_end]
+    assert script.index("if ($environmentExitCode -ne 0)") < console_start
+    assert "run_owner_console(Path(sys.argv[1]), environ=os.environ)" in console
+    assert "& $pythonExe -c $ownerConsole $resolvedDataDir\n" in console
+    assert "2>&1" not in console and "RedirectStandard" not in console
+    assert "Production owner setup was not completed." in console
+
+
+def test_local_launcher_only_trial_issues_fragment_grants() -> None:
+    script = POWERSHELL_LAUNCHER.read_text(encoding="utf-8")
+    start = script.index(
+        '    if ($deploymentProfile -eq "loopback_evaluation") {\n        $launchOutput'
+    )
+    end = script.index("    if ($SmokeTest)", start)
+    trial, production = script[start:end].split("    else {", 1)
+    assert "admin launch-token --data-dir" in trial
+    assert "#local-launch=" in trial
+    assert "admin launch-token" not in script[:start] + production + script[end:]
+    assert "#local-launch=" not in script[:start] + production + script[end:]
+    assert '$adminUrl = "$baseUrl/admin"' in production
+    assert "Start-Process -FilePath $adminUrl" in script[end:]
+    assert "Write-Host $adminUrl" in script[end:]
+
+
 @pytest.mark.parametrize(
     ("config", "missing_executable", "needs_sync"),
     [

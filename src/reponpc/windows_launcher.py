@@ -3,18 +3,26 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import secrets
 import socket
 import stat
+import sys
 import threading
 import time
 import webbrowser
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from http.client import HTTPConnection
 from pathlib import Path
 from typing import Any
+
+from reponpc.config.private_files import (
+    is_owner_only,
+    restrict_owner_only,
+    windows_owner_only_repair,
+)
 
 _START_TIMEOUT = 30.0
 _STOP_TIMEOUT = 35.0
@@ -22,6 +30,25 @@ _STOP_TIMEOUT = 35.0
 
 class _LauncherError(Exception):
     """An internal failure whose details must not reach the console."""
+
+
+class UnsafeDataDirectory(_LauncherError):
+    """A private runtime path needs an explicit owner ACL repair."""
+
+    def __init__(self, path: Path, *, root: bool) -> None:
+        self.path = path
+        self.root = root
+        super().__init__("runtime path is not owner-only")
+
+
+def owner_only_fix_command(path: Path, *, root: bool) -> str:
+    """Return the owner-run repair (D5); RepoNPC never changes existing ACLs."""
+
+    if not root:
+        # The root already passed, so inheriting from it is owner-only. Inheritance
+        # flags on a file would drop the grants instead of applying them.
+        return f'icacls "{path}" /reset /T'
+    return windows_owner_only_repair(path)
 
 
 def _port(value: str) -> int:
@@ -53,10 +80,26 @@ def _check_directory(path: Path) -> None:
             raise _LauncherError
 
 
-def _identity_key(data_dir: Path) -> Path:
+def prepare_data_directory(data_dir: Path, *, production: bool) -> Path:
+    """Prepare new private paths, but never repair existing permissions implicitly."""
+
+    _check_directory(data_dir)
+    if not data_dir.exists():
+        data_dir.mkdir(parents=True, mode=0o700)
+        restrict_owner_only(data_dir)
+    if (
+        production
+        and sys.platform == "win32"
+        and not is_owner_only(data_dir, posix_forbidden_mode=0)
+    ):
+        raise UnsafeDataDirectory(data_dir, root=True)
     private = data_dir / "private"
     _check_directory(private)
-    private.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if not private.exists():
+        private.mkdir(mode=0o700)
+        restrict_owner_only(private)
+    if production and not is_owner_only(private, posix_forbidden_mode=0o077):
+        raise UnsafeDataDirectory(private, root=False)
     key_file = private / "ip-hash-key"
     try:
         descriptor = os.open(
@@ -71,6 +114,7 @@ def _identity_key(data_dir: Path) -> Path:
             stream.write(secrets.token_hex(32))
             stream.flush()
             os.fsync(stream.fileno())
+        restrict_owner_only(key_file)
     metadata = key_file.lstat()
     if (
         key_file.is_symlink()
@@ -78,8 +122,11 @@ def _identity_key(data_dir: Path) -> Path:
         or not stat.S_ISREG(metadata.st_mode)
         or metadata.st_nlink != 1
         or metadata.st_size != 64
-        or (os.name != "nt" and metadata.st_mode & 0o077)
     ):
+        raise _LauncherError
+    if production and not is_owner_only(key_file, posix_forbidden_mode=0o077):
+        raise UnsafeDataDirectory(key_file, root=False)
+    if not production and os.name != "nt" and metadata.st_mode & 0o077:
         raise _LauncherError
     try:
         with key_file.open("rb") as stream:
@@ -89,6 +136,67 @@ def _identity_key(data_dir: Path) -> Path:
     except UnicodeError, ValueError:
         raise _LauncherError from None
     return key_file
+
+
+def run_owner_console(
+    data_dir: Path,
+    *,
+    environ: Mapping[str, str],
+    read_password: Callable[[str], str] = getpass.getpass,
+    write: Callable[[str], object] = print,
+) -> bool:
+    """Complete host-only production onboarding without logging credentials."""
+
+    from reponpc.admin.auth import (
+        AdminAuthError,
+        admin_owner_state,
+        issue_admin_setup_code,
+        set_admin_recovery_password,
+    )
+    from reponpc.runtime.database import RuntimeDatabase
+
+    database = RuntimeDatabase(data_dir)
+    database.initialize()
+    if environ.get("REPONPC_ADMIN_USERNAME") and environ.get("REPONPC_ADMIN_PASSWORD_HASH"):
+        return True
+    state = admin_owner_state(database)
+    if state == "setup_required":
+        code = issue_admin_setup_code(database)
+        write(
+            "首次擁有者設定碼(只在此顯示, 有效 15 分鐘):\n"
+            "First-owner setup code (shown only here, valid for 15 minutes):\n"
+            f"{code}"
+        )
+        return True
+    if state == "ready":
+        return True
+    write(
+        "正式模式登入前, 必須先設定至少 15 字元的密碼。\n"
+        "Set a password of at least 15 characters before production sign-in."
+    )
+    for _ in range(3):
+        try:
+            password = read_password("新密碼 / New password: ")
+            confirmation = read_password("確認新密碼 / Confirm new password: ")
+        except EOFError, KeyboardInterrupt:
+            return False
+        if password != confirmation:
+            write("密碼不一致, 請重試。 Passwords do not match; try again.")
+            continue
+        try:
+            set_admin_recovery_password(
+                database, username=None, password=password, deployment_profile="production"
+            )
+        except AdminAuthError:
+            write(
+                "無法設定密碼, 請使用符合正式模式政策的密碼重試(15-128 字元, 避開常見密碼)。\n"
+                "Password could not be set; retry with 15-128 characters "
+                "and avoid common passwords."
+            )
+            continue
+        write("密碼已設定。 Password set successfully.")
+        return True
+    return False
 
 
 def _reserve_socket(port: int) -> socket.socket:
@@ -103,11 +211,11 @@ def _reserve_socket(port: int) -> socket.socket:
         raise
 
 
-def _environment(data_dir: Path, key_file: Path, port: int) -> dict[str, str]:
+def _environment(data_dir: Path, key_file: Path, port: int, profile: str) -> dict[str, str]:
     origin = f"http://localhost:{port}"
     return {
         "REPONPC_ENV": "production",
-        "REPONPC_DEPLOYMENT_PROFILE": "loopback_evaluation",
+        "REPONPC_DEPLOYMENT_PROFILE": profile,
         "REPONPC_DATA_DIR": str(data_dir),
         "REPONPC_HOST": "127.0.0.1",
         "REPONPC_PORT": str(port),
@@ -195,10 +303,13 @@ def _issue_grant(database: Any) -> str:
     return issue_admin_local_launch_grant(database, deployment_profile="loopback_evaluation")
 
 
-def _open_admin(application: Any, port: int) -> None:
+def _open_admin(application: Any, port: int, profile: str) -> None:
     try:
-        grant = _issue_grant(application.state.runtime_database)
-        opened = webbrowser.open(f"http://localhost:{port}/admin#local-launch={grant}")
+        url = f"http://localhost:{port}/admin"
+        if profile == "loopback_evaluation":
+            grant = _issue_grant(application.state.runtime_database)
+            url += f"#local-launch={grant}"
+        opened = webbrowser.open(url)
         if not opened:
             print("無法開啟瀏覽器; 輸入 open 重試。 Browser unavailable; enter open to retry.")
     except Exception:
@@ -217,6 +328,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="RepoNPC local Windows launcher")
     parser.add_argument("--port", type=_port, default=0)
     parser.add_argument("--data-dir", type=Path)
+    parser.add_argument(
+        "--profile", choices=("loopback_evaluation", "production"), default="loopback_evaluation"
+    )
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--smoke-check", action="store_true", help="check health and exit")
     try:
@@ -233,7 +347,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         listener = _reserve_socket(options.port)
         port = listener.getsockname()[1]
         data_dir = _data_directory(options.data_dir)
-        key_file = _identity_key(data_dir)
+        key_file = prepare_data_directory(data_dir, production=options.profile == "production")
         saved_environment = {
             key: value
             for key, value in os.environ.items()
@@ -241,13 +355,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         for key in saved_environment:
             del os.environ[key]
-        os.environ.update(_environment(data_dir, key_file, port))
+        os.environ.update(_environment(data_dir, key_file, port, options.profile))
         application = _load_application(data_dir)
         if (
             getattr(application.state, "runtime_storage_usable", False) is not True
             or getattr(application.state, "runtime_database", None) is None
         ):
             raise _LauncherError
+        if (
+            options.profile == "production"
+            and not options.smoke_check
+            and not run_owner_console(data_dir, environ=os.environ)
+        ):
+            print(
+                "未完成擁有者設定, RepoNPC 未啟動。 "
+                "Owner setup was not completed; RepoNPC did not start."
+            )
+            return 2
         server = _make_server(application, port)
         failed = threading.Event()
 
@@ -262,17 +386,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         _wait_for_health(port, thread, failed)
         if not options.smoke_check:
             if not options.no_browser:
-                _open_admin(application, port)
+                _open_admin(application, port, options.profile)
             while thread.is_alive() and not failed.is_set():
                 command = input("o/open 開啟管理頁/Open admin; q/quit 結束/Quit: ").strip().lower()
                 if command in {"q", "quit"}:
                     break
                 if command in {"o", "open"} and not options.no_browser:
-                    _open_admin(application, port)
+                    _open_admin(application, port, options.profile)
             if failed.is_set() or not thread.is_alive():
                 raise _LauncherError
     except EOFError, KeyboardInterrupt:
         pass
+    except UnsafeDataDirectory as exc:
+        print(f"私密路徑權限過寬 / Private path is not owner-only: {exc.path}")
+        print(owner_only_fix_command(exc.path, root=exc.root))
+        result = 2
     except Exception:
         print("RepoNPC 無法啟動。 RepoNPC could not start.")
         result = 2

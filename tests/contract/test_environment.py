@@ -25,8 +25,13 @@ from reponpc.config.environment import (
     format_environment_error,
     load_environment,
 )
-from reponpc.config.private_files import is_owner_only
+from reponpc.config.private_files import is_owner_only, restrict_owner_only
 from reponpc.runtime.database import RuntimeDatabase
+from reponpc.windows_launcher import (
+    UnsafeDataDirectory,
+    owner_only_fix_command,
+    prepare_data_directory,
+)
 
 
 def deployment_environment(**overrides: str) -> dict[str, str]:
@@ -770,6 +775,56 @@ def _grant_users_read(path: Path, inheritance: str = "") -> None:
 
 
 @windows_only
+@pytest.mark.parametrize("production", [False, True])
+def test_launcher_creates_owner_only_runtime_paths(tmp_path: Path, production: bool) -> None:
+    data_dir = tmp_path / "new parent" / "data"
+    key_file = prepare_data_directory(data_dir, production=production)
+    assert key_file == data_dir / "private" / "ip-hash-key"
+    for path in (data_dir, data_dir / "private", key_file):
+        assert is_owner_only(path, posix_forbidden_mode=0o077)
+
+
+@windows_only
+def test_launcher_rejects_existing_broad_directory_without_changing_acl(tmp_path: Path) -> None:
+    data_dir = tmp_path / "existing data"
+    data_dir.mkdir()
+    restrict_owner_only(data_dir)
+    _grant_users_read(data_dir, "(OI)(CI)")
+    with pytest.raises(UnsafeDataDirectory) as raised:
+        prepare_data_directory(data_dir, production=True)
+    assert raised.value.path == data_dir
+    assert not is_owner_only(data_dir, posix_forbidden_mode=0)
+    assert not (data_dir / "private").exists()
+    assert prepare_data_directory(data_dir, production=False).is_file()
+    assert not is_owner_only(data_dir, posix_forbidden_mode=0)
+    assert raised.value.root
+    subprocess.run(owner_only_fix_command(data_dir, root=True), check=True, capture_output=True)
+    assert prepare_data_directory(data_dir, production=True).is_file()
+
+
+@windows_only
+@pytest.mark.parametrize("target", ["private", "key"])
+def test_launcher_rejects_existing_broad_private_paths_without_repair(
+    tmp_path: Path, target: str
+) -> None:
+    data_dir = tmp_path / "data"
+    key_file = prepare_data_directory(data_dir, production=True)
+    contents = key_file.read_bytes()
+    unsafe_path = data_dir / "private" if target == "private" else key_file
+    _grant_users_read(unsafe_path)
+    with pytest.raises(UnsafeDataDirectory) as raised:
+        prepare_data_directory(data_dir, production=True)
+    assert raised.value.path == unsafe_path
+    assert not is_owner_only(unsafe_path, posix_forbidden_mode=0o077)
+    assert prepare_data_directory(data_dir, production=False) == key_file
+    assert key_file.read_bytes() == contents
+    assert not raised.value.root
+    subprocess.run(owner_only_fix_command(unsafe_path, root=False), check=True, capture_output=True)
+    assert prepare_data_directory(data_dir, production=True) == key_file
+    assert key_file.read_bytes() == contents
+
+
+@windows_only
 def test_windows_production_rejects_a_secret_file_another_account_can_read(
     tmp_path: Path,
 ) -> None:
@@ -876,11 +931,16 @@ def test_windows_evaluation_starts_with_a_data_directory_other_accounts_can_read
     monkeypatch: pytest.MonkeyPatch,
     reponpc_logger: object,
 ) -> None:
-    from reponpc.windows_launcher import _environment, _identity_key
+    from reponpc.windows_launcher import _environment, prepare_data_directory
 
     _grant_users_read(tmp_path, "(OI)(CI)")
     settings = load_environment(
-        _environment(tmp_path, _identity_key(tmp_path), 18241),
+        _environment(
+            tmp_path,
+            prepare_data_directory(tmp_path, production=False),
+            18241,
+            "loopback_evaluation",
+        ),
         secret_roots=(tmp_path / "private",),
     )
     monkeypatch.setattr(main, "app", main.create_app())

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import socket
 import sys
 import threading
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -15,6 +17,14 @@ from typing import Any
 import pytest
 
 from reponpc import windows_launcher as launcher
+from reponpc.admin.auth import (
+    AdminSessionService,
+    admin_owner_state,
+    issue_admin_local_launch_grant,
+    set_admin_recovery_password,
+)
+from reponpc.config import private_files
+from reponpc.runtime.database import RuntimeDatabase
 
 
 class FakeServer:
@@ -145,7 +155,9 @@ def test_persistent_key_is_32_bytes_and_not_printed(
     key = tmp_path / "data" / "private" / "ip-hash-key"
     contents = key.read_text(encoding="ascii")
     assert len(contents) == 64 and len(bytes.fromhex(contents)) == 32
-    assert launcher._identity_key(tmp_path / "data").read_text() == contents
+    assert (
+        launcher.prepare_data_directory(tmp_path / "data", production=False).read_text() == contents
+    )
     assert contents not in capsys.readouterr().out
 
 
@@ -344,7 +356,10 @@ def test_installer_log_file_survives_maintenance_application_rebuild(
         if key.startswith("REPONPC_"):
             monkeypatch.delenv(key)
     for key, value in launcher._environment(
-        tmp_path, launcher._identity_key(tmp_path), 18240
+        tmp_path,
+        launcher.prepare_data_directory(tmp_path, production=False),
+        18240,
+        "loopback_evaluation",
     ).items():
         monkeypatch.setenv(key, value)
     monkeypatch.setattr(runtime_main, "app", runtime_main.create_app())
@@ -439,3 +454,293 @@ def test_real_uvicorn_disposable_health_smoke(
     assert launcher.main(arguments(tmp_path, "--smoke-check")) == 0
     assert requests == ["/healthz"]
     assert launcher._listener_stopped(ports[0])
+
+
+def _passwordless_owner(data_dir: Path) -> RuntimeDatabase:
+    database = RuntimeDatabase(data_dir)
+    database.initialize()
+    service = AdminSessionService(
+        database=database,
+        identity_hmac_key=b"k" * 32,
+        deployment_profile="loopback_evaluation",
+    )
+    grant = issue_admin_local_launch_grant(database, deployment_profile="loopback_evaluation")
+    service.consume_local_launch(grant=grant)
+    return database
+
+
+def test_admin_owner_state_three_states(tmp_path: Path) -> None:
+    database = RuntimeDatabase(tmp_path)
+    database.initialize()
+    assert admin_owner_state(database) == "setup_required"
+    _passwordless_owner(tmp_path)
+    assert admin_owner_state(database) == "password_required"
+    set_admin_recovery_password(database, username=None, password="example password 12345")
+    assert admin_owner_state(database) == "ready"
+
+
+def test_owner_console_setup_code_is_displayed_once_and_only_hash_stored(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from reponpc.admin import auth
+
+    issue = auth.issue_admin_setup_code
+    issued: list[str] = []
+    output: list[str] = []
+
+    def issue_once(database: RuntimeDatabase) -> str:
+        code = issue(database)
+        issued.append(code)
+        return code
+
+    monkeypatch.setattr(auth, "issue_admin_setup_code", issue_once)
+    caplog.set_level(logging.DEBUG)
+    assert launcher.run_owner_console(tmp_path, environ={}, write=output.append)
+    assert len(output) == 1
+    code = output[0].splitlines()[-1]
+    assert issued == [code]
+    assert len(code) == 43
+    assert "15 minutes" in output[0] and "15 分鐘" in output[0]
+    assert "shown only here" in output[0] and "只在此顯示" in output[0]
+    database = RuntimeDatabase(tmp_path)
+    with database.connection() as connection:
+        rows = connection.execute("SELECT * FROM admin_setup").fetchall()
+        assert len(rows) == 1
+        assert rows[0]["code_hash"] == hashlib.sha256(code.encode()).hexdigest()
+        assert datetime.fromisoformat(rows[0]["expires_at"]) - datetime.fromisoformat(
+            rows[0]["created_at"]
+        ) == timedelta(minutes=15)
+        assert code not in repr([tuple(row) for row in rows])
+        assert connection.execute("SELECT COUNT(*) FROM admin_owner").fetchone()[0] == 0
+    assert code not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "attempts",
+    [
+        ["example password 12345"] * 2,
+        ["short", "short", "example password 12345", "example password 12345"],
+        ["mismatch canary", "other canary", "example password 12345", "example password 12345"],
+    ],
+)
+def test_owner_console_sets_password_and_retries_safely(
+    tmp_path: Path, attempts: list[str], caplog: pytest.LogCaptureFixture
+) -> None:
+    database = _passwordless_owner(tmp_path)
+    output: list[str] = []
+    prompts: list[str] = []
+    replies = iter(attempts)
+
+    def read_password(prompt: str) -> str:
+        prompts.append(prompt)
+        return next(replies)
+
+    caplog.set_level(logging.DEBUG)
+    assert launcher.run_owner_console(
+        tmp_path, environ={}, read_password=read_password, write=output.append
+    )
+    assert len(prompts) == len(attempts)
+    assert admin_owner_state(database) == "ready"
+    service = AdminSessionService(database=database, identity_hmac_key=b"k" * 32)
+    assert service.auth_methods().password_available
+    service.login(username="local-owner", password=attempts[-1], remote_identity="console-test")
+    assert "Password set successfully" in output[-1]
+    for password in attempts:
+        assert password not in "\n".join(output + prompts) + caplog.text
+
+
+@pytest.mark.parametrize("mismatch", [False, True])
+def test_owner_console_stops_after_three_failures_without_password_method(
+    tmp_path: Path, mismatch: bool, caplog: pytest.LogCaptureFixture
+) -> None:
+    database = _passwordless_owner(tmp_path)
+    output: list[str] = []
+    reads: list[str] = []
+
+    def read_password(prompt: str) -> str:
+        reads.append(prompt)
+        return "different canary" if mismatch and len(reads) % 2 == 0 else "short canary"
+
+    assert not launcher.run_owner_console(
+        tmp_path, environ={}, read_password=read_password, write=output.append
+    )
+    assert len(reads) == 6
+    assert admin_owner_state(database) == "password_required"
+    with database.connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM admin_auth_methods").fetchone()[0] == 0
+    assert "short canary" not in "\n".join(output) + caplog.text
+    assert "different canary" not in "\n".join(output) + caplog.text
+
+
+@pytest.mark.parametrize("exception", [EOFError, KeyboardInterrupt])
+@pytest.mark.parametrize("interrupt_at", [1, 2])
+def test_owner_console_interrupt_never_sets_password(
+    tmp_path: Path, exception: type[BaseException], interrupt_at: int
+) -> None:
+    database = _passwordless_owner(tmp_path)
+    reads: list[str] = []
+
+    def read_password(prompt: str) -> str:
+        reads.append(prompt)
+        if len(reads) == interrupt_at:
+            raise exception
+        return "example password 12345"
+
+    assert not launcher.run_owner_console(
+        tmp_path, environ={}, read_password=read_password, write=lambda message: None
+    )
+    assert admin_owner_state(database) == "password_required"
+
+
+@pytest.mark.parametrize("existing_owner", [False, True])
+def test_owner_console_environment_credentials_are_silent(
+    tmp_path: Path, existing_owner: bool
+) -> None:
+    if existing_owner:
+        _passwordless_owner(tmp_path)
+    output: list[str] = []
+
+    def forbidden(prompt: str) -> str:
+        pytest.fail("environment credentials must not prompt")
+
+    assert launcher.run_owner_console(
+        tmp_path,
+        environ={"REPONPC_ADMIN_USERNAME": "example", "REPONPC_ADMIN_PASSWORD_HASH": "example"},
+        read_password=forbidden,
+        write=output.append,
+    )
+    assert output == []
+    with RuntimeDatabase(tmp_path).connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM admin_setup").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("name", ["REPONPC_ADMIN_USERNAME", "REPONPC_ADMIN_PASSWORD_HASH"])
+def test_owner_console_partial_environment_credentials_do_not_bypass_setup(
+    tmp_path: Path, name: str
+) -> None:
+    output: list[str] = []
+    assert launcher.run_owner_console(tmp_path, environ={name: "example"}, write=output.append)
+    assert len(output) == 1 and "First-owner setup code" in output[0]
+
+
+def test_owner_console_ready_owner_is_silent(tmp_path: Path) -> None:
+    database = _passwordless_owner(tmp_path)
+    set_admin_recovery_password(database, username=None, password="example password 12345")
+
+    def forbidden(*args: Any) -> Any:
+        pytest.fail("ready owner must not prompt or print")
+
+    assert launcher.run_owner_console(
+        tmp_path, environ={}, read_password=forbidden, write=forbidden
+    )
+
+
+def test_invalid_profile_has_no_startup_side_effects(
+    harness: SimpleNamespace, tmp_path: Path
+) -> None:
+    assert launcher.main(arguments(tmp_path, "--profile", "invalid")) == 2
+    assert not (tmp_path / "data").exists() and not harness.ports
+
+
+@pytest.mark.parametrize("profile", ["loopback_evaluation", "production"])
+def test_explicit_profile_and_production_browser_never_issues_grants(
+    harness: SimpleNamespace, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, profile: str
+) -> None:
+    consoles: list[tuple[Path, str]] = []
+    commands = iter(["open", "q"])
+    monkeypatch.setattr("builtins.input", lambda prompt: next(commands))
+
+    def console(data_dir: Path, *, environ: Any) -> bool:
+        assert not harness.server.sockets
+        consoles.append((data_dir, environ["REPONPC_DEPLOYMENT_PROFILE"]))
+        return True
+
+    def forbidden(database: Any) -> str:
+        pytest.fail("production must never issue a local-launch grant")
+
+    monkeypatch.setattr(launcher, "run_owner_console", console)
+    if profile == "production":
+        monkeypatch.setattr(launcher, "_issue_grant", forbidden)
+    assert launcher.main(arguments(tmp_path, "--profile", profile)) == 0
+    assert harness.observed["REPONPC_DEPLOYMENT_PROFILE"] == profile
+    assert harness.observed["REPONPC_ADMIN_ORIGINS"] == f"http://localhost:{harness.ports[0]}"
+    if profile == "production":
+        assert consoles == [(tmp_path / "data", "production")]
+        assert harness.urls == [f"http://localhost:{harness.ports[0]}/admin"] * 2
+        assert not harness.grants
+    else:
+        assert not consoles
+        assert len(harness.grants) == 2
+
+
+def test_production_console_failure_prevents_server_construction(
+    harness: SimpleNamespace, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def forbidden(*args: Any) -> Any:
+        pytest.fail("cancelled owner setup must not construct a server")
+
+    monkeypatch.setattr(launcher, "run_owner_console", lambda *args, **kwargs: False)
+    monkeypatch.setattr(launcher, "_make_server", forbidden)
+    assert launcher.main(arguments(tmp_path, "--profile", "production")) == 2
+    assert not harness.urls and not harness.grants and not harness.server.sockets
+    assert launcher._listener_stopped(harness.ports[0])
+
+
+def test_production_smoke_skips_owner_console_and_grants(
+    harness: SimpleNamespace, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("production smoke must not prompt, issue grants or open a browser")
+
+    monkeypatch.setattr(launcher, "run_owner_console", forbidden)
+    monkeypatch.setattr(launcher, "_issue_grant", forbidden)
+    monkeypatch.setattr(launcher.webbrowser, "open", forbidden)
+    assert launcher.main(arguments(tmp_path, "--profile", "production", "--smoke-check")) == 0
+    assert harness.server.sockets and launcher._listener_stopped(harness.ports[0])
+
+
+@pytest.mark.parametrize(
+    ("relative", "root", "expected"),
+    [
+        (
+            "existing data",
+            True,
+            'icacls "{path}" /inheritance:r /grant:r '
+            '"*S-1-5-21-123-456-789-1001:(OI)(CI)F" '
+            '"*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" /remove:g "*S-1-5-32-545"',
+        ),
+        ("existing data/private", False, 'icacls "{path}" /reset /T'),
+    ],
+)
+def test_unsafe_production_path_reports_exact_repair_and_does_not_load_app(
+    harness: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: Any,
+    relative: str,
+    root: bool,
+    expected: str,
+) -> None:
+    unsafe_path = tmp_path / relative
+    monkeypatch.setattr(private_files, "_current_user_sid", lambda: "S-1-5-21-123-456-789-1001")
+    monkeypatch.setattr(
+        private_files,
+        "_read_windows_acl",
+        lambda path: (
+            "S-1-5-21-123-456-789-1001",
+            [(0, 0, "S-1-5-32-545"), (0, 0x10, "S-1-5-11")],
+            True,
+        ),
+    )
+
+    def prepare(data_dir: Path, *, production: bool) -> Path:
+        assert production
+        raise launcher.UnsafeDataDirectory(unsafe_path, root=root)
+
+    monkeypatch.setattr(launcher, "prepare_data_directory", prepare)
+    assert launcher.main(arguments(tmp_path, "--profile", "production")) == 2
+    output = capsys.readouterr().out.splitlines()
+    assert len(output) == 2
+    assert str(unsafe_path) in output[0]
+    assert output[1] == expected.format(path=unsafe_path)
+    assert not harness.ports and not harness.server.sockets and not harness.urls

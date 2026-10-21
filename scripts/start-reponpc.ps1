@@ -407,6 +407,15 @@ function Invoke-RepoNpcLauncher {
     Repair-WindowsPathEnvironment
     Import-RepoNpcDotEnv (Join-Path $repoRoot ".env")
 
+    $deploymentProfile = Get-ProcessEnvironmentValue "REPONPC_DEPLOYMENT_PROFILE"
+    if ([string]::IsNullOrEmpty($deploymentProfile)) {
+        $deploymentProfile = "loopback_evaluation"
+    }
+    if ($deploymentProfile -cnotin @("loopback_evaluation", "production")) {
+        throw "REPONPC_DEPLOYMENT_PROFILE must be loopback_evaluation or production."
+    }
+    Set-ProcessEnvironmentValue "REPONPC_DEPLOYMENT_PROFILE" $deploymentProfile
+
     if ($Port -eq 0) {
         $configuredPort = Get-ProcessEnvironmentValue "REPONPC_PORT"
         $parsedPort = 0
@@ -436,11 +445,8 @@ function Invoke-RepoNpcLauncher {
         $resolvedDataDir = Join-Path $repoRoot $DataDir
     }
     $resolvedDataDir = [IO.Path]::GetFullPath($resolvedDataDir)
-    [IO.Directory]::CreateDirectory($resolvedDataDir) | Out-Null
 
     $baseUrl = "http://localhost:$Port"
-    Set-ProcessEnvironmentValue "REPONPC_ENV" "development"
-    Set-ProcessEnvironmentValue "REPONPC_DEPLOYMENT_PROFILE" "loopback_evaluation"
     Set-ProcessEnvironmentValue "REPONPC_PUBLIC_BASE_URL" $baseUrl
     Set-ProcessEnvironmentValue "REPONPC_HOST" "127.0.0.1"
     Set-ProcessEnvironmentValue "REPONPC_PORT" ([string]$Port)
@@ -451,8 +457,35 @@ function Invoke-RepoNpcLauncher {
     if (-not [string]::IsNullOrWhiteSpace($ChatModel)) {
         Set-ProcessEnvironmentValue "REPONPC_CHAT_MODEL" $ChatModel
     }
-    Import-LocalSecretFiles
-    Ensure-LocalIpHashKey
+    if ($deploymentProfile -eq "loopback_evaluation") {
+        [IO.Directory]::CreateDirectory($resolvedDataDir) | Out-Null
+        Set-ProcessEnvironmentValue "REPONPC_ENV" "development"
+        Import-LocalSecretFiles
+        Ensure-LocalIpHashKey
+    }
+    else {
+        Set-ProcessEnvironmentValue "REPONPC_ENV" "production"
+        Set-ProcessEnvironmentValue "REPONPC_ADMIN_ORIGINS" $baseUrl
+        $directSecretNames = @(
+            "REPONPC_CHAT_API_KEY", "REPONPC_EMBEDDING_API_KEY", "REPONPC_IP_HASH_KEY"
+        )
+        $configuredDirectSecrets = @($directSecretNames | Where-Object {
+            -not [string]::IsNullOrEmpty((Get-ProcessEnvironmentValue $_))
+        })
+        if ($configuredDirectSecrets.Count -gt 0) {
+            throw (($configuredDirectSecrets -join ", ") + ": put the value in a file under $resolvedDataDir\private and use the _FILE variable.")
+        }
+        foreach ($name in $directSecretNames) {
+            $fileName = $name + "_FILE"
+            $fileValue = Get-ProcessEnvironmentValue $fileName
+            if (-not [string]::IsNullOrEmpty($fileValue)) {
+                if (-not [IO.Path]::IsPathRooted($fileValue)) {
+                    $fileValue = Join-Path $repoRoot $fileValue
+                }
+                Set-ProcessEnvironmentValue $fileName ([IO.Path]::GetFullPath($fileValue))
+            }
+        }
+    }
 
     $pythonExe = Join-Path $repoRoot ".venv\Scripts\python.exe"
     $reponpcExe = Join-Path $repoRoot ".venv\Scripts\reponpc.exe"
@@ -483,6 +516,34 @@ function Invoke-RepoNpcLauncher {
         & $uv @syncArguments
         if ($LASTEXITCODE -ne 0) {
             throw "uv sync failed with exit code $LASTEXITCODE."
+        }
+    }
+
+    if ($deploymentProfile -eq "production") {
+        $prepareDataDirectory = @"
+import sys
+from pathlib import Path
+from reponpc.windows_launcher import UnsafeDataDirectory, owner_only_fix_command, prepare_data_directory
+
+try:
+    key_path = prepare_data_directory(Path(sys.argv[1]), production=True)
+except UnsafeDataDirectory as exc:
+    print(f'\u79c1\u5bc6\u8def\u5f91\u6b0a\u9650\u904e\u5bec / Private path is not owner-only: {exc.path}')
+    print(owner_only_fix_command(exc.path, root=exc.root))
+    sys.exit(3)
+print(key_path)
+"@
+        $preparationOutput = @(& $pythonExe -c $prepareDataDirectory $resolvedDataDir)
+        $preparationExitCode = $LASTEXITCODE
+        if ($preparationExitCode -eq 3) {
+            $preparationOutput | ForEach-Object { Write-Host $_ }
+            throw "Production data directory preparation stopped."
+        }
+        if ($preparationExitCode -ne 0 -or $preparationOutput.Count -ne 1) {
+            throw "Unable to prepare the production data directory."
+        }
+        if ([string]::IsNullOrEmpty((Get-ProcessEnvironmentValue "REPONPC_IP_HASH_KEY_FILE"))) {
+            Set-ProcessEnvironmentValue "REPONPC_IP_HASH_KEY_FILE" ([string]$preparationOutput[0])
         }
     }
 
@@ -522,6 +583,21 @@ sys.exit(check_environment())
     }
     if ($environmentExitCode -ne 0) {
         throw (($environmentOutput -join "`n") + ". Review .env and try again.")
+    }
+
+    if ($deploymentProfile -eq "production" -and -not $SmokeTest) {
+        $ownerConsole = @"
+import os
+import sys
+from pathlib import Path
+from reponpc.windows_launcher import run_owner_console
+
+sys.exit(0 if run_owner_console(Path(sys.argv[1]), environ=os.environ) else 2)
+"@
+        & $pythonExe -c $ownerConsole $resolvedDataDir
+        if ($LASTEXITCODE -ne 0) {
+            throw "Production owner setup was not completed."
+        }
     }
 
     $startedHere = $false
@@ -566,18 +642,23 @@ sys.exit(check_environment())
         Write-Step "Server is healthy."
     }
 
-    $launchOutput = @(& $reponpcExe admin launch-token --data-dir $resolvedDataDir 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Unable to issue the local launch URL."
+    if ($deploymentProfile -eq "loopback_evaluation") {
+        $launchOutput = @(& $reponpcExe admin launch-token --data-dir $resolvedDataDir 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to issue the local launch URL."
+        }
+        if ($launchOutput.Count -ne 1) {
+            throw "The local launch command returned an invalid response."
+        }
+        $adminUrl = ([string]$launchOutput[0]).Trim()
+        $expectedLaunchPrefix = "$baseUrl/admin#local-launch="
+        if (-not $adminUrl.StartsWith($expectedLaunchPrefix, [StringComparison]::Ordinal) -or
+            $adminUrl.Substring($expectedLaunchPrefix.Length) -notmatch '^[A-Za-z0-9_-]{43}$') {
+            throw "The local launch command returned an invalid response."
+        }
     }
-    if ($launchOutput.Count -ne 1) {
-        throw "The local launch command returned an invalid response."
-    }
-    $adminUrl = ([string]$launchOutput[0]).Trim()
-    $expectedLaunchPrefix = "$baseUrl/admin#local-launch="
-    if (-not $adminUrl.StartsWith($expectedLaunchPrefix, [StringComparison]::Ordinal) -or
-        $adminUrl.Substring($expectedLaunchPrefix.Length) -notmatch '^[A-Za-z0-9_-]{43}$') {
-        throw "The local launch command returned an invalid response."
+    else {
+        $adminUrl = "$baseUrl/admin"
     }
 
     if ($SmokeTest) {
@@ -593,7 +674,9 @@ sys.exit(check_environment())
         Start-Process -FilePath $adminUrl | Out-Null
     }
     else {
-        Write-Host "One-use Admin URL (expires in two minutes):" -ForegroundColor Yellow
+        if ($deploymentProfile -eq "loopback_evaluation") {
+            Write-Host "One-use Admin URL (expires in two minutes):" -ForegroundColor Yellow
+        }
         Write-Host $adminUrl -ForegroundColor White
     }
 

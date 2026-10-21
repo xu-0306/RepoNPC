@@ -51,6 +51,45 @@ def _evaluate_owner_only_acl(
     return True
 
 
+_INHERITED_ACE: Final = 0x10
+
+
+def _disallowed_explicit_sids(entries: Sequence[tuple[int, int, str]], user_sid: str) -> list[str]:
+    allowed = {user_sid, _SYSTEM_SID, _ADMINISTRATORS_SID, _OWNER_RIGHTS_SID}
+    found: list[str] = []
+    for ace_type, flags, sid in entries:
+        if (
+            ace_type == _ACCESS_ALLOWED_ACE_TYPE
+            and not flags & _INHERITED_ACE
+            and sid not in allowed
+            and sid not in found
+        ):
+            found.append(sid)
+    return found
+
+
+def windows_owner_only_repair(path: Path) -> str:
+    """Return the ``icacls`` arguments an owner runs to make ``path`` owner-only (ADR-070 D5).
+
+    Inheritance is removed, the three allowed accounts are granted, and explicit allow
+    entries for other accounts are removed. RepoNPC never runs it itself.
+    """
+
+    user_sid = _current_user_sid()
+    command = (
+        f'icacls "{path}" /inheritance:r /grant:r "*{user_sid}:(OI)(CI)F" '
+        f'"*{_SYSTEM_SID}:(OI)(CI)F" "*{_ADMINISTRATORS_SID}:(OI)(CI)F"'
+    )
+    try:
+        _, entries, _ = _read_windows_acl(path)
+    except OSError:
+        return command
+    extra = _disallowed_explicit_sids(entries, user_sid)
+    if extra:
+        command += " /remove:g " + " ".join(f'"*{sid}"' for sid in extra)
+    return command
+
+
 def restrict_owner_only(path: Path) -> None:
     """Restrict one existing file or directory to its owner and system accounts."""
 

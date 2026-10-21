@@ -1,4 +1,4 @@
-; Build with /DAppVersion=<pyproject version> /DBuildRoot=<onedir path>
+﻿; Build with /DAppVersion=<pyproject version> /DBuildRoot=<onedir path>
 ; /DOutputRoot=<installer output directory>. No generated recipe is required.
 #ifndef AppVersion
   #error AppVersion must be supplied from pyproject.toml
@@ -51,6 +51,7 @@ Source: "{#BuildRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 
 [Icons]
 Name: "{group}\RepoNPC"; Filename: "{app}\RepoNPC.exe"; WorkingDir: "{app}"
+Name: "{group}\RepoNPC（正式模式）"; Filename: "{app}\RepoNPC.exe"; Parameters: "--profile production"; WorkingDir: "{app}"
 Name: "{autodesktop}\RepoNPC"; Filename: "{app}\RepoNPC.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]

@@ -11,7 +11,7 @@ BUILD_SCRIPT = ROOT / "scripts" / "build_windows.ps1"
 
 
 def _recipe() -> str:
-    return RECIPE.read_text(encoding="utf-8")
+    return RECIPE.read_text(encoding="utf-8-sig")
 
 
 def _sections() -> dict[str, list[str]]:
@@ -115,12 +115,16 @@ def test_shortcuts_target_launcher_with_optional_desktop_icon() -> None:
     assert set(tasks[0]["Flags"].split()) == {"unchecked"}
     assert {icon["Name"] for icon in icons} == {
         r"{group}\RepoNPC",
+        r"{group}\RepoNPC" "\uff08正式模式\uff09",
         r"{autodesktop}\RepoNPC",
     }
     for icon in icons:
         assert icon["Filename"] == r"{app}\RepoNPC.exe"
         assert icon["WorkingDir"] == "{app}"
-        assert "Parameters" not in icon
+        if icon["Name"] == r"{group}\RepoNPC" "\uff08正式模式\uff09":
+            assert icon["Parameters"] == "--profile production"
+        else:
+            assert "Parameters" not in icon
         if icon["Name"].startswith("{autodesktop}"):
             assert icon["Tasks"] == "desktopicon"
         else:

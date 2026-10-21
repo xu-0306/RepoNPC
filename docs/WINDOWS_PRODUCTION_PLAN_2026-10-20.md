@@ -1,6 +1,6 @@
 # Windows 正式模式計劃（ADR-070 草案，2026-10-20）
 
-**狀態：** 擁有者在 2026-10-20 核准，第 4 節 D1–D7 全部採用建議選項（ADR-070 Accepted）。W1–W3 與實測待完成。
+**狀態：** 擁有者在 2026-10-20 核准，第 4 節 D1–D7 全部採用建議選項（ADR-070 Accepted）。W1（378af5b）與 W2 已完成；W3 與實測待完成。
 
 ## 1. 目標
 
@@ -160,7 +160,10 @@ README 與 OPERATIONS 描述的是已出貨的行為。在實作完成前改動�
 - 中文改為「要讓訪客使用，請以正式模式啟動（`.env` 設 `REPONPC_DEPLOYMENT_PROFILE=production`，或使用「RepoNPC（正式模式）」捷徑），再依 Funnel 步驟操作。」英文與中文對等。
 - OPERATIONS 新增 Windows 正式模式小節：
   - 第 3.3 節的首次登入；
-  - 第 3.4 節的 `icacls` 修正指令：`icacls "<資料目錄>" /inheritance:r /grant:r "%USERNAME%:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F"`；
+  - 第 3.4 節的 `icacls` 修正指令（W2 實作，啟動器依實際狀況印出其中一行）：
+    - 資料目錄根：`icacls "<資料目錄>" /inheritance:r /grant:r "*<目前使用者 SID>:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F"`，若根目錄有其他帳號的明確項目，後面再加 `/remove:g "*<SID>" …`；
+    - 根目錄已通過、但 `private\` 或其中的金鑰有明確的其他帳號項目：`icacls "<路徑>" /reset /T`（改為繼承已受保護的根目錄）。
+    - 2026-10-22 實測：繼承來的過寬權限，修正根目錄後子項（含 `runtime.sqlite`、`master.key`）會一併更新；對檔案使用 `(OI)(CI)` 會讓授權失效，所以檔案一律用 `/reset`；
   - 第 3.5 節的 Funnel 步驟；
   - 第 3.6 節的不支援項目。
 - README:118 與 OPERATIONS:172 的 Docker Desktop 說明維持不變（仍不支援）。
