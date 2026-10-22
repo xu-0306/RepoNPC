@@ -98,6 +98,13 @@ public visitor gateway or automatically select, download or call a model.
 `--no-browser` suppresses browser opening; `--smoke-check` checks health and stops
 without entering the interactive console.
 
+`--profile production` (the 「RepoNPC（正式模式）」 Start menu shortcut) starts the
+same data directory in Windows production mode (ADR-070): no local-launch grant,
+a console setup code or password step before the server starts, and owner-only
+permission checks that stop with an `icacls` repair command. The default profile
+remains `loopback_evaluation`. See
+[Windows production mode](../../docs/OPERATIONS.md#windows-production-mode).
+
 For a bounded smoke against fresh disposable data, use an explicit directory:
 
 ```powershell
@@ -118,7 +125,8 @@ The per-user recipe requires Windows 11 x64, requests no administrator elevation
 and uses the stable AppId `{9B5F80E7-BE26-49B4-9939-9F85D69FF4EC}`. Program files
 default to `%LOCALAPPDATA%\Programs\RepoNPC`. The launcher independently owns
 `%LOCALAPPDATA%\RepoNPC\data`; model artifacts and secret stores remain there.
-The start-menu shortcut launches `RepoNPC.exe`; the desktop shortcut and
+The start-menu shortcuts launch `RepoNPC.exe` (trial) and `RepoNPC.exe --profile production`
+(「RepoNPC（正式模式）」); the desktop shortcut and
 post-install launch are optional and unchecked. Silent installation does not
 launch the application.
 

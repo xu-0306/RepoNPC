@@ -712,7 +712,7 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
 
 ## ADR-070: Windows production mode on the owner's own computer
 
-- **Status:** Accepted; owner-approved 2026-10-20 with decisions D1–D7 as recommended in [the Windows production plan](WINDOWS_PRODUCTION_PLAN_2026-10-20.md). W1 and W2 are implemented; W3 and the real-host test are pending.
+- **Status:** Accepted; owner-approved 2026-10-20 with decisions D1–D7 as recommended in [the Windows production plan](WINDOWS_PRODUCTION_PLAN_2026-10-20.md). W1, W2 and W3 are implemented; the real-host test is pending.
 - **Why:** ADR-048 and the A1 gateway contract approve a Windows installation whose owner enables Funnel, but both Windows entry points force `loopback_evaluation`, and the visitor gateway starts only in `production`. Windows also skips every private-file permission check: secret files, `model-secrets/master.key`, the IP key and the 0600/0700 writes are enforced only where POSIX modes exist. A data directory inside a checkout inherits `Authenticated Users` and `Users` access from a non-system drive root.
 - **Decision:** Windows production is the existing `production` profile with:
   - the application on `127.0.0.1`;
@@ -736,7 +736,7 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
   - Windows Docker Desktop production, Windows services and non-loopback administration remain unsupported.
   - Administrators on the host can always read the data.
 - **Consequences:**
-  - README/OPERATIONS keep the ADR-069 trial-only wording until the launchers ship (W3).
+  - README/OPERATIONS describe Windows production mode since W3 (2026-10-22); before that they kept the ADR-069 trial-only wording.
   - AC-081 adds the Windows production acceptance; external Funnel evidence stays under A12.
   - FR-048 gains the production option.
 - **Requirements:** FR-017/029/047/048, NFR-002/003, AC-069/071 and new AC-081.
