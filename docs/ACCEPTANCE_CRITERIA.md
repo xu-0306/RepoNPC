@@ -779,11 +779,10 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **Then** while available, answers stream through the Funnel visitor gateway with the third-person NPC and a collapsible Sources row; visitor responses contain no host, hardware, provider, model or cost information.
 - **And** while the host is off, the page renders the profile, project cards and approved FAQ with a 「休息中」 / resting indicator and matches typed questions to approved FAQ entries in the browser without generating text.
 - **And** the export contains `.nojekyll` and a hashed manifest, passes the secret scan, contains no credential or host detail other than the gateway origin, and stays within GitHub Pages size limits.
-- **And** (0.4.4) the page uses the chat layout:
-  - at 1440 px, a persistent sidebar with the profile and project cards; at 375 px, a drawer;
-  - a top bar with the NPC status avatar, the language switch and, when enabled, the light/dark toggle;
-  - a welcome hero before the first question;
-  - right-aligned visitor bubbles, and left-aligned NPC answers with an avatar;
+- **And** (0.4.14, ADR-072) the page uses the pixel RPG chat layout of FR-047:
+  - a top bar with the brand, the 「專案」 drawer with the profile and project cards, the language switch and, when enabled, the appearance controls;
+  - at 1440 px, the scene stage with the NPC and the RPG dialogue box beside the conversation log; at 375 px, a compact scene strip above the log;
+  - suggestion chips that name the project, right-aligned visitor messages and NPC answers with citations;
   - an input bar pinned to the bottom.
 - **Verification:** browser tests against a static server plus a stopped/started gateway, export inspection tests, keyboard/screen-reader and 375/1440-pixel checks; external reachability is recorded separately.
 
@@ -830,16 +829,16 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
   - `core/humanoid` rendered with two different colour options.
 - **When** each becomes the active character, and the chat page renders live and from the static export with every registry scheme, in light and dark variants, available and resting states, with and without messages, and with reduced motion,
 - **Then**:
-  - the welcome-hero NPC, the answer avatars and the status avatar are that character, and only the newest answer avatar animates;
+  - the scene-stage NPC, the answer avatars and the status avatar are that character, and only the newest answer avatar animates;
   - page colour tokens are the selected scheme's values (plus any owner accent) and are identical across all fixtures except `stage`;
-  - NPC edge vs `stage` is ≥ 3:1 in every combination; where the stage cannot be adjusted enough, the plate appears, and no text colour changes;
+  - (0.4.14) NPC edge vs `sky` and `hill_near` is ≥ 3:1 in every combination or the pixel plate appears; with an owner image, NPC edge vs `stage` is ≥ 3:1 or the plate appears; no text colour changes;
   - every text pair is ≥ 4.5:1 and every non-text pair ≥ 3:1;
   - identical input yields byte-identical tokens, and live and exported pages render the same tokens.
 - **And**:
   - renaming the sprite file or changing option key names with identical pixels changes nothing;
   - no scene code reads species, `pack_id`, filenames or option names, and no code derives page colours from sheet pixels;
   - a style guard finds no literal colour or scheme id in visitor CSS or source outside the build-generated fallback block;
-  - no illustrated or decorative background is drawn.
+  - (0.4.14) the only drawn background is the token-coloured CSS pixel scene; no image file, per-scheme drawing code or illustrated background exists.
 - **Verification:**
   - backend unit tests for token resolution and the stage rule over the fixture × scheme × variant matrix;
   - a style-guard test;
@@ -874,7 +873,7 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
   - admin browser tests in both locales;
   - an export manifest check.
 
-### AC-074 - Colour schemes are registry data with light/dark variants and a visitor mode toggle
+### AC-074 - Colour schemes are registry data with light/dark variants and visitor mode and scheme choice
 
 **Maps to:** FR-051, FR-050, FR-047, FR-018, NFR-009, NFR-011
 
@@ -898,8 +897,8 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
     - it is never sent in any request, and no cookie is set;
   - with the toggle off, the control is absent and any stored choice is ignored;
   - a stored choice is applied before first paint without an inline script, and the CSP is unchanged;
-  - an omitted setting behaves as `neutral`, `system` with the toggle on;
-  - the export holds resolved tokens plus the scheme id and version, and identical inputs give identical manifests.
+  - an omitted setting behaves as `meadow`, `system` with both visitor switches on (0.4.14);
+  - the export holds the resolved tokens of every scheme plus the default scheme id and version, and identical inputs give identical manifests.
 - **And**:
   - the test-only registry renders end to end with no code change, and removing an entry removes its tile;
   - an unknown configured id is rejected with the valid list, and a retired id resolves through `aliases`;
@@ -911,7 +910,7 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
     - a missing locale;
     - an alias cycle;
   - no source file outside the registry holds scheme colours, and frontend source contains no scheme id;
-  - visitors have no scheme control, and payloads stay free of host, model and cost data.
+  - (0.4.14) with `visitor_scheme_choice` on, visitors choose among all registry schemes under the same `localStorage`-only rules as the mode toggle; with it off, there is no scheme control; payloads stay free of host, model and cost data.
 - **Verification:**
   - registry schema and contrast-validation unit tests;
   - the scheme × character × variant matrix;
@@ -929,12 +928,12 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **Then**:
   - an accepted upload becomes a private draft with metadata stripped; its URL needs the owner session, sends `no-store` and `nosniff`, and is unreachable through public routes, `GET /api/public/scene-background` and the export until 「套用」;
   - invalid files get plain-language reasons and nothing is stored; a second upload replaces the draft; 「取消」 and 24-hour expiry delete it;
-  - the preview is built from the real visitor components and shows the image in the welcome hero, the animated active character, the owner's name and a sample dialog marked 「範例」, with no provider call;
+  - the preview is built from the real visitor components and shows the image in the scene stage in place of the drawn scene (0.4.14), the animated active character, the owner's name and a sample dialog marked 「範例」, with no provider call;
   - light/dark, desktop/phone, NPC state, reduced motion and before/after controls work;
   - focus moves the visible crop in both frames, with crop outlines on the thumbnail; `dim: auto` picks the lowest level that separates the NPC, else the stage plate; scaling applies;
   - notices appear for upscaled, strongly cropped and busy images;
   - text never sits directly on the image, and all contrast checks pass at every dim level;
-  - the image appears only in the welcome hero card, never behind the sidebar, top bar, messages or input;
+  - the image appears only in the scene stage, never behind the top bar, log, messages or input;
   - for equal settings, `POST /api/admin/scene/preview` and the published profile return identical scene objects, and computed styles of the preview and the live page match;
   - 「套用」 promotes the draft to a content-hashed file, bumps `character.revision` and changes the public page; before that the public page is unchanged; 「移除背景圖」 returns to the plain hero;
   - the export includes the applied image, focus, dim and scaling.
@@ -995,6 +994,23 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **Then** a new directory requires a host setup code and a 15-character password; a trial owner must set a password through the host before sign-in; no local-launch grant is issued; secret files, `model-secrets/master.key` and the data directory are rejected while any account other than the current user, SYSTEM or Administrators has an allow entry, and accepted after the documented fix; and through Funnel only visitor routes respond while `/admin` and `/api/admin/*` return 404.
 - **Verification:** Windows unit tests with real files and ACLs (created, broadened, inherited and wrong-owner cases); launcher contract tests; a dated real-host walkthrough with `icacls` listings; the external Funnel check is recorded under A12.
 
+### AC-082 - The pixel interface is accessible, consistent and visitor-adjustable
+
+**Maps to:** FR-047, FR-050, FR-051, FR-052, NFR-009, NFR-011 (ADR-072)
+
+- **Given** the packaged schemes, the AC-072 character fixtures, both locales, light and dark `prefers-color-scheme`, and widths 1440 and 375 px,
+- **When** visitors use the live and exported chat page in the available, thinking and resting states, and the owner uses every owner page,
+- **Then**:
+  - every scheme passes the §12.3 text, non-text and adjacent scene-layer pairs in both variants as authored;
+  - with `visitor_scheme_choice` on, a visitor's scheme and mode choices apply immediately, persist across reloads through `localStorage` only, never appear in a request, cookie or export, and the page still works when storage throws; with it off, the scheme control is absent and a stored scheme is ignored;
+  - the scene stage, dialogue box, log and pinned input follow the FR-047 layout; at 375 px the latest message is visible above the input on first load;
+  - no page scrolls horizontally, and the primary action (send, 「確認配對並繼續」, 「套用角色」) is visible without scrolling at 1440×900;
+  - the NPC uses the idle/talk, think and offline rows for the three visitor states, and reduced motion shows static frames;
+  - the pixel font appears only on the brand, Latin headings, numbers and buttons, and the minimum sizes of §16 hold;
+  - project cards in the 「專案」 drawer show name, description, language, stars and forks when present.
+- **And** no source file holds a literal colour or scheme id outside the registry and the generated fallback block, no code branches on a scheme id, the CSP is unchanged, and no external font, stylesheet or script is requested.
+- **Verification:** registry contrast tests; source and style guards; Playwright screenshots and computed-style checks over scheme × variant × width × state, live and exported; keyboard and screen-reader checks in both locales; an export manifest check.
+
 **0.4.0–0.4.5 traceability additions:**
 
 | Requirement | Acceptance criteria            |
@@ -1003,16 +1019,16 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 | FR-044      | AC-064, AC-065                 |
 | FR-045      | AC-066                         |
 | FR-046      | AC-067                         |
-| FR-047      | AC-068, AC-071, AC-072, AC-074 |
+| FR-047      | AC-068, AC-071, AC-072, AC-074, AC-082 |
 | FR-048      | AC-069, AC-081                 |
 | FR-049      | AC-070                         |
 | FR-050      | AC-072, AC-073, AC-074, AC-075 |
-| FR-051      | AC-074                         |
+| FR-051      | AC-074, AC-082                 |
 | FR-052      | AC-075, AC-079                 |
 | FR-053      | AC-076                         |
 | NFR-001     | AC-071, AC-073, AC-075         |
 | NFR-009     | AC-072, AC-073, AC-074, AC-075 |
-| NFR-011     | AC-072, AC-074                 |
+| NFR-011     | AC-072, AC-074, AC-082         |
 | NFR-014     | AC-071                         |
 
 **AC-057 extension (0.4.0):** the device check, `model_catalog.yml` guidance (適合 / 勉強可用 / 不建議), canirun.ai link, Ollama explicit pull, plain-language error mapping, one-line status and cloud data disclosure are owner-only admin surfaces; none of them appear in visitor pages or responses.

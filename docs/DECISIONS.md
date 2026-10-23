@@ -462,7 +462,7 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
 
 ## ADR-051: Use a plain chat interface with owner-selected colour schemes and light/dark mode
 
-- **Status:** Accepted 2026-09-26; implementation pending. No acceptance evidence exists. Partly supersedes ADR-049 and ADR-050.
+- **Status:** Accepted 2026-09-26; implementation pending. No acceptance evidence exists. Partly supersedes ADR-049 and ADR-050. ADR-072 (2026-10-23) supersedes its flat-colour and no-drawn-backdrop clauses, the ban on visitor scheme choice, the starter set and the chat layout; the registry, closed roles, AA validation, mode script and the NPC following the character remain in force.
 - **Authorization:** On 2026-09-26 the owner said:
   - no bundled illustrated backgrounds are needed;
   - a simple chat UI is enough, like the SnowUI "ChatGPT UI Kit" Figma community file;
@@ -747,3 +747,57 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
 - **Decision:** Archive the obsolete paths listed in [legacy/README.md](../legacy/README.md) under `legacy/`; archived code is not imported. The README card links only to the verified Pages chat page. Historical handoffs and fully superseded ADRs and ACs move to `legacy/docs/`; superseded ADRs and ACs keep one-line stubs.
 - **Supersedes:** ADR-005, ADR-010, ADR-020 and ADR-022 in full. It also supersedes the GitHub writeback, GitHub Release publication, remote manifest polling and operator-managed visitor URL clauses of ADR-009, ADR-015, ADR-016, ADR-018, ADR-021, ADR-027, ADR-028, ADR-040, ADR-042 through ADR-047 and ADR-070; their other decisions remain in force.
 - **Consequences:** Removed `REPONPC_*` names are rejected as unknown, so existing `.env` files must delete them. ADR-070 D6 is moot.
+
+## ADR-072: Pixel RPG interface for the visitor chat and owner pages
+
+- **Status:** Accepted 2026-10-23; the owner approved D1–D8 as recommended in [the pixel UI plan](PIXEL_UI_PLAN_2026-10-23.md) (「D1–D8 全部照建議選項，核准 ADR-072」). Technical Specification 0.4.14 and AC-082 apply it. Implementation phases P0–P4 are pending.
+- **Authorization:** On 2026-10-22 the owner said the current UI is too ugly and asked for several design sets, allowing a UI component library. On 2026-10-23 the owner chose the prototypes in `output/mockups/ui-pixel-2026-10-23/`:
+  - Set C "Pixel Guild" for the visitor chat, with visitor-selectable colour schemes and dark mode;
+  - Set F "Pixel Workshop" for the owner settings and character pages.
+
+  The owner then asked for this ADR and a plan, covering the Tailwind + daisyUI dependency and the change to ADR-051, before implementation.
+- **Context:**
+  - ADR-051 (implemented, AC-068/072–075 revised) requires flat colours, no drawn backdrop, an owner-only scheme choice and no literal colours in visitor source. The build guard `scripts/check_visitor_source.mjs` enforces the last rule.
+  - The chosen design conflicts with three ADR-051 clauses:
+    - it draws a pixel scene (sky, hills, grass, signpost) behind the NPC;
+    - visitors choose a palette;
+    - the chat layout differs from the FR-047 layout sentence (scene and RPG dialogue box beside a conversation log; projects in a drawer).
+  - The prototypes target daisyUI 5 on Tailwind v4, loaded from CDNs. Production cannot use CDNs or Google Fonts: the CSP is `style-src 'self'; font-src 'self'` for both the app and the exported Pages site.
+- **Decision (owner-approved recommended options; the rejected alternatives are in the plan):**
+  - **D1 Styling stack:** no new UI dependency. Build a small pixel design system in project CSS: tokens, stepped borders, offset shadows and a few primitives. React Aria stays the admin behaviour layer (ADR-061). Reasons:
+    - daisyUI themes ship literal colours and their own theme switch, which duplicate `color_schemes.yml` and break the colour guard;
+    - its component class names collide with project classes (the prototype `.stack` overlap);
+    - most of its rounded components would be overridden for the pixel look anyway.
+
+    The alternatives are Tailwind v4 + daisyUI 5 as build-time `devDependencies` via `@tailwindcss/vite` (D1-b) or Tailwind only (D1-c). Either needs ADR-012 lockfile updates, notices, and guard and CSP checks.
+  - **D2 Visitor scheme choice:** add `visitor_scheme_choice` (default `true`). Visitors may pick any registry scheme; the owner's `color_scheme` remains the default. The choice is stored only in that browser's `localStorage` and applied before first paint by the existing same-origin mode script. It is never sent, exported or set as a cookie. The export carries the resolved tokens of every scheme, not only the selected one.
+  - **D3 Drawn scene:**
+    - **Scene:** allow one character-agnostic pixel scene drawn with CSS, coloured only by scheme tokens.
+    - **Limits:** no image files, no per-scheme drawing code and no branch on a scheme id.
+    - **Owner image:** when set (FR-052), it replaces the drawn scene inside the same stage frame.
+    - **NPC separation:** the check runs against the scene colours directly behind the NPC. When that fails, a pixel plate is drawn; text colours never change.
+  - **D4 Schemes:** replace the starter set with pixel palettes `meadow` (default), `sunset`, `coast` and `sakura`. Each has a designed light (day) and dark (night) variant.
+    - **Scene roles:** add `sky`, `horizon`, `hill_far`, `hill_near`, `grass`, `ground`, `wood` and `celestial`. They are decorative; each pair of adjacent layers (`sky`/`hill_far`, `hill_far`/`hill_near`, `hill_near`/`grass`, `grass`/`ground`, `celestial`/`sky`, `wood`/`sky`) must reach 1.5:1, so the scene stays legible.
+    - **Contrast:** the existing text and non-text pairs keep their thresholds.
+    - **Aliases:** `neutral`→`meadow`, `forest`→`meadow`, `ocean`→`coast`, `lavender`→`sakura`; `sunset` is re-versioned. No migration is needed.
+  - **D5 Fonts:** self-host Press Start 2P (SIL OFL 1.1, Latin glyphs only) for the brand, Latin headings, numbers and buttons. Chinese and body text use the system font stack. There is no web-font download for CJK and no Google Fonts.
+  - **D6 Layout:** revise the FR-047 layout sentence to the Set C layout:
+    - **Desktop:** the scene stage and RPG dialogue box beside the conversation log, with the composer pinned; projects and the profile in a 「專案」 drawer that still shows name, description, language, stars and forks.
+    - **Phones:** a compact scene strip, the log taking the remaining height, and one 「外觀」 control.
+  - **D7 Owner pages:** the Set F language applies to every owner page:
+    - quest list for the six setup steps;
+    - 裝備欄 model cards;
+    - character-creation screen for the character page.
+
+    The models and character pages follow the approved mockups. The other pages are restyled with the same primitives and reviewed by the owner from real screenshots before commit, without separate mockups.
+  - **D8 G-round copy:** fold the approved G-round text-reduction rules into the restyle of each page instead of a later separate round.
+- **Boundaries:**
+  - No new endpoint, error code or provider behaviour. The only new public data are the resolved tokens of every registry scheme (already public registry data) and the `visitor_scheme_choice` flag.
+  - No change to CSP, the visitor dependency closure guard or ADR-061's admin-only React Aria scope.
+  - Accessibility, reduced motion and zh-TW/en parity stay release gates. The pixel font is decorative only and never used for body text or inputs.
+  - The prototype "設計狀態" switcher, the CDN builds and the demo data are not shipped.
+- **Consequences:**
+  - Technical Specification 0.4.14 revises FR-047 (layout), FR-050 (scene roles and plate) and FR-051 (visitor scheme choice, drawn scene), and §12.3 and §16.
+  - New AC-082 covers the pixel interface. AC-068 and AC-072–AC-075 are revised.
+  - ADR-051's clauses on flat colours, no drawn backdrop and owner-only scheme choice are superseded. Its other clauses (registry data, closed roles, AA validation, mode script, NPC follows the character) remain in force.
+- **Requirements:** FR-047/050/051/052, NFR-001/009/011, AC-068/072–075 and new AC-082.
