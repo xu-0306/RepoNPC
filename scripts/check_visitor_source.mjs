@@ -21,6 +21,32 @@ const retired = new Set([
 const color =
   /#[\da-f]{3,8}\b|\b(?:rgb|hsl|hwb|lab|lch|oklab|oklch|color|device-cmyk)a?\s*\(/i;
 
+function validFontUrl(specifier, parent) {
+  if (
+    !specifier ||
+    /[\\\s%?#:]|^[\/]/.test(specifier) ||
+    path.extname(specifier) !== ".woff2"
+  )
+    return false;
+  const sourceRoot = fs.realpathSync(path.join(root, "apps/web/src"));
+  try {
+    const target = fs.realpathSync(
+      path.resolve(path.dirname(parent), specifier),
+    );
+    const relative = path.relative(sourceRoot, target);
+    return (
+      relative !== "" &&
+      !relative.startsWith(".." + path.sep) &&
+      !path.isAbsolute(relative) &&
+      relative !== ".." &&
+      path.extname(target) === ".woff2" &&
+      fs.statSync(target).isFile()
+    );
+  } catch {
+    return false;
+  }
+}
+
 function unwrapped(node) {
   while (ts.isAsExpression(node) || ts.isParenthesizedExpression(node))
     node = node.expression;
@@ -49,6 +75,15 @@ function check(entry, { schemes, roles }) {
       )
         return;
       const css = source.replace(/\/\*[\s\S]*?\*\//g, "");
+      for (const match of css.matchAll(
+        /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)/gi,
+      )) {
+        if (!validFontUrl(match[1] ?? match[2] ?? match[3], file))
+          fail(
+            file,
+            "CSS URL must reference an existing relative source woff2 font",
+          );
+      }
       if (color.test(css)) fail(file, "literal scene colour");
       // Colour-bearing declarations must use tokens; named colours cannot bypass hex checks.
       for (const match of css.matchAll(
@@ -288,7 +323,45 @@ function selfTest() {
     ':root[data-visitor-scheme="test_scheme"] { color: var(--scene-ink); }',
   );
   assert.throws(() => run(mapper + ' import "./nested.css";'));
-  console.log("Visitor source guard: 17 positive/negative checks passed.");
+  const fontParent = path.join(root, "apps/web/src/pixel.css");
+  const font = "./assets/fonts/press-start-2p-latin-400-normal.woff2";
+  assert.equal(validFontUrl(font, fontParent), true);
+  const rejectedUrls = [
+    "https://fixture.test/font.woff2",
+    "//fixture.test/font.woff2",
+    "/assets/font.woff2",
+    "data:font/woff2;base64,AA==",
+    "./assets/fonts/missing.woff2",
+    "./visitor.css",
+    "../../../package.json",
+    "C:/font.woff2",
+  ];
+  for (const url of rejectedUrls) {
+    assert.equal(validFontUrl(url, fontParent), false, url);
+    fs.writeFileSync(
+      path.join(directory, "font.css"),
+      `@font-face { src: url("${url}"); }`,
+    );
+    assert.throws(() => run(mapper + ' import "./font.css";'));
+  }
+  const fixtureFont = path
+    .relative(directory, path.resolve(path.dirname(fontParent), font))
+    .split(path.sep)
+    .join("/");
+  fs.writeFileSync(
+    path.join(directory, "font.css"),
+    `@font-face { src: url("${fixtureFont}"); }`,
+  );
+  assert.equal(run(mapper + ' import "./font.css";'), 2);
+  fs.writeFileSync(path.join(directory, "outside.woff2"), "fixture font");
+  fs.writeFileSync(
+    path.join(directory, "font.css"),
+    '@font-face { src: url("./outside.woff2"); }',
+  );
+  assert.throws(() => run(mapper + ' import "./font.css";'));
+  console.log(
+    "Visitor source guard: existing and font URL positive/negative checks passed.",
+  );
 }
 
 if (process.argv.includes("--self-test")) selfTest();

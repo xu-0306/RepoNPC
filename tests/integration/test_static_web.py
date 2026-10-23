@@ -64,7 +64,10 @@ def test_missing_web_build_does_not_break_health_or_expose_filesystem(tmp_path: 
 
 def test_built_web_assets_exclude_server_secret_and_private_provider_canaries() -> None:
     bundle = "\n".join(
-        asset.read_text(encoding="utf-8") for asset in web_dist().rglob("*") if asset.is_file()
+        # latin-1 maps every byte, so binary assets such as fonts are scanned too.
+        asset.read_bytes().decode("latin-1")
+        for asset in web_dist().rglob("*")
+        if asset.is_file()
     ).casefold()
 
     for forbidden in ("ollama:11434", "private.example.invalid"):

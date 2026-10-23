@@ -1,8 +1,31 @@
+@import "./pixel.css";
+
 body {
   margin: 0;
 }
 
 .visitor-page {
+  --px-bg: var(--visitor-background);
+  --px-surface: var(--visitor-surface);
+  --px-surface-alt: var(--visitor-surface-alt);
+  --px-ink: var(--visitor-ink);
+  --px-muted: var(--visitor-muted);
+  --px-line: var(--visitor-border);
+  --px-accent: var(--visitor-accent);
+  --px-accent-ink: var(--visitor-accent-ink);
+  --px-focus: var(--visitor-focus);
+  --px-shadow: var(--visitor-border);
+  --px-stage: var(--visitor-stage);
+  --px-danger: var(--visitor-ink);
+  --px-danger-ink: var(--visitor-surface);
+  --px-sky: var(--visitor-sky);
+  --px-horizon: var(--visitor-horizon);
+  --px-hill-far: var(--visitor-hill-far);
+  --px-hill-near: var(--visitor-hill-near);
+  --px-grass: var(--visitor-grass);
+  --px-ground: var(--visitor-ground);
+  --px-wood: var(--visitor-wood);
+  --px-celestial: var(--visitor-celestial);
   --visitor-background: var(--scene-light-background, var(--scene-background));
   --visitor-surface: var(--scene-light-surface, var(--scene-surface));
   --visitor-surface-alt: var(
@@ -16,6 +39,14 @@ body {
   --visitor-border: var(--scene-light-border, var(--scene-border));
   --visitor-stage: var(--scene-light-stage, var(--scene-stage));
   --visitor-focus: var(--scene-light-focus, var(--scene-focus));
+  --visitor-sky: var(--scene-light-sky, var(--scene-sky));
+  --visitor-horizon: var(--scene-light-horizon, var(--scene-horizon));
+  --visitor-hill-far: var(--scene-light-hill_far, var(--scene-hill_far));
+  --visitor-hill-near: var(--scene-light-hill_near, var(--scene-hill_near));
+  --visitor-grass: var(--scene-light-grass, var(--scene-grass));
+  --visitor-ground: var(--scene-light-ground, var(--scene-ground));
+  --visitor-wood: var(--scene-light-wood, var(--scene-wood));
+  --visitor-celestial: var(--scene-light-celestial, var(--scene-celestial));
   background: var(--visitor-background);
   color: var(--visitor-ink);
   font-family:
@@ -42,6 +73,14 @@ html[data-visitor-mode="dark"] .visitor-page,
   --visitor-border: var(--scene-dark-border, var(--scene-border));
   --visitor-stage: var(--scene-dark-stage, var(--scene-stage));
   --visitor-focus: var(--scene-dark-focus, var(--scene-focus));
+  --visitor-sky: var(--scene-dark-sky, var(--scene-sky));
+  --visitor-horizon: var(--scene-dark-horizon, var(--scene-horizon));
+  --visitor-hill-far: var(--scene-dark-hill_far, var(--scene-hill_far));
+  --visitor-hill-near: var(--scene-dark-hill_near, var(--scene-hill_near));
+  --visitor-grass: var(--scene-dark-grass, var(--scene-grass));
+  --visitor-ground: var(--scene-dark-ground, var(--scene-ground));
+  --visitor-wood: var(--scene-dark-wood, var(--scene-wood));
+  --visitor-celestial: var(--scene-dark-celestial, var(--scene-celestial));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -59,6 +98,14 @@ html[data-visitor-mode="dark"] .visitor-page,
     --visitor-border: var(--scene-dark-border, var(--scene-border));
     --visitor-stage: var(--scene-dark-stage, var(--scene-stage));
     --visitor-focus: var(--scene-dark-focus, var(--scene-focus));
+    --visitor-sky: var(--scene-dark-sky, var(--scene-sky));
+    --visitor-horizon: var(--scene-dark-horizon, var(--scene-horizon));
+    --visitor-hill-far: var(--scene-dark-hill_far, var(--scene-hill_far));
+    --visitor-hill-near: var(--scene-dark-hill_near, var(--scene-hill_near));
+    --visitor-grass: var(--scene-dark-grass, var(--scene-grass));
+    --visitor-ground: var(--scene-dark-ground, var(--scene-ground));
+    --visitor-wood: var(--scene-dark-wood, var(--scene-wood));
+    --visitor-celestial: var(--scene-dark-celestial, var(--scene-celestial));
   }
 }
 
@@ -76,6 +123,14 @@ html[data-visitor-mode="dark"] .visitor-page,
   --visitor-border: var(--scene-light-border, var(--scene-border));
   --visitor-stage: var(--scene-light-stage, var(--scene-stage));
   --visitor-focus: var(--scene-light-focus, var(--scene-focus));
+  --visitor-sky: var(--scene-light-sky, var(--scene-sky));
+  --visitor-horizon: var(--scene-light-horizon, var(--scene-horizon));
+  --visitor-hill-far: var(--scene-light-hill_far, var(--scene-hill_far));
+  --visitor-hill-near: var(--scene-light-hill_near, var(--scene-hill_near));
+  --visitor-grass: var(--scene-light-grass, var(--scene-grass));
+  --visitor-ground: var(--scene-light-ground, var(--scene-ground));
+  --visitor-wood: var(--scene-light-wood, var(--scene-wood));
+  --visitor-celestial: var(--scene-light-celestial, var(--scene-celestial));
 }
 
 .visitor-page *,

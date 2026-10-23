@@ -1,0 +1,455 @@
+@font-face {
+  font-family: "Press Start 2P";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/press-start-2p-latin-400-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  --px-font-body:
+    "Noto Sans TC", "Microsoft JhengHei UI", "PingFang TC", ui-sans-serif,
+    system-ui, sans-serif;
+  --px-font-display:
+    "Press Start 2P", "Noto Sans TC", "Microsoft JhengHei UI", "PingFang TC",
+    ui-sans-serif, system-ui, sans-serif;
+}
+
+.px-body,
+.px-panel,
+.px-dialog {
+  box-sizing: border-box;
+  color: var(--px-ink);
+  font-family: var(--px-font-body);
+  font-size: 15px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.px-display {
+  font-family: var(--px-font-display);
+  font-weight: 400;
+  line-height: 1.8;
+}
+
+.px-meta {
+  color: var(--px-muted);
+  font-family: var(--px-font-body);
+  font-size: 13px;
+}
+
+.px-label {
+  font-family: var(--px-font-body);
+  font-size: 14px;
+}
+
+.px-panel,
+.px-dialog {
+  background: var(--px-surface);
+  border: 0;
+  border-radius: 0;
+  margin: 4px;
+  min-width: 0;
+  padding: 20px;
+  position: relative;
+  box-shadow:
+    4px 0 0 var(--px-line),
+    -4px 0 0 var(--px-line),
+    0 4px 0 var(--px-line),
+    0 -4px 0 var(--px-line),
+    8px 8px 0 var(--px-shadow);
+}
+
+.px-panel--raised {
+  box-shadow:
+    4px 0 0 var(--px-line),
+    -4px 0 0 var(--px-line),
+    0 4px 0 var(--px-line),
+    0 -4px 0 var(--px-line),
+    10px 10px 0 var(--px-shadow);
+}
+
+.px-panel--inset {
+  background: var(--px-surface-alt);
+  border: 2px solid var(--px-line);
+  box-shadow: inset 4px 4px 0 var(--px-shadow);
+  margin: 0;
+}
+
+/* Repeated classes keep the opt-in primitives above legacy element selectors. */
+.px-button.px-button,
+.px-chip.px-chip {
+  align-items: center;
+  background: var(--px-surface);
+  border: 2px solid var(--px-line);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--px-shadow);
+  box-sizing: border-box;
+  color: var(--px-ink);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--px-font-display);
+  font-size: 14px;
+  font-weight: 400;
+  gap: 8px;
+  justify-content: center;
+  line-height: 1.8;
+  max-width: 100%;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+  padding: 8px 16px;
+  text-align: center;
+  text-decoration: none;
+  white-space: normal;
+}
+
+.px-button.px-button--primary,
+.px-chip.px-chip[aria-pressed="true"] {
+  background: var(--px-accent);
+  color: var(--px-accent-ink);
+}
+
+.px-button.px-button--secondary {
+  background: var(--px-surface-alt);
+}
+
+.px-button.px-button--quiet {
+  box-shadow: none;
+}
+
+.px-button.px-button--danger {
+  background: var(--px-danger);
+  border-style: double;
+  border-width: 4px;
+  color: var(--px-danger-ink);
+  padding: 6px 14px;
+}
+
+.px-button.px-button:hover:not(:disabled):not([aria-disabled="true"]),
+.px-chip.px-chip:hover:not(:disabled):not([aria-disabled="true"]) {
+  box-shadow: 5px 5px 0 var(--px-shadow);
+  transform: translate(-1px, -1px);
+}
+
+.px-button.px-button:active:not(:disabled):not([aria-disabled="true"]),
+.px-chip.px-chip:active:not(:disabled):not([aria-disabled="true"]) {
+  box-shadow: none;
+  transform: translate(2px, 2px);
+}
+
+.px-button.px-button:disabled,
+.px-button.px-button[aria-disabled="true"],
+.px-chip.px-chip:disabled,
+.px-chip.px-chip[aria-disabled="true"] {
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+}
+
+.px-chip.px-chip,
+.px-button.px-button:lang(en),
+.px-button.px-button--body {
+  font-family: var(--px-font-body);
+}
+
+.px-chip.px-chip[aria-pressed="true"] {
+  border-style: double;
+  border-width: 4px;
+  padding: 6px 14px;
+}
+
+.px-field.px-field {
+  background: var(--px-surface);
+  border: 2px solid var(--px-line);
+  border-radius: 0;
+  box-shadow: inset 3px 3px 0 var(--px-surface-alt);
+  box-sizing: border-box;
+  color: var(--px-ink);
+  font-family: var(--px-font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+}
+
+.px-field.px-field::placeholder {
+  color: var(--px-muted);
+  opacity: 1;
+}
+
+.px-field.px-field:disabled {
+  background: var(--px-surface-alt);
+  color: var(--px-muted);
+  cursor: not-allowed;
+}
+
+.px-field.px-field[aria-invalid="true"] {
+  border-style: double;
+  border-width: 4px;
+}
+
+.px-button.px-button:focus-visible,
+.px-chip.px-chip:focus-visible,
+.px-field.px-field:focus-visible {
+  outline: 3px solid var(--px-focus);
+  outline-offset: 4px;
+}
+
+.px-tab {
+  background: var(--px-accent);
+  border: 2px solid var(--px-line);
+  color: var(--px-accent-ink);
+  display: table;
+  font-family: var(--px-font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: -36px 0 12px;
+  max-width: 100%;
+  padding: 4px 12px;
+  position: relative;
+}
+
+.px-dialog {
+  padding-bottom: 36px;
+}
+
+.px-dialog::after {
+  bottom: 8px;
+  color: var(--px-accent);
+  content: "▼" / "";
+  font-size: 14px;
+  position: absolute;
+  right: 16px;
+}
+
+/* Components supply role="progressbar", an accessible name and value bounds. */
+.px-progress {
+  background: var(--px-surface);
+  border: 2px solid var(--px-line);
+  box-sizing: border-box;
+  height: 18px;
+  padding: 3px;
+}
+
+.px-progress::before {
+  background: var(--px-accent);
+  box-shadow: inset -4px 0 0 var(--px-line);
+  content: "";
+  display: block;
+  height: 100%;
+  width: clamp(0%, var(--px-progress, 0%), 100%);
+}
+
+.px-badge {
+  background: var(--px-surface-alt);
+  border: 2px solid var(--px-line);
+  color: var(--px-ink);
+  display: inline-block;
+  font-family: var(--px-font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 2px 8px;
+}
+
+.px-scene {
+  --px-night: 0;
+  background: var(--px-sky);
+  border: 3px solid var(--px-line);
+  box-sizing: border-box;
+  isolation: isolate;
+  min-height: 240px;
+  overflow: hidden;
+  position: relative;
+}
+
+.px-scene__horizon,
+.px-scene__hill-far,
+.px-scene__hill-near,
+.px-scene__grass,
+.px-scene__ground {
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+
+.px-scene__horizon {
+  background: var(--px-horizon);
+  bottom: 20%;
+  height: 35%;
+}
+
+.px-scene__hill-far,
+.px-scene__hill-near {
+  bottom: 16%;
+  clip-path: polygon(
+    0 100%,
+    0 60%,
+    8% 60%,
+    8% 40%,
+    18% 40%,
+    18% 20%,
+    30% 20%,
+    30% 0,
+    42% 0,
+    42% 20%,
+    52% 20%,
+    52% 40%,
+    65% 40%,
+    65% 20%,
+    78% 20%,
+    78% 40%,
+    90% 40%,
+    90% 60%,
+    100% 60%,
+    100% 100%
+  );
+  height: 55%;
+}
+
+.px-scene__hill-far {
+  background: var(--px-hill-far);
+}
+
+.px-scene__hill-near {
+  background: var(--px-hill-near);
+  height: 38%;
+  transform: scaleX(-1);
+}
+
+.px-scene__grass {
+  background: var(--px-grass);
+  bottom: 12%;
+  height: 8%;
+}
+
+.px-scene__ground {
+  background: var(--px-ground);
+  bottom: 0;
+  height: 12%;
+}
+
+.px-scene__sign {
+  background: var(--px-wood);
+  bottom: 17%;
+  height: 38px;
+  left: 14%;
+  position: absolute;
+  width: 8px;
+}
+
+.px-scene__sign::before {
+  background: var(--px-wood);
+  box-shadow:
+    4px 0 0 var(--px-wood),
+    -4px 0 0 var(--px-wood);
+  content: "";
+  height: 16px;
+  left: -12px;
+  position: absolute;
+  top: 0;
+  width: 32px;
+}
+
+.px-scene__celestial {
+  background: var(--px-celestial);
+  box-shadow:
+    5px 0 0 var(--px-celestial),
+    -5px 0 0 var(--px-celestial),
+    0 5px 0 var(--px-celestial),
+    0 -5px 0 var(--px-celestial);
+  height: 28px;
+  position: absolute;
+  right: 18%;
+  top: 15%;
+  width: 28px;
+}
+
+.px-scene__celestial::after {
+  background: var(--px-sky);
+  content: "";
+  height: 27px;
+  left: 10px;
+  opacity: var(--px-night);
+  position: absolute;
+  top: -5px;
+  width: 23px;
+}
+
+.px-scene__stars {
+  background: var(--px-celestial);
+  box-shadow:
+    48px 16px 0 var(--px-celestial),
+    120px -8px 0 var(--px-celestial),
+    180px 24px 0 var(--px-celestial);
+  height: 4px;
+  left: 12%;
+  opacity: var(--px-night);
+  position: absolute;
+  top: 14%;
+  width: 4px;
+}
+
+.px-scene__npc {
+  bottom: 18%;
+  display: grid;
+  isolation: isolate;
+  left: 50%;
+  min-height: 64px;
+  min-width: 64px;
+  place-items: center;
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.px-scene__npc[data-npc-plate="true"]::before {
+  background: var(--px-stage);
+  box-shadow:
+    4px 0 0 var(--px-stage),
+    -4px 0 0 var(--px-stage),
+    0 4px 0 var(--px-stage),
+    0 -4px 0 var(--px-stage);
+  content: "";
+  inset: -4px;
+  position: absolute;
+  z-index: -1;
+}
+
+html[data-visitor-mode="dark"] .px-scene,
+[data-preview="true"][data-preview-mode="dark"] .px-scene {
+  --px-night: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-visitor-mode]) .px-scene {
+    --px-night: 1;
+  }
+}
+
+[data-preview="true"][data-preview-mode="light"] .px-scene {
+  --px-night: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .px-dialog::after {
+    animation: px-more 1.2s steps(2, end) infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .px-dialog::after {
+    animation: none;
+  }
+}
+
+@keyframes px-more {
+  to {
+    opacity: 0;
+  }
+}

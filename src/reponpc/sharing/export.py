@@ -261,7 +261,9 @@ def _visitor_dependencies(web_dist: Path) -> dict[str, bytes]:
         if (
             key != "visitor.html"
             and (item.get("isEntry") is True or item.get("isDynamicEntry") is True)
-            and any(value in closure_paths for value in linked_values)
+            and any(
+                value in closure_paths and not value.endswith(".woff2") for value in linked_values
+            )
         ):
             raise SiteExportError("SHARING_EXPORT_INVALID")
     result: dict[str, bytes] = {}

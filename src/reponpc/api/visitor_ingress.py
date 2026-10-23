@@ -639,7 +639,11 @@ def create_visitor_gateway_app(
             except OSError, ValueError:
                 return Response(status_code=404)
             if checked.suffix != ".html":
-                return FileResponse(checked)
+                return FileResponse(
+                    checked,
+                    media_type="font/woff2" if checked.suffix == ".woff2" else None,
+                    headers={"X-Content-Type-Options": "nosniff"},
+                )
             from reponpc.api.visitor_document import render_published_visitor_document
 
             try:

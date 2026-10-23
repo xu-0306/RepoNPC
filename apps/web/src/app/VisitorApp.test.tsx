@@ -77,6 +77,8 @@ beforeEach(() => {
   hooks.cursor = 0;
   hooks.effects = [];
   vi.stubGlobal("window", {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
     matchMedia: () => ({
       matches: false,
       addEventListener: vi.fn(),

@@ -16,6 +16,7 @@ import { VisitorPage } from "./VisitorPage";
 import type { PublicFaq, PublicProfile } from "./publicTypes";
 import {
   readVisitorMode,
+  readVisitorScheme,
   setVisitorMode,
   syncVisitorPolicy,
   type VisitorMode,
@@ -48,6 +49,7 @@ export function VisitorApp() {
   const [visitorMode, setCurrentVisitorMode] = useState<VisitorMode>(() =>
     readVisitorMode(),
   );
+  const [visitorScheme, setCurrentVisitorScheme] = useState(readVisitorScheme);
   const [reducedMotion, setReducedMotion] = useState(() =>
     typeof window === "undefined"
       ? true
@@ -61,6 +63,17 @@ export function VisitorApp() {
   const focusQuestionWhenIdle = useRef(false);
   const characterTimer = useRef<number | null>(null);
   const copy = messages[locale];
+
+  useEffect(() => {
+    const updateMode = () => setCurrentVisitorMode(readVisitorMode());
+    const updateScheme = () => setCurrentVisitorScheme(readVisitorScheme());
+    window.addEventListener("reponpc:visitor-mode-change", updateMode);
+    window.addEventListener("reponpc:visitor-scheme-change", updateScheme);
+    return () => {
+      window.removeEventListener("reponpc:visitor-mode-change", updateMode);
+      window.removeEventListener("reponpc:visitor-scheme-change", updateScheme);
+    };
+  }, []);
 
   const transitionCharacter = useCallback((state: CharacterState) => {
     if (characterTimer.current !== null) {
@@ -168,8 +181,12 @@ export function VisitorApp() {
             syncVisitorPolicy(
               scene?.color_mode ?? "system",
               scene?.visitor_mode_toggle ?? true,
+              scene?.scheme.id,
+              scene?.visitor_scheme_choice,
+              scene?.schemes.map((scheme) => scheme.id),
             ),
           );
+          setCurrentVisitorScheme(readVisitorScheme());
         }
       })
       .catch((error: unknown) => {
@@ -533,6 +550,7 @@ export function VisitorApp() {
       suggestions={suggestions}
       turns={turns}
       visitorMode={visitorMode}
+      visitorScheme={visitorScheme}
       onVisitorModeChange={(mode) => {
         if (setVisitorMode(mode)) setCurrentVisitorMode(readVisitorMode());
       }}

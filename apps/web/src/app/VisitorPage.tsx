@@ -4,12 +4,17 @@ import type { RefObject } from "react";
 import { CharacterRenderer } from "../features/character/CharacterRenderer";
 import { messages } from "../i18n/messages";
 import { VisitorConversation } from "./VisitorConversation";
-import { sceneThemeStyle, type VisitorMode } from "./scene";
+import {
+  sceneThemesForScheme,
+  sceneThemeStyle,
+  type VisitorMode,
+} from "./scene";
 import { isStaticExport } from "./visitorData";
 import type { PublicScene, VisitorPageProps } from "./publicTypes";
 
 interface ExtendedProps extends VisitorPageProps {
   visitorMode?: VisitorMode;
+  visitorScheme?: string;
   onVisitorModeChange?: (mode: VisitorMode) => void;
   backgroundUrlOverride?: string | null;
   compactPreview?: boolean;
@@ -44,6 +49,7 @@ export function VisitorPage(props: ExtendedProps) {
     mode = "visitor",
     previewMode,
     visitorMode = "system",
+    visitorScheme,
     onVisitorModeChange,
     sceneOverride,
     backgroundUrlOverride,
@@ -72,7 +78,16 @@ export function VisitorPage(props: ExtendedProps) {
     backgroundUrlOverride === undefined
       ? publicBackgroundUrl(backgroundUrl, scene?.revision)
       : previewBackgroundUrl(backgroundUrlOverride);
-  const sceneStyle = sceneThemeStyle(scene);
+  const canChooseScheme = mode === "visitor" && scene?.visitor_scheme_choice;
+  const chosenScheme = canChooseScheme
+    ? scene.schemes.find((scheme) => scheme.id === visitorScheme)
+    : undefined;
+  const sceneStyle = sceneThemeStyle(
+    scene && canChooseScheme
+      ? { ...scene, themes: sceneThemesForScheme(scene, visitorScheme ?? "") }
+      : scene,
+  );
+  const npcPlate = chosenScheme?.npc_plate ?? scene?.npc_plate;
   const sceneDim =
     scene?.background_dim === "auto"
       ? "none"
@@ -140,6 +155,8 @@ export function VisitorPage(props: ExtendedProps) {
       data-compact-preview={compactPreview ? "true" : undefined}
       data-preview={mode === "preview" ? "true" : undefined}
       data-preview-mode={mode === "preview" ? previewMode : undefined}
+      data-npc-plate-light={npcPlate?.light}
+      data-npc-plate-dark={npcPlate?.dark}
       lang={locale}
       style={heroStyle}
     >

@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { PublicScene } from "./publicTypes";
 
 export const VISITOR_MODE_STORAGE_KEY = "reponpc.visitor.mode";
+export const VISITOR_SCHEME_STORAGE_KEY = "reponpc.visitor.scheme";
 export type VisitorMode = "system" | "light" | "dark";
 
 declare global {
@@ -9,9 +10,14 @@ declare global {
     RepoNPCSceneMode?: {
       get: () => VisitorMode;
       set: (mode: VisitorMode) => boolean;
+      getScheme: () => string;
+      setScheme: (id: string | null) => boolean;
       configure: (
         ownerMode: VisitorMode,
         visitorToggle: boolean,
+        defaultScheme?: string,
+        visitorSchemeChoice?: boolean,
+        schemeIds?: string[],
       ) => VisitorMode;
     };
   }
@@ -90,15 +96,44 @@ export function setVisitorMode(mode: VisitorMode): boolean {
   return window.RepoNPCSceneMode?.set(mode) ?? false;
 }
 
+export function readVisitorScheme(): string {
+  if (typeof document === "undefined") return "";
+  const scripted = window.RepoNPCSceneMode?.getScheme();
+  if (scripted) return scripted;
+  const root = document.documentElement;
+  const selected = root.dataset.visitorScheme;
+  return root.dataset.visitorSchemeChoice === "true" &&
+    selected &&
+    /^[a-z0-9_]{1,64}$/.test(selected)
+    ? selected
+    : (root.dataset.defaultScheme ?? "");
+}
+
 export function syncVisitorPolicy(
   ownerMode: VisitorMode,
   visitorToggle: boolean,
+  defaultScheme?: string,
+  visitorSchemeChoice?: boolean,
+  schemeIds?: string[],
 ): VisitorMode {
   if (typeof document === "undefined") return ownerMode;
   const root = document.documentElement;
   root.dataset.ownerMode = ownerMode;
   root.dataset.visitorToggle = String(visitorToggle);
-  const current = window.RepoNPCSceneMode?.configure(ownerMode, visitorToggle);
+  if (defaultScheme !== undefined) {
+    root.dataset.defaultScheme = defaultScheme;
+    root.dataset.visitorSchemeChoice = String(visitorSchemeChoice === true);
+    if (!visitorSchemeChoice || !schemeIds?.includes(readVisitorScheme())) {
+      root.removeAttribute("data-visitor-scheme");
+    }
+  }
+  const current = window.RepoNPCSceneMode?.configure(
+    ownerMode,
+    visitorToggle,
+    defaultScheme,
+    visitorSchemeChoice,
+    schemeIds,
+  );
   if (current) return current;
   if (!visitorToggle) {
     if (ownerMode === "system") root.removeAttribute("data-visitor-mode");

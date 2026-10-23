@@ -1,4 +1,27 @@
+@import "./pixel.css";
+
 :root {
+  --px-bg: #f2e9d9;
+  --px-surface: #fff9ed;
+  --px-surface-alt: #ebe0cb;
+  --px-ink: #322b2b;
+  --px-muted: #64564a;
+  --px-line: #44362e;
+  --px-accent: #9b3c21;
+  --px-accent-ink: #fff9ed;
+  --px-focus: #075e71;
+  --px-shadow: #c6b393;
+  --px-stage: #d6e7e3;
+  --px-danger: #a52b31;
+  --px-danger-ink: #fff9ed;
+  --px-sky: #d6e7e3;
+  --px-horizon: #fff7dd;
+  --px-hill-far: #719b92;
+  --px-hill-near: #476c5e;
+  --px-grass: #7d9470;
+  --px-ground: #806950;
+  --px-wood: #846248;
+  --px-celestial: #e9b452;
   --ui-bg: #f8f7fc;
   --admin-bg: var(--ui-bg);
   --ui-surface: #ffffff;
