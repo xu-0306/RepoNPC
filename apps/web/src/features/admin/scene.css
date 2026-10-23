@@ -307,19 +307,10 @@
   padding-block: 0;
 }
 
-.scene-preview__reference-layout--desktop .visitor-menu-button {
-  display: none;
-}
-
 .scene-preview__reference-layout--desktop .visitor-topbar__controls {
   align-items: center;
   flex-basis: auto;
   justify-content: flex-start;
-}
-
-.scene-preview__reference-layout--desktop .visitor-mode-control legend {
-  flex-basis: auto;
-  float: left;
 }
 
 .scene-preview__reference-layout--desktop .visitor-preview-banner {
@@ -332,47 +323,16 @@
   padding-block: 2rem;
 }
 
-.scene-preview__reference-layout--desktop .visitor-sidebar,
-.scene-preview__reference-layout--desktop
-  .visitor-sidebar:not(.visitor-sidebar--open) {
-  display: grid;
-  margin-bottom: 0;
-  position: sticky;
-}
-
-.scene-preview__reference-layout--desktop .visitor-hero {
-  align-items: center;
-  grid-template-columns: minmax(0, 1fr) auto;
+.scene-preview__reference-layout--desktop .visitor-stage {
   min-height: 17rem;
-  padding: 3.5rem;
 }
 
-.scene-preview__reference-layout--desktop .visitor-hero__copy {
+.scene-preview__reference-layout--desktop .visitor-dialog {
   padding: 1.6rem;
 }
 
-.scene-preview__reference-layout--desktop .visitor-hero__copy h1 {
-  font-size: 4.7rem;
-}
-
-.scene-preview__reference-layout--desktop .visitor-hero__stage {
-  height: 12rem;
-  inset: auto;
-  position: relative;
-  width: 12rem;
-}
-
-.scene-preview__reference-layout--desktop .visitor-hero__character {
-  transform: scale(1.5);
-}
-
 .scene-preview__reference-layout--desktop
-  :is(
-    .visitor-profile-card,
-    .visitor-about-card,
-    .visitor-projects,
-    .visitor-chat-panel
-  ) {
+  :is(.visitor-profile-card, .visitor-projects) {
   padding: 1.55rem;
 }
 
@@ -397,21 +357,6 @@
   align-items: flex-start;
 }
 
-.scene-preview__reference-layout--phone .visitor-sidebar--open {
-  background: var(--visitor-surface);
-  border-right: 2px solid var(--visitor-border);
-  display: grid;
-  inset: 0 auto auto 0;
-  margin: 0;
-  max-height: 100%;
-  max-width: 90%;
-  overflow-y: auto;
-  padding: 1rem;
-  position: absolute;
-  width: min(22rem, 90%);
-  z-index: 10;
-}
-
 .scene-preview__reference-layout--phone .visitor-preview-banner {
   margin-inline: -1rem;
 }
@@ -421,12 +366,7 @@
 }
 
 .scene-preview__reference-layout--phone
-  :is(
-    .visitor-profile-card,
-    .visitor-about-card,
-    .visitor-projects,
-    .visitor-chat-panel
-  ) {
+  :is(.visitor-profile-card, .visitor-projects, .visitor-dialog) {
   padding: 1rem;
 }
 
@@ -563,13 +503,10 @@
 }
 
 .scene-preview__miniature .visitor-topbar__controls,
-.scene-preview__miniature .visitor-menu-button,
 .scene-preview__miniature .visitor-mode-control,
 .scene-preview__miniature .visitor-profile-links,
 .scene-preview__miniature .visitor-suggestions,
-.scene-preview__miniature .visitor-question-form,
-.scene-preview__miniature .visitor-npc-status__label,
-.scene-preview__miniature .visitor-sidebar {
+.scene-preview__miniature .visitor-question-form {
   display: none;
 }
 
@@ -578,39 +515,34 @@
   padding-top: 0.5rem;
 }
 
-.scene-preview__miniature .visitor-hero {
-  border-radius: 0.8rem;
+.scene-preview__miniature .visitor-adventure {
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
-  min-height: 8rem;
-  padding: 0.7rem;
 }
 
-.scene-preview__miniature .visitor-hero__copy {
+.scene-preview__miniature .visitor-stage {
+  min-height: 8rem;
+}
+
+.scene-preview__miniature .visitor-dialog {
+  margin: 0.4rem;
   padding: 0.5rem;
 }
 
-.scene-preview__miniature .visitor-hero__copy h1 {
+.scene-preview__miniature .visitor-dialog h1 {
   font-size: 1.3rem;
 }
 
-.scene-preview__miniature .visitor-hero__stage {
-  height: 4rem;
-  width: 4rem;
-}
-
-.scene-preview__miniature .visitor-chat-panel {
-  border-radius: 0.8rem;
+.scene-preview__miniature .visitor-log {
   max-width: none;
   padding: 0.6rem;
 }
 
-.scene-preview__miniature .visitor-chat-heading {
+.scene-preview__miniature .visitor-log__heading {
   padding-bottom: 0.4rem;
 }
 
-.scene-preview__miniature .visitor-chat-heading h2,
-.scene-preview__miniature .visitor-chat-heading p,
+.scene-preview__miniature .visitor-log__heading h2,
+.scene-preview__miniature .visitor-log__heading p,
 .scene-preview__miniature .visitor-welcome-card,
 .scene-preview__miniature .turn {
   font-size: 0.75rem;

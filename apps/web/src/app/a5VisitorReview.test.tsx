@@ -1,14 +1,15 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { messages } from "../i18n/messages";
 import { VisitorPage } from "./VisitorPage";
 import { VisitorConversation, type VisitorTurn } from "./VisitorConversation";
-import { sceneThemesForScheme, sceneThemeStyle } from "./scene";
-import type {
-  PublicProfile,
-  PublicScene,
-  VisitorPageProps,
-} from "./publicTypes";
+import {
+  sceneSwatchStyle,
+  sceneThemesForScheme,
+  sceneThemeStyle,
+} from "./scene";
+import type { PublicProfile, PublicScene } from "./publicTypes";
 
 const tokens = {
   background: "#f2f3f4",
@@ -89,7 +90,7 @@ const profile: PublicProfile = {
   },
 };
 const noop = () => undefined;
-function page(overrides: Partial<VisitorPageProps> = {}) {
+function page(overrides: Partial<Parameters<typeof VisitorPage>[0]> = {}) {
   return (
     <VisitorPage
       locale="en"
@@ -191,6 +192,128 @@ describe("Main's independent shared visitor review", () => {
     );
   });
 
+  it("renders the Set C landmarks in reading order", () => {
+    const markup = renderToStaticMarkup(page());
+    const topbar = markup.indexOf('class="visitor-topbar"');
+    const stage = markup.indexOf('class="px-scene visitor-stage"');
+    const dialogue = markup.indexOf('class="px-dialog visitor-dialog"');
+    const log = markup.indexOf('class="visitor-log px-panel"');
+    const composer = markup.indexOf('class="visitor-question-form"');
+    expect(topbar).toBeGreaterThanOrEqual(0);
+    expect(stage).toBeGreaterThan(topbar);
+    expect(dialogue).toBeGreaterThan(stage);
+    expect(log).toBeGreaterThan(dialogue);
+    expect(composer).toBeGreaterThan(log);
+    expect(markup).toContain('class="visitor-projects-trigger px-button');
+    expect(markup).toContain('class="visitor-log__scroll"');
+    expect(markup).toContain('aria-label="Pixel scene"');
+  });
+
+  it("uses the available, thinking, and resting dialogue states", () => {
+    const available = renderToStaticMarkup(page());
+    // The owner greeting takes precedence over the generic welcome line.
+    expect(available).toContain(">Fixture greeting</h1>");
+    expect(available).toContain(messages.en.statusAvailable);
+    expect(available).toContain('data-character-state="idle"');
+
+    const thinking = renderToStaticMarkup(
+      page({ characterState: "think", pending: true }),
+    );
+    expect(thinking).toContain(messages.en.dialogueThinking);
+    expect(thinking).toContain(messages.en.statusThinking);
+    expect(thinking).toContain('data-character-state="think"');
+
+    const resting = renderToStaticMarkup(
+      page({
+        chatAvailable: false,
+        characterState: "offline",
+        suggestions: ["Approved FAQ"],
+        canAskSuggestion: () => true,
+      }),
+    );
+    expect(resting).toContain(messages.en.dialogueResting);
+    expect(resting).toContain(messages.en.restingBadge);
+    expect(resting).toContain(messages.en.dialogueFaq);
+    expect(resting).toContain("Approved FAQ");
+    expect(resting).toContain('data-character-state="offline"');
+  });
+
+  it("shows appearance only when a visitor choice is enabled and keeps preview inert", () => {
+    expect(renderToStaticMarkup(page())).toContain(
+      'class="visitor-appearance-trigger px-button px-button--secondary"',
+    );
+    expect(
+      renderToStaticMarkup(
+        page({
+          sceneOverride: {
+            ...scene,
+            visitor_scheme_choice: false,
+            visitor_mode_toggle: false,
+          },
+        }),
+      ),
+    ).not.toContain("visitor-appearance-trigger");
+    const preview = renderToStaticMarkup(
+      page({ mode: "preview", previewMode: "dark" }),
+    );
+    expect(preview).not.toContain("visitor-appearance-trigger");
+    expect(preview).not.toContain("reponpc.visitor.scheme");
+  });
+
+  it("maps scheme swatches only from the selected payload tokens", () => {
+    const style = sceneSwatchStyle(scene.schemes[0]);
+    expect(style).toEqual({
+      "--scene-swatch-light-sky": tokens.sky,
+      "--scene-swatch-light-hill-near": tokens.hill_near,
+      "--scene-swatch-light-grass": tokens.grass,
+      "--scene-swatch-dark-sky": tokens.sky,
+      "--scene-swatch-dark-hill-near": tokens.hill_near,
+      "--scene-swatch-dark-grass": tokens.grass,
+    });
+  });
+
+  it("keeps the projects drawer data and the owner background in the stage", () => {
+    const profileWithMetadata = {
+      ...profile,
+      repositories: [
+        {
+          ...profile.repositories[0],
+          language: "TypeScript",
+          stars: 0,
+          forks: 2,
+        },
+      ],
+    };
+    vi.stubGlobal("window", { location: { origin: "https://fixture.test" } });
+    try {
+      const markup = renderToStaticMarkup(
+        page({
+          profile: profileWithMetadata,
+          mode: "preview",
+          previewMode: "light",
+          backgroundUrlOverride:
+            "/api/admin/assets/scene/background-drafts/" + "a".repeat(32),
+        }),
+      );
+      expect(markup).toContain("<dialog");
+      expect(markup).toContain("fixture/project");
+      expect(markup).toContain("Fixture project");
+      expect(markup).toContain("TypeScript");
+      expect(markup).toMatch(/<dd>0<\/dd>/);
+      expect(markup).toContain(
+        'class="px-scene visitor-stage visitor-stage--image"',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps zh-TW and English message key sets aligned", () => {
+    expect(Object.keys(messages["zh-TW"]).sort()).toEqual(
+      Object.keys(messages.en).sort(),
+    );
+  });
+
   it("keeps two preview instances' semantic IDs and explicit modes isolated", () => {
     const markup = renderToStaticMarkup(
       <>
@@ -234,8 +357,10 @@ describe("Main's independent shared visitor review", () => {
     expect(present.match(/<dd>0<\/dd>/g)).toHaveLength(2);
   });
 
-  it("hides the welcome hero after a question and retains both semantic messages", () => {
-    expect(renderToStaticMarkup(page())).toContain('class="visitor-hero"');
+  it("keeps the pixel scene and dialogue while the log changes with a question", () => {
+    expect(renderToStaticMarkup(page())).toContain(
+      'class="px-dialog visitor-dialog"',
+    );
     const markup = renderToStaticMarkup(
       page({
         turns: [
@@ -244,7 +369,11 @@ describe("Main's independent shared visitor review", () => {
         ],
       }),
     );
-    expect(markup).not.toContain('class="visitor-hero"');
+    expect(markup).toContain('class="px-scene visitor-stage"');
+    expect(markup).toContain('class="px-dialog visitor-dialog"');
+    expect(markup).not.toContain(
+      'class="visitor-welcome-card px-panel--inset"',
+    );
     expect(markup).toContain("Fixture question");
     expect(markup).toContain("Fixture answer");
   });

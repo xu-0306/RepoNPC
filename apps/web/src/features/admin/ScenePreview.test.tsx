@@ -256,7 +256,7 @@ describe("owner scene preview", () => {
       />,
     );
 
-    expect(markup.match(/class="visitor-page"/g)).toHaveLength(13);
+    expect(markup.match(/class="visitor-page px-body"/g)).toHaveLength(13);
     expect(markup.match(/data-compact-preview="true"/g)).toHaveLength(10);
     expect(markup.match(/data-preview-mode="light"/g)).toHaveLength(8);
     // The main preview and two geometry probes use light; the gallery contributes five of each.

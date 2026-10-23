@@ -106,8 +106,12 @@ class FixtureVisitorChatService:
         history: tuple[ChatHistoryMessage, ...],
         client_ip: str,
         cancel_requested: threading.Event | None = None,
+        timeout_seconds: float | None = None,
+        allow_retry: bool = True,
+        on_progress: Any = None,
+        on_summary: Any = None,
     ) -> ChatDelivery:
-        del client_ip
+        del client_ip, timeout_seconds, allow_retry, on_progress, on_summary
         attempt = self.controller.record(message, locale, history)
         if message == "browser-failure" and attempt == 1:
             raise RuntimeError("deterministic prestream failure")

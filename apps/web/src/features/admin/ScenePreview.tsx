@@ -94,8 +94,8 @@ export function ScenePreview({
     desktop: number;
     phone: number;
   } | null>(null);
-  const desktopHeroRef = useRef<HTMLElement | null>(null);
-  const phoneHeroRef = useRef<HTMLElement | null>(null);
+  const desktopHeroRef = useRef<HTMLDivElement | null>(null);
+  const phoneHeroRef = useRef<HTMLDivElement | null>(null);
   const visibleViewportRef = useRef<HTMLDivElement | null>(null);
   const focusImageRef = useRef<HTMLImageElement | null>(null);
   const focusMapRef = useRef<HTMLDivElement | null>(null);
@@ -408,7 +408,6 @@ export function ScenePreview({
               reducedMotion={reducedMotion}
               sampleContent
               sampleConversation={conversationMode === "conversation"}
-              previewKeepHero={conversationMode === "empty"}
               showFocusFrame={showFocusFrame}
               sceneOverride={{ ...selectedScene, visitor_mode_toggle: false }}
               backgroundUrlOverride={protectedBackground}
@@ -664,7 +663,6 @@ export function ScenePreview({
                           sampleConversation={
                             conversationMode === "conversation"
                           }
-                          previewKeepHero
                           sceneOverride={scene}
                           backgroundUrlOverride={protectedBackground}
                           suggestions={profile.suggested_questions}
@@ -706,7 +704,6 @@ export function ScenePreview({
             question=""
             reducedMotion
             sampleContent
-            previewKeepHero
             sceneOverride={{ ...selectedScene, visitor_mode_toggle: false }}
             backgroundUrlOverride={protectedBackground}
             suggestions={profile.suggested_questions}
@@ -738,7 +735,6 @@ export function ScenePreview({
             question=""
             reducedMotion
             sampleContent
-            previewKeepHero
             sceneOverride={{ ...selectedScene, visitor_mode_toggle: false }}
             backgroundUrlOverride={protectedBackground}
             suggestions={profile.suggested_questions}

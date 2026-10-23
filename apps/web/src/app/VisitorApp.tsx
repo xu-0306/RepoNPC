@@ -554,6 +554,11 @@ export function VisitorApp() {
       onVisitorModeChange={(mode) => {
         if (setVisitorMode(mode)) setCurrentVisitorMode(readVisitorMode());
       }}
+      onVisitorSchemeChange={(scheme) => {
+        if (window.RepoNPCSceneMode?.setScheme(scheme)) {
+          setCurrentVisitorScheme(readVisitorScheme());
+        }
+      }}
     />
   );
 }

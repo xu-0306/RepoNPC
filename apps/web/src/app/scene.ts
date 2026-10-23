@@ -78,6 +78,20 @@ export function sceneThemesForScheme(
   );
 }
 
+/** Maps payload tokens to the closed set used by visitor scheme swatches. */
+export function sceneSwatchStyle(
+  scheme: PublicScene["schemes"][number],
+): CSSProperties {
+  return {
+    "--scene-swatch-light-sky": scheme.themes.light.sky,
+    "--scene-swatch-light-hill-near": scheme.themes.light.hill_near,
+    "--scene-swatch-light-grass": scheme.themes.light.grass,
+    "--scene-swatch-dark-sky": scheme.themes.dark.sky,
+    "--scene-swatch-dark-hill-near": scheme.themes.dark.hill_near,
+    "--scene-swatch-dark-grass": scheme.themes.dark.grass,
+  } as CSSProperties;
+}
+
 export function readVisitorMode(): VisitorMode {
   if (typeof document === "undefined") return "system";
   const scripted = window.RepoNPCSceneMode?.get();

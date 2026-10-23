@@ -251,7 +251,9 @@ describe("visitor no-match UX", () => {
         view.markup().split(`<button type="button">${next}</button>`).length -
           1,
       ).toBe(1);
-      expect(view.markup()).toContain(`<h3>${messages[locale].suggested}</h3>`);
+      expect(view.markup()).toContain(
+        `<h3 class="px-label">${messages[locale].suggested}</h3>`,
+      );
       await view.submit("Supported topic");
       expect(JSON.parse(send.mock.calls[1][1].body).history).toEqual([]);
       expect(view.render().characterState).toBe("success");
@@ -282,12 +284,14 @@ describe("visitor no-match UX", () => {
       expect(view.render().suggestions).toEqual([]);
       expect(view.markup()).not.toContain('class="visitor-suggestions"');
       expect(view.markup()).not.toContain(
-        `<h3>${messages[locale].suggested}</h3>`,
+        `<h3 class="px-label">${messages[locale].suggested}</h3>`,
       );
       await view.submit("Found evidence");
       expect(view.render().suggestions).toEqual(["Next?"]);
       expect(view.markup()).toContain('class="visitor-suggestions"');
-      expect(view.markup()).toContain(`<h3>${messages[locale].suggested}</h3>`);
+      expect(view.markup()).toContain(
+        `<h3 class="px-label">${messages[locale].suggested}</h3>`,
+      );
       expect(view.markup()).toContain('class="answer-suggestions"');
     },
   );

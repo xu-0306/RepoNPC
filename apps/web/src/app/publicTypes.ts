@@ -128,7 +128,6 @@ export interface VisitorPageProps {
   previewMode?: "light" | "dark";
   sceneOverride?: PublicScene | null;
   sampleConversation?: boolean;
-  previewKeepHero?: boolean;
   showFocusFrame?: boolean;
   sampleContent?: boolean;
 }
