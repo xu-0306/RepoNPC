@@ -59,9 +59,10 @@ def test_scene_defaults_and_optional_settings_match_the_approved_contract() -> N
     legacy = example_data()
     legacy["character"].pop("scene", None)
     defaults = validate_public_config(legacy).character.scene
-    assert defaults.color_scheme == "neutral"
+    assert defaults.color_scheme == "meadow"
     assert defaults.color_mode == "system"
     assert defaults.visitor_mode_toggle is True
+    assert defaults.visitor_scheme_choice is True
     assert defaults.accent is None
     assert defaults.background_path is None
     assert defaults.background_scaling == "smooth"
@@ -73,6 +74,7 @@ def test_scene_defaults_and_optional_settings_match_the_approved_contract() -> N
         "color_scheme": "ocean",
         "color_mode": "dark",
         "visitor_mode_toggle": False,
+        "visitor_scheme_choice": False,
         "accent": "#AABBCC",
         "background_path": "assets/scene/hero.webp",
         "background_scaling": "pixelated",
@@ -80,9 +82,10 @@ def test_scene_defaults_and_optional_settings_match_the_approved_contract() -> N
         "background_dim": "high",
     }
     scene = validate_public_config(configured).character.scene
-    assert scene.color_scheme == "ocean"
+    assert scene.color_scheme == "coast"
     assert scene.color_mode == "dark"
     assert scene.visitor_mode_toggle is False
+    assert scene.visitor_scheme_choice is False
     assert scene.accent == "#aabbcc"
     assert scene.background_path == "assets/scene/hero.webp"
     assert scene.background_scaling == "pixelated"
@@ -109,7 +112,9 @@ def test_scene_config_rejects_unknown_and_unsafe_values(field: str, value: str, 
     error = assert_invalid(data, path)
     assert "CANARY" not in str(error)
     if field == "color_scheme":
-        assert all(scheme in error.issues[0].message for scheme in ("neutral", "ocean", "forest"))
+        assert all(
+            scheme in error.issues[0].message for scheme in ("meadow", "sunset", "coast", "sakura")
+        )
 
 
 def test_scene_config_rejects_unknown_template_fields_and_out_of_range_focus() -> None:
@@ -120,6 +125,21 @@ def test_scene_config_rejects_unknown_template_fields_and_out_of_range_focus() -
     data = example_data()
     data["character"]["scene"] = {"background_focus": {"x": 101, "y": 50}}
     assert_invalid(data, "character.scene.background_focus.x")
+
+
+@pytest.mark.parametrize("value", [0, 1, "true", "false", None, [], {}])
+def test_visitor_scheme_choice_is_a_strict_boolean(value: object) -> None:
+    data = example_data()
+    data["character"]["scene"] = {"visitor_scheme_choice": value}
+    assert_invalid(data, "character.scene.visitor_scheme_choice")
+
+
+def test_old_neutral_config_canonicalizes_to_meadow_without_migration() -> None:
+    data = example_data()
+    data["character"]["scene"] = {"color_scheme": "neutral"}
+    scene = validate_public_config(data).character.scene
+    assert scene.color_scheme == "meadow"
+    assert scene.visitor_scheme_choice is True
 
 
 def test_legacy_humanoid_fields_are_rejected_without_compatibility_aliases() -> None:

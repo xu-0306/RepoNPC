@@ -108,12 +108,16 @@ def test_scene_status_gallery_resolves_every_scheme_for_all_sheet_edges(tmp_path
     )
 
     gallery = cast(list[dict[str, object]], payload["schemes"])
-    assert len(gallery) == 5
+    assert len(gallery) == 4
     assert {str(item["id"]) for item in gallery} == set(registry.schemes)
     for item in gallery:
         scheme = registry.schemes[str(item["id"])]
         themes = cast(dict[str, dict[str, str]], item["themes"])
-        assert themes["light"]["stage"] != scheme.light["stage"]
+        assert item["npc_plate"]["light"] is True
+        if contrast_ratio("#f5f5f5", scheme.light["stage"]) >= 3.0:
+            assert themes["light"]["stage"] == scheme.light["stage"]
+        else:
+            assert themes["light"]["stage"] != scheme.light["stage"]
         assert contrast_ratio("#f5f5f5", themes["light"]["stage"]) >= 3.0
         assert themes["light"]["stage"] != themes["light"]["surface"]
 
@@ -170,12 +174,84 @@ def _proposal(state: dict[str, object], *, background: str) -> dict[str, object]
         "color_scheme": state["scene"]["scheme"]["id"],  # type: ignore[index]
         "color_mode": "system",
         "visitor_mode_toggle": True,
+        "visitor_scheme_choice": True,
         "accent": None,
         "background": background,
         "focus": {"x": 50, "y": 50},
         "dim": "auto",
         "scaling": "smooth",
     }
+
+
+def test_scene_scheme_choice_preview_apply_reset_and_strict_bool(tmp_path: Path) -> None:
+    app = build_application(tmp_path / "runtime", tmp_path / "web", _ORIGIN)
+    with TestClient(app, base_url=_ORIGIN) as client:
+        login = client.post(
+            "/api/admin/session",
+            headers={"Origin": _ORIGIN},
+            json={"username": FIXTURE_USERNAME, "password": FIXTURE_PASSWORD},
+        )
+        assert login.status_code == 200
+        client.headers["Referer"] = f"{_ORIGIN}/admin"
+        headers = {"Origin": _ORIGIN, "X-CSRF-Token": login.json()["csrf_token"]}
+        state = client.get("/api/admin/portfolio/status").json()["scene_state"]
+        defaults = state["defaults"]
+        assert defaults["color_scheme"] == "meadow"
+        assert defaults["color_mode"] == "system"
+        assert defaults["visitor_mode_toggle"] is True
+        assert defaults["visitor_scheme_choice"] is True
+        assert defaults["accent"] is None
+        proposal = {
+            **defaults,
+            "color_scheme": "sunset",
+            "color_mode": "dark",
+            "visitor_mode_toggle": False,
+            "visitor_scheme_choice": False,
+            "accent": "#333399",
+        }
+        for value in (0, 1, "false", None):
+            invalid = {**proposal, "visitor_scheme_choice": value}
+            assert (
+                client.post("/api/admin/scene/preview", headers=headers, json=invalid).status_code
+                == 400
+            )
+            assert (
+                client.put(
+                    "/api/admin/scene",
+                    headers=headers,
+                    json={"proposal": invalid, "expected": _expected_state(state)},
+                ).status_code
+                == 400
+            )
+        preview = client.post("/api/admin/scene/preview", headers=headers, json=proposal)
+        assert preview.status_code == 200
+        assert preview.json()["scene"]["visitor_scheme_choice"] is False
+        applied = client.put(
+            "/api/admin/scene",
+            headers=headers,
+            json={"proposal": proposal, "expected": _expected_state(state)},
+        )
+        assert applied.status_code == 200
+        assert applied.json()["scene"] == preview.json()["scene"]
+        current = applied.json()["scene_state"]
+        assert current["settings"]["visitor_scheme_choice"] is False
+        assert (
+            client.get("/api/public/profile?locale=en").json()["character"]["scene"]
+            == applied.json()["scene"]
+        )
+        reset = client.put(
+            "/api/admin/scene",
+            headers=headers,
+            json={"proposal": defaults, "expected": _expected_state(current)},
+        )
+        assert reset.status_code == 200
+        assert reset.json()["scene_state"]["settings"] == defaults
+        assert reset.json()["scene"]["scheme"] == {"id": "meadow", "version": 1}
+        assert reset.json()["scene"]["visitor_scheme_choice"] is True
+        config = parse_public_config_bytes(
+            client.get("/api/admin/portfolio").json()["content"].encode()
+        )
+        assert config.character.scene.visitor_scheme_choice is True
 
 
 def test_http_scene_draft_preview_apply_and_revision_binding(tmp_path: Path) -> None:

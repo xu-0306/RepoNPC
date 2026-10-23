@@ -164,6 +164,15 @@ def test_export_follows_applied_background_without_rebuilding_bundle(tmp_path: P
                     assert profile["character"]["revision"] == published["character"]["revision"]
                     scene = profile["character"]["scene"]
                     assert scene["themes"] == published["character"]["scene"]["themes"]
+                    assert scene["schemes"] == published["character"]["scene"]["schemes"]
+                    assert scene["visitor_scheme_choice"] is True
+                    assert scene["npc_plate"] == published["character"]["scene"]["npc_plate"]
+                    assert [item["id"] for item in scene["schemes"]] == list(
+                        service.registry.schemes
+                    )
+                    html = archive.read("index.html")
+                    assert b'data-visitor-scheme-choice="true"' in html
+                    assert f'data-default-scheme="{scene["scheme"]["id"]}"'.encode() in html
                     if color is None:
                         assert scene["background_url"] is None
                         assert not any(name.startswith("scene/") for name in archive.namelist())

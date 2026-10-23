@@ -18,7 +18,7 @@ from reponpc.indexing.public_profile import (
     normalize_public_profile_scene,
     parse_public_profile_bytes,
 )
-from reponpc.scene.registry import SceneRegistry, parse_scene_registry
+from reponpc.scene.registry import SceneRegistry, default_scene_registry, parse_scene_registry
 from reponpc.scene.resolve import (
     PublicScene,
     SceneResolutionError,
@@ -32,6 +32,9 @@ PUBLIC_SCENE_KEYS = {
     "scheme",
     "color_mode",
     "visitor_mode_toggle",
+    "visitor_scheme_choice",
+    "npc_plate",
+    "schemes",
     "themes",
     "background_url",
     "background_scaling",
@@ -49,6 +52,14 @@ PUBLIC_ROLES = {
     "border",
     "stage",
     "focus",
+    "sky",
+    "horizon",
+    "hill_far",
+    "hill_near",
+    "grass",
+    "ground",
+    "wood",
+    "celestial",
 }
 
 
@@ -86,6 +97,14 @@ def _test_only_registry() -> SceneRegistry:
             "border": "#5a715e",
             "stage": "#cfe1d1",
             "focus": "#287a3f",
+            "sky": "#ffffff",
+            "horizon": "#bbbbbb",
+            "hill_far": "#999999",
+            "hill_near": "#333333",
+            "grass": "#888888",
+            "ground": "#222222",
+            "wood": "#444444",
+            "celestial": "#aaaaaa",
         },
         "dark": {
             "background": "#111a13",
@@ -98,6 +117,14 @@ def _test_only_registry() -> SceneRegistry:
             "border": "#87998a",
             "stage": "#304635",
             "focus": "#93e0a3",
+            "sky": "#101020",
+            "horizon": "#222233",
+            "hill_far": "#444455",
+            "hill_near": "#181828",
+            "grass": "#555533",
+            "ground": "#222222",
+            "wood": "#666655",
+            "celestial": "#ddddcc",
         },
     }
     return parse_scene_registry(yaml.safe_dump({"schemes": [scheme], "aliases": {}}))
@@ -123,9 +150,12 @@ def test_resolver_emits_exact_public_shape_and_frozen_roles() -> None:
     result = resolve_scene(SceneConfig(), sprite_content=_sprite(), revision=4)
     payload = result.public.model_dump(mode="json")
     assert set(payload) == PUBLIC_SCENE_KEYS
-    assert payload["scheme"] == {"id": "neutral", "version": 1}
+    assert payload["scheme"] == {"id": "meadow", "version": 1}
     assert payload["color_mode"] == "system"
     assert payload["visitor_mode_toggle"] is True
+    assert payload["visitor_scheme_choice"] is True
+    assert set(payload["npc_plate"]) == {"light", "dark"}
+    assert [scheme["id"] for scheme in payload["schemes"]] == list(default_scene_registry().schemes)
     assert payload["background_url"] is None
     assert payload["background_scaling"] == "smooth"
     assert payload["background_focus"] == {"x": 50, "y": 50}
@@ -268,3 +298,117 @@ def test_public_profile_rejects_scene_revision_mismatch() -> None:
     payload["character"]["scene"]["revision"] += 1
     with pytest.raises(PublicProfileError):
         parse_public_profile_bytes(json.dumps(payload).encode())
+
+
+@pytest.mark.parametrize("scheme_id", ["meadow", "sunset", "coast", "sakura"])
+@pytest.mark.parametrize("variant,edge", [("light", "#000000"), ("dark", "#ffffff")])
+def test_scene_separation_preserves_stage_when_both_layers_pass(
+    scheme_id: str, variant: str, edge: str
+) -> None:
+    scheme = default_scene_registry().scheme(scheme_id)
+    authored = scheme.variant(variant)
+    assert all(_ratio(edge, authored[role]) >= 3.0 for role in ("sky", "hill_near"))
+    result = resolve_scene(
+        SceneConfig(color_scheme=scheme_id),
+        sprite_content=_sprite(dict.fromkeys(range(FRAME_ROWS), edge[1:])),
+        revision=2,
+    )
+    assert getattr(result.public.npc_plate, variant) is False
+    assert getattr(result.public.themes, variant).model_dump() == dict(authored)
+
+
+@pytest.mark.parametrize("scheme_id", ["meadow", "sunset", "coast", "sakura"])
+@pytest.mark.parametrize("variant", ["light", "dark"])
+def test_scene_matching_edge_gets_plate_without_adjusting_scene_colors(
+    scheme_id: str, variant: str
+) -> None:
+    scheme = default_scene_registry().scheme(scheme_id)
+    authored = scheme.variant(variant)
+    edge = authored["sky"]
+    result = resolve_scene(
+        SceneConfig(color_scheme=scheme_id),
+        sprite_content=_sprite(dict.fromkeys(range(FRAME_ROWS), edge[1:])),
+        revision=2,
+    )
+    resolved = getattr(result.public.themes, variant).model_dump()
+    assert getattr(result.public.npc_plate, variant) is True
+    assert _ratio(edge, resolved["stage"]) >= 3.0
+    assert {role: value for role, value in resolved.items() if role != "stage"} == {
+        role: value for role, value in authored.items() if role != "stage"
+    }
+    assert any(
+        notice.kind == "stage_plate"
+        and notice.variant == variant
+        and notice.adjusted_value == resolved["stage"]
+        for notice in result.notices
+    )
+
+
+def test_image_keeps_stage_adjustment_and_only_fallback_needs_plate(monkeypatch) -> None:
+    scheme = default_scene_registry().scheme("meadow")
+    edge = scheme.light["stage"]
+    sprite = _sprite(dict.fromkeys(range(FRAME_ROWS), edge[1:]))
+    settings = SceneConfig(background_path="assets/scene/fixture.png")
+    adjusted = resolve_scene(settings, sprite_content=sprite, revision=3)
+    assert adjusted.public.npc_plate.light is False
+    assert _ratio(edge, adjusted.public.themes.light.stage) >= 3.0
+    assert adjusted.public.themes.light.stage != edge
+    assert any(n.kind == "stage_adjusted" and n.variant == "light" for n in adjusted.notices)
+    monkeypatch.setattr("reponpc.scene.resolve._nearest_lightness", lambda *_args: None)
+    fallback = resolve_scene(settings, sprite_content=sprite, revision=3)
+    assert fallback.public.npc_plate.light is True
+    assert _ratio(edge, fallback.public.themes.light.stage) >= 3.0
+    assert any(n.kind == "stage_plate" and n.variant == "light" for n in fallback.notices)
+
+
+def test_every_catalog_entry_resolves_accent_and_is_deterministic() -> None:
+    settings = SceneConfig(color_scheme="coast", accent="#333399", visitor_scheme_choice=False)
+    first = resolve_scene(settings, sprite_content=_sprite(), revision=9).public
+    second = resolve_scene(settings, sprite_content=_sprite(), revision=9).public
+    assert first.model_dump_json() == second.model_dump_json()
+    assert first.visitor_scheme_choice is False
+    assert [scheme.id for scheme in first.schemes] == list(default_scene_registry().schemes)
+    for scheme in first.schemes:
+        authored = default_scene_registry().scheme(scheme.id)
+        assert scheme.version == authored.version
+        assert scheme.label == dict(authored.label)
+        assert scheme.themes.light.accent == "#333399"
+        for variant in ("light", "dark"):
+            tokens = getattr(scheme.themes, variant)
+            assert _ratio(tokens.accent_ink, tokens.accent) >= 4.5
+            for surface in ("background", "surface", "surface_alt"):
+                assert _ratio(tokens.accent, getattr(tokens, surface)) >= 3.0
+            for role in (
+                "sky",
+                "horizon",
+                "hill_far",
+                "hill_near",
+                "grass",
+                "ground",
+                "wood",
+                "celestial",
+            ):
+                assert getattr(tokens, role) == authored.variant(variant)[role]
+    selected = next(scheme for scheme in first.schemes if scheme.id == first.scheme.id)
+    assert selected.themes == first.themes
+    assert selected.npc_plate == first.npc_plate
+
+
+@pytest.mark.parametrize("mutation", ["duplicate", "default", "scene_pair", "plate_bool", "labels"])
+def test_public_catalog_rejects_malformed_or_inconsistent_entries(mutation: str) -> None:
+    payload = resolve_scene(SceneConfig(), sprite_content=_sprite(), revision=1).public.model_dump(
+        mode="json"
+    )
+    if mutation == "duplicate":
+        payload["schemes"].append(payload["schemes"][0])
+    elif mutation == "default":
+        payload["schemes"] = payload["schemes"][1:]
+    elif mutation == "scene_pair":
+        tokens = payload["schemes"][1]["themes"]["dark"]
+        tokens["wood"] = tokens["sky"]
+    elif mutation == "plate_bool":
+        payload["schemes"][1]["npc_plate"]["light"] = 1
+    else:
+        del payload["schemes"][1]["label"]["en"]
+    with pytest.raises(ValueError):
+        PublicScene.model_validate(payload)

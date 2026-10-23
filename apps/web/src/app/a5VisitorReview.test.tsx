@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { VisitorPage } from "./VisitorPage";
 import { VisitorConversation, type VisitorTurn } from "./VisitorConversation";
-import { sceneThemeStyle } from "./scene";
+import { sceneThemesForScheme, sceneThemeStyle } from "./scene";
 import type {
   PublicProfile,
   PublicScene,
@@ -21,13 +21,32 @@ const tokens = {
   border: "#555555",
   stage: "#ffffff",
   focus: "#224466",
+  sky: "#cceeff",
+  horizon: "#ddeeff",
+  hill_far: "#aabbcc",
+  hill_near: "#667788",
+  grass: "#334422",
+  ground: "#776644",
+  wood: "#554422",
+  celestial: "#ffeecc",
 };
 const scene: PublicScene = {
   revision: 7,
   scheme: { id: "fixture-added-scheme", version: 1 },
   color_mode: "dark",
   visitor_mode_toggle: false,
+  visitor_scheme_choice: true,
   themes: { light: tokens, dark: tokens },
+  npc_plate: { light: false, dark: true },
+  schemes: [
+    {
+      id: "fixture-added-scheme",
+      version: 1,
+      label: { "zh-TW": "測試", en: "Fixture" },
+      themes: { light: tokens, dark: tokens },
+      npc_plate: { light: false, dark: true },
+    },
+  ],
   background_url: null,
   background_scaling: "smooth",
   background_focus: { x: 35, y: 65 },
@@ -139,7 +158,7 @@ describe("Main's independent shared visitor review", () => {
     );
   });
 
-  it("ignores unknown theme keys and maps exactly the ten roles in both variants", () => {
+  it("ignores unknown theme keys and maps exactly the eighteen roles in both variants", () => {
     const injected = structuredClone(scene);
     Object.assign(injected.themes.light, {
       "background-image": "url(https://invalid.example)",
@@ -153,6 +172,23 @@ describe("Main's independent shared visitor review", () => {
     expect(JSON.stringify(mapped)).not.toContain("canary");
     expect(JSON.stringify(mapped)).not.toContain("invalid.example");
     expect(sceneThemeStyle(null)).toEqual({});
+  });
+
+  it("selects an arbitrary catalog scheme and falls back for unknown ids", () => {
+    const alternate = {
+      ...scene.schemes[0],
+      id: "another_fixture",
+      themes: {
+        light: { ...tokens, sky: "#bbccdd" },
+        dark: { ...tokens, sky: "#112233" },
+      },
+    };
+    const value = { ...scene, schemes: [...scene.schemes, alternate] };
+    expect(sceneThemesForScheme(value, alternate.id)).toBe(alternate.themes);
+    expect(sceneThemesForScheme(value, "unknown_fixture")).toBe(value.themes);
+    expect(sceneThemesForScheme(value, scene.scheme.id)).toStrictEqual(
+      scene.themes,
+    );
   });
 
   it("keeps two preview instances' semantic IDs and explicit modes isolated", () => {

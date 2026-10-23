@@ -41,13 +41,14 @@ from reponpc.indexing.public_profile import (
 )
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 from reponpc.scene.images import CanonicalSceneImage, SceneImageError, validate_scene_image
-from reponpc.scene.registry import SceneRegistry, contrast_ratio, default_scene_registry
+from reponpc.scene.registry import DEFAULT_SCHEME_ID, SceneRegistry, default_scene_registry
 from reponpc.scene.resolve import (
     PublicScene,
     SceneNotice,
     SceneResolutionError,
     _average_edge_color,
     resolve_scene,
+    validate_npc_separation,
 )
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -167,26 +168,23 @@ class AdminSceneService:
         self, snapshot: PublishedProfileSnapshot
     ) -> list[dict[str, object]]:
         """Resolve gallery themes against the same leased canonical sprite."""
-        catalog: list[dict[str, object]] = []
-        for scheme in self.registry.schemes.values():
-            settings = SceneConfig.model_validate(
-                {"color_scheme": scheme.id},
-                context={"scene_registry": self.registry},
-            )
-            public = self._resolve(
-                settings,
-                snapshot.sprite_content,
-                snapshot.character_revision,
-            ).public
-            catalog.append(
-                {
-                    "id": scheme.id,
-                    "version": scheme.version,
-                    "labels": dict(scheme.label),
-                    "themes": public.themes.model_dump(mode="json"),
-                }
-            )
-        return catalog
+        settings = SceneConfig.model_validate(
+            {"color_scheme": next(iter(self.registry.schemes))},
+            context={"scene_registry": self.registry},
+        )
+        public = self._resolve(
+            settings, snapshot.sprite_content, snapshot.character_revision
+        ).public
+        return [
+            {
+                "id": scheme.id,
+                "version": scheme.version,
+                "labels": dict(scheme.label),
+                "themes": scheme.themes.model_dump(mode="json"),
+                "npc_plate": scheme.npc_plate.model_dump(mode="json"),
+            }
+            for scheme in public.schemes
+        ]
 
     def create_background_draft(
         self, *, session_hash: str, content: bytes, filename: str
@@ -778,13 +776,7 @@ class AdminSceneService:
         if scene is None:
             raise SceneServiceError("PUBLIC_SCENE_UNAVAILABLE")
         try:
-            with Image.open(io.BytesIO(validate_sprite(sprite).content)) as image:
-                edge = _average_edge_color(image.convert("RGBA"))
-            if any(
-                contrast_ratio(edge, getattr(scene.themes, variant).stage) < 3.0
-                for variant in ("light", "dark")
-            ):
-                raise ValueError
+            _validate_public_scene_stage(scene, sprite)
         except OSError, ValueError, SpriteValidationError:
             raise SceneServiceError("PUBLIC_SCENE_UNAVAILABLE") from None
 
@@ -1065,6 +1057,7 @@ def _scene_settings(
         "color_scheme",
         "color_mode",
         "visitor_mode_toggle",
+        "visitor_scheme_choice",
         "accent",
         "focus",
         "dim",
@@ -1076,9 +1069,10 @@ def _scene_settings(
     if not isinstance(focus, dict):
         raise SceneServiceError("SCENE_SETTINGS_INVALID")
     raw = {
-        "color_scheme": proposal.get("color_scheme", "neutral"),
+        "color_scheme": proposal.get("color_scheme", DEFAULT_SCHEME_ID),
         "color_mode": proposal.get("color_mode", "system"),
         "visitor_mode_toggle": proposal.get("visitor_mode_toggle", True),
+        "visitor_scheme_choice": proposal.get("visitor_scheme_choice", True),
         "accent": proposal.get("accent"),
         "background_path": "assets/scene/preview.png" if background_present else None,
         "background_scaling": proposal.get("scaling", "smooth"),
@@ -1096,6 +1090,7 @@ def _settings_payload(settings: SceneConfig, scene: PublicScene | None) -> dict[
         "color_scheme": settings.color_scheme,
         "color_mode": settings.color_mode,
         "visitor_mode_toggle": settings.visitor_mode_toggle,
+        "visitor_scheme_choice": settings.visitor_scheme_choice,
         "accent": settings.accent,
         "background": (
             "current"
@@ -1129,6 +1124,7 @@ def _settings_match_public(
         canonical_scheme == canonical_public_scheme
         and settings.color_mode == scene.color_mode
         and settings.visitor_mode_toggle == scene.visitor_mode_toggle
+        and settings.visitor_scheme_choice == scene.visitor_scheme_choice
         and settings.background_scaling == scene.background_scaling
         and settings.background_focus.model_dump(mode="json")
         == scene.background_focus.model_dump(mode="json")
@@ -1165,6 +1161,7 @@ def _settings_from_public(scene: PublicScene | None) -> dict[str, object]:
         "color_scheme": scene.scheme.id,
         "color_mode": scene.color_mode,
         "visitor_mode_toggle": scene.visitor_mode_toggle,
+        "visitor_scheme_choice": scene.visitor_scheme_choice,
         "accent": None,
         "background": "current" if scene.background_url is not None else "none",
         "focus": scene.background_focus.model_dump(mode="json"),
@@ -1365,11 +1362,7 @@ def _validate_public_scene_stage(scene: PublicScene, sprite: bytes) -> None:
     canonical = validate_sprite(sprite)
     with Image.open(io.BytesIO(canonical.content)) as image:
         edge = _average_edge_color(image.convert("RGBA"))
-    if any(
-        contrast_ratio(edge, getattr(scene.themes, variant).stage) < 3.0
-        for variant in ("light", "dark")
-    ):
-        raise ValueError("stage contrast is invalid")
+    validate_npc_separation(scene, edge)
 
 
 def _write_private_immutable(path: Path, content: bytes) -> None:

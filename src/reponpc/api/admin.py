@@ -93,6 +93,7 @@ from reponpc.config.environment import _canonical_origin
 from reponpc.config.models import ConfigValidationError, PublicConfig, SceneFocusConfig
 from reponpc.providers import ProviderError
 from reponpc.runtime.database import RuntimeDatabaseError
+from reponpc.scene.registry import DEFAULT_SCHEME_ID
 from reponpc.sharing.export import build_visitor_site_export
 from reponpc.sharing.manifest import SiteExportError
 from reponpc.sharing.pages import PagesSharingService
@@ -231,9 +232,10 @@ class PreparePortfolioRequest(_StrictRequest):
 
 
 class SceneProposalRequest(_StrictRequest):
-    color_scheme: str = Field(default="neutral", min_length=1, max_length=64)
+    color_scheme: str = Field(default=DEFAULT_SCHEME_ID, min_length=1, max_length=64)
     color_mode: Literal["system", "light", "dark"] = "system"
     visitor_mode_toggle: StrictBool = True
+    visitor_scheme_choice: StrictBool = True
     accent: str | None = Field(default=None, max_length=7)
     background: str = Field(
         default="current",

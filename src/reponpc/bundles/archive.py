@@ -36,8 +36,7 @@ from reponpc.indexing.public_profile import (
 )
 from reponpc.indexing.sources import EmbeddingIdentity, ResolvedConfiguration, ResolvedRepository
 from reponpc.scene.images import SceneImageError, validate_scene_image
-from reponpc.scene.registry import contrast_ratio
-from reponpc.scene.resolve import _average_edge_color
+from reponpc.scene.resolve import _average_edge_color, validate_npc_separation
 
 APPLICATION_VERSION: Final = "0.1.0"
 ARCHIVE_FILE_LIMIT: Final = 64
@@ -387,11 +386,11 @@ def _verify_public_assets(staging: Path, manifest: BundleManifest) -> None:
     try:
         with Image.open(io.BytesIO(character_bytes)) as image:
             edge = _average_edge_color(image.convert("RGBA"))
-        if scene is not None and any(
-            contrast_ratio(edge, getattr(scene.themes, variant).stage) < 3.0
-            for variant in ("light", "dark")
-        ):
-            raise BundleError("bundle_scene_stage_invalid")
+        if scene is not None:
+            try:
+                validate_npc_separation(scene, edge)
+            except ValueError:
+                raise BundleError("bundle_scene_stage_invalid") from None
     except (OSError, ValueError) as exc:
         raise BundleError("bundle_character_invalid") from exc
     for path in _CARD_VARIANTS:

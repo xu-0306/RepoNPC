@@ -19,6 +19,7 @@ from reponpc.scene.images import SceneImageError, validate_scene_image
 from reponpc.scene.registry import (
     SCENE_ROLES,
     SceneRegistry,
+    Scheme,
     contrast_pairs,
     contrast_ratio,
     default_scene_registry,
@@ -53,6 +54,14 @@ class SceneTokens(_StrictSceneModel):
     border: str
     stage: str
     focus: str
+    sky: str
+    horizon: str
+    hill_far: str
+    hill_near: str
+    grass: str
+    ground: str
+    wood: str
+    celestial: str
 
     @field_validator(*SCENE_ROLES)
     @classmethod
@@ -75,12 +84,33 @@ class SceneThemes(_StrictSceneModel):
     dark: SceneTokens
 
 
+class SceneNpcPlate(_StrictSceneModel):
+    light: bool
+    dark: bool
+
+
+class ResolvedSceneScheme(SceneScheme):
+    label: dict[str, str]
+    themes: SceneThemes
+    npc_plate: SceneNpcPlate
+
+    @field_validator("label")
+    @classmethod
+    def validate_label(cls, value: dict[str, str]) -> dict[str, str]:
+        if set(value) != {"zh-TW", "en"} or any(not text.strip() for text in value.values()):
+            raise ValueError("scheme labels must include exactly zh-TW and en")
+        return value
+
+
 class PublicScene(_StrictSceneModel):
     revision: Annotated[int, Field(ge=0)]
     scheme: SceneScheme
     color_mode: Literal["system", "light", "dark"]
     visitor_mode_toggle: bool
+    visitor_scheme_choice: bool
     themes: SceneThemes
+    npc_plate: SceneNpcPlate
+    schemes: Annotated[list[ResolvedSceneScheme], Field(min_length=1)]
     background_url: str | None
     background_scaling: Literal["smooth", "pixelated"]
     background_focus: SceneFocusConfig
@@ -99,6 +129,17 @@ class PublicScene(_StrictSceneModel):
             expected = f"/api/public/scene-background?rev={self.revision}"
             if self.background_url != expected:
                 raise ValueError("background URL revision must match scene revision")
+        ids = [scheme.id for scheme in self.schemes]
+        if len(ids) != len(set(ids)):
+            raise ValueError("scene schemes must have unique ids")
+        default = next((item for item in self.schemes if item.id == self.scheme.id), None)
+        if (
+            default is None
+            or default.version != self.scheme.version
+            or default.themes != self.themes
+            or default.npc_plate != self.npc_plate
+        ):
+            raise ValueError("default scheme must match its catalog entry")
         return self
 
 
@@ -157,62 +198,14 @@ def resolve_scene(
     except KeyError:
         raise SceneResolutionError("scene_scheme_unknown") from None
 
+    catalog: list[ResolvedSceneScheme] = []
     notices: list[SceneNotice] = []
-    resolved_variants: dict[str, dict[str, str]] = {}
-    for variant in ("light", "dark"):
-        roles = dict(scheme.variant(variant))
-        if parsed_settings.accent is not None:
-            accent, accent_ink = _resolve_accent(parsed_settings.accent, roles)
-            if accent != parsed_settings.accent.lower():
-                notices.append(
-                    SceneNotice(
-                        "accent_adjusted",
-                        variant,
-                        accent,
-                        "The accent was adjusted in lightness to meet contrast requirements.",
-                    )
-                )
-            roles["accent"] = accent
-            roles["accent_ink"] = accent_ink
-
-        stage = roles["stage"]
-        if contrast_ratio(edge, stage) < 3.0 or stage == roles["surface"]:
-            surface = roles["surface"]
-
-            def acceptable_stage(candidate: str, fixed_surface: str = surface) -> bool:
-                return candidate != fixed_surface and contrast_ratio(edge, candidate) >= 3.0
-
-            adjusted = _nearest_lightness(stage, acceptable_stage)
-            if adjusted is None:
-                stage = max(
-                    (
-                        color
-                        for color in (_from_oklch(0, 0, 0), _from_oklch(1, 0, 0))
-                        if color != roles["surface"]
-                    ),
-                    key=lambda color: contrast_ratio(edge, color),
-                )
-                notices.append(
-                    SceneNotice(
-                        "stage_plate",
-                        variant,
-                        stage,
-                        "A solid stage plate is needed because hue-preserving lightness "
-                        "cannot meet 3:1.",
-                    )
-                )
-            else:
-                stage = adjusted
-                notices.append(
-                    SceneNotice(
-                        "stage_adjusted",
-                        variant,
-                        stage,
-                        "Stage lightness was adjusted to separate the character edge at 3:1.",
-                    )
-                )
-        roles["stage"] = stage
-        resolved_variants[variant] = roles
+    for entry in selected_registry.schemes.values():
+        resolved, entry_notices = _resolve_scheme(entry, parsed_settings, edge)
+        catalog.append(resolved)
+        if entry.id == scheme.id:
+            notices.extend(entry_notices)
+    default = next(item for item in catalog if item.id == scheme.id)
 
     resolved_dim: Literal["auto", "none", "low", "medium", "high"] = parsed_settings.background_dim
     if background_content is not None:
@@ -222,9 +215,20 @@ def resolve_scene(
             parsed_settings,
             background_content,
             edge_color=edge,
-            themes=resolved_variants,
+            themes=default.themes.model_dump(),
         )
         notices.extend(dim_notices)
+        plate_variants = {notice.variant for notice in dim_notices if notice.kind == "stage_plate"}
+        if plate_variants:
+            default = default.model_copy(
+                update={
+                    "npc_plate": SceneNpcPlate(
+                        light=default.npc_plate.light or "light" in plate_variants,
+                        dark=default.npc_plate.dark or "dark" in plate_variants,
+                    )
+                }
+            )
+            catalog = [default if item.id == scheme.id else item for item in catalog]
 
     background_url = (
         f"/api/public/scene-background?rev={revision}"
@@ -237,10 +241,10 @@ def resolve_scene(
             scheme=SceneScheme(id=scheme.id, version=scheme.version),
             color_mode=parsed_settings.color_mode,
             visitor_mode_toggle=parsed_settings.visitor_mode_toggle,
-            themes=SceneThemes(
-                light=SceneTokens(**resolved_variants["light"]),
-                dark=SceneTokens(**resolved_variants["dark"]),
-            ),
+            visitor_scheme_choice=parsed_settings.visitor_scheme_choice,
+            themes=default.themes,
+            npc_plate=default.npc_plate,
+            schemes=catalog,
             background_url=background_url,
             background_scaling=parsed_settings.background_scaling,
             background_focus=parsed_settings.background_focus,
@@ -249,6 +253,96 @@ def resolve_scene(
     except ValidationError:
         raise SceneResolutionError("scene_resolution_invalid") from None
     return SceneResolution(public=public, notices=tuple(notices))
+
+
+def _resolve_scheme(
+    scheme: Scheme, settings: SceneConfig, edge: str
+) -> tuple[ResolvedSceneScheme, list[SceneNotice]]:
+    notices: list[SceneNotice] = []
+    themes: dict[str, SceneTokens] = {}
+    plates: dict[str, bool] = {}
+    has_image = settings.background_path is not None
+    for variant in ("light", "dark"):
+        roles = dict(scheme.variant(variant))
+        if settings.accent is not None:
+            accent, accent_ink = _resolve_accent(settings.accent, roles)
+            if accent != settings.accent:
+                notices.append(
+                    SceneNotice(
+                        "accent_adjusted",
+                        variant,
+                        accent,
+                        "The accent was adjusted in lightness to meet contrast requirements.",
+                    )
+                )
+            roles["accent"], roles["accent_ink"] = accent, accent_ink
+
+        plate = not has_image and any(
+            contrast_ratio(edge, roles[role]) < 3.0 for role in ("sky", "hill_near")
+        )
+        stage = roles["stage"]
+        if plate or (
+            has_image and (contrast_ratio(edge, stage) < 3.0 or stage == roles["surface"])
+        ):
+            surface = roles["surface"]
+
+            def acceptable_stage(candidate: str, fixed_surface: str = surface) -> bool:
+                return (not has_image or candidate != fixed_surface) and contrast_ratio(
+                    edge, candidate
+                ) >= 3.0
+
+            adjusted = (
+                stage if acceptable_stage(stage) else _nearest_lightness(stage, acceptable_stage)
+            )
+            if adjusted is None:
+                stage = max(
+                    (
+                        color
+                        for color in ("#000000", "#ffffff")
+                        if not has_image or color != surface
+                    ),
+                    key=lambda color: contrast_ratio(edge, color),
+                )
+                plate = True
+            else:
+                stage = adjusted
+            notices.append(
+                SceneNotice(
+                    "stage_plate" if plate else "stage_adjusted",
+                    variant,
+                    stage,
+                    "A contrasting plate separates the character edge at 3:1."
+                    if plate
+                    else "Stage lightness was adjusted to separate the character edge at 3:1.",
+                )
+            )
+        roles["stage"] = stage
+        try:
+            themes[variant] = SceneTokens(**roles)
+        except ValidationError:
+            raise SceneResolutionError("scene_resolution_invalid") from None
+        plates[variant] = plate
+    return ResolvedSceneScheme(
+        id=scheme.id,
+        version=scheme.version,
+        label=dict(scheme.label),
+        themes=SceneThemes(light=themes["light"], dark=themes["dark"]),
+        npc_plate=SceneNpcPlate(light=plates["light"], dark=plates["dark"]),
+    ), notices
+
+
+def validate_npc_separation(scene: PublicScene, edge: str) -> None:
+    """Validate the default and every exported scheme at the publication boundary."""
+    for scheme in scene.schemes:
+        for variant in ("light", "dark"):
+            tokens = getattr(scheme.themes, variant)
+            behind = (
+                (tokens.stage,)
+                if scene.background_url is not None or getattr(scheme.npc_plate, variant)
+                else (tokens.sky, tokens.hill_near)
+            )
+            if any(contrast_ratio(edge, color) < 3.0 for color in behind):
+                raise ValueError("NPC separation is invalid")
 
 
 def _resolve_background_dim(

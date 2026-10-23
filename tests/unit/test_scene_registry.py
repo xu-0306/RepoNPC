@@ -16,7 +16,15 @@ from reponpc.scene.registry import (
     parse_scene_registry,
 )
 
-STARTER_IDS = {"neutral", "ocean", "forest", "sunset", "lavender"}
+STARTER_IDS = {"meadow", "sunset", "coast", "sakura"}
+SCENE_PAIRS = (
+    ("sky", "hill_far"),
+    ("hill_far", "hill_near"),
+    ("hill_near", "grass"),
+    ("grass", "ground"),
+    ("celestial", "sky"),
+    ("wood", "sky"),
+)
 EXPECTED_ROLES = {
     "background",
     "surface",
@@ -28,6 +36,14 @@ EXPECTED_ROLES = {
     "border",
     "stage",
     "focus",
+    "sky",
+    "horizon",
+    "hill_far",
+    "hill_near",
+    "grass",
+    "ground",
+    "wood",
+    "celestial",
 }
 
 
@@ -47,6 +63,14 @@ def _test_scheme() -> dict[str, object]:
             "border": "#5a715e",
             "stage": "#cfe1d1",
             "focus": "#287a3f",
+            "sky": "#ffffff",
+            "horizon": "#bbbbbb",
+            "hill_far": "#999999",
+            "hill_near": "#333333",
+            "grass": "#888888",
+            "ground": "#222222",
+            "wood": "#444444",
+            "celestial": "#aaaaaa",
         },
         "dark": {
             "background": "#111a13",
@@ -59,6 +83,14 @@ def _test_scheme() -> dict[str, object]:
             "border": "#87998a",
             "stage": "#304635",
             "focus": "#93e0a3",
+            "sky": "#101020",
+            "horizon": "#222233",
+            "hill_far": "#444455",
+            "hill_near": "#181828",
+            "grass": "#555533",
+            "ground": "#222222",
+            "wood": "#666655",
+            "celestial": "#ddddcc",
         },
     }
 
@@ -90,6 +122,14 @@ def _ratio(first: str, second: str) -> float:
 def test_authored_schemes_are_bilingual_versioned_and_meet_every_pair() -> None:
     registry = default_scene_registry()
     assert set(registry.schemes) == STARTER_IDS
+    assert list(registry.schemes) == ["meadow", "sunset", "coast", "sakura"]
+    assert registry.scheme("sunset").version == 2
+    assert [dict(scheme.label) for scheme in registry.schemes.values()] == [
+        {"zh-TW": "草原", "en": "Meadow"},
+        {"zh-TW": "黃昏", "en": "Sunset"},
+        {"zh-TW": "海岸", "en": "Coast"},
+        {"zh-TW": "櫻花", "en": "Sakura"},
+    ]
     for scheme in registry.schemes.values():
         assert scheme.version >= 1
         assert set(scheme.label) == {"zh-TW", "en"}
@@ -105,6 +145,8 @@ def test_authored_schemes_are_bilingual_versioned_and_meet_every_pair() -> None:
             for edge in ("accent", "border", "focus"):
                 for surface in ("background", "surface", "surface_alt"):
                     assert _ratio(roles[edge], roles[surface]) >= 3.0
+            for first, second in SCENE_PAIRS:
+                assert _ratio(roles[first], roles[second]) >= 1.5
 
 
 def test_test_only_scheme_and_alias_resolve_without_frontend_changes() -> None:
@@ -118,7 +160,7 @@ def test_test_only_scheme_and_alias_resolve_without_frontend_changes() -> None:
     assert contrast_ratio("#000000", "#ffffff") == pytest.approx(21.0)
 
 
-def test_packaged_registry_requires_the_default_neutral_scheme(
+def test_packaged_registry_requires_the_default_meadow_scheme(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import reponpc.scene.registry as registry_module
@@ -127,7 +169,7 @@ def test_packaged_registry_requires_the_default_neutral_scheme(
     monkeypatch.setattr(registry_module, "load_scene_registry", lambda _path: test_registry)
     registry_module.default_scene_registry.cache_clear()
     try:
-        with pytest.raises(SceneRegistryError, match="missing default scheme neutral"):
+        with pytest.raises(SceneRegistryError, match="missing default scheme meadow"):
             registry_module.default_scene_registry()
     finally:
         registry_module.default_scene_registry.cache_clear()
@@ -216,3 +258,58 @@ def test_fallback_is_reproducible_and_tracks_normalized_registry_identity() -> N
     assert "prefers-color-scheme: dark" in fallback
     assert f"Registry SHA-256: {registry.source_sha256}" in fallback
     assert set(contrast_report(registry)["schemes"][0]["variants"]) == {"light", "dark"}
+    for scheme in registry.schemes.values():
+        root = f':root[data-visitor-scheme="{scheme.id}"]'
+        assert fallback.count(root + ",\n") == 1
+        assert fallback.count(root + '[data-visitor-mode="light"] {') == 1
+        assert fallback.count(root + '[data-visitor-mode="dark"] {') == 1
+        assert (
+            root + ':not([data-visitor-mode="light"]):not([data-visitor-mode="dark"])' in fallback
+        )
+        for variant in ("light", "dark"):
+            for role in EXPECTED_ROLES:
+                assert f"--scene-{role}: {scheme.variant(variant)[role]};" in fallback
+
+
+@pytest.mark.parametrize("variant", ["light", "dark"])
+@pytest.mark.parametrize("first,second", SCENE_PAIRS)
+def test_adjacent_layer_failure_names_scheme_variant_and_pair(
+    variant: str, first: str, second: str
+) -> None:
+    data = _registry_data()
+    roles = data["schemes"][0][variant]
+    changed = second if (first, second) in SCENE_PAIRS[:4] else first
+    other = first if changed == second else second
+    roles[changed] = roles[other]
+    with pytest.raises(
+        SceneRegistryError,
+        match=f"scheme unshipped_green {variant}: contrast {first}/{second}",
+    ):
+        parse_scene_registry(_yaml(data))
+
+
+def test_missing_scene_role_fails_and_contrast_report_covers_scene_pairs() -> None:
+    data = _registry_data()
+    del data["schemes"][0]["dark"]["sky"]
+    with pytest.raises(SceneRegistryError, match="unshipped_green dark: missing sky role"):
+        parse_scene_registry(_yaml(data))
+    report = contrast_report()
+    for scheme in report["schemes"]:
+        for variant in ("light", "dark"):
+            for first, second in SCENE_PAIRS:
+                assert scheme["variants"][variant][f"{first}/{second}"] >= 1.5
+
+
+@pytest.mark.parametrize(
+    "alias,canonical",
+    [("neutral", "meadow"), ("forest", "meadow"), ("ocean", "coast"), ("lavender", "sakura")],
+)
+def test_retired_ids_resolve_without_migration(alias: str, canonical: str) -> None:
+    assert default_scene_registry().canonical_id(alias) == canonical
+    assert SceneConfig(color_scheme=alias).color_scheme == canonical
+
+
+def test_unknown_configured_id_lists_every_valid_scheme() -> None:
+    with pytest.raises(ValueError, match="valid ids:") as caught:
+        SceneConfig(color_scheme="unregistered_fixture")
+    assert all(scheme in str(caught.value) for scheme in STARTER_IDS)

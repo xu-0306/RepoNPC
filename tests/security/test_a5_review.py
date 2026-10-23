@@ -50,6 +50,10 @@ _VISITOR_HTML = (
     b'data-visitor-toggle="true"><head><script src="./scene-mode.js"></script>'
     b'<link rel="stylesheet" href="./visitor.css"></head><body></body></html>'
 )
+_RENDERED_VISITOR_HTML = _VISITOR_HTML.replace(
+    b'data-visitor-toggle="true">',
+    b'data-visitor-toggle="true" data-default-scheme="meadow" data-visitor-scheme-choice="true">',
+)
 
 
 @pytest.mark.parametrize("primary_size", [(16384, 16384), (800, 400)], ids=["bomb", "mismatch"])
@@ -115,9 +119,9 @@ def test_character_canonicalization_strips_private_metadata_without_pixel_change
 
 def test_first_paint_policy_is_closed_and_keeps_external_script() -> None:
     result = render_visitor_document(_VISITOR_HTML, color_mode="light", visitor_mode_toggle=False)
-    assert result == _VISITOR_HTML.replace(b'owner-mode="system"', b'owner-mode="light"').replace(
-        b'visitor-toggle="true"', b'visitor-toggle="false"'
-    )
+    assert result == _RENDERED_VISITOR_HTML.replace(
+        b'owner-mode="system"', b'owner-mode="light"'
+    ).replace(b'visitor-toggle="true"', b'visitor-toggle="false"')
 
 
 def test_first_paint_reads_one_published_snapshot_and_rejects_unavailable_policy() -> None:
@@ -164,11 +168,11 @@ def test_gateway_only_serves_the_fixed_bootstrap_and_binds_html_policy(tmp_path:
     app, _ = _gateway(tmp_path, web_dist=root)
     with TestClient(app, base_url="https://fixture.ts.net") as client:
         page = client.get("/")
-        assert page.status_code == 200 and page.content == _VISITOR_HTML
+        assert page.status_code == 200 and page.content == _RENDERED_VISITOR_HTML
         assert page.headers["cache-control"] == "no-store"
         head = client.head("/")
         assert head.status_code == 200 and not head.content
-        assert head.headers["content-length"] == str(len(_VISITOR_HTML))
+        assert head.headers["content-length"] == str(len(_RENDERED_VISITOR_HTML))
         assert client.get("/scene-mode.js?file=private.js").status_code == 200
         assert client.get("/private.js").status_code == 404
         assert client.get("/.vite/manifest.json").status_code == 404
@@ -180,13 +184,13 @@ def test_real_html_boundary_injects_onboarding_policy_without_changing_csp(tmp_p
     (tmp_path / "index.html").write_bytes(_VISITOR_HTML)
     with TestClient(create_app(web_dist=tmp_path)) as client:
         page = client.get("/")
-        assert page.status_code == 200 and page.content == _VISITOR_HTML
+        assert page.status_code == 200 and page.content == _RENDERED_VISITOR_HTML
         assert page.headers["cache-control"] == "no-store"
         assert "unsafe-inline" not in page.headers["content-security-policy"]
         assert "unsafe-eval" not in page.headers["content-security-policy"]
         head = client.head("/")
         assert head.status_code == 200 and not head.content
-        assert head.headers["content-length"] == str(len(_VISITOR_HTML))
+        assert head.headers["content-length"] == str(len(_RENDERED_VISITOR_HTML))
         assert client.get("/admin").content == _VISITOR_HTML
         assert client.get("/api/missing").status_code == 404
         (tmp_path / "index.html").write_bytes(_VISITOR_HTML + b'data-owner-mode="system"')
@@ -212,7 +216,7 @@ def test_gateway_prefers_the_dedicated_visitor_entry_and_never_falls_back(tmp_pa
     manifest_path.write_text(json.dumps(manifest))
     app, _ = _gateway(tmp_path, web_dist=root)
     with TestClient(app, base_url="https://fixture.ts.net") as client:
-        assert client.get("/").content == _VISITOR_HTML
+        assert client.get("/").content == _RENDERED_VISITOR_HTML
         assert client.get("/assets/visitor.js").status_code == 200
         for private in ("/assets/admin.js", "/index.html", "/visitor.html"):
             assert client.get(private).status_code == 404
@@ -234,10 +238,15 @@ def test_primary_public_entrance_uses_visitor_build_and_keeps_admin_entrance(
     with TestClient(create_app(web_dist=tmp_path)) as client:
         for path in ("/", "/index.html"):
             page = client.get(path)
-            assert page.status_code == 200 and page.content == visitor
+            assert (
+                page.status_code == 200
+                and page.content == _RENDERED_VISITOR_HTML + b"\n<!-- dedicated visitor -->"
+            )
             head = client.head(path)
             assert head.status_code == 200 and not head.content
-            assert head.headers["content-length"] == str(len(visitor))
+            assert head.headers["content-length"] == str(
+                len(_RENDERED_VISITOR_HTML + b"\n<!-- dedicated visitor -->")
+            )
         assert client.get("/admin").content == administrator
 
 
@@ -256,6 +265,52 @@ def test_first_paint_policy_rejects_injection_and_ambiguous_markers(
 ) -> None:
     with pytest.raises(ValueError, match="invalid visitor document"):
         render_visitor_document(document, color_mode=mode, visitor_mode_toggle=toggle)
+
+
+@pytest.mark.parametrize(
+    "scheme,choice",
+    [
+        ("unknown_fixture", True),
+        ('meadow" onload="alert(1)', True),
+        (None, True),
+        ([], True),
+        ("meadow", "false"),
+        ("meadow", 1),
+        ("meadow", None),
+    ],
+)
+def test_first_paint_rejects_invalid_scheme_policy(scheme: object, choice: object) -> None:
+    with pytest.raises(ValueError, match="invalid visitor document"):
+        render_visitor_document(
+            _VISITOR_HTML,
+            color_mode="system",
+            visitor_mode_toggle=True,
+            default_scheme=scheme,
+            visitor_scheme_choice=choice,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize(
+    "marker", [b'data-default-scheme="meadow"', b'data-visitor-scheme-choice="true"']
+)
+def test_first_paint_rejects_duplicate_scheme_policy_markers(marker: bytes) -> None:
+    with pytest.raises(ValueError, match="invalid visitor document"):
+        render_visitor_document(
+            _VISITOR_HTML + marker, color_mode="system", visitor_mode_toggle=True
+        )
+
+
+def test_first_paint_canonicalizes_alias_and_writes_disabled_choice() -> None:
+    result = render_visitor_document(
+        _VISITOR_HTML,
+        color_mode="system",
+        visitor_mode_toggle=True,
+        default_scheme="neutral",
+        visitor_scheme_choice=False,
+    )
+    assert result == _RENDERED_VISITOR_HTML.replace(
+        b'data-visitor-scheme-choice="true"', b'data-visitor-scheme-choice="false"'
+    )
 
 
 def test_scene_migration_rolls_back_and_keeps_existing_faq(tmp_path: Path) -> None:
@@ -542,7 +597,7 @@ def test_nested_duplicate_key_cannot_hide_an_invalid_authored_color() -> None:
 @pytest.mark.parametrize(
     "aliases",
     [
-        {"neutral": "ocean"},
+        {"meadow": "coast"},
         {"cycle_one": "cycle_two", "cycle_two": "cycle_one"},
         {"dangling": "missing_scheme"},
     ],
@@ -630,7 +685,20 @@ def test_character_change_keeps_every_scheme_role_except_stage(scheme_id: str) -
     for variant in ("light", "dark"):
         black_roles = getattr(black.public.themes, variant).model_dump()
         white_roles = getattr(white.public.themes, variant).model_dump()
-        assert {role for role in black_roles if black_roles[role] != white_roles[role]} == {"stage"}
+        assert {role: value for role, value in black_roles.items() if role != "stage"} == {
+            role: value for role, value in white_roles.items() if role != "stage"
+        }
+        authored = default_scene_registry().scheme(scheme_id).variant(variant)
+        for resolved, edge in ((black, "#000000"), (white, "#ffffff")):
+            roles = getattr(resolved.public.themes, variant)
+            needs_plate = any(
+                _contrast(edge, authored[role]) < 3.0 for role in ("sky", "hill_near")
+            )
+            assert getattr(resolved.public.npc_plate, variant) is needs_plate
+            if not needs_plate or _contrast(edge, authored["stage"]) >= 3.0:
+                assert roles.stage == authored["stage"]
+            else:
+                assert roles.stage != authored["stage"]
         assert _contrast("#000000", black_roles["stage"]) >= 3.0
         assert _contrast("#ffffff", white_roles["stage"]) >= 3.0
         for roles in (black_roles, white_roles):

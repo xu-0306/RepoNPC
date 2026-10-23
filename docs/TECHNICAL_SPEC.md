@@ -320,16 +320,17 @@ The normative populated example is `reponpc.example.yml`. Rules:
 - The legacy top-level built-in fields `body`, `skin`, `hair`, `outfit`, `hair_color`, `primary_color`, `secondary_color`, and `accessory` are invalid. Because no deployment consumed that draft contract, v1 provides no compatibility aliases or migration shim.
 - A custom sprite path MUST be below `assets/character/`, must be a `.png`, and must satisfy section 12.
 - (0.4.1, FR-050; 0.4.2–0.4.4, FR-051/052) Optional `character.scene` contains exactly these fields:
-  - `color_scheme`: a registry id, default `neutral`;
+  - `color_scheme`: a registry id, default `meadow`;
   - `color_mode`: `system | light | dark`, default `system`;
   - `visitor_mode_toggle`: boolean, default `true`;
+  - `visitor_scheme_choice`: strict boolean, default `true` (0.4.14, ADR-072);
   - `accent`: null or `#rrggbb`;
   - `background_path`: null, or a `.png`/`.webp` directly below `assets/scene/`, shown only in the welcome hero;
   - `background_scaling`: `smooth` or `pixelated`, default `smooth`;
   - `background_focus`: `{x, y}` percentages 0–100, default 50/50;
   - `background_dim`: `auto | none | low | medium | high`, default `auto`.
 
-  Omitting the block means `neutral`, `system`, the visitor toggle on and no overrides. An unknown `color_scheme` fails validation with the list of valid ids; a retired id resolves through the registry `aliases`. The unreleased 0.4.2 `template` key is rejected. The block has no species or free-form CSS field, and scene changes are versioned by `character.revision`.
+  Omitting the block means `meadow`, `system`, both visitor switches on and no overrides. An unknown `color_scheme` fails validation with the list of valid ids; a retired id resolves through the registry `aliases`. The unreleased 0.4.2 `template` key is rejected. The block has no species or free-form CSS field, and scene changes are versioned by `character.revision`.
 
 - `card.revision` is a non-negative integer used for cache-busting snippets.
 - Retrieval weights are non-negative finite numbers and at least one source weight must be positive.
@@ -641,9 +642,19 @@ Success `200`:
     "movement": "subtle",
     "scene": {
       "revision": 1,
-      "scheme": { "id": "neutral", "version": 1 },
+      "scheme": { "id": "meadow", "version": 1 },
       "color_mode": "system",
       "visitor_mode_toggle": true,
+      "visitor_scheme_choice": true,
+      "npc_plate": { "light": false, "dark": true },
+      "schemes": [
+        {
+          "id": "meadow", "version": 1,
+          "label": { "zh-TW": "草原", "en": "Meadow" },
+          "themes": { "light": { "...": "#rrggbb" }, "dark": { "...": "#rrggbb" } },
+          "npc_plate": { "light": false, "dark": true }
+        }
+      ],
       "themes": {
         "light": { "background": "#rrggbb", "...": "#rrggbb" },
         "dark": { "...": "#rrggbb" }
@@ -1237,7 +1248,7 @@ The visitor page is a pixel RPG chat interface (FR-047, ADR-072). Its colours co
 - Admin API (authenticated; mutations need CSRF):
   - `POST /api/admin/assets/scene/background-drafts` (multipart) returns `{draft_id, width, height, format, notices[]}` or a plain-language error;
   - `GET` and `DELETE /api/admin/assets/scene/background-drafts/{id}` (`no-store`, `nosniff`);
-  - `POST /api/admin/scene/preview` resolves proposed settings (`color_scheme`, `color_mode`, `visitor_mode_toggle`, `accent`, `background: draft:<id> | current | none`, `focus`, `dim`, `scaling`) and returns the public `character.scene` shape plus notices, persisting nothing;
+  - `POST /api/admin/scene/preview` resolves proposed settings (`color_scheme`, `color_mode`, `visitor_mode_toggle`, `visitor_scheme_choice`, `accent`, `background: draft:<id> | current | none`, `focus`, `dim`, `scaling`) and returns the public `character.scene` shape plus notices, persisting nothing;
   - `PUT /api/admin/scene` applies the settings, promotes a referenced draft to `assets/scene/<content-hash>.png|webp` and bumps `character.revision`.
 - Preview and publication use the same server resolver, so equal settings give identical scene objects.
 - Focus maps to `object-position` inside the hero card; dim is a scrim from `--scene-surface` at a registry-defined opacity per level. `auto` chooses the lowest level at which NPC separation passes without a plate, else the plate.

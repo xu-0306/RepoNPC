@@ -415,6 +415,10 @@ function validProfile(
     !integer(scene.scheme.version, Number.MAX_SAFE_INTEGER, 1) ||
     !["system", "light", "dark"].includes(String(scene.color_mode)) ||
     typeof scene.visitor_mode_toggle !== "boolean" ||
+    typeof scene.visitor_scheme_choice !== "boolean" ||
+    !isNpcPlate(scene.npc_plate) ||
+    !Array.isArray(scene.schemes) ||
+    scene.schemes.length === 0 ||
     !["smooth", "pixelated"].includes(String(scene.background_scaling)) ||
     !["auto", "none", "low", "medium", "high"].includes(
       String(scene.background_dim),
@@ -422,21 +426,43 @@ function validProfile(
     !isRecord(scene.background_focus) ||
     !integer(scene.background_focus.x, 100) ||
     !integer(scene.background_focus.y, 100) ||
-    !isRecord(scene.themes)
+    !isSceneThemes(scene.themes)
   )
     return false;
-  for (const variant of ["light", "dark"]) {
-    const tokens = scene.themes[variant];
+  const ids = new Set<string>();
+  for (const scheme of scene.schemes) {
     if (
-      !isRecord(tokens) ||
-      Object.keys(tokens).sort().join(",") !==
-        "accent,accent_ink,background,border,focus,ink,muted_ink,stage,surface,surface_alt" ||
-      !Object.values(tokens).every(
-        (color) => typeof color === "string" && /^#[0-9a-f]{6}$/.test(color),
-      )
+      !isRecord(scheme) ||
+      !boundedText(scheme.id, 64, 1) ||
+      !/^[a-z0-9_]+$/.test(scheme.id) ||
+      ids.has(scheme.id) ||
+      !integer(scheme.version, Number.MAX_SAFE_INTEGER, 1) ||
+      !isRecord(scheme.label) ||
+      Object.keys(scheme.label).sort().join(",") !== "en,zh-TW" ||
+      !Object.values(scheme.label).every(
+        (label) => typeof label === "string" && label.trim().length > 0,
+      ) ||
+      !isSceneThemes(scheme.themes) ||
+      !isNpcPlate(scheme.npc_plate)
     )
       return false;
+    ids.add(scheme.id);
   }
+  const ownerScheme = scene.scheme;
+  const ownerThemes = scene.themes;
+  const selected = scene.schemes.find((scheme) => scheme.id === ownerScheme.id);
+  if (
+    !selected ||
+    selected.version !== scene.scheme.version ||
+    selected.npc_plate.light !== scene.npc_plate.light ||
+    selected.npc_plate.dark !== scene.npc_plate.dark ||
+    !["light", "dark"].every((variant) =>
+      Object.keys(ownerThemes[variant]).every(
+        (role) => selected.themes[variant][role] === ownerThemes[variant][role],
+      ),
+    )
+  )
+    return false;
   return (
     scene.background_url === null ||
     (typeof scene.background_url === "string" &&
@@ -450,6 +476,35 @@ function validProfile(
         : scene.background_url ===
           `/api/public/scene-background?rev=${character.revision}`))
   );
+}
+
+function isNpcPlate(
+  value: unknown,
+): value is { light: boolean; dark: boolean } {
+  return (
+    isRecord(value) &&
+    Object.keys(value).sort().join(",") === "dark,light" &&
+    typeof value.light === "boolean" &&
+    typeof value.dark === "boolean"
+  );
+}
+
+function isSceneThemes(
+  value: unknown,
+): value is Record<string, Record<string, string>> {
+  if (!isRecord(value) || Object.keys(value).sort().join(",") !== "dark,light")
+    return false;
+  return ["light", "dark"].every((variant) => {
+    const tokens = value[variant];
+    return (
+      isRecord(tokens) &&
+      Object.keys(tokens).sort().join(",") ===
+        "accent,accent_ink,background,border,celestial,focus,grass,ground,hill_far,hill_near,horizon,ink,muted_ink,sky,stage,surface,surface_alt,wood" &&
+      Object.values(tokens).every(
+        (color) => typeof color === "string" && /^#[0-9a-f]{6}$/.test(color),
+      )
+    );
+  });
 }
 
 function isCitation(value: unknown): boolean {

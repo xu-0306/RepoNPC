@@ -142,9 +142,10 @@ character:
     movement: subtle
   # Visitor colours come only from the packaged registry, independently of the NPC.
   scene:
-    color_scheme: neutral # neutral | ocean | forest | sunset | lavender
+    color_scheme: meadow # meadow | sunset | coast | sakura; retired ids resolve via aliases
     color_mode: system # system | light | dark
     visitor_mode_toggle: true
+    visitor_scheme_choice: true
     accent: null # optional six-digit hex; preview shows any contrast adjustment
     background_path: null # only an applied PNG/WebP directly under assets/scene/
     background_scaling: smooth # smooth | pixelated

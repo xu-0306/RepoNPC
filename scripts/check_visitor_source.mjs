@@ -65,7 +65,7 @@ function check(entry, { schemes, roles }) {
           fail(file, "colour declaration outside the closed tokens");
       }
       for (const match of css.matchAll(
-        /data-(?:scene-)?scheme\s*=\s*["']?([a-z0-9_]+)/g,
+        /data-(?:(?:scene|visitor)-)?scheme\s*=\s*["']?([a-z0-9_]+)/g,
       )) {
         if (schemes.has(match[1])) fail(file, "scheme-specific selector");
       }
@@ -206,7 +206,26 @@ function check(entry, { schemes, roles }) {
   return seen.size;
 }
 
+function authoredRoles(registry) {
+  const variant =
+    registry.match(
+      /^    light:\r?\n((?:      [a-z_]+:[^\r\n]*\r?\n)+)/m,
+    )?.[1] ?? "";
+  return new Set(
+    [...variant.matchAll(/^      ([a-z_]+):/gm)].map((match) => match[1]),
+  );
+}
+
 function selfTest() {
+  const sample =
+    '    label:\n      en: "#ffffff"\n    light:\n      ink: "#111111"\n      sky: "#222222"\n    dark:\n';
+  assert.deepEqual([...authoredRoles(sample)], ["ink", "sky"]);
+  assert.equal(
+    authoredRoles(
+      sample.replace("    dark:", '      wood: "#333333"\n    dark:'),
+    ).size,
+    3,
+  );
   const directory = fs.mkdtempSync(
     path.join(root, ".test-tmp", "visitor-source-"),
   );
@@ -264,7 +283,12 @@ function selfTest() {
     '@import "https://fixture.test/theme.css";',
   );
   assert.throws(() => run(mapper + ' import "./nested.css";'));
-  console.log("Visitor source guard: 14 positive/negative checks passed.");
+  fs.writeFileSync(
+    path.join(directory, "nested.css"),
+    ':root[data-visitor-scheme="test_scheme"] { color: var(--scene-ink); }',
+  );
+  assert.throws(() => run(mapper + ' import "./nested.css";'));
+  console.log("Visitor source guard: 17 positive/negative checks passed.");
 }
 
 if (process.argv.includes("--self-test")) selfTest();
@@ -288,7 +312,13 @@ else {
       [...generated.matchAll(/--scene-([a-z_]+):/g)].map((match) => match[1]),
     ),
   ];
-  if (schemes.size === 0 || roles.length !== 10)
+  const registryRoles = authoredRoles(registry);
+  if (
+    schemes.size === 0 ||
+    registryRoles.size === 0 ||
+    roles.length !== registryRoles.size ||
+    roles.some((role) => !registryRoles.has(role))
+  )
     throw new Error("invalid generated scene registry identity");
   const count = check(path.join(root, "apps/web/src/visitor-main.tsx"), {
     schemes,

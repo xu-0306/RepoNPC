@@ -159,6 +159,19 @@ def test_same_public_snapshot_exports_identical_manifest_and_zip_bytes(
             for locale in ("zh-TW", "en"):
                 assert json.loads(first_archive.read(f"faq-{locale}.json"))["entries"]
                 assert json.loads(first_archive.read(f"profile-{locale}.json"))["locale"] == locale
+                exported_scene = json.loads(first_archive.read(f"profile-{locale}.json"))[
+                    "character"
+                ]["scene"]
+                assert exported_scene["visitor_scheme_choice"] is True
+                assert set(exported_scene["npc_plate"]) == {"light", "dark"}
+                assert [item["id"] for item in exported_scene["schemes"]] == list(
+                    scene.registry.schemes
+                )
+                assert all(
+                    len(item["themes"][variant]) == 18
+                    for item in exported_scene["schemes"]
+                    for variant in ("light", "dark")
+                )
                 if withdraw_during_export:
                     assert json.loads(second_archive.read(f"faq-{locale}.json"))["entries"] == []
             if not withdraw_during_export:

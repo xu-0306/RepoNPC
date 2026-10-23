@@ -28,15 +28,17 @@ models, inspect secrets or mutate live runtime data.
 
 ## 1. Scene producer and consumers
 
-`character.scene` is additive. Defaults are `neutral`, `system`, visitor toggle
-on, no accent/image, smooth scaling, 50/50 focus and automatic dim. Fields and
+`character.scene` is additive. Under ADR-072 / Specification 0.4.14, defaults are
+`meadow`, `system`, both visitor switches on, no accent/image, smooth scaling,
+50/50 focus and automatic dim. `visitor_scheme_choice` is a strict boolean.
+Retired IDs resolve through registry aliases without migrating configuration. Fields and
 bounds are exactly those in completion contract §4.6. Unknown fields and retired
 template/source/glow/pack scene fields fail validation. A background path is one
 PNG/WebP immediately under `assets/scene/`.
 
 The packaged registry uses `schemes` and `aliases` as its only top-level keys.
 Each scheme has `id`, positive `version`, `label` with exactly `zh-TW`/`en`,
-`light` and `dark`. Both variants have exactly the ten approved roles. Load
+`light` and `dark`. Both variants have exactly the eighteen approved roles. Load
 failures identify scheme, variant and role/pair without reflecting arbitrary
 submitted data. Duplicate YAML keys must not be silently overwritten. Alias
 cycles, dangling aliases and ID collisions fail. Authored scheme values are
@@ -45,8 +47,9 @@ never repaired at runtime. Registry validation runs before serving requests.
 The shared Python resolver produces this exact public shape:
 
 ```text
-{revision, scheme:{id,version}, color_mode, visitor_mode_toggle,
- themes:{light:{ten roles},dark:{ten roles}}, background_url,
+{revision, scheme:{id,version}, color_mode, visitor_mode_toggle, visitor_scheme_choice,
+ themes:{light:{eighteen roles},dark:{eighteen roles}}, npc_plate:{light,dark},
+ schemes:[{id,version,label,themes:{light,dark},npc_plate:{light,dark}}], background_url,
  background_scaling, background_focus:{x,y}, background_dim}
 ```
 
@@ -57,7 +60,10 @@ notices remain private preview data. No names, pack IDs, options or filenames
 affect resolution. All authored contrast pairs and the sprite edge rule retain
 the approved thresholds. Lightness adjustment uses OKLCH with hue preserved;
 gamut handling must be deterministic. The solid stage backing is shared by hero
-and avatars; no drawn backdrop or species-specific imagery is introduced.
+and avatars when needed. Without an owner image, separation checks `sky` and
+`hill_near`; a failure uses the resolved `stage` as the plate and never changes
+scene colors. With an owner image the existing stage-lightness rule remains.
+The token-only CSS scene is implemented in the later ADR-072 visual phases.
 
 The edge average includes all 28 canonical cells; transparency adjacency stays
 inside each cell. It is the aggregate edge rule already approved, not a new

@@ -17,6 +17,14 @@ export interface SceneTokens {
   border: string;
   stage: string;
   focus: string;
+  sky: string;
+  horizon: string;
+  hill_far: string;
+  hill_near: string;
+  grass: string;
+  ground: string;
+  wood: string;
+  celestial: string;
 }
 
 export interface PublicScene {
@@ -24,7 +32,16 @@ export interface PublicScene {
   scheme: { id: string; version: number };
   color_mode: "system" | "light" | "dark";
   visitor_mode_toggle: boolean;
+  visitor_scheme_choice: boolean;
   themes: { light: SceneTokens; dark: SceneTokens };
+  npc_plate: { light: boolean; dark: boolean };
+  schemes: Array<{
+    id: string;
+    version: number;
+    label: Record<Locale, string>;
+    themes: { light: SceneTokens; dark: SceneTokens };
+    npc_plate: { light: boolean; dark: boolean };
+  }>;
   background_url: string | null;
   background_scaling: "smooth" | "pixelated";
   background_focus: { x: number; y: number };

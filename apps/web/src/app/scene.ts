@@ -33,6 +33,14 @@ export function sceneThemeStyle(
     "--scene-light-border": scene.themes.light.border,
     "--scene-light-stage": scene.themes.light.stage,
     "--scene-light-focus": scene.themes.light.focus,
+    "--scene-light-sky": scene.themes.light.sky,
+    "--scene-light-horizon": scene.themes.light.horizon,
+    "--scene-light-hill_far": scene.themes.light.hill_far,
+    "--scene-light-hill_near": scene.themes.light.hill_near,
+    "--scene-light-grass": scene.themes.light.grass,
+    "--scene-light-ground": scene.themes.light.ground,
+    "--scene-light-wood": scene.themes.light.wood,
+    "--scene-light-celestial": scene.themes.light.celestial,
     "--scene-dark-background": scene.themes.dark.background,
     "--scene-dark-surface": scene.themes.dark.surface,
     "--scene-dark-surface_alt": scene.themes.dark.surface_alt,
@@ -43,7 +51,25 @@ export function sceneThemeStyle(
     "--scene-dark-border": scene.themes.dark.border,
     "--scene-dark-stage": scene.themes.dark.stage,
     "--scene-dark-focus": scene.themes.dark.focus,
+    "--scene-dark-sky": scene.themes.dark.sky,
+    "--scene-dark-horizon": scene.themes.dark.horizon,
+    "--scene-dark-hill_far": scene.themes.dark.hill_far,
+    "--scene-dark-hill_near": scene.themes.dark.hill_near,
+    "--scene-dark-grass": scene.themes.dark.grass,
+    "--scene-dark-ground": scene.themes.dark.ground,
+    "--scene-dark-wood": scene.themes.dark.wood,
+    "--scene-dark-celestial": scene.themes.dark.celestial,
   } as CSSProperties;
+}
+
+export function sceneThemesForScheme(
+  scene: PublicScene,
+  schemeId: string,
+): PublicScene["themes"] {
+  return (
+    scene.schemes.find((scheme) => scheme.id === schemeId)?.themes ??
+    scene.themes
+  );
 }
 
 export function readVisitorMode(): VisitorMode {

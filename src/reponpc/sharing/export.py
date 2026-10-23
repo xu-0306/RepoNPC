@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 from reponpc.admin.faq import FaqError, ReviewedFaq
 from reponpc.admin.scene import AdminSceneService, PublishedProfileSnapshot
+from reponpc.api.visitor_document import render_visitor_document
 from reponpc.api.visitor_ingress import _visitor_files
 from reponpc.bundles.archive import BundleError
 from reponpc.bundles.index_reader import IndexReadError
@@ -311,17 +312,17 @@ def _rewrite_entry_html(
     scene = snapshot.document.character.scene
     if scene is None:
         raise SiteExportError("SHARING_EXPORT_INVALID")
-    owner_mode = html.escape(scene.color_mode, quote=True)
-    toggle = "true" if scene.visitor_mode_toggle else "false"
-    document = document.replace(
-        '<html lang="zh-TW" data-owner-mode="system" data-visitor-toggle="true">',
-        '<html lang="zh-TW" data-owner-mode="'
-        + owner_mode
-        + '" data-visitor-toggle="'
-        + toggle
-        + '" data-static-export="true">',
-        1,
-    )
+    try:
+        document = render_visitor_document(
+            content,
+            color_mode=scene.color_mode,
+            visitor_mode_toggle=scene.visitor_mode_toggle,
+            default_scheme=scene.scheme.id,
+            visitor_scheme_choice=scene.visitor_scheme_choice,
+        ).decode("utf-8")
+    except ValueError:
+        raise SiteExportError("SHARING_EXPORT_INVALID") from None
+    document = re.sub(r"(<html\s[^>]*)(>)", r'\1 data-static-export="true"\2', document, count=1)
     document = document.replace('="/assets/', '="./assets/')
     csp = (
         "default-src 'none'; base-uri 'none'; connect-src 'self' "

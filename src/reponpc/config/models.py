@@ -256,10 +256,19 @@ class SceneFocusConfig(StrictModel):
     y: Annotated[int, Field(strict=True, ge=0, le=100)] = 50
 
 
+def _default_color_scheme_id() -> str:
+    from reponpc.scene.registry import DEFAULT_SCHEME_ID
+
+    return DEFAULT_SCHEME_ID
+
+
 class SceneConfig(StrictModel):
-    color_scheme: Annotated[str, Field(min_length=1, max_length=64)] = "neutral"
+    color_scheme: Annotated[str, Field(min_length=1, max_length=64)] = Field(
+        default_factory=_default_color_scheme_id
+    )
     color_mode: Literal["system", "light", "dark"] = "system"
     visitor_mode_toggle: Annotated[bool, Field(strict=True)] = True
+    visitor_scheme_choice: Annotated[bool, Field(strict=True)] = True
     accent: str | None = None
     background_path: str | None = None
     background_scaling: Literal["smooth", "pixelated"] = "smooth"

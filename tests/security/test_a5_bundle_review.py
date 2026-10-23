@@ -120,6 +120,24 @@ def test_rehashed_sprite_stage_cannot_hide_a_failing_edge_contrast(
         verify_retained_bundle_directory(directory=directory, expected_embedding=embedding)
 
 
+def test_rehashed_catalog_plate_cannot_hide_a_failing_edge_contrast(
+    published_bundle: tuple[Path, EmbeddingIdentity],
+) -> None:
+    directory, embedding = published_bundle
+    with Image.open(directory / "public/character.png") as sprite:
+        edge = _average_edge_color(sprite.convert("RGBA"))
+    path = directory / "public/profile.json"
+    profile = json.loads(path.read_bytes())
+    scheme = profile["character"]["scene"]["schemes"][-1]
+    for variant in ("light", "dark"):
+        scheme["npc_plate"][variant] = True
+        scheme["themes"][variant]["stage"] = edge
+    path.write_bytes(json.dumps(profile, ensure_ascii=False).encode("utf-8"))
+    _rehash(directory)
+    with pytest.raises(BundleError):
+        verify_retained_bundle_directory(directory=directory, expected_embedding=embedding)
+
+
 def test_rehashed_character_cannot_publish_private_metadata(
     published_bundle: tuple[Path, EmbeddingIdentity],
 ) -> None:

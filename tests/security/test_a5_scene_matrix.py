@@ -145,7 +145,12 @@ def test_ac072_non_cat_fixture_scheme_variant_matrix(
         assert {key: value for key, value in roles.items() if key != "stage"} == {
             key: value for key, value in authored.items() if key != "stage"
         }
-        assert _contrast(edge, roles["stage"]) >= 3.0
+        if background is not None or getattr(scene.npc_plate, variant):
+            assert _contrast(edge, roles["stage"]) >= 3.0
+        else:
+            assert _contrast(edge, roles["sky"]) >= 3.0
+            assert _contrast(edge, roles["hill_near"]) >= 3.0
+            assert roles["stage"] == authored["stage"]
         for surface in ("background", "surface", "surface_alt"):
             for text in ("ink", "muted_ink"):
                 assert _contrast(roles[text], roles[surface]) >= 4.5

@@ -229,6 +229,20 @@ The concrete owner/public/export routes, migration 29, exact-bundle approval and
 
 ### 4.4 Character NPC in a simple chat interface (ADR-049, revised by ADR-051 2026-09-26)
 
+**ADR-072 amendment (2026-10-23):** Technical Specification 0.4.14 §12.3
+supersedes the scene and configuration details below. The default is `meadow`;
+the registry order is meadow, sunset (version 2), coast, sakura. Retired neutral
+and forest alias meadow, ocean aliases coast and lavender aliases sakura.
+`visitor_scheme_choice` is a strict boolean defaulting to true; reset enables
+both visitor switches and clears the accent. Every scheme publishes light/dark
+themes with all eighteen roles and `npc_plate` flags, plus localized `label`.
+Public scenes retain the owner's `scheme`/`themes` and add `schemes`,
+`visitor_scheme_choice` and default `npc_plate`. The six adjacent scene-layer
+pairs reach 1.5:1. Without an owner image NPC separation checks sky and hill_near
+and uses a plate on failure, leaving scene colors unchanged; with an image the
+existing stage rule applies. These are P0 data contracts; the layout, CSS scene
+and browser scheme controls follow in later phases.
+
 **Owner requirements (2026-09-26):**
 - 「NPC角色與背景應該根據使用者上傳不同的角色而有所變化，這只是我使用貓咪角色的示意」: the cat in the reference mockup is only an example. The NPC must be whatever character the owner selects or uploads.
 - Revision (ADR-051): 「不用內建插畫背景，可以用簡單的對話ui介面即可…配色也不用跟隨角色，可以給幾套配色讓使用者自行選擇，以及淺色深色模式」. The page around the NPC is therefore a plain chat interface (§4.0) in an owner-chosen colour scheme with light and dark variants (§4.5). **Colours no longer follow the character.** Only the NPC itself changes with the character.
@@ -476,9 +490,10 @@ Exact hex values are set in the registry during implementation and reviewed with
 ```yaml
 character:
   scene:
-    color_scheme: neutral       # registry id (§4.5)
+    color_scheme: meadow        # registry id (§4.5; ADR-072)
     color_mode: system          # system | light | dark
     visitor_mode_toggle: true   # visitors may switch light/dark
+    visitor_scheme_choice: true # visitors may choose a registry scheme (ADR-072)
     accent: null                # or "#rrggbb"
     background_path: null       # or assets/scene/<name>.png|webp
     background_scaling: smooth  # smooth | pixelated
@@ -490,7 +505,7 @@ character:
 - `POST /api/admin/assets/scene/background-drafts` (multipart): validates and re-encodes. Returns `{draft_id, width, height, format, notices[]}` or a plain-language error.
 - `GET /api/admin/assets/scene/background-drafts/{id}`: the draft image; owner-only, `Cache-Control: no-store`, `nosniff`.
 - `DELETE /api/admin/assets/scene/background-drafts/{id}`: discards the draft.
-- `POST /api/admin/scene/preview`: takes proposed settings (`color_scheme`, `color_mode`, `visitor_mode_toggle`, `accent`, `background: draft:<id> | current | none`, `focus`, `dim`, `scaling`). Returns the resolved scene in the same shape as the public `character.scene`, plus notices. It persists nothing.
+- `POST /api/admin/scene/preview`: takes proposed settings (`color_scheme`, `color_mode`, `visitor_mode_toggle`, `visitor_scheme_choice`, `accent`, `background: draft:<id> | current | none`, `focus`, `dim`, `scaling`). Returns the resolved scene in the same shape as the public `character.scene`, plus notices. It persists nothing.
 - `PUT /api/admin/scene`: applies the settings and promotes a referenced draft.
 
 **Public output:**

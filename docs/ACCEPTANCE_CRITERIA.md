@@ -862,7 +862,7 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
   - accepted images are re-encoded without metadata, served only through `GET /api/public/scene-background`, and shown only in the welcome hero;
   - text never sits directly on the image;
   - scheme, mode and accent survive a character change; only the NPC and, where needed, the stage change;
-  - 「重設為預設」 restores `neutral`, `system`, the visitor toggle on and no accent;
+  - 「重設為預設」 restores `meadow`, `system`, both visitor switches on and no accent (0.4.14, ADR-072);
   - the export manifest hashes the tokens and any hero image;
   - the admin guide mascot shows the active character.
 - **And**:
