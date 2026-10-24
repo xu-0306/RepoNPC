@@ -131,3 +131,51 @@ describe("AnalysisSelectionPanel", () => {
     expect(html).toMatch(/<button disabled=""[^>]*>Use for analysis/);
   });
 });
+
+it.each(["zh-TW", "en"] as const)(
+  "discloses the full explanation and shows only current feedback in %s",
+  (locale) => {
+    for (const error of ["", "<unsafe-error>"]) {
+      const html = renderToStaticMarkup(
+        <AnalysisSelectionPanel
+          locale={locale}
+          chatProfiles={[]}
+          embeddingProfiles={[]}
+          value={null}
+          pending={false}
+          error={error}
+          onSelect={vi.fn()}
+        />,
+      );
+      const info = html.match(
+        /<details class="model-selection__info">(.*?)<\/details>/s,
+      )?.[1];
+      expect(info).toBeDefined();
+      expect(info).toContain('<summary><span aria-hidden="true">ⓘ</span> ');
+      expect(info).toContain(locale === "en" ? "About analysis" : "分析說明");
+      expect(info).toContain(
+        locale === "en"
+          ? "Analysis uses two tested models. This does not change the public website model or index."
+          : "分析會使用兩個已測試的模型；不會變更網站目前使用的公開模型或索引。",
+      );
+      expect(html).toMatch(
+        /<label for="analysis-chat-profile"><span>[^<]+<\/span><select[^>]+id="analysis-chat-profile"/,
+      );
+      expect(html).toMatch(
+        /<label for="analysis-embedding-profile"><span>[^<]+<\/span><select[^>]+id="analysis-embedding-profile"/,
+      );
+      expect(html.match(/role="(?:status|alert)"/g)).toHaveLength(1);
+      if (error) {
+        expect(html).toContain('<p role="alert">&lt;unsafe-error&gt;</p>');
+        expect(html).not.toContain('role="status"');
+      } else {
+        expect(html).toContain('<p role="status">');
+        expect(html).toContain(
+          locale === "en"
+            ? "Add and test both types of model, then select and confirm them."
+            : "請先新增並測試兩種模型，再分別選擇並確認。",
+        );
+      }
+    }
+  },
+);

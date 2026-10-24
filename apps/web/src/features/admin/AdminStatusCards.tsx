@@ -33,6 +33,24 @@ interface Props {
   status: AdminWorkspaceStatus;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- shared read-only status labels
+export const ADMIN_MODEL_STATES = {
+  "zh-TW": {
+    unconfigured: "尚未設定",
+    testing: "正在處理",
+    tested: "已測試，尚未選用",
+    selected: "已選用",
+    unavailable: "目前無法使用",
+  },
+  en: {
+    unconfigured: "Not configured",
+    testing: "Working",
+    tested: "Tested; not selected",
+    selected: "Selected",
+    unavailable: "Unavailable",
+  },
+} as const;
+
 const COPY = {
   "zh-TW": {
     heading: "工作區狀態",
@@ -52,13 +70,7 @@ const COPY = {
     publicReady: "資料版本已啟用",
     publicPending: "尚未就緒",
     connection: (value: string) => `連線：${value}`,
-    modelStates: {
-      unconfigured: "尚未設定",
-      testing: "正在處理",
-      tested: "已測試，尚未選用",
-      selected: "已選用",
-      unavailable: "目前無法使用",
-    },
+    modelStates: ADMIN_MODEL_STATES["zh-TW"],
   },
   en: {
     heading: "Workspace status",
@@ -77,13 +89,7 @@ const COPY = {
     publicReady: "Content version is active",
     publicPending: "Not ready yet",
     connection: (value: string) => `Connection: ${value}`,
-    modelStates: {
-      unconfigured: "Not configured",
-      testing: "Working",
-      tested: "Tested; not selected",
-      selected: "Selected",
-      unavailable: "Unavailable",
-    },
+    modelStates: ADMIN_MODEL_STATES["en"],
   },
 } as const;
 

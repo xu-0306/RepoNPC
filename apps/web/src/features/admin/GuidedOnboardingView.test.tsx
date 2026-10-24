@@ -30,6 +30,9 @@ import { Dialog, DialogTrigger, Popover } from "react-aria-components";
 const directHooks = vi.hoisted(() => ({
   values: null as unknown[] | null,
   cursor: 0,
+  effects: null as Array<() => unknown> | null,
+  refs: null as Array<{ current: unknown }> | null,
+  refCursor: 0,
 }));
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof import("react")>();
@@ -39,11 +42,14 @@ vi.mock("react", async (importOriginal) => {
       directHooks.values === null ? react.useId() : "highlight-body",
     useEffect: (...args: Parameters<typeof react.useEffect>) => {
       if (directHooks.values === null) react.useEffect(...args);
+      else directHooks.effects?.push(args[0]);
     },
-    useRef: (initial: unknown) =>
-      directHooks.values === null
-        ? react.useRef(initial)
-        : { current: initial },
+    useRef: (initial: unknown) => {
+      if (directHooks.values === null) return react.useRef(initial);
+      if (!directHooks.refs) return { current: initial };
+      const index = directHooks.refCursor++;
+      return (directHooks.refs[index] ??= { current: initial });
+    },
     useState: (initial: unknown) => {
       if (directHooks.values === null) return react.useState(initial);
       const index = directHooks.cursor++;
@@ -214,6 +220,59 @@ const confirmedModels: AnalysisSelectionView = {
 };
 
 describe("GuidedOnboardingView", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "focuses mount and async draft restoration without scrolling, but scrolls user step changes in %s",
+    (locale) => {
+      directHooks.values = [];
+      directHooks.refs = [];
+      directHooks.effects = [];
+      const heading = { focus: vi.fn(), scrollIntoView: vi.fn() };
+      const input = props({
+        locale,
+        state: state({ step: "intro" }),
+      });
+      const view = () => {
+        directHooks.cursor = 0;
+        directHooks.refCursor = 0;
+        directHooks.effects = [];
+        const tree = GuidedOnboardingView(input);
+        const title = elements(tree).find(
+          (node) => node.props.id === "guided-onboarding-heading",
+        )!;
+        (title.props.ref as { current: unknown }).current = heading;
+        return { effects: directHooks.effects, section: tree };
+      };
+      try {
+        const mountEffects = view().effects;
+        mountEffects.forEach((effect) => effect());
+        expect(heading.focus).toHaveBeenCalledWith({ preventScroll: true });
+        expect(heading.scrollIntoView).not.toHaveBeenCalled();
+        // React StrictMode replays mount effects without changing the step.
+        mountEffects.forEach((effect) => effect());
+        expect(heading.scrollIntoView).not.toHaveBeenCalled();
+        input.state = { ...input.state, step: "profile", route: "manual" };
+        const restored = view();
+        restored.effects.forEach((effect) => effect());
+        expect(heading.scrollIntoView).not.toHaveBeenCalled();
+        const interaction =
+          locale === "en" ? "onKeyDownCapture" : "onClickCapture";
+        (restored.section.props[interaction] as () => void)();
+        input.state = { ...input.state, step: "review" };
+        view().effects.forEach((effect) => effect());
+        expect(heading.scrollIntoView).toHaveBeenCalledExactlyOnceWith({
+          block: "start",
+          behavior: "instant",
+        });
+        view().effects.forEach((effect) => effect());
+        expect(heading.scrollIntoView).toHaveBeenCalledTimes(1);
+      } finally {
+        directHooks.values = null;
+        directHooks.refs = null;
+        directHooks.effects = null;
+      }
+    },
+  );
+
   it.each(["zh-TW", "en"] as const)(
     "renders specific analysis and GitHub timeout errors in %s",
     (locale) => {
@@ -1270,3 +1329,19 @@ it.each(["zh-TW", "en"] as const)(
     expect(current.step).toBe("review");
   },
 );
+
+it.each([
+  "models",
+  "repositories",
+  "analysis",
+  "contributions",
+  "profile",
+  "review",
+] as const)("leaves the %s stepper to the workspace shell", (step) => {
+  const markup = renderToStaticMarkup(
+    <GuidedOnboardingView {...props({ state: state({ step }) })} />,
+  );
+  expect(markup).not.toContain('class="onboarding-stepper');
+  expect(markup).toContain('id="guided-onboarding-heading"');
+  expect(markup).toContain("admin-status-overview");
+});

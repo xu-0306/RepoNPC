@@ -107,7 +107,7 @@ describe("admin workspace navigation and status", () => {
     expect(markup).toContain("Manual route");
     expect(markup).toContain("Step 1 of 4 · 0/4 complete");
     expect(markup).toContain(
-      '<progress aria-label="Setup progress" max="4" value="0">0/4</progress>',
+      'aria-label="Setup progress" aria-valuemin="0" aria-valuemax="4" aria-valuenow="0"',
     );
     expect(markup).not.toContain(">Models<");
     expect(markup).not.toContain(">Analysis<");
@@ -133,8 +133,31 @@ describe("shared onboarding progress", () => {
         />,
       );
       expect(markup).toContain(`${completed}/${total} complete`);
-      expect(markup).toContain(`max="${total}" value="${completed}"`);
+      expect(markup).toContain(
+        `aria-valuemax="${total}" aria-valuenow="${completed}"`,
+      );
       expect(markup).toContain(`Step ${completed + 1} of ${total}`);
     },
   );
 });
+
+it.each(["ai", "manual"] as const)(
+  "renders display-only %s quests with a collapsed phone disclosure",
+  (route) => {
+    const markup = renderToStaticMarkup(
+      <OnboardingStepper
+        copy={{ progress: "Setup progress", steps }}
+        locale="en"
+        state={{ ...initialGuidedOnboardingState(), route, step: "profile" }}
+      />,
+    );
+    expect(markup).toContain('<details class="onboarding-stepper__details">');
+    expect(markup).toContain('role="progressbar"');
+    expect(markup).toContain('aria-current="step" data-state="current"');
+    expect(markup).toContain('data-state="complete"');
+    expect(markup).toContain('data-state="upcoming"');
+    expect(markup.match(/<li /g)).toHaveLength(route === "ai" ? 6 : 4);
+    expect(markup).not.toContain("<button");
+    expect(markup).not.toContain("<a ");
+  },
+);

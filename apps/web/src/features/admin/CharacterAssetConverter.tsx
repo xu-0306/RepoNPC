@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { ChangeEvent, DragEvent, FormEvent } from "react";
+import type { DragEvent, FormEvent } from "react";
+import { Button, FileTrigger } from "react-aria-components";
 
 import {
   CHARACTER_FRAME_COUNT,
@@ -104,6 +105,11 @@ export interface CharacterAssetConverterProps {
 const COPY = {
   "zh-TW": {
     heading: "製作角色動畫",
+    eyebrow: "WORKSHOP / CHARACTER",
+    subtitle: "上傳素材，預覽七種動作後套用到作品集。",
+    howTo: "製作步驟",
+    empty: "上傳素材後即可預覽角色。",
+    apply: "套用到作品集",
     introduction:
       "上傳你手上的圖片、ZIP 或整個素材資料夾，RepoNPC 會自動找出可用的角色圖。找到多張時，看預覽選擇即可；原始檔案不會被修改。",
     steps: ["選擇素材", "選擇角色", "預覽並儲存"],
@@ -195,6 +201,12 @@ const COPY = {
   },
   en: {
     heading: "Create character animation",
+    eyebrow: "WORKSHOP / CHARACTER",
+    subtitle:
+      "Upload art, preview seven actions and apply it to your portfolio.",
+    howTo: "Creation steps",
+    empty: "Upload art to preview your character.",
+    apply: "Apply to portfolio",
     introduction:
       "Upload an image, ZIP, or whole asset folder. RepoNPC finds usable character art automatically and shows visual choices when several match. Your original files are never changed.",
     steps: ["Choose assets", "Choose a character", "Preview and save"],
@@ -391,8 +403,8 @@ export function CharacterAssetConverter({
     }
   }
 
-  function chooseFile(event: ChangeEvent<HTMLInputElement>) {
-    const selected = event.target.files?.[0] ?? null;
+  function chooseFile(files: FileList | null) {
+    const selected = files?.[0] ?? null;
     resetOutput(
       selected
         ? { kind: "file", file: selected, displayName: selected.name }
@@ -400,8 +412,8 @@ export function CharacterAssetConverter({
     );
   }
 
-  function chooseFolder(event: ChangeEvent<HTMLInputElement>) {
-    resetOutput(folderSource(Array.from(event.target.files ?? [])));
+  function chooseFolder(files: FileList | null) {
+    resetOutput(folderSource(Array.from(files ?? [])));
   }
 
   function dropMaterial(event: DragEvent<HTMLDivElement>) {
@@ -706,141 +718,42 @@ export function CharacterAssetConverter({
   return (
     <section
       aria-labelledby="admin-character-converter-heading"
-      className="admin-surface character-converter"
+      className="character-converter"
+      lang={locale}
     >
-      <h2 id="admin-character-converter-heading">{copy.heading}</h2>
-      <p>{copy.introduction}</p>
-      <div
-        className="character-converter__steps"
-        aria-label={copy.heading}
-        role="list"
-      >
-        {copy.steps.map((step, index) => (
-          <div key={step} role="listitem">
-            <span aria-hidden="true">{index + 1}</span>
-            <span>{step}</span>
-          </div>
-        ))}
-      </div>
-      <form onSubmit={convert}>
-        <div
-          className="character-converter__dropzone"
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={dropMaterial}
-        >
-          <strong>{copy.drop}</strong>
-          <label htmlFor="admin-character-source">{copy.chooseFile}</label>
-          <input
-            accept=".png,.zip,image/png,application/zip"
-            disabled={disabled || pending}
-            id="admin-character-source"
-            onChange={chooseFile}
-            type="file"
-          />
-          <label htmlFor="admin-character-folder">{copy.chooseFolder}</label>
-          <input
-            disabled={disabled || pending}
-            id="admin-character-folder"
-            multiple
-            onChange={chooseFolder}
-            type="file"
-            {...({ directory: "", webkitdirectory: "" } as Record<
-              string,
-              string
-            >)}
-          />
-        </div>
-        {source && (
-          <p className="character-converter__source" role="status">
-            {copy.selected}: <strong>{source.displayName}</strong>
-            {source.kind === "folder"
-              ? ` · ${source.entries.length} ${copy.folderFiles}`
-              : ""}
-          </p>
-        )}
-        <details className="character-converter__advanced">
-          <summary>{copy.advancedSettings}</summary>
-          <label htmlFor="admin-character-strategy">{copy.strategy}</label>
-          <select
-            disabled={disabled || pending}
-            id="admin-character-strategy"
-            onChange={(event) => {
-              setStrategy(event.target.value as CharacterConversionStrategy);
-              setSelection(null);
-              setResult(null);
-              resetAlignment();
-              setStatus(null);
-            }}
-            value={strategy}
-          >
-            <option value="pixelize">{copy.pixelize}</option>
-            <option value="pixel_exact">{copy.pixelExact}</option>
-          </select>
-        </details>
-        <button disabled={disabled || pending || !source} type="submit">
-          {pending ? copy.converting : copy.convert}
-        </button>
-      </form>
-
-      {error && (
-        <p role="alert">
-          {copy[error.kind]} ({error.detail})
+      <header className="character-converter__heading">
+        <p className="px-display" aria-hidden="true">
+          {copy.eyebrow}
         </p>
-      )}
-      {status && <p role="status">{copy[status]}</p>}
-
-      {selection && (
-        <section aria-labelledby="character-candidate-heading">
-          <h3 id="character-candidate-heading">{copy.candidates}</h3>
-          <p>
-            {selection.discovery.candidates.length} · {copy.ignored}:{" "}
-            {selection.discovery.ignored_count}
-          </p>
-          <ul className="character-converter__candidates">
-            {selection.discovery.candidates.map((candidate, index) => (
-              <li key={candidate.candidate_id}>
-                <Base64PngCanvas
-                  failureText={copy.previewFailed}
-                  height={candidate.asset.height}
-                  label={`${copy.candidates} ${index + 1}: ${candidate.source_path}`}
-                  pngBase64={candidate.asset.png_base64}
-                  pngUrl={candidate.asset.png_url}
-                  width={candidate.asset.width}
-                />
-                <code>{candidate.source_path}</code>
-                <button
-                  aria-label={`${copy.useCandidate}: ${candidate.source_path}`}
-                  disabled={pending || disabled}
-                  onClick={() => void prepare(candidate.candidate_id)}
-                  type="button"
-                >
-                  {copy.useCandidate}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {result && (
-        <div
-          className={`character-converter__result${result.edge_cleanup ? " character-converter__result--cleanup" : ""}`}
-        >
+        <h2 id="admin-character-converter-heading">{copy.heading}</h2>
+        <p>{copy.subtitle}</p>
+      </header>
+      <div className="character-converter__workbench px-panel px-panel--raised">
+        <div className="character-converter__editor">
           <div className="character-converter__animation-preview">
             <h3>{copy.animationPreview}</h3>
-            <div className="character-converter__animation-stage">
-              <Base64PngCanvas
-                className="character-converter__animated-canvas"
-                failureText={copy.previewFailed}
-                frame={selectedFrame}
-                frameOffsets={previewOffsets}
-                height={64}
-                label={copy.stateLabels[previewState]}
-                pngBase64={previewAsset}
-                pngUrl={previewAssetUrl}
-                state={previewState}
-                width={64}
-              />
+            <div className="character-converter__pedestal px-panel px-panel--inset">
+              <span className="character-converter__state-tab px-badge">
+                {copy.stateLabels[previewState]}
+              </span>
+              {result ? (
+                <div className="character-converter__plinth">
+                  <Base64PngCanvas
+                    className="character-converter__animated-canvas"
+                    failureText={copy.previewFailed}
+                    frame={selectedFrame}
+                    frameOffsets={previewOffsets}
+                    height={64}
+                    label={copy.stateLabels[previewState]}
+                    pngBase64={previewAsset}
+                    pngUrl={previewAssetUrl}
+                    state={previewState}
+                    width={64}
+                  />
+                </div>
+              ) : (
+                <p>{copy.empty}</p>
+              )}
             </div>
             <div
               aria-label={copy.animationState}
@@ -849,6 +762,8 @@ export function CharacterAssetConverter({
             >
               {CHARACTER_STATES.map((state) => (
                 <button
+                  className="px-button px-button--secondary"
+                  disabled={!result}
                   aria-pressed={previewState === state}
                   key={state}
                   onClick={() => {
@@ -857,358 +772,509 @@ export function CharacterAssetConverter({
                   }}
                   type="button"
                 >
-                  {copy.stateLabels[state]}
+                  {result && (
+                    <span aria-hidden="true">
+                      <Base64PngCanvas
+                        className="character-converter__thumbnail"
+                        failureText={copy.previewFailed}
+                        frame={0}
+                        frameOffsets={previewOffsets}
+                        height={64}
+                        label={copy.stateLabels[state]}
+                        pngBase64={previewAsset}
+                        pngUrl={previewAssetUrl}
+                        state={state}
+                        width={64}
+                      />
+                    </span>
+                  )}
+                  <span>{copy.stateLabels[state]}</span>
                 </button>
               ))}
             </div>
-            <small>{copy.reducedMotionNote}</small>
-            {result.edge_cleanup && (
-              <section
-                aria-labelledby="character-edge-cleanup-heading"
-                className="character-converter__cleanup"
-              >
-                <h4 id="character-edge-cleanup-heading">
-                  {copy.cleanupHeading}
-                </h4>
-                <p>{copy.cleanupHelp}</p>
-                <p>
-                  {result.edge_cleanup.affected_frames.length}{" "}
-                  {copy.cleanupFrames}
-                </p>
-                <div className="character-converter__cleanup-comparison">
-                  {(
-                    [
-                      [copy.cleanupBefore, result.asset],
-                      [copy.cleanupAfter, result.edge_cleanup.asset],
-                    ] as const
-                  ).map(([label, asset]) => (
-                    <figure key={label}>
-                      <figcaption>{label}</figcaption>
-                      <div className="character-converter__animation-stage">
-                        <Base64PngCanvas
-                          className="character-converter__animated-canvas"
-                          failureText={copy.previewFailed}
-                          frame={comparisonFrame}
-                          height={64}
-                          label={`${label} · ${copy.stateLabels[previewState]} · ${copy.alignmentFrame} ${comparisonFrame + 1}`}
-                          pngBase64={asset.png_base64}
-                          pngUrl={asset.png_url}
-                          state={previewState}
-                          width={64}
-                        />
-                      </div>
-                    </figure>
-                  ))}
-                </div>
-                <div
-                  aria-label={copy.cleanupHeading}
-                  className="character-converter__cleanup-actions"
-                  role="group"
-                >
-                  <button
-                    aria-pressed={cleanupChoice === "cleaned"}
-                    disabled={pending || disabled}
-                    onClick={() => void chooseCleanup("cleaned")}
-                    type="button"
-                  >
-                    {copy.cleanupUse}
-                  </button>
-                  <button
-                    aria-pressed={cleanupChoice === "original"}
-                    disabled={pending || disabled}
-                    onClick={() => void chooseCleanup("original")}
-                    type="button"
-                  >
-                    {copy.cleanupKeep}
-                  </button>
-                </div>
-              </section>
-            )}
-            {!cleanupReviewPending && (
-              <section
-                aria-labelledby="character-alignment-heading"
-                className="character-converter__alignment"
-              >
-                <h4 id="character-alignment-heading">
-                  {copy.alignmentHeading}
-                </h4>
-                <p>{copy.alignmentHelp}</p>
-                <button
-                  disabled={pending || disabled}
-                  onClick={() => void suggestAlignment()}
-                  type="button"
-                >
-                  {alignmentOperation === "inspect"
-                    ? copy.alignmentInspecting
-                    : copy.alignmentSuggest}
-                </button>
-                {alignmentAnalysis && (
-                  <>
-                    <p className="character-converter__alignment-note">
-                      {copy.alignmentNote}
-                    </p>
-                    {(alignedAsset ||
-                      (!automaticPatternAvailable && !hasAlignmentEdits)) && (
-                      <p role="status">
-                        {alignedAsset
-                          ? copy.alignmentReady
-                          : copy.alignmentManualReview}
-                      </p>
-                    )}
-                    <details
-                      className="character-converter__alignment-details"
-                      open
-                      onToggle={(event) => {
-                        if (!event.currentTarget.open) setSelectedFrame(null);
-                      }}
-                    >
-                      <summary>{copy.alignmentEdit}</summary>
-                      <div
-                        aria-label={`${copy.stateLabels[previewState]} · ${copy.alignmentFrame}`}
-                        className="character-converter__frame-picker"
-                        role="group"
-                      >
-                        {Array.from(
-                          { length: CHARACTER_FRAME_COUNT },
-                          (_, frame) => (
-                            <button
-                              aria-pressed={selectedFrame === frame}
-                              disabled={pending}
-                              key={frame}
-                              onClick={() => selectFrame(frame)}
-                              type="button"
-                            >
-                              {copy.alignmentFrame} {frame + 1}
-                            </button>
-                          ),
-                        )}
-                      </div>
-                      {selectedFrame !== null && selectedOffset && (
-                        <>
-                          <p role="status">
-                            {copy.alignmentPosition}: X {selectedOffset.x}, Y{" "}
-                            {selectedOffset.y}
-                          </p>
-                          <div className="character-converter__offset-fields">
-                            {(["x", "y"] as const).map((axis) => {
-                              const minimum =
-                                axis === "x"
-                                  ? -(selectedBounds?.left ?? 0)
-                                  : -(selectedBounds?.top ?? 0);
-                              const maximum =
-                                axis === "x"
-                                  ? CHARACTER_FRAME_SIZE -
-                                    (selectedBounds?.right ??
-                                      CHARACTER_FRAME_SIZE)
-                                  : CHARACTER_FRAME_SIZE -
-                                    (selectedBounds?.bottom ??
-                                      CHARACTER_FRAME_SIZE);
-                              return (
-                                <label key={axis}>
-                                  <span>
-                                    {copy.stateLabels[previewState]} ·{" "}
-                                    {copy.alignmentFrame} {selectedFrame + 1} ·{" "}
-                                    {axis.toUpperCase()} {copy.alignmentPixels}
-                                  </span>
-                                  <input
-                                    aria-invalid={!offsetDraftValid}
-                                    disabled={pending || disabled}
-                                    max={maximum}
-                                    min={minimum}
-                                    onBlur={() => {
-                                      if (!offsetDraftValid) {
-                                        setOffsetDraft({
-                                          x: String(selectedOffset.x),
-                                          y: String(selectedOffset.y),
-                                        });
-                                      }
-                                    }}
-                                    onChange={(event) =>
-                                      updateOffsetDraft(
-                                        axis,
-                                        event.target.value,
-                                      )
-                                    }
-                                    step={1}
-                                    type="number"
-                                    value={offsetDraft[axis]}
-                                  />
-                                </label>
-                              );
-                            })}
-                          </div>
-                          {!offsetDraftValid && (
-                            <p role="alert">{copy.alignmentInvalid}</p>
-                          )}
-                          <div className="character-converter__nudge-controls">
-                            {(
-                              [
-                                [copy.alignmentLeft, -1, 0],
-                                [copy.alignmentRight, 1, 0],
-                                [copy.alignmentUp, 0, -1],
-                                [copy.alignmentDown, 0, 1],
-                              ] as const
-                            ).map(([label, dx, dy]) => (
-                              <button
-                                disabled={pending || !canNudge(dx, dy)}
-                                key={label}
-                                onClick={() => nudgeFrame(dx, dy)}
-                                type="button"
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                          <button
-                            onClick={() => setSelectedFrame(null)}
-                            type="button"
-                          >
-                            {copy.alignmentPlay}
-                          </button>
-                        </>
-                      )}
-                    </details>
-                    <div className="character-converter__alignment-actions">
-                      <button
-                        disabled={
-                          pending ||
-                          disabled ||
-                          !alignmentNeedsApply ||
-                          !offsetDraftValid
-                        }
-                        onClick={() => void applyAlignment()}
-                        type="button"
-                      >
-                        {alignmentOperation === "apply"
-                          ? copy.alignmentApplying
-                          : copy.alignmentApply}
-                      </button>
-                      <button
-                        disabled={
-                          pending || (!hasAlignmentEdits && !alignedAsset)
-                        }
-                        onClick={restoreOriginal}
-                        type="button"
-                      >
-                        {copy.alignmentRestore}
-                      </button>
-                    </div>
-                    {alignmentNeedsApply && (
-                      <p role="status">{copy.alignmentUnapplied}</p>
-                    )}
-                  </>
-                )}
-              </section>
-            )}
           </div>
-          <div>
-            <details className="character-converter__technical">
-              <summary>{copy.technicalDetails}</summary>
-              <h3>{copy.sheetPreview}</h3>
-              <Base64PngCanvas
-                failureText={copy.previewFailed}
-                frameOffsets={previewOffsets}
-                height={result.asset.height}
-                label={copy.sheetPreview}
-                pngBase64={previewAsset}
-                pngUrl={previewAssetUrl}
-                width={result.asset.width}
-              />
-              <h3>{copy.report}</h3>
-              <dl>
-                <div>
-                  <dt>{copy.sourceKind}</dt>
-                  <dd>{result.conversion.source_kind}</dd>
-                </div>
-                {result.conversion.source_path && (
-                  <div>
-                    <dt>{copy.sourcePath}</dt>
-                    <dd>{result.conversion.source_path}</dd>
-                  </div>
-                )}
-                <div>
-                  <dt>{copy.dimensions}</dt>
-                  <dd>
-                    {result.asset.width}×{result.asset.height}
-                  </dd>
-                </div>
-              </dl>
-              <h4>{copy.warnings}</h4>
-              {result.conversion.warnings.length ? (
-                <ul>
-                  {result.conversion.warnings.map((warning) => (
-                    <li key={warning.code}>
-                      <code>{warning.code}</code>
-                      {warning.items.length
-                        ? `: ${warning.items.join(", ")}`
-                        : ""}
+          <div className="character-converter__source-result">
+            <details className="character-converter__instructions">
+              <summary>ⓘ {copy.howTo}</summary>
+              <p>{copy.introduction}</p>
+              <ol>
+                {copy.steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+              <p>{copy.reducedMotionNote}</p>
+            </details>
+            <form onSubmit={convert}>
+              <div
+                className="character-converter__dropzone"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={dropMaterial}
+              >
+                <strong>{copy.drop}</strong>
+                <FileTrigger
+                  acceptedFileTypes={[
+                    ".png",
+                    ".zip",
+                    "image/png",
+                    "application/zip",
+                  ]}
+                  onSelect={chooseFile}
+                >
+                  <Button
+                    id="admin-character-source"
+                    isDisabled={disabled || pending}
+                    className={`px-button ${!source && !result ? "px-button--primary" : "px-button--secondary"}`}
+                  >
+                    {copy.chooseFile}
+                  </Button>
+                </FileTrigger>
+                <FileTrigger
+                  acceptDirectory
+                  allowsMultiple
+                  onSelect={chooseFolder}
+                >
+                  <Button
+                    id="admin-character-folder"
+                    isDisabled={disabled || pending}
+                    className="px-button px-button--secondary"
+                  >
+                    {copy.chooseFolder}
+                  </Button>
+                </FileTrigger>
+              </div>
+              {source && (
+                <p className="character-converter__source" role="status">
+                  {copy.selected}: <strong>{source.displayName}</strong>
+                  {source.kind === "folder"
+                    ? ` · ${source.entries.length} ${copy.folderFiles}`
+                    : ""}
+                </p>
+              )}
+              <details className="character-converter__advanced">
+                <summary>{copy.advancedSettings}</summary>
+                <label htmlFor="admin-character-strategy">
+                  {copy.strategy}
+                </label>
+                <select
+                  disabled={disabled || pending}
+                  id="admin-character-strategy"
+                  onChange={(event) => {
+                    setStrategy(
+                      event.target.value as CharacterConversionStrategy,
+                    );
+                    setSelection(null);
+                    setResult(null);
+                    resetAlignment();
+                    setStatus(null);
+                  }}
+                  value={strategy}
+                >
+                  <option value="pixelize">{copy.pixelize}</option>
+                  <option value="pixel_exact">{copy.pixelExact}</option>
+                </select>
+              </details>
+              <button
+                className={`px-button ${source && !result ? "px-button--primary" : "px-button--secondary"}`}
+                disabled={disabled || pending || !source}
+                type="submit"
+              >
+                {pending ? copy.converting : copy.convert}
+              </button>
+            </form>{" "}
+            {error && (
+              <p role="alert">
+                {copy[error.kind]} ({error.detail})
+              </p>
+            )}
+            {status && <p role="status">{copy[status]}</p>}
+            {selection && (
+              <section aria-labelledby="character-candidate-heading">
+                <h3 id="character-candidate-heading">{copy.candidates}</h3>
+                <p>
+                  {selection.discovery.candidates.length} · {copy.ignored}:{" "}
+                  {selection.discovery.ignored_count}
+                </p>
+                <ul className="character-converter__candidates">
+                  {selection.discovery.candidates.map((candidate, index) => (
+                    <li key={candidate.candidate_id}>
+                      <Base64PngCanvas
+                        failureText={copy.previewFailed}
+                        height={candidate.asset.height}
+                        label={`${copy.candidates} ${index + 1}: ${candidate.source_path}`}
+                        pngBase64={candidate.asset.png_base64}
+                        pngUrl={candidate.asset.png_url}
+                        width={candidate.asset.width}
+                      />
+                      <code>{candidate.source_path}</code>
+                      <button
+                        aria-label={`${copy.useCandidate}: ${candidate.source_path}`}
+                        disabled={pending || disabled}
+                        onClick={() => void prepare(candidate.candidate_id)}
+                        type="button"
+                      >
+                        {copy.useCandidate}
+                      </button>
                     </li>
                   ))}
                 </ul>
-              ) : (
-                <p>{copy.noWarnings}</p>
-              )}
-            </details>
-            <label htmlFor="admin-character-filename">{copy.filename}</label>
-            <input
-              aria-describedby="admin-character-filename-help"
-              disabled={pending}
-              id="admin-character-filename"
-              onChange={(event) => setFilename(event.target.value)}
-              value={filename}
-            />
-            <small id="admin-character-filename-help">
-              {copy.filenameHelp}
-            </small>
-            <div className="admin-workspace__actions">
-              {onApply && (
-                <button
-                  type="button"
-                  disabled={
-                    pending ||
-                    disabled ||
-                    !downloadableAsset ||
-                    !offsetDraftValid
-                  }
-                  onClick={async () => {
-                    if (!downloadableAsset) return;
-                    setPending(true);
-                    setError(null);
-                    try {
-                      await onApply(downloadableAsset);
-                      setStatus("applied");
-                    } catch (error) {
-                      setError({
-                        kind: "failed",
-                        detail:
-                          error instanceof Error
-                            ? error.message
-                            : "REQUEST_FAILED",
-                      });
-                    } finally {
-                      setPending(false);
-                    }
-                  }}
-                >
-                  {locale === "zh-TW" ? "套用到作品集" : "Apply to portfolio"}
-                </button>
-              )}
-              <button
-                disabled={
-                  pending ||
-                  !filenameValid ||
-                  !downloadableAsset ||
-                  !offsetDraftValid
-                }
-                onClick={download}
-                type="button"
-              >
-                {copy.download}
-              </button>
-            </div>
+              </section>
+            )}
+            {result && (
+              <>
+                {result.edge_cleanup && (
+                  <section
+                    aria-labelledby="character-edge-cleanup-heading"
+                    className="character-converter__cleanup"
+                  >
+                    <h4 id="character-edge-cleanup-heading">
+                      {copy.cleanupHeading}
+                    </h4>
+                    <p>{copy.cleanupHelp}</p>
+                    <p>
+                      {result.edge_cleanup.affected_frames.length}{" "}
+                      {copy.cleanupFrames}
+                    </p>
+                    <div className="character-converter__cleanup-comparison">
+                      {(
+                        [
+                          [copy.cleanupBefore, result.asset],
+                          [copy.cleanupAfter, result.edge_cleanup.asset],
+                        ] as const
+                      ).map(([label, asset]) => (
+                        <figure key={label}>
+                          <figcaption>{label}</figcaption>
+                          <div className="character-converter__animation-stage">
+                            <Base64PngCanvas
+                              className="character-converter__animated-canvas"
+                              failureText={copy.previewFailed}
+                              frame={comparisonFrame}
+                              height={64}
+                              label={`${label} · ${copy.stateLabels[previewState]} · ${copy.alignmentFrame} ${comparisonFrame + 1}`}
+                              pngBase64={asset.png_base64}
+                              pngUrl={asset.png_url}
+                              state={previewState}
+                              width={64}
+                            />
+                          </div>
+                        </figure>
+                      ))}
+                    </div>
+                    <div
+                      aria-label={copy.cleanupHeading}
+                      className="character-converter__cleanup-actions"
+                      role="group"
+                    >
+                      <button
+                        aria-pressed={cleanupChoice === "cleaned"}
+                        disabled={pending || disabled}
+                        onClick={() => void chooseCleanup("cleaned")}
+                        type="button"
+                      >
+                        {copy.cleanupUse}
+                      </button>
+                      <button
+                        aria-pressed={cleanupChoice === "original"}
+                        disabled={pending || disabled}
+                        onClick={() => void chooseCleanup("original")}
+                        type="button"
+                      >
+                        {copy.cleanupKeep}
+                      </button>
+                    </div>
+                  </section>
+                )}
+                {!cleanupReviewPending && (
+                  <section
+                    aria-labelledby="character-alignment-heading"
+                    className="character-converter__alignment"
+                  >
+                    <h4 id="character-alignment-heading">
+                      {copy.alignmentHeading}
+                    </h4>
+                    <p>{copy.alignmentHelp}</p>
+                    <button
+                      disabled={pending || disabled}
+                      onClick={() => void suggestAlignment()}
+                      type="button"
+                    >
+                      {alignmentOperation === "inspect"
+                        ? copy.alignmentInspecting
+                        : copy.alignmentSuggest}
+                    </button>
+                    {alignmentAnalysis && (
+                      <>
+                        <p className="character-converter__alignment-note">
+                          {copy.alignmentNote}
+                        </p>
+                        {(alignedAsset ||
+                          (!automaticPatternAvailable &&
+                            !hasAlignmentEdits)) && (
+                          <p role="status">
+                            {alignedAsset
+                              ? copy.alignmentReady
+                              : copy.alignmentManualReview}
+                          </p>
+                        )}
+                        <details
+                          className="character-converter__alignment-details"
+                          open
+                          onToggle={(event) => {
+                            if (!event.currentTarget.open)
+                              setSelectedFrame(null);
+                          }}
+                        >
+                          <summary>{copy.alignmentEdit}</summary>
+                          <div
+                            aria-label={`${copy.stateLabels[previewState]} · ${copy.alignmentFrame}`}
+                            className="character-converter__frame-picker"
+                            role="group"
+                          >
+                            {Array.from(
+                              { length: CHARACTER_FRAME_COUNT },
+                              (_, frame) => (
+                                <button
+                                  aria-pressed={selectedFrame === frame}
+                                  disabled={pending}
+                                  key={frame}
+                                  onClick={() => selectFrame(frame)}
+                                  type="button"
+                                >
+                                  {copy.alignmentFrame} {frame + 1}
+                                </button>
+                              ),
+                            )}
+                          </div>
+                          {selectedFrame !== null && selectedOffset && (
+                            <>
+                              <p role="status">
+                                {copy.alignmentPosition}: X {selectedOffset.x},
+                                Y {selectedOffset.y}
+                              </p>
+                              <div className="character-converter__offset-fields">
+                                {(["x", "y"] as const).map((axis) => {
+                                  const minimum =
+                                    axis === "x"
+                                      ? -(selectedBounds?.left ?? 0)
+                                      : -(selectedBounds?.top ?? 0);
+                                  const maximum =
+                                    axis === "x"
+                                      ? CHARACTER_FRAME_SIZE -
+                                        (selectedBounds?.right ??
+                                          CHARACTER_FRAME_SIZE)
+                                      : CHARACTER_FRAME_SIZE -
+                                        (selectedBounds?.bottom ??
+                                          CHARACTER_FRAME_SIZE);
+                                  return (
+                                    <label key={axis}>
+                                      <span>
+                                        {copy.stateLabels[previewState]} ·{" "}
+                                        {copy.alignmentFrame}{" "}
+                                        {selectedFrame + 1} ·{" "}
+                                        {axis.toUpperCase()}{" "}
+                                        {copy.alignmentPixels}
+                                      </span>
+                                      <input
+                                        aria-invalid={!offsetDraftValid}
+                                        disabled={pending || disabled}
+                                        max={maximum}
+                                        min={minimum}
+                                        onBlur={() => {
+                                          if (!offsetDraftValid) {
+                                            setOffsetDraft({
+                                              x: String(selectedOffset.x),
+                                              y: String(selectedOffset.y),
+                                            });
+                                          }
+                                        }}
+                                        onChange={(event) =>
+                                          updateOffsetDraft(
+                                            axis,
+                                            event.target.value,
+                                          )
+                                        }
+                                        step={1}
+                                        type="number"
+                                        value={offsetDraft[axis]}
+                                      />
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                              {!offsetDraftValid && (
+                                <p role="alert">{copy.alignmentInvalid}</p>
+                              )}
+                              <div className="character-converter__nudge-controls">
+                                {(
+                                  [
+                                    [copy.alignmentLeft, -1, 0],
+                                    [copy.alignmentRight, 1, 0],
+                                    [copy.alignmentUp, 0, -1],
+                                    [copy.alignmentDown, 0, 1],
+                                  ] as const
+                                ).map(([label, dx, dy]) => (
+                                  <button
+                                    disabled={pending || !canNudge(dx, dy)}
+                                    key={label}
+                                    onClick={() => nudgeFrame(dx, dy)}
+                                    type="button"
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                              <button
+                                onClick={() => setSelectedFrame(null)}
+                                type="button"
+                              >
+                                {copy.alignmentPlay}
+                              </button>
+                            </>
+                          )}
+                        </details>
+                        <div className="character-converter__alignment-actions">
+                          <button
+                            disabled={
+                              pending ||
+                              disabled ||
+                              !alignmentNeedsApply ||
+                              !offsetDraftValid
+                            }
+                            onClick={() => void applyAlignment()}
+                            type="button"
+                          >
+                            {alignmentOperation === "apply"
+                              ? copy.alignmentApplying
+                              : copy.alignmentApply}
+                          </button>
+                          <button
+                            disabled={
+                              pending || (!hasAlignmentEdits && !alignedAsset)
+                            }
+                            onClick={restoreOriginal}
+                            type="button"
+                          >
+                            {copy.alignmentRestore}
+                          </button>
+                        </div>
+                        {alignmentNeedsApply && (
+                          <p role="status">{copy.alignmentUnapplied}</p>
+                        )}
+                      </>
+                    )}
+                  </section>
+                )}
+                <details className="character-converter__technical">
+                  <summary>{copy.technicalDetails}</summary>
+                  <h3>{copy.sheetPreview}</h3>
+                  <Base64PngCanvas
+                    failureText={copy.previewFailed}
+                    frameOffsets={previewOffsets}
+                    height={result.asset.height}
+                    label={copy.sheetPreview}
+                    pngBase64={previewAsset}
+                    pngUrl={previewAssetUrl}
+                    width={result.asset.width}
+                  />
+                  <h3>{copy.report}</h3>
+                  <dl>
+                    <div>
+                      <dt>{copy.sourceKind}</dt>
+                      <dd>{result.conversion.source_kind}</dd>
+                    </div>
+                    {result.conversion.source_path && (
+                      <div>
+                        <dt>{copy.sourcePath}</dt>
+                        <dd>{result.conversion.source_path}</dd>
+                      </div>
+                    )}
+                    <div>
+                      <dt>{copy.dimensions}</dt>
+                      <dd>
+                        {result.asset.width}×{result.asset.height}
+                      </dd>
+                    </div>
+                  </dl>
+                  <h4>{copy.warnings}</h4>
+                  {result.conversion.warnings.length ? (
+                    <ul>
+                      {result.conversion.warnings.map((warning) => (
+                        <li key={warning.code}>
+                          <code>{warning.code}</code>
+                          {warning.items.length
+                            ? `: ${warning.items.join(", ")}`
+                            : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>{copy.noWarnings}</p>
+                  )}
+                </details>
+                <label htmlFor="admin-character-filename">
+                  {copy.filename}
+                </label>
+                <input
+                  aria-describedby="admin-character-filename-help"
+                  disabled={pending}
+                  id="admin-character-filename"
+                  onChange={(event) => setFilename(event.target.value)}
+                  value={filename}
+                />
+                <small id="admin-character-filename-help">
+                  {copy.filenameHelp}
+                </small>
+              </>
+            )}
           </div>
         </div>
-      )}
+        {result && (
+          <footer className="character-converter__confirm">
+            {onApply && (
+              <button
+                className="px-button px-button--primary"
+                type="button"
+                disabled={
+                  pending || disabled || !downloadableAsset || !offsetDraftValid
+                }
+                onClick={async () => {
+                  if (!downloadableAsset) return;
+                  setPending(true);
+                  setError(null);
+                  try {
+                    await onApply(downloadableAsset);
+                    setStatus("applied");
+                  } catch (error) {
+                    setError({
+                      kind: "failed",
+                      detail:
+                        error instanceof Error
+                          ? error.message
+                          : "REQUEST_FAILED",
+                    });
+                  } finally {
+                    setPending(false);
+                  }
+                }}
+              >
+                {copy.apply}
+              </button>
+            )}
+            <button
+              className="px-button px-button--secondary"
+              disabled={
+                pending ||
+                !filenameValid ||
+                !downloadableAsset ||
+                !offsetDraftValid
+              }
+              onClick={download}
+              type="button"
+            >
+              {copy.download}
+            </button>
+          </footer>
+        )}
+      </div>
     </section>
   );
 }

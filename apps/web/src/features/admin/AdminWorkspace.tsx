@@ -109,6 +109,7 @@ export interface AdminWorkspaceProps {
   onLogout: () => void;
   onLocaleChange?: (locale: AdminLocale) => void;
   guidedView?: ReactNode;
+  questRail?: ReactNode;
   embeddingProfileView?: ReactNode;
   characterAssetView?: ReactNode;
   publicationView?: ReactNode;
@@ -121,8 +122,9 @@ export interface AdminWorkspaceProps {
 const COPY = {
   "zh-TW": {
     title: "RepoNPC 管理工作區",
-    subtitle: "設定 AI 模型與資料來源，打造專屬的知識庫問答助手。",
-    guideMessage: "跟著步驟設定，很快就能完成囉！",
+    brand: "RepoNPC",
+    subtitle: "像素工坊",
+    publishMode: "預覽與分享",
     help: "使用說明",
     administrator: "管理員",
     language: "介面語言",
@@ -172,9 +174,9 @@ const COPY = {
   },
   en: {
     title: "RepoNPC admin workspace",
-    subtitle:
-      "Set up AI models and sources for your evidence-backed portfolio assistant.",
-    guideMessage: "Follow the steps—you'll have a working draft soon.",
+    brand: "RepoNPC",
+    subtitle: "Pixel Workshop",
+    publishMode: "Preview & share",
     help: "Setup guide",
     administrator: "Administrator",
     language: "Interface language",
@@ -281,6 +283,7 @@ export function AdminWorkspace({
   onLogout,
   onLocaleChange,
   guidedView,
+  questRail,
   embeddingProfileView,
   characterAssetView,
   publicationView,
@@ -317,36 +320,41 @@ export function AdminWorkspace({
   }
 
   return (
-    <main aria-busy={busy} className="admin-workspace" lang={locale}>
+    <div aria-busy={busy} className="admin-workspace" lang={locale}>
       <header className="admin-workspace__header">
         <div className="admin-workspace__brand">
-          <h1 className="admin-workspace__title">{copy.title}</h1>
-          <p className="admin-workspace__subtitle">{copy.subtitle}</p>
+          <span className="admin-workspace__logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="m12 3 9 5v8l-9 5-9-5V8Z" />
+              <path d="m3 8 9 5 9-5M12 13v8M7.5 5.5l9 5" />
+            </svg>
+          </span>
+          <div>
+            <h1 aria-label={copy.title} className="admin-workspace__title">
+              {copy.brand}
+            </h1>
+            <p className="admin-workspace__subtitle">{copy.subtitle}</p>
+          </div>
         </div>
-        <div className="admin-workspace__guide" aria-hidden="true">
-          {activeCharacter ? (
-            <span
-              style={{
-                backgroundColor: activeCharacter.scene?.themes.light.stage,
-                border: `2px solid ${activeCharacter.scene?.themes.light.border ?? "currentColor"}`,
-                borderRadius: "50%",
-                display: "inline-flex",
-                flexShrink: 0,
-              }}
-            >
+        <div className="admin-workspace__scene px-scene" aria-hidden="true">
+          <span className="px-scene__horizon" />
+          <span className="px-scene__celestial" />
+          <span className="px-scene__hill-far" />
+          <span className="px-scene__hill-near" />
+          <span className="px-scene__grass" />
+          <span className="px-scene__ground" />
+          <span className="px-scene__sign" />
+          {activeCharacter && (
+            <span className="px-scene__npc">
               <CharacterRenderer
                 assetUrl={`/api/public/character.png?rev=${activeCharacter.revision}`}
                 state="idle"
                 stateLabel=""
                 reducedMotion
+                frame={0}
               />
             </span>
-          ) : (
-            <span className="admin-workspace__npc">
-              <span />
-            </span>
           )}
-          <span className="admin-workspace__speech">{copy.guideMessage}</span>
         </div>
         <div className="admin-workspace__utilities">
           {onLocaleChange && (
@@ -357,6 +365,7 @@ export function AdminWorkspace({
             >
               {(["zh-TW", "en"] as const).map((option) => (
                 <button
+                  className="px-button px-button--quiet"
                   aria-label={option === "zh-TW" ? "繁體中文" : "English"}
                   aria-pressed={locale === option}
                   key={option}
@@ -370,7 +379,7 @@ export function AdminWorkspace({
           )}
           <DialogTrigger>
             <Button
-              className="admin-display-settings"
+              className="admin-display-settings px-button px-button--quiet"
               aria-label={copy.displaySettings}
             >
               <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -379,7 +388,7 @@ export function AdminWorkspace({
               <span>{copy.displaySettings}</span>
             </Button>
             <Popover
-              className="admin-display-settings__popover"
+              className="admin-display-settings__popover px-panel"
               placement="bottom end"
               offset={8}
             >
@@ -417,12 +426,12 @@ export function AdminWorkspace({
           </a>
           {authenticated && (
             <>
-              <span className="admin-workspace__owner">
+              <span className="admin-workspace__owner px-badge">
                 <span aria-hidden="true">R</span>
                 {copy.administrator}
               </span>
               <button
-                className="admin-workspace__logout"
+                className="admin-workspace__logout px-button px-button--quiet"
                 disabled={busy}
                 onClick={onLogout}
                 type="button"
@@ -435,8 +444,9 @@ export function AdminWorkspace({
       </header>
 
       {guidedView && (
-        <nav aria-label={copy.title} className="admin-workspace__mode-switch">
+        <nav aria-label={copy.title} className="admin-workspace__modes">
           <button
+            className="px-tab"
             aria-pressed={workspaceMode === "guided"}
             disabled={busy}
             onClick={() => onWorkspaceModeChange?.("guided")}
@@ -445,6 +455,7 @@ export function AdminWorkspace({
             {copy.guidedMode}
           </button>
           <button
+            className="px-tab"
             aria-pressed={workspaceMode === "character"}
             disabled={busy}
             onClick={() => onWorkspaceModeChange?.("character")}
@@ -454,14 +465,17 @@ export function AdminWorkspace({
           </button>
           {publicationView && (
             <button
+              className="px-tab"
               type="button"
+              disabled={busy}
               aria-pressed={workspaceMode === "publish"}
               onClick={() => onWorkspaceModeChange?.("publish")}
             >
-              {locale === "zh-TW" ? "預覽與分享" : "Preview & share"}
+              {copy.publishMode}
             </button>
           )}
           <button
+            className="px-tab admin-workspace__advanced-tab"
             aria-pressed={workspaceMode === "advanced"}
             disabled={busy}
             onClick={() => onWorkspaceModeChange?.("advanced")}
@@ -471,6 +485,7 @@ export function AdminWorkspace({
           </button>
           {maintenanceView && (
             <button
+              className="px-tab"
               aria-pressed={workspaceMode === "maintenance"}
               disabled={busy}
               onClick={() => onWorkspaceModeChange?.("maintenance")}
@@ -482,200 +497,215 @@ export function AdminWorkspace({
         </nav>
       )}
 
-      {notice && (!guidedView || workspaceMode !== "guided") && (
-        <p className="admin-workspace__notice" role="alert">
-          {notice}
-        </p>
-      )}
+      <div className="admin-workspace__layout">
+        {authenticated && questRail}
+        <main className="admin-workspace__content">
+          {notice && (!guidedView || workspaceMode !== "guided") && (
+            <p className="admin-workspace__notice" role="alert">
+              {notice}
+            </p>
+          )}
 
-      {authenticated &&
-        (!guidedView || workspaceMode === "advanced") &&
-        embeddingProfileView}
+          {authenticated &&
+            (!guidedView || workspaceMode === "advanced") &&
+            embeddingProfileView}
 
-      {authenticated && workspaceMode === "character" && characterAssetView}
+          {authenticated && workspaceMode === "character" && characterAssetView}
 
-      {!authenticated && (
-        <p role="alert" className="admin-workspace__auth-message">
-          {copy.authRequired}
-        </p>
-      )}
+          {!authenticated && (
+            <p role="alert" className="admin-workspace__auth-message">
+              {copy.authRequired}
+            </p>
+          )}
 
-      {guidedView && workspaceMode === "guided" && guidedView}
-      {authenticated && workspaceMode === "publish" && publicationView}
-      {authenticated && workspaceMode === "maintenance" && maintenanceView}
+          {guidedView && workspaceMode === "guided" && guidedView}
+          {authenticated && workspaceMode === "publish" && publicationView}
+          {authenticated && workspaceMode === "maintenance" && maintenanceView}
 
-      {(!guidedView || workspaceMode === "advanced") && (
-        <>
-          <section
-            aria-labelledby="admin-draft-heading"
-            className="admin-surface"
-          >
-            <h2 id="admin-draft-heading">{copy.draftHeading}</h2>
-            <label htmlFor="admin-config-draft">{copy.draftLabel}</label>
-            <p id="admin-draft-help">{copy.draftHelp}</p>
-            <textarea
-              aria-describedby="admin-draft-help"
-              disabled={!authenticated || busy}
-              id="admin-config-draft"
-              onChange={handleDraftChange}
-              rows={18}
-              value={draft}
-            />
-            <div
-              className="admin-workspace__actions"
-              aria-label={copy.draftHeading}
-            >
-              <button
-                disabled={!authenticated || busy}
-                onClick={onValidate}
-                type="button"
+          {(!guidedView || workspaceMode === "advanced") && (
+            <>
+              <section
+                aria-labelledby="admin-draft-heading"
+                className="admin-surface"
               >
-                {copy.validate}
-              </button>
-              <button
-                disabled={!authenticated || busy}
-                onClick={onPreview}
-                type="button"
+                <h2 id="admin-draft-heading">{copy.draftHeading}</h2>
+                <label htmlFor="admin-config-draft">{copy.draftLabel}</label>
+                <p id="admin-draft-help">{copy.draftHelp}</p>
+                <textarea
+                  aria-describedby="admin-draft-help"
+                  disabled={!authenticated || busy}
+                  id="admin-config-draft"
+                  onChange={handleDraftChange}
+                  rows={18}
+                  value={draft}
+                />
+                <div
+                  className="admin-workspace__actions"
+                  aria-label={copy.draftHeading}
+                >
+                  <button
+                    disabled={!authenticated || busy}
+                    onClick={onValidate}
+                    type="button"
+                  >
+                    {copy.validate}
+                  </button>
+                  <button
+                    disabled={!authenticated || busy}
+                    onClick={onPreview}
+                    type="button"
+                  >
+                    {copy.preview}
+                  </button>
+                </div>
+                {busy && <p role="status">{copy.busy}</p>}
+              </section>
+
+              <section
+                aria-labelledby="admin-validation-heading"
+                className="admin-surface"
               >
-                {copy.preview}
-              </button>
-            </div>
-            {busy && <p role="status">{copy.busy}</p>}
-          </section>
-
-          <section
-            aria-labelledby="admin-validation-heading"
-            className="admin-surface"
-          >
-            <h2 id="admin-validation-heading">{copy.validationHeading}</h2>
-            {validation?.valid === true && errors.length === 0 && (
-              <p role="status">{copy.valid}</p>
-            )}
-            {validation?.valid === false && <p role="alert">{copy.invalid}</p>}
-            {errors.length > 0 && (
-              <IssueList heading={copy.errors} issues={errors} role="alert" />
-            )}
-            {warnings.length > 0 && (
-              <IssueList
-                heading={copy.warnings}
-                issues={warnings}
-                role="status"
-              />
-            )}
-            {validation &&
-              errors.length === 0 &&
-              warnings.length === 0 &&
-              validation.valid !== false && <p>{copy.noIssues}</p>}
-          </section>
-
-          {preview && (
-            <section
-              aria-labelledby="admin-preview-heading"
-              className="admin-surface"
-            >
-              <h2 id="admin-preview-heading">{copy.previewHeading}</h2>
-              <p role="status">{copy.unsaved}</p>
-              {profile && (
-                <article aria-labelledby="admin-preview-profile-heading">
-                  <h3 id="admin-preview-profile-heading">{copy.profile}</h3>
-                  <h4>{profile.display_name}</h4>
-                  <p>{profile.headline}</p>
-                  <p>{profile.bio}</p>
-                  {profile.greeting && <p>{profile.greeting}</p>}
-                </article>
-              )}
-              {preview.character?.png_base64 && (
-                <article aria-labelledby="admin-preview-character-heading">
-                  <h3 id="admin-preview-character-heading">{copy.character}</h3>
-                  <p>{preview.character.mode}</p>
-                  <Base64PngCanvas
-                    failureText={copy.previewFailed}
-                    height={448}
-                    label={copy.characterAlt}
-                    pngBase64={preview.character.png_base64}
-                    pngUrl={preview.character.png_url}
-                    width={256}
+                <h2 id="admin-validation-heading">{copy.validationHeading}</h2>
+                {validation?.valid === true && errors.length === 0 && (
+                  <p role="status">{copy.valid}</p>
+                )}
+                {validation?.valid === false && (
+                  <p role="alert">{copy.invalid}</p>
+                )}
+                {errors.length > 0 && (
+                  <IssueList
+                    heading={copy.errors}
+                    issues={errors}
+                    role="alert"
                   />
-                </article>
-              )}
-              {cardEntries(preview.cards).length > 0 && (
-                <article aria-labelledby="admin-preview-cards-heading">
-                  <h3 id="admin-preview-cards-heading">{copy.cards}</h3>
-                  <ul>
-                    {cardEntries(preview.cards).map(([variant, card]) =>
-                      card.png_base64 ? (
-                        <li key={variant}>
-                          <figure>
-                            <figcaption>{variant}</figcaption>
-                            <Base64PngCanvas
-                              failureText={copy.previewFailed}
-                              height={180}
-                              label={`${copy.cardAlt}: ${variant}`}
-                              pngBase64={card.png_base64}
-                              pngUrl={card.png_url}
-                              width={600}
-                            />
-                          </figure>
-                        </li>
-                      ) : null,
-                    )}
-                  </ul>
-                </article>
-              )}
-            </section>
-          )}
+                )}
+                {warnings.length > 0 && (
+                  <IssueList
+                    heading={copy.warnings}
+                    issues={warnings}
+                    role="status"
+                  />
+                )}
+                {validation &&
+                  errors.length === 0 &&
+                  warnings.length === 0 &&
+                  validation.valid !== false && <p>{copy.noIssues}</p>}
+              </section>
 
-          <section
-            aria-labelledby="admin-status-heading"
-            className="admin-surface"
-          >
-            <h2 id="admin-status-heading">{copy.statusHeading}</h2>
-            <dl>
-              <StatusRow
-                label={copy.activeBundle}
-                value={status?.active_bundle_id}
-                fallback={copy.none}
-              />
-              <StatusRow
-                label={copy.previousBundle}
-                value={status?.previous_bundle_id}
-                fallback={copy.none}
-              />
-              <StatusRow
-                label={copy.pinnedBundle}
-                value={status?.pinned_bundle_id}
-                fallback={copy.none}
-              />
-              <StatusRow
-                label={copy.lastChecked}
-                value={status?.last_checked_at}
-                fallback={copy.none}
-              />
-            </dl>
-          </section>
+              {preview && (
+                <section
+                  aria-labelledby="admin-preview-heading"
+                  className="admin-surface"
+                >
+                  <h2 id="admin-preview-heading">{copy.previewHeading}</h2>
+                  <p role="status">{copy.unsaved}</p>
+                  {profile && (
+                    <article aria-labelledby="admin-preview-profile-heading">
+                      <h3 id="admin-preview-profile-heading">{copy.profile}</h3>
+                      <h4>{profile.display_name}</h4>
+                      <p>{profile.headline}</p>
+                      <p>{profile.bio}</p>
+                      {profile.greeting && <p>{profile.greeting}</p>}
+                    </article>
+                  )}
+                  {preview.character?.png_base64 && (
+                    <article aria-labelledby="admin-preview-character-heading">
+                      <h3 id="admin-preview-character-heading">
+                        {copy.character}
+                      </h3>
+                      <p>{preview.character.mode}</p>
+                      <Base64PngCanvas
+                        failureText={copy.previewFailed}
+                        height={448}
+                        label={copy.characterAlt}
+                        pngBase64={preview.character.png_base64}
+                        pngUrl={preview.character.png_url}
+                        width={256}
+                      />
+                    </article>
+                  )}
+                  {cardEntries(preview.cards).length > 0 && (
+                    <article aria-labelledby="admin-preview-cards-heading">
+                      <h3 id="admin-preview-cards-heading">{copy.cards}</h3>
+                      <ul>
+                        {cardEntries(preview.cards).map(([variant, card]) =>
+                          card.png_base64 ? (
+                            <li key={variant}>
+                              <figure>
+                                <figcaption>{variant}</figcaption>
+                                <Base64PngCanvas
+                                  failureText={copy.previewFailed}
+                                  height={180}
+                                  label={`${copy.cardAlt}: ${variant}`}
+                                  pngBase64={card.png_base64}
+                                  pngUrl={card.png_url}
+                                  width={600}
+                                />
+                              </figure>
+                            </li>
+                          ) : null,
+                        )}
+                      </ul>
+                    </article>
+                  )}
+                </section>
+              )}
 
-          {snippetValue && (
-            <section
-              aria-labelledby="admin-snippet-heading"
-              className="admin-surface"
-            >
-              <h2 id="admin-snippet-heading">{copy.snippetHeading}</h2>
-              <label htmlFor="admin-readme-snippet">{copy.snippetLabel}</label>
-              <textarea
-                id="admin-readme-snippet"
-                readOnly
-                rows={4}
-                value={snippetValue}
-              />
-              <button disabled={busy} onClick={onCopy} type="button">
-                {copy.copy}
-              </button>
-              <p role="status">{copy.copyReady}</p>
-            </section>
+              <section
+                aria-labelledby="admin-status-heading"
+                className="admin-surface"
+              >
+                <h2 id="admin-status-heading">{copy.statusHeading}</h2>
+                <dl>
+                  <StatusRow
+                    label={copy.activeBundle}
+                    value={status?.active_bundle_id}
+                    fallback={copy.none}
+                  />
+                  <StatusRow
+                    label={copy.previousBundle}
+                    value={status?.previous_bundle_id}
+                    fallback={copy.none}
+                  />
+                  <StatusRow
+                    label={copy.pinnedBundle}
+                    value={status?.pinned_bundle_id}
+                    fallback={copy.none}
+                  />
+                  <StatusRow
+                    label={copy.lastChecked}
+                    value={status?.last_checked_at}
+                    fallback={copy.none}
+                  />
+                </dl>
+              </section>
+
+              {snippetValue && (
+                <section
+                  aria-labelledby="admin-snippet-heading"
+                  className="admin-surface"
+                >
+                  <h2 id="admin-snippet-heading">{copy.snippetHeading}</h2>
+                  <label htmlFor="admin-readme-snippet">
+                    {copy.snippetLabel}
+                  </label>
+                  <textarea
+                    id="admin-readme-snippet"
+                    readOnly
+                    rows={4}
+                    value={snippetValue}
+                  />
+                  <button disabled={busy} onClick={onCopy} type="button">
+                    {copy.copy}
+                  </button>
+                  <p role="status">{copy.copyReady}</p>
+                </section>
+              )}
+            </>
           )}
-        </>
-      )}
-    </main>
+        </main>
+      </div>
+    </div>
   );
 }
 

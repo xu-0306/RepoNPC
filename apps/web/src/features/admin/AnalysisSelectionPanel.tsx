@@ -167,13 +167,19 @@ export function AnalysisSelectionPanel({
       <h3 className="visually-hidden" id="analysis-model-selection-heading">
         {chinese ? "選擇用於分析的模型" : "Choose models for analysis"}
       </h3>
-      <p>
-        {chinese
-          ? "分析會使用兩個已測試的模型；不會變更網站目前使用的公開模型或索引。"
-          : "Analysis uses two tested models. This does not change the public website model or index."}
-      </p>
+      <details className="model-selection__info">
+        <summary>
+          <span aria-hidden="true">ⓘ</span>{" "}
+          {chinese ? "分析說明" : "About analysis"}
+        </summary>
+        <p>
+          {chinese
+            ? "分析會使用兩個已測試的模型；不會變更網站目前使用的公開模型或索引。"
+            : "Analysis uses two tested models. This does not change the public website model or index."}
+        </p>
+      </details>
       <label htmlFor="analysis-chat-profile">
-        {chinese ? "分析與回答模型" : "Analysis and chat model"}
+        <span>{chinese ? "分析與回答模型" : "Analysis and chat model"}</span>
         <select
           disabled={pending}
           id="analysis-chat-profile"
@@ -197,7 +203,7 @@ export function AnalysisSelectionPanel({
         </select>
       </label>
       <label htmlFor="analysis-embedding-profile">
-        {chinese ? "資料查找模型" : "Content finder"}
+        <span>{chinese ? "資料查找模型" : "Content finder"}</span>
         <select
           disabled={pending}
           id="analysis-embedding-profile"
@@ -233,18 +239,18 @@ export function AnalysisSelectionPanel({
       >
         {chinese ? "確認用於分析" : "Use for analysis"}
       </button>
-      <p role="status">
-        {changed && (chatProfileId || embeddingProfileId)
-          ? chinese
-            ? "選擇尚未確認。按「確認用於分析」後才會套用。"
-            : "Your selection is not confirmed. Use for analysis applies these changes."
-          : value?.eligible && !changed && chatProfileId && embeddingProfileId
+      <p role={error ? "alert" : "status"}>
+        {error ||
+          (changed && (chatProfileId || embeddingProfileId)
             ? chinese
-              ? "兩個模型已選用，可開始分析。"
-              : "Both models are selected and ready for analysis."
-            : unavailableReason}
+              ? "選擇尚未確認。按「確認用於分析」後才會套用。"
+              : "Your selection is not confirmed. Use for analysis applies these changes."
+            : value?.eligible && !changed && chatProfileId && embeddingProfileId
+              ? chinese
+                ? "兩個模型已選用，可開始分析。"
+                : "Both models are selected and ready for analysis."
+              : unavailableReason)}
       </p>
-      {error && <p role="alert">{error}</p>}
     </section>
   );
 }

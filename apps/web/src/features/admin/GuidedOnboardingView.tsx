@@ -22,7 +22,6 @@ import {
   AdminStatusCards,
   type AdminWorkspaceStatus,
 } from "./AdminStatusCards";
-import { OnboardingStepper } from "./OnboardingStepper";
 import { ConfirmButton } from "./ConfirmDialog";
 import { CheckboxField } from "./CheckboxField";
 import type { ClaimKind } from "./ClaimEditor";
@@ -224,8 +223,7 @@ const COPY: Record<Locale, Copy> = {
     startManualHelp:
       "不需模型即可手動填寫、確認、預覽、儲存及備份草稿。之後準備 NPC 與即時聊天仍需模型；建立草稿不等於公開分享。",
     modelsHeading: "設定 AI 模型",
-    modelsDescription:
-      "依序設定下方的回答模型與資料查找模型，才能準備 NPC 並聊天。還沒準備好服務時，也能先手動填寫、預覽及儲存內容。",
+    modelsDescription: "設定並測試兩種模型，或先手動填寫、預覽及儲存內容。",
     confirmModels: "完成模型設定並選擇專案",
     returnToPreparation: "完成設定並返回準備 NPC",
     returnWithoutSetup: "返回準備 NPC",
@@ -429,7 +427,7 @@ const COPY: Record<Locale, Copy> = {
       "No model is needed to write, confirm, preview, save or back up a draft manually. Preparing the NPC and live chat still need models later; creating a draft does not publish it.",
     modelsHeading: "Set up AI models",
     modelsDescription:
-      "Set up an answer model and a content finder below to prepare the NPC and chat. You can also write, preview and save content manually before adding models.",
+      "Set up and test both model roles, or write, preview and save your content manually.",
     confirmModels: "Finish model setup and choose projects",
     returnToPreparation: "Finish setup and return to prepare NPC",
     returnWithoutSetup: "Return to prepare NPC",
@@ -636,6 +634,12 @@ const COPY: Record<Locale, Copy> = {
     disabledNeedsConfirmation:
       "Confirm each project's contribution. Rejected suggestions must be rewritten and confirmed before continuing.",
   },
+};
+
+// eslint-disable-next-line react-refresh/only-export-components -- the shell reuses the guided labels
+export const GUIDED_PROGRESS_COPY = {
+  "zh-TW": { progress: COPY["zh-TW"].progress, steps: COPY["zh-TW"].steps },
+  en: { progress: COPY.en.progress, steps: COPY.en.steps },
 };
 
 function localized(value: LocalizedText, locale: Locale): string {
@@ -1533,7 +1537,7 @@ function ModelsStep({
   return (
     <section
       aria-labelledby="guided-models-heading"
-      className="guided-onboarding__step"
+      className="guided-onboarding__step guided-onboarding__step--models"
     >
       <h2 className="visually-hidden" id="guided-models-heading">
         {copy.modelsHeading}
@@ -1544,7 +1548,7 @@ function ModelsStep({
         aria-describedby={reason ? "guided-models-reason" : undefined}
         disabled={Boolean(reason) || busy}
         onClick={() => onAction({ type: "COMPLETE_MODEL_SETUP" })}
-        className="ux-primary"
+        className="px-button px-button--secondary"
         type="button"
       >
         {modelSetupReturn ? copy.returnToPreparation : copy.confirmModels}
@@ -2497,9 +2501,19 @@ export function GuidedOnboardingView({
 }: GuidedOnboardingViewProps & { workspaceStatus?: AdminWorkspaceStatus }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
+  const previousStep = useRef(state.step);
+  const interacted = useRef(false);
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true });
-    headingRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
+    if (previousStep.current !== state.step) {
+      // Restoring a draft after mount is still initial loading.
+      if (interacted.current)
+        headingRef.current?.scrollIntoView({
+          block: "start",
+          behavior: "instant",
+        });
+      previousStep.current = state.step;
+    }
   }, [state.step]);
   useEffect(() => {
     if (errorCode) errorRef.current?.focus();
@@ -2520,15 +2534,18 @@ export function GuidedOnboardingView({
       data-mode={state.mode}
       data-step={state.step}
       lang={locale}
+      onClickCapture={() => {
+        interacted.current = true;
+      }}
+      onKeyDownCapture={() => {
+        interacted.current = true;
+      }}
     >
       <header className="guided-onboarding__header">
         <h2 id="guided-onboarding-heading" ref={headingRef} tabIndex={-1}>
           <span className="visually-hidden">{copy.title} · </span>
           {copy.steps[state.step]}
         </h2>
-        {state.mode === "guided" && (
-          <OnboardingStepper copy={copy} locale={locale} state={state} />
-        )}
         {state.step !== "intro" && (
           <div className="guided-onboarding__navigation-actions">
             <button

@@ -3,6 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { AdminWorkspace, type AdminWorkspaceProps } from "./AdminWorkspace";
+import { OnboardingStepper } from "./OnboardingStepper";
+import { GUIDED_PROGRESS_COPY } from "./GuidedOnboardingView";
+import { initialGuidedOnboardingState } from "./guidedOnboarding";
 
 // Node omits overlay portals. Expose authored popover content for the existing
 // markup assertions; browser focus and dismissal still need browser checks.
@@ -55,7 +58,7 @@ function props(
 }
 
 describe("AdminWorkspace", () => {
-  it("uses the active canonical character for its guide and falls back before publication", () => {
+  it("uses only the active canonical character on the static scene strip", () => {
     const markup = renderToStaticMarkup(
       <AdminWorkspace
         {...props({
@@ -71,9 +74,12 @@ describe("AdminWorkspace", () => {
     );
     expect(markup).toContain("/api/public/character.png?rev=42");
     expect(markup).not.toContain('class="admin-workspace__npc"');
-    expect(renderToStaticMarkup(<AdminWorkspace {...props()} />)).toContain(
-      'class="admin-workspace__npc"',
-    );
+    expect(markup).toContain('data-reduced-motion="true"');
+    expect(markup).toContain('data-character-state="idle"');
+    const empty = renderToStaticMarkup(<AdminWorkspace {...props()} />);
+    expect(empty).toContain('class="admin-workspace__scene px-scene"');
+    expect(empty).not.toContain('class="px-scene__npc"');
+    expect(empty).not.toContain("character-renderer");
   });
   it("renders semantic editable, validation, preview, publication, and snippet regions", () => {
     const markup = renderToStaticMarkup(<AdminWorkspace {...props()} />);
@@ -177,8 +183,9 @@ describe("AdminWorkspace", () => {
       <AdminWorkspace {...props({ onLocaleChange: vi.fn() })} />,
     );
 
-    expect(markup).toContain("Set up AI models and sources");
-    expect(markup).toContain("Follow the steps");
+    expect(markup).toContain("Pixel Workshop");
+    expect(markup).not.toContain("Follow the steps");
+    expect(markup).not.toContain("admin-workspace__speech");
     expect(markup).toContain('aria-label="Interface language"');
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain("Setup guide");
@@ -302,3 +309,83 @@ it.each(["guided", "advanced", "character", "publish", "maintenance"] as const)(
     expect(markup).toContain('id="' + target + '"');
   },
 );
+
+it.each(["guided", "character", "publish", "advanced", "maintenance"] as const)(
+  "keeps shell landmark order and the quest rail in %s mode",
+  (workspaceMode) => {
+    const markup = renderToStaticMarkup(
+      <AdminWorkspace
+        {...props({
+          workspaceMode,
+          busy: true,
+          onLocaleChange: vi.fn(),
+          guidedView: <h2 id="guided-onboarding-heading">Guide</h2>,
+          characterAssetView: (
+            <h2 id="admin-character-converter-heading">Character</h2>
+          ),
+          publicationView: <h2 id="local-publication-heading">Publish</h2>,
+          maintenanceView: <h2 id="admin-maintenance-heading">Maintenance</h2>,
+          questRail: (
+            <OnboardingStepper
+              copy={GUIDED_PROGRESS_COPY.en}
+              locale="en"
+              state={{ ...initialGuidedOnboardingState(), step: "analysis" }}
+            />
+          ),
+        })}
+      />,
+    );
+    const header = markup.indexOf("<header");
+    const modes = markup.indexOf('class="admin-workspace__modes"');
+    const rail = markup.indexOf('class="onboarding-stepper');
+    const content = markup.indexOf('<main class="admin-workspace__content"');
+    expect(header).toBeLessThan(modes);
+    expect(modes).toBeLessThan(rail);
+    expect(rail).toBeLessThan(content);
+    const tabs = markup
+      .slice(modes, rail)
+      .match(
+        /<button[^>]+class="px-tab(?: admin-workspace__advanced-tab)?"[^>]*>/g,
+      )!;
+    expect(tabs).toHaveLength(5);
+    expect(
+      tabs.filter((tab) => tab.includes("admin-workspace__advanced-tab")),
+    ).toHaveLength(1);
+    expect(tabs.every((tab) => tab.includes('disabled=""'))).toBe(true);
+    expect(
+      tabs.filter((tab) => tab.includes('aria-pressed="true"')),
+    ).toHaveLength(1);
+    expect(markup).toContain('aria-label="Interface language"');
+    expect(markup).toContain('aria-label="Display settings"');
+    expect(markup).toContain("Administrator");
+    expect(markup).toContain("Log out");
+  },
+);
+
+it("keeps optional modes conditional and uses full width when the rail has no applicable step", () => {
+  for (const step of ["intro", "draft"] as const) {
+    const markup = renderToStaticMarkup(
+      <AdminWorkspace
+        {...props({
+          guidedView: <h2 id="guided-onboarding-heading">Guide</h2>,
+          questRail: (
+            <OnboardingStepper
+              copy={GUIDED_PROGRESS_COPY.en}
+              locale="en"
+              state={{ ...initialGuidedOnboardingState(), step }}
+            />
+          ),
+        })}
+      />,
+    );
+    expect(markup).not.toContain('class="onboarding-stepper');
+    expect(markup).not.toContain("Preview &amp; share");
+    expect(markup).not.toContain(">Maintenance<");
+    expect(
+      markup.match(/class="px-tab(?: admin-workspace__advanced-tab)?"/g),
+    ).toHaveLength(3);
+    expect(
+      markup.match(/class="px-tab admin-workspace__advanced-tab"/g),
+    ).toHaveLength(1);
+  }
+});

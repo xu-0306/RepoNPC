@@ -1,9 +1,15 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import type { Locale } from "../../i18n/messages";
+import {
+  ADMIN_MODEL_STATES,
+  type AdminModelSummary,
+  type AdminWorkspaceStatus,
+} from "./AdminStatusCards";
 
 interface Props {
   locale: Locale;
+  status?: Pick<AdminWorkspaceStatus, "chat" | "embedding">;
   selectionView: ReactNode;
   chatConnectionView: ReactNode;
   embeddingConnectionView: ReactNode;
@@ -31,8 +37,34 @@ function RoleIcon({ role }: { role: "chat" | "embedding" }) {
   );
 }
 
+const COPY = {
+  "zh-TW": {
+    heading: "模型裝備",
+    usable: "可用",
+    chat: "分析與回答模型",
+    chatDescription: "根據專案資料整理分析與回答。",
+    embedding: "資料查找模型",
+    embeddingDescription: "從專案中找出相關資料。",
+    details: "設定細節",
+    confirm: "分析使用這一組",
+    guidance: "選模型有困難？查看裝置、推薦清單與手動路線",
+  },
+  en: {
+    heading: "Model equipment",
+    usable: "usable",
+    chat: "Analysis and answer model",
+    chatDescription: "Analyzes and answers using your project information.",
+    embedding: "Content finder model",
+    embeddingDescription: "Finds relevant information in your projects.",
+    details: "Setup details",
+    confirm: "Use this pair for analysis",
+    guidance: "Need help choosing? Device checks, catalog and manual route",
+  },
+} as const;
+
 export function ModelSetupWorkspace({
   locale,
+  status,
   selectionView,
   chatConnectionView,
   embeddingConnectionView,
@@ -41,69 +73,61 @@ export function ModelSetupWorkspace({
   localModelView,
   guidanceView,
 }: Props) {
-  const chinese = locale === "zh-TW";
+  const copy = COPY[locale];
+  const usable = [status?.chat, status?.embedding].filter(
+    (summary) => summary?.state === "tested" || summary?.state === "selected",
+  ).length;
   return (
-    <div className="model-setup-workspace">
+    <div className="model-setup-workspace" lang={locale}>
       <section
-        aria-labelledby="chat-role-setup-heading"
-        className="model-setup-workspace__role admin-surface"
+        className="model-setup-workspace__equipment px-panel px-panel--raised"
+        aria-labelledby="model-equipment-heading"
       >
-        <RoleHeading
-          description={
-            chinese
-              ? "先準備你自己的 Ollama 或相容 API 服務。依序新增服務 → 新增回答模型 → 測試模型，最後在「確認分析模型」選用。"
-              : "Prepare your own Ollama or compatible API service. Add the service, add an answer model, test it, then select it under Confirm models for analysis."
-          }
-          heading={chinese ? "分析與回答模型" : "Analysis and answer model"}
-          id="chat-role-setup-heading"
-          role="chat"
-        />
-        <div className="model-role-setup__flow">
-          {chatConnectionView}
-          {chatView}
+        <header className="model-setup-workspace__heading">
+          <h3 id="model-equipment-heading">{copy.heading}</h3>
+          <span className="px-meta">
+            <span className="px-display">{usable}/2</span> {copy.usable}
+          </span>
+        </header>
+        <div className="model-setup-workspace__slots">
+          <ModelSlot
+            locale={locale}
+            role="chat"
+            number="01"
+            heading={copy.chat}
+            description={copy.chatDescription}
+            summary={status?.chat}
+          >
+            {chatConnectionView}
+            {chatView}
+          </ModelSlot>
+          <ModelSlot
+            locale={locale}
+            role="embedding"
+            number="02"
+            heading={copy.embedding}
+            description={copy.embeddingDescription}
+            summary={status?.embedding}
+          >
+            {localModelView}
+            <div id="embedding-external-setup">{embeddingConnectionView}</div>
+            {embeddingView}
+          </ModelSlot>
         </div>
+        <footer
+          aria-labelledby="model-setup-role-heading"
+          className="model-setup-workspace__confirm"
+          ref={reserveConfirmationSpace}
+        >
+          <h3 className="visually-hidden" id="model-setup-role-heading">
+            {copy.confirm}
+          </h3>
+          {selectionView}
+        </footer>
       </section>
-      <section
-        aria-labelledby="embedding-role-setup-heading"
-        className="model-setup-workspace__role admin-surface"
-      >
-        <RoleHeading
-          description={
-            chinese
-              ? "協助從專案中找出相關資料。選擇內建本機模型或外部服務，設定後先測試是否能處理文字。"
-              : "Finds relevant project information. Choose the built-in local model or an external service, then test that it can process text."
-          }
-          heading={chinese ? "資料查找模型" : "Content finder model"}
-          id="embedding-role-setup-heading"
-          role="embedding"
-        />
-        <div className="model-role-setup__flow">
-          {localModelView}
-          <div id="embedding-external-setup">{embeddingConnectionView}</div>
-          {embeddingView}
-        </div>
-      </section>
-      <aside
-        aria-labelledby="model-setup-role-heading"
-        className="model-setup-workspace__roles admin-surface"
-      >
-        <h3 id="model-setup-role-heading">
-          {chinese ? "確認分析模型" : "Confirm models for analysis"}
-        </h3>
-        <p>
-          {chinese
-            ? "兩種模型都通過測試後，在這裡選擇並確認，接著就能分析專案。"
-            : "After both models pass testing, select and confirm them here to analyze your projects."}
-        </p>
-        {selectionView}
-      </aside>
       {guidanceView && (
-        <details className="model-setup-workspace__guidance">
-          <summary>
-            {chinese
-              ? "選模型有困難？查看裝置、推薦清單與手動路線"
-              : "Need help choosing? Device checks, catalog and manual route"}
-          </summary>
+        <details className="model-setup-workspace__guidance px-panel px-panel--inset">
+          <summary>{copy.guidance}</summary>
           {guidanceView}
         </details>
       )}
@@ -111,26 +135,74 @@ export function ModelSetupWorkspace({
   );
 }
 
-function RoleHeading({
-  id,
+function reserveConfirmationSpace(confirm: HTMLElement | null) {
+  if (!confirm) return;
+  const slots = confirm.previousElementSibling as HTMLElement;
+  const reserve = () => {
+    slots.style.paddingBottom = `${confirm.getBoundingClientRect().height}px`;
+  };
+  reserve();
+  const observer =
+    typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reserve);
+  observer?.observe(confirm);
+  return () => observer?.disconnect();
+}
+
+function ModelSlot({
+  locale,
   role,
+  number,
   heading,
   description,
+  summary,
+  children,
 }: {
-  id: string;
+  locale: Locale;
   role: "chat" | "embedding";
+  number: string;
   heading: string;
   description: string;
+  summary?: AdminModelSummary;
+  children: ReactNode;
 }) {
+  const [open, setOpen] = useState(true);
+  const state = summary?.state ?? "unconfigured";
+  const id = `${role}-role-setup-heading`;
   return (
-    <header className="model-role-setup__heading">
-      <span className="model-role-switch__icon">
+    <section aria-labelledby={id} className="model-setup-workspace__role">
+      <span aria-hidden="true" className="model-role-setup__tile">
         <RoleIcon role={role} />
+        <span className="px-display">{number}</span>
       </span>
-      <span>
-        <h3 id={id}>{heading}</h3>
-        <p>{description}</p>
-      </span>
-    </header>
+      <div className="model-role-setup__body">
+        <header className="model-role-setup__heading">
+          <div>
+            <h3 id={id}>{heading}</h3>
+            <p>{description}</p>
+          </div>
+          <span
+            className="model-role-setup__status px-badge"
+            data-state={state}
+          >
+            {ADMIN_MODEL_STATES[locale][state]}
+          </span>
+        </header>
+        {(summary?.connection || summary?.provider || summary?.model) && (
+          <p className="model-role-setup__summary">
+            {[summary.connection ?? summary.provider, summary.model]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        )}
+        <details
+          className="model-role-setup__details"
+          open={open}
+          onToggle={(event) => setOpen(event.currentTarget.open)}
+        >
+          <summary>{COPY[locale].details}</summary>
+          <div className="model-role-setup__flow">{children}</div>
+        </details>
+      </div>
+    </section>
   );
 }

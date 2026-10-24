@@ -25,6 +25,7 @@ export interface ScenePreviewSettings {
   color_scheme: string;
   color_mode: VisitorMode;
   visitor_mode_toggle: boolean;
+  visitor_scheme_choice: boolean;
   accent: string | null;
   background: string;
   focus: { x: number; y: number };

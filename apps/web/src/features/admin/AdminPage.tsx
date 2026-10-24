@@ -89,7 +89,11 @@ import {
   type ModelGuidanceEntry,
 } from "./ModelGuidancePanel";
 import { MaintenanceSetup } from "./MaintenanceSetup";
-import { GuidedOnboardingView } from "./GuidedOnboardingView";
+import {
+  GuidedOnboardingView,
+  GUIDED_PROGRESS_COPY,
+} from "./GuidedOnboardingView";
+import { OnboardingStepper } from "./OnboardingStepper";
 import { LocalLaunchAccessPanel } from "./LocalLaunchAccessPanel";
 import { modelConnectionFailureMessage } from "./modelConnectionFeedback";
 import { embeddingProfileErrorMessage } from "./embeddingProfileError";
@@ -3551,6 +3555,7 @@ export function AdminPage({
   };
   const guidedModelSetup = (
     <ModelSetupWorkspace
+      status={workspaceStatus}
       guidanceView={
         <ModelGuidanceSetup
           locale={locale}
@@ -3601,6 +3606,13 @@ export function AdminPage({
       <AdminWorkspace
         authenticated
         activeCharacter={activeCharacter}
+        questRail={
+          <OnboardingStepper
+            copy={GUIDED_PROGRESS_COPY[locale]}
+            locale={locale}
+            state={guidedState}
+          />
+        }
         busy={busy}
         maintenanceView={
           <MaintenanceSetup locale={locale} sendRequest={sendAdminRequest} />

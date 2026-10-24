@@ -126,6 +126,7 @@ const settings: ScenePreviewSettings = {
   color_scheme: "neutral",
   color_mode: "system",
   visitor_mode_toggle: true,
+  visitor_scheme_choice: true,
   accent: null,
   background: "none",
   focus: { x: 40, y: 55 },

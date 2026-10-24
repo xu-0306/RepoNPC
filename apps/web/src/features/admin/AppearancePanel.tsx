@@ -479,6 +479,16 @@ export function AppearancePanel({
             />
             {copy.toggle}
           </label>
+          <label className="scene-appearance__toggle">
+            <input
+              checked={settings.visitor_scheme_choice}
+              onChange={(event) =>
+                update({ visitor_scheme_choice: event.target.checked })
+              }
+              type="checkbox"
+            />
+            {copy.schemeChoice}
+          </label>
           <label>
             {copy.accent}
             <input
@@ -844,6 +854,7 @@ const appearanceCopy = {
     scheme: "配色方案",
     mode: "預設色彩模式",
     toggle: "允許訪客切換模式",
+    schemeChoice: "允許訪客切換配色",
     accent: "自訂強調色",
     useSchemeAccent: "使用方案色彩",
     background: "背景圖片",
@@ -912,6 +923,7 @@ const appearanceCopy = {
     scheme: "Color scheme",
     mode: "Default color mode",
     toggle: "Let visitors switch modes",
+    schemeChoice: "Let visitors choose a colour scheme",
     accent: "Custom accent",
     useSchemeAccent: "Use scheme colors",
     background: "Background image",

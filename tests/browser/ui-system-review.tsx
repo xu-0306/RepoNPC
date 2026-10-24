@@ -7,7 +7,11 @@ import { ModelConnectionPanel } from "./src/features/admin/ModelConnectionPanel"
 import { ChatProfilePanel } from "./src/features/admin/ChatProfilePanel";
 import { EmbeddingProfilePanel } from "./src/features/admin/EmbeddingProfilePanel";
 import { ModelSetupWorkspace } from "./src/features/admin/ModelSetupWorkspace";
-import { GuidedOnboardingView } from "./src/features/admin/GuidedOnboardingView";
+import {
+  GuidedOnboardingView,
+  GUIDED_PROGRESS_COPY,
+} from "./src/features/admin/GuidedOnboardingView";
+import { OnboardingStepper } from "./src/features/admin/OnboardingStepper";
 import {
   initialGuidedOnboardingState,
   guidedOnboardingReducer,
@@ -99,8 +103,25 @@ function Review() {
     last_probed_at: "2026-09-12T00:00:00Z",
   };
   const models = (
-    <section className="guided-onboarding__step">
+    <section className="guided-onboarding__step guided-onboarding__step--models">
+      <h2 id="guided-onboarding-heading">
+        {locale === "zh-TW" ? "設定 AI 模型" : "Set up AI models"}
+      </h2>
       <ModelSetupWorkspace
+        status={{
+          chat: {
+            model: model.model_id,
+            connection: fixture.display_name,
+            provider: "openai_compatible",
+            state: "unavailable",
+          },
+          embedding: {
+            model: model.model_id,
+            connection: fixture.display_name,
+            provider: "openai_compatible",
+            state: "unavailable",
+          },
+        }}
         locale={locale}
         chatConnectionView={<ModelConnectionPanel {...common} purpose="chat" />}
         embeddingConnectionView={
@@ -246,7 +267,18 @@ function Review() {
         onPreview={noop}
         onCopy={noop}
         onLogout={noop}
-        advancedMode={false}
+        workspaceMode="guided"
+        questRail={
+          <OnboardingStepper
+            copy={GUIDED_PROGRESS_COPY[locale]}
+            locale={locale}
+            state={
+              scenario === "models"
+                ? { ...state, step: "models", route: "ai" }
+                : state
+            }
+          />
+        }
         guidedView={scenario === "models" ? models : repositories}
       />
     </>

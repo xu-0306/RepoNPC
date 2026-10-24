@@ -38,7 +38,16 @@ describe("CharacterAssetConverter", () => {
       expect(markup).toContain("multiple");
       expect(markup).toContain('value="pixelize"');
       expect(markup).toContain('value="pixel_exact"');
-      expect(markup).toContain('type="file"');
+      const inputs = markup.match(/<input[^>]+type="file"[^>]*>/g)!;
+      expect(inputs).toHaveLength(2);
+      expect(
+        inputs.every((input) => input.includes('style="display:none"')),
+      ).toBe(true);
+      expect(markup).toContain('id="admin-character-source"');
+      expect(markup).toContain(
+        'class="character-converter__pedestal px-panel px-panel--inset"',
+      );
+      expect(markup).not.toContain("Choose File");
     }
     expect(zh).toContain("製作角色動畫");
     expect(zh).toContain("選擇整個資料夾");
