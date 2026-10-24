@@ -181,3 +181,68 @@ it("stacks full-width phone selections above the action and wraps confirmation f
   );
   expect(confirmation).toContain("overflow-wrap: anywhere");
 });
+
+it("keeps phone utility and progress names readable to assistive technology without wrapping chrome", () => {
+  const css = readFileSync(
+    new URL("../../styles.css", import.meta.url),
+    "utf8",
+  );
+  const phone = css.slice(css.lastIndexOf("@media (max-width: 760px)"));
+  expect(phone).toMatch(
+    /\.admin-workspace__utilities > \*\s*\{[^}]*flex-shrink: 0;[^}]*white-space: nowrap/s,
+  );
+  expect(phone).toMatch(
+    /\.admin-workspace__modes\s*\{[^}]*overflow-wrap: normal;[^}]*word-break: normal/s,
+  );
+  const labels = phone.match(
+    /\.admin-workspace__utilities \.admin-workspace__utility-label,\s*\.onboarding-stepper__summary-full\s*\{([^}]+)\}/s,
+  )?.[1];
+  expect(labels).toBeDefined();
+  for (const rule of [
+    "clip-path: inset(50%)",
+    "position: absolute",
+    "white-space: nowrap",
+    "width: 1px",
+    "height: 1em",
+  ])
+    expect(labels).toContain(rule);
+  expect(labels).not.toMatch(/display: none|visibility: hidden/);
+  expect(phone).toMatch(/\.admin-workspace__help\s*\{[^}]*min-width: 44px/s);
+  expect(css).toMatch(
+    /\.onboarding-stepper__summary-compact\s*\{\s*display: none/s,
+  );
+  expect(phone).toMatch(
+    /\.onboarding-stepper__summary-compact\s*\{\s*display: inline/s,
+  );
+  expect(css).toMatch(
+    /\.onboarding-stepper__details > summary\s*\{[^}]*min-height: 44px/s,
+  );
+});
+
+it("makes phone room above model equipment by tightening gaps and paragraph margins", () => {
+  const css = readFileSync(
+    new URL("../../styles.css", import.meta.url),
+    "utf8",
+  );
+  const phone = css.slice(css.lastIndexOf("@media (max-width: 760px)"));
+  expect(phone).toMatch(
+    /\.admin-workspace__layout:has\(> \.onboarding-stepper\)\s*\{[^}]*gap: 12px;[^}]*padding: 12px 16px/s,
+  );
+  expect(phone).toMatch(
+    /\.guided-onboarding\[data-step="models"\][^{]*,[^{]*\.guided-onboarding__header,[^{]*\.guided-onboarding__step--models\s*\{\s*gap: 8px/s,
+  );
+  expect(phone).toMatch(
+    /\.guided-onboarding__step--models > p:first-of-type\s*\{\s*margin: 0/s,
+  );
+  for (const selector of ["button", "details\\s*>\\s*summary"]) {
+    const block = phone.match(
+      new RegExp(
+        `\\.guided-onboarding__navigation-actions\\s*>\\s*${selector}\\s*\\{([^}]+)\\}`,
+        "s",
+      ),
+    )?.[1];
+    expect(block).toBeDefined();
+    expect(block).toContain("min-height: 44px");
+    expect(block).toContain("white-space: nowrap");
+  }
+});

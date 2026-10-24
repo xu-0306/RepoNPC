@@ -161,3 +161,38 @@ it.each(["ai", "manual"] as const)(
     expect(markup).not.toContain("<a ");
   },
 );
+
+it.each([
+  ["zh-TW", "ai", "AI 路線", 5, 6],
+  ["zh-TW", "manual", "手動路線", 3, 4],
+  ["en", "ai", "AI route", 5, 6],
+  ["en", "manual", "Manual route", 3, 4],
+] as const)(
+  "keeps the full progress name behind a compact %s %s phone summary",
+  (locale, route, routeLabel, current, total) => {
+    const markup = renderToStaticMarkup(
+      <OnboardingStepper
+        copy={{ progress: "Setup progress", steps }}
+        locale={locale}
+        state={{ ...initialGuidedOnboardingState(), route, step: "profile" }}
+      />,
+    );
+    const summary = markup.match(/<summary>(.*?)<\/summary>/)?.[1];
+    expect(summary).toContain(
+      '<span class="onboarding-stepper__summary-full">',
+    );
+    expect(summary).toContain(
+      locale === "en"
+        ? `Setup quests · ${routeLabel} · Step ${current} of ${total} · ${current - 1}/${total} complete`
+        : `設定任務 · ${routeLabel} · 目前第 ${current} 步，共 ${total} 步 · 已完成 ${current - 1}/${total}`,
+    );
+    expect(summary).toContain(
+      `<span class="onboarding-stepper__summary-compact" aria-hidden="true">${routeLabel} · ${current}/${total}</span>`,
+    );
+    expect(markup).toContain(
+      `aria-valuemax="${total}" aria-valuenow="${current - 1}"`,
+    );
+    expect(markup).toContain('<details class="onboarding-stepper__details">');
+    expect(markup.match(/<li /g)).toHaveLength(total);
+  },
+);

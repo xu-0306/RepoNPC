@@ -389,3 +389,46 @@ it("keeps optional modes conditional and uses full width when the rail has no ap
     ).toHaveLength(1);
   }
 });
+
+it.each([
+  ["zh-TW", "顯示設定", "使用說明", "管理員", "登出"],
+  ["en", "Display settings", "Setup guide", "Administrator", "Log out"],
+] as const)(
+  "keeps full accessible utility names when the %s phone header shows icons",
+  (locale, display, help, owner, logout) => {
+    const markup = renderToStaticMarkup(
+      <AdminWorkspace {...props({ locale, onLocaleChange: vi.fn() })} />,
+    );
+    const header = markup.slice(
+      markup.indexOf("<header"),
+      markup.indexOf("</header>"),
+    );
+    expect(
+      header.match(/class="admin-workspace__utility-label"/g),
+    ).toHaveLength(2);
+    expect(header).toMatch(
+      new RegExp(`<button[^>]*aria-label="${display}"[^>]*>`),
+    );
+    expect(header).toContain(
+      `<span class="admin-workspace__utility-label">${display}</span>`,
+    );
+    expect(header).toMatch(
+      new RegExp(
+        `<a class="admin-workspace__help"[^>]*><span aria-hidden="true">\\?</span><span class="admin-workspace__utility-label">${help}</span></a>`,
+      ),
+    );
+    expect(header).toContain(
+      `<span aria-hidden="true">R</span>${owner}</span>`,
+    );
+    expect(header).toMatch(
+      new RegExp(
+        `<button class="admin-workspace__logout[^>]*>${logout}</button>`,
+      ),
+    );
+    expect(header).toContain('aria-label="繁體中文"');
+    expect(header).toContain('aria-label="English"');
+    expect(header).not.toMatch(
+      /class="admin-workspace__utility-label"[^>]*aria-hidden/,
+    );
+  },
+);

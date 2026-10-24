@@ -62,8 +62,16 @@ export function OnboardingStepper({ copy, locale, state }: Props) {
         }}
       >
         <summary>
-          {labels.heading} · {routeLabel} ·{" "}
-          {labels.current(current + 1, total, completed)}
+          <span className="onboarding-stepper__summary-full">
+            {labels.heading} · {routeLabel} ·{" "}
+            {labels.current(current + 1, total, completed)}
+          </span>
+          <span
+            className="onboarding-stepper__summary-compact"
+            aria-hidden="true"
+          >
+            {routeLabel} · {current + 1}/{total}
+          </span>
         </summary>
         <h2>{labels.heading}</h2>
         <div className="onboarding-stepper__xp">

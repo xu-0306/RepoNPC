@@ -1562,7 +1562,7 @@ form button {
   min-height: 44px;
   text-decoration: none;
 }
-.admin-workspace__help span {
+.admin-workspace__help > span[aria-hidden="true"] {
   border: 1px solid var(--px-line);
   padding-inline: 5px;
 }
@@ -1661,6 +1661,9 @@ form button {
   font-size: max(14px, 0.875rem);
   min-height: 44px;
   padding-block: 8px;
+}
+.onboarding-stepper__summary-compact {
+  display: none;
 }
 .onboarding-stepper__route {
   margin: 8px 0;
@@ -2224,6 +2227,11 @@ form button {
   }
 }
 @media (max-width: 760px) {
+  .admin-workspace__header,
+  .admin-workspace__modes {
+    overflow-wrap: normal;
+    word-break: normal;
+  }
   .admin-workspace__header {
     gap: 4px;
     grid-template-columns: minmax(0, 1fr);
@@ -2252,6 +2260,29 @@ form button {
     justify-content: space-between;
     max-width: none;
   }
+  .admin-workspace__utilities > * {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .admin-workspace .admin-display-settings,
+  .admin-workspace__help {
+    justify-content: center;
+    min-width: 44px;
+  }
+  .admin-workspace__utilities .admin-workspace__utility-label,
+  .onboarding-stepper__summary-full {
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    display: block;
+    height: 1em;
+    line-height: 1;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
   .admin-workspace__locale {
     position: absolute;
     right: 12px;
@@ -2270,7 +2301,7 @@ form button {
   .admin-workspace__modes {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    padding: 4px 12px;
+    padding: 2px 12px;
   }
   .admin-workspace__modes .px-tab {
     grid-column: span 2;
@@ -2284,12 +2315,42 @@ form button {
   }
   .admin-workspace__layout,
   .admin-workspace__layout:has(> .onboarding-stepper) {
-    gap: 24px;
+    gap: 12px;
     grid-template-columns: minmax(0, 1fr);
-    padding: 20px 16px;
+    padding: 12px 16px;
   }
   .onboarding-stepper {
     padding: 4px 12px;
+  }
+  .onboarding-stepper__summary-compact {
+    display: inline;
+  }
+  .guided-onboarding[data-step="models"],
+  .guided-onboarding[data-step="models"] .guided-onboarding__header,
+  .guided-onboarding__step--models {
+    gap: 8px;
+  }
+  .guided-onboarding[data-step="models"]
+    .guided-onboarding__navigation-actions {
+    align-items: center;
+  }
+  .guided-onboarding[data-step="models"]
+    .guided-onboarding__navigation-actions
+    > button {
+    min-height: 44px;
+    padding: 6px 12px;
+    white-space: nowrap;
+  }
+  .guided-onboarding[data-step="models"]
+    .guided-onboarding__navigation-actions
+    > details
+    > summary {
+    min-height: 44px;
+    padding-block: 6px;
+    white-space: nowrap;
+  }
+  .guided-onboarding__step--models > p:first-of-type {
+    margin: 0;
   }
   .onboarding-stepper ol {
     grid-template-columns: repeat(2, minmax(0, 1fr));
