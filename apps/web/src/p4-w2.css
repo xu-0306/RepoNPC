@@ -21,9 +21,10 @@
   max-width: none;
 }
 .p4-w2.px-panel > h2 {
-  font-family: var(--px-font-display);
-  font-size: max(20px, 1.25rem);
-  line-height: 1.6;
+  font-family: var(--px-font-body);
+  font-size: max(18px, 1.125rem);
+  font-weight: 700;
+  line-height: 1.4;
 }
 .p4-w2 :is(h3, h4, h5, h6) {
   font-size: max(16px, 1rem);
@@ -68,7 +69,7 @@
 .p4-w2 .p4-w2__info {
   margin: 0;
 }
-.p4-w2 .p4-w2__info > summary {
+.p4-w2 .p4-w2__info:not(.px-info) > summary {
   color: var(--px-accent);
   cursor: pointer;
   font-size: max(14px, 0.875rem);
@@ -278,9 +279,10 @@
 
 .p4-w2 .p5-contributions__header > h2 {
   flex-basis: 100%;
-  font-family: var(--px-font-display);
-  font-size: max(20px, 1.25rem);
-  line-height: 1.6;
+  font-family: var(--px-font-body);
+  font-size: max(18px, 1.125rem);
+  font-weight: 700;
+  line-height: 1.4;
 }
 .p4-w2 .p5-contributions__project {
   box-shadow: none;
@@ -367,6 +369,13 @@
   margin-inline: -16px;
   padding-inline: 16px;
 }
+
+/* Guided step titles carry the hierarchy; all inner labels stay compact. */
+.guided-onboarding .guided-onboarding__step :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--px-font-body);
+  font-size: 18px;
+  line-height: 1.4;
+}
 @media (max-width: 760px) {
   .p4-w2 .p5-contributions__header > h2 {
     font-size: 18px;
@@ -408,7 +417,8 @@
     display: inline-block;
     font-family: var(--px-font-body);
     font-size: 20px;
-    line-height: 1;
+    height: 24px;
+    line-height: 1.2;
     padding-inline: 4px;
   }
   .p4-w2__confirm .p4-w2__actions-text {
@@ -426,14 +436,10 @@
   .p4-w2--contributions .p4-w2__confirm .p4-w2__info {
     flex: 0 0 auto;
   }
-  .p4-w2__confirm .p4-w2__info > summary {
+  .p4-w2__confirm .p4-w2__info.px-info > summary {
     align-items: center;
     display: flex;
     justify-content: center;
-    list-style: none;
     min-width: 44px;
-  }
-  .p4-w2__confirm .p4-w2__info > summary::-webkit-details-marker {
-    display: none;
   }
 }

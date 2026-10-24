@@ -167,7 +167,7 @@ export function AnalysisSelectionPanel({
       <h3 className="visually-hidden" id="analysis-model-selection-heading">
         {chinese ? "選擇用於分析的模型" : "Choose models for analysis"}
       </h3>
-      <details className="model-selection__info">
+      <details className="model-selection__info px-info">
         <summary>
           <span aria-hidden="true">ⓘ</span>{" "}
           {chinese ? "分析說明" : "About analysis"}

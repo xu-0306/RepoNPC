@@ -411,7 +411,7 @@ export function AppearancePanel({
       <header className="scene-appearance__header">
         <div>
           <h2 id="scene-appearance-title">{copy.title}</h2>
-          <details className="publication-info">
+          <details className="publication-info px-info">
             <summary>ⓘ {copy.noModel}</summary>
             <p>{copy.description}</p>
           </details>

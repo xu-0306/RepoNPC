@@ -42,6 +42,8 @@ const MAX_BACKUP_BYTES = 128 * 1024 * 1024 + 8192;
 const COPY = {
   "zh-TW": {
     heading: "維護",
+    statusGroup: "服務狀態",
+    dataGroup: "網站資料",
     scope:
       "此加密備份只還原同一台主機的 SQLite 設定。請保留原資料目錄內的密鑰、網站資料與圖片；備份不含模型權重，也不是完整搬移工具。",
     refresh: "更新狀態",
@@ -112,6 +114,8 @@ const COPY = {
   },
   en: {
     heading: "Maintenance",
+    statusGroup: "Service status",
+    dataGroup: "Website data",
     scope:
       "This encrypted backup restores only SQLite settings on the same host. Keep the keys, website data, and images in the original data directory. It excludes model weights and is not a full migration tool.",
     refresh: "Refresh status",
@@ -304,7 +308,7 @@ function MaintenanceContent({
       aria-busy={pending}
     >
       <h2 id="admin-maintenance-heading">{copy.heading}</h2>
-      <details className="admin-maintenance__scope">
+      <details className="admin-maintenance__scope px-info">
         <summary>ⓘ {copy.preview}</summary>
         <p id={`${id}-scope`}>{copy.scope}</p>
       </details>
@@ -316,50 +320,74 @@ function MaintenanceContent({
       >
         {copy.refresh}
       </button>
-      <dl className="admin-maintenance__status">
-        <dt>{copy.local}</dt>
-        <dd className="px-badge">
-          {status
-            ? status.local_ready
-              ? copy.ready
-              : copy.notReady
-            : copy.unknown}
-        </dd>
-        <dt>{copy.gateway}</dt>
-        <dd className="px-badge">
-          {status
-            ? status.gateway_configured
-              ? copy.configured
-              : copy.unconfigured
-            : copy.unknown}
-        </dd>
-        <dt>{copy.verified}</dt>
-        <dd className="px-badge">
-          {status
-            ? status.externally_verified
-              ? copy.checked
-              : copy.unchecked
-            : copy.unknown}
-        </dd>
-        <dt>{copy.active}</dt>
-        <dd>
-          {status ? (status.active_bundle_id ?? copy.none) : copy.unknown}
-        </dd>
-        <dt>{copy.previous}</dt>
-        <dd>{status ? (previous ?? copy.none) : copy.unknown}</dd>
-        <dt>{copy.pinned}</dt>
-        <dd>
-          {status ? (status.pinned_bundle_id ?? copy.none) : copy.unknown}
-        </dd>
-        <dt>{copy.lastBackup}</dt>
-        <dd>
-          {status
-            ? status.last_backup_at
-              ? date(status.last_backup_at)
-              : copy.never
-            : copy.unknown}
-        </dd>
-      </dl>
+      <section
+        aria-labelledby={`${id}-status-heading`}
+        className="admin-maintenance__group"
+      >
+        <h3
+          className="admin-maintenance__group-title"
+          id={`${id}-status-heading`}
+        >
+          {copy.statusGroup}
+        </h3>
+        <dl className="admin-maintenance__status">
+          <dt>{copy.local}</dt>
+          <dd className="px-badge">
+            {status
+              ? status.local_ready
+                ? copy.ready
+                : copy.notReady
+              : copy.unknown}
+          </dd>
+          <dt>{copy.gateway}</dt>
+          <dd className="px-badge">
+            {status
+              ? status.gateway_configured
+                ? copy.configured
+                : copy.unconfigured
+              : copy.unknown}
+          </dd>
+          <dt>{copy.verified}</dt>
+          <dd className="px-badge">
+            {status
+              ? status.externally_verified
+                ? copy.checked
+                : copy.unchecked
+              : copy.unknown}
+          </dd>
+        </dl>
+      </section>
+      <section
+        aria-labelledby={`${id}-data-heading`}
+        className="admin-maintenance__group"
+      >
+        <h3
+          className="admin-maintenance__group-title"
+          id={`${id}-data-heading`}
+        >
+          {copy.dataGroup}
+        </h3>
+        <dl className="admin-maintenance__data">
+          <dt>{copy.active}</dt>
+          <dd>
+            {status ? (status.active_bundle_id ?? copy.none) : copy.unknown}
+          </dd>
+          <dt>{copy.previous}</dt>
+          <dd>{status ? (previous ?? copy.none) : copy.unknown}</dd>
+          <dt>{copy.pinned}</dt>
+          <dd>
+            {status ? (status.pinned_bundle_id ?? copy.none) : copy.unknown}
+          </dd>
+          <dt>{copy.lastBackup}</dt>
+          <dd>
+            {status
+              ? status.last_backup_at
+                ? date(status.last_backup_at)
+                : copy.never
+              : copy.unknown}
+          </dd>
+        </dl>
+      </section>
       {pending && <p role="status">{copy.pending}</p>}
       {notice && (
         <p role="status" aria-live="polite">

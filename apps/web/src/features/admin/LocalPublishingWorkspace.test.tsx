@@ -48,8 +48,13 @@ describe("publication setup guidance", () => {
           ? "先設定並測試兩種模型"
           : "Set up and test both models",
       );
-      expect(reason).toContain(
+      expect(reason).not.toContain(
         locale === "zh-TW" ? "前往設定模型" : "Set up models",
+      );
+      expect(markup).toMatch(
+        locale === "zh-TW"
+          ? /<div class="publication-status px-panel px-panel--inset">[\s\S]*<button class="px-button px-button--secondary" type="button">前往設定模型<\/button>/
+          : /<div class="publication-status px-panel px-panel--inset">[\s\S]*<button class="px-button px-button--secondary" type="button">Set up models<\/button>/,
       );
       expect(markup).not.toContain(
         locale === "zh-TW"

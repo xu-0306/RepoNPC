@@ -148,7 +148,7 @@ it.each(["zh-TW", "en"] as const)(
         />,
       );
       const info = html.match(
-        /<details class="model-selection__info">(.*?)<\/details>/s,
+        /<details class="model-selection__info px-info">(.*?)<\/details>/s,
       )?.[1];
       expect(info).toBeDefined();
       expect(info).toContain('<summary><span aria-hidden="true">ⓘ</span> ');

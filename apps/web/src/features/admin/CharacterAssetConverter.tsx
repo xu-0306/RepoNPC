@@ -795,7 +795,7 @@ export function CharacterAssetConverter({
           </div>
           <div className="character-converter__source-result">
             {status && <p role="status">{copy[status]}</p>}
-            <details className="character-converter__instructions">
+            <details className="character-converter__instructions px-info">
               <summary>ⓘ {copy.howTo}</summary>
               <p>{copy.introduction}</p>
               <ol>

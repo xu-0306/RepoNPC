@@ -16,13 +16,23 @@
 .local-publication__heading nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 20px;
+  gap: 8px;
 }
 .local-publication__heading nav a {
   align-items: center;
   display: inline-flex;
   font-size: 14px;
   min-height: 44px;
+}
+.local-publication__heading nav a.px-chip {
+  color: var(--px-ink);
+  font-family: var(--px-font-body);
+  padding-inline: 12px;
+}
+.local-publication__heading nav a.px-chip[aria-current="step"] {
+  background: var(--px-accent);
+  border-color: var(--px-line);
+  color: var(--px-accent-ink);
 }
 :is(
   .publication-local,
@@ -116,12 +126,33 @@
   border-block: 1px dashed var(--px-muted);
   padding-block: 16px;
 }
-.publication-info > summary,
+.publication-status {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 12px;
+}
+.publication-status p {
+  margin: 0;
+}
+.publication-status .px-button {
+  justify-self: start;
+}
+.publication-current-version.px-button {
+  justify-self: start;
+  margin-block: 4px;
+}
+.publication-impact {
+  margin-bottom: 0;
+}
+.publication-impact-details {
+  margin-top: -8px;
+}
 .publication-optional > summary,
-.github-share summary,
-.visitor-gateway summary,
-.coverage-faq summary,
-.scene-appearance summary {
+.github-share details:not(.px-info) > summary,
+.visitor-gateway details:not(.px-info) > summary,
+.coverage-faq details:not(.px-info) > summary,
+.scene-appearance details:not(.px-info) > summary {
   align-content: center;
   color: var(--px-accent);
   cursor: pointer;

@@ -431,9 +431,14 @@ export function AdminWorkspace({
           </a>
           {authenticated && (
             <>
-              <span className="admin-workspace__owner px-badge">
+              <span
+                aria-label={copy.administrator}
+                className="admin-workspace__owner px-badge"
+              >
                 <span aria-hidden="true">R</span>
-                {copy.administrator}
+                <span className="admin-workspace__utility-label">
+                  {copy.administrator}
+                </span>
               </span>
               <button
                 className="admin-workspace__logout px-button px-button--quiet"
@@ -717,7 +722,7 @@ export function AdminWorkspace({
                 </section>
               )}
               {authenticated && embeddingProfileView && (
-                <details className="admin-workspace__yaml-model-info">
+                <details className="admin-workspace__yaml-model-info px-info">
                   <summary>ⓘ {copy.modelInfo}</summary>
                   {embeddingProfileView}
                 </details>

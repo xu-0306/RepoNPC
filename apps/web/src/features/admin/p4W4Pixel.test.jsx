@@ -103,9 +103,15 @@ it.each(["zh-TW", "en"])(
     expect(markup).toContain("Required");
     expect(markup).toContain("fixture-version");
     expect(markup).toContain("Fixture Markdown");
-    expect(markup).toContain('<details class="admin-workspace__yaml-model-info">');
-    expect(markup).toContain(locale === "en" ? "Models and device information" : "模型與裝置資訊");
-    expect(markup.indexOf("Fixture model information")).toBeGreaterThan(markup.indexOf('id="admin-validation-heading"'));
+    expect(markup).toContain(
+      '<details class="admin-workspace__yaml-model-info px-info">',
+    );
+    expect(markup).toContain(
+      locale === "en" ? "Models and device information" : "模型與裝置資訊",
+    );
+    expect(markup.indexOf("Fixture model information")).toBeGreaterThan(
+      markup.indexOf('id="admin-validation-heading"'),
+    );
     expect(markup).toContain('class="px-button px-button--primary"');
     expect(markup).not.toMatch(/style="[^"]*(?:color|background)/);
   },
@@ -174,7 +180,9 @@ it("uses token colours, square corners, readable text and visible focus", () => 
   expect(css).not.toMatch(/font-size:\s*(?:[0-9]|1[0-2])px/);
   expect(css).toContain("outline: 3px solid var(--px-focus)");
   expect(css).toContain("white-space: pre-line");
-  expect(css).toMatch(/\.admin-confirm-dialog__description\s*\{[^}]*white-space: pre-line/s);
+  expect(css).toMatch(
+    /\.admin-confirm-dialog__description\s*\{[^}]*white-space: pre-line/s,
+  );
   // Only the modal backdrop scrolls, keeping long confirmations reachable.
   const pageRules = css.replace(
     /\.admin-confirm-overlay\.admin-confirm-overlay\s*\{[^}]*\}/,

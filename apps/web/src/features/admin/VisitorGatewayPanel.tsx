@@ -588,7 +588,7 @@ export function VisitorGatewayPanel({
           <p>{zh ? "目前使用預設值" : "Using the default"}</p>
         )}
       </fieldset>
-      <details className="publication-info">
+      <details className="publication-info px-info">
         <summary>ⓘ {zh ? "來源網址與儲存說明" : "Origins and saving"}</summary>
         <p id="visitor-pages-origin-help">
           {zh

@@ -388,8 +388,8 @@ input {
   margin-top: 0.75rem;
   padding-top: 0.5rem;
 }
-.guided-onboarding__step > details > summary,
-.guided-onboarding__repository > details > summary {
+.guided-onboarding__step > details:not(.px-info) > summary,
+.guided-onboarding__repository > details:not(.px-info) > summary {
   cursor: pointer;
   min-height: 2.75rem;
   padding-block: 0.65rem;
@@ -606,17 +606,18 @@ input {
   gap: 8px;
 }
 .guided-onboarding > .guided-onboarding__header {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
+  align-items: stretch;
+  display: grid;
   gap: 12px;
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr);
 }
 #guided-onboarding-heading {
   border: 0;
   border-radius: 0;
-  font-size: 28px;
+  font-size: clamp(20px, 2vw, 28px);
+  line-height: 1.4;
   margin: 0;
+  min-height: 50px;
   max-width: none;
   outline: none;
 }
@@ -652,10 +653,18 @@ input {
   margin: 8px 12px 4px 0;
 }
 .guided-onboarding__step > h2 {
-  font-size: clamp(1.45rem, 2.6vw, 2rem);
-  line-height: 1.25;
+  font-family: var(--px-font-body);
+  font-size: max(18px, 1.125rem);
+  font-weight: 700;
+  line-height: 1.4;
   margin: 0;
   max-width: 28ch;
+}
+.guided-onboarding__step h2 {
+  font-family: var(--px-font-body);
+  font-size: max(18px, 1.125rem);
+  font-weight: 700;
+  line-height: 1.4;
 }
 .guided-onboarding__eyebrow {
   color: var(--admin-primary);
@@ -1387,7 +1396,7 @@ form button {
 .local-publication details {
   margin-block: 1rem;
 }
-.local-publication summary {
+.local-publication details:not(.px-info) > summary {
   cursor: pointer;
   padding-block: 0.75rem;
 }
@@ -1901,7 +1910,7 @@ form button {
 .model-selection__info {
   grid-row: 2;
 }
-.model-selection__info > summary {
+.model-selection__info:not(.px-info) > summary {
   cursor: pointer;
   width: fit-content;
 }
@@ -2083,7 +2092,7 @@ form button {
 .character-converter__source-result :is(summary, label) {
   font-size: max(14px, 0.875rem);
 }
-.character-converter summary {
+.character-converter details:not(.px-info) > summary {
   cursor: pointer;
   min-height: 44px;
   padding-block: 10px;
@@ -2247,16 +2256,39 @@ form button {
 }
 @media (max-width: 1100px) {
   .admin-workspace__header {
-    grid-template-columns: minmax(180px, 1fr) minmax(140px, 220px) minmax(
-        0,
-        1fr
-      );
+    grid-template-columns: minmax(180px, 1fr) minmax(140px, 220px) auto;
   }
   .admin-display-settings span {
     display: none;
   }
+  .admin-workspace__utilities .admin-workspace__utility-label {
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    display: block;
+    height: 1em;
+    line-height: 1;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+  .admin-workspace__owner {
+    min-height: 44px;
+    min-width: 44px;
+    justify-content: center;
+  }
   .admin-workspace__layout:has(> .onboarding-stepper) {
     grid-template-columns: 196px minmax(0, 1fr);
+  }
+}
+@media (max-width: 900px) {
+  .admin-workspace__header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .admin-workspace__scene {
+    display: none;
   }
 }
 @media (max-width: 760px) {
@@ -2368,6 +2400,9 @@ form button {
   }
   #guided-onboarding-heading {
     font-size: 20px;
+    min-height: 56px;
+    display: flex;
+    align-items: center;
   }
   .guided-onboarding__navigation-actions {
     align-items: center;
@@ -2434,7 +2469,7 @@ form button {
   .model-setup-workspace__confirm .model-selection__info {
     grid-row: 4;
   }
-  .model-selection__info > summary {
+  .model-selection__info:not(.px-info) > summary {
     align-content: center;
     min-height: 44px;
     position: absolute;

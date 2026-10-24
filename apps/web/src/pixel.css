@@ -258,6 +258,40 @@
   padding: 2px 8px;
 }
 
+.px-info > summary {
+  align-items: center;
+  box-sizing: border-box;
+  color: var(--px-accent);
+  cursor: pointer;
+  display: flex;
+  font-family: var(--px-font-body);
+  font-size: max(14px, 0.875rem);
+  font-weight: 400;
+  gap: 6px;
+  list-style: none;
+  min-height: 44px;
+  padding-block: 10px;
+}
+
+.px-info > summary::-webkit-details-marker {
+  display: none;
+}
+
+.px-info > summary::marker {
+  content: "";
+}
+
+.px-info > summary:focus-visible {
+  outline: 3px solid var(--px-focus);
+  outline-offset: 4px;
+}
+
+.px-info[open] > summary {
+  background: var(--px-accent);
+  color: var(--px-accent-ink);
+  padding-inline: 8px;
+}
+
 .px-scene {
   --px-night: 0;
   background: var(--px-sky);

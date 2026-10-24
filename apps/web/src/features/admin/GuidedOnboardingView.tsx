@@ -1045,7 +1045,7 @@ function RepositoryRow({
           </span>
         )}
       </div>
-      <details className="p4-w1-repository__details">
+      <details className="p4-w1-repository__details px-info">
         <summary
           aria-label={`${copy.optionsLegend}: ${repository.metadata.name}`}
         >
@@ -2149,7 +2149,7 @@ function ContributionsStep({
     >
       <header className="p4-w2__tools p5-contributions__header">
         <h2 id="guided-contributions-heading">{copy.contributionsHeading}</h2>
-        <details className="p4-w2__info">
+        <details className="p4-w2__info px-info">
           <summary>ⓘ {copy.p4Help}</summary>
           <p>{copy.contributionsDescription}</p>
           {repositories.map((repository) => {
@@ -2289,7 +2289,7 @@ function ProfileStep({
       className="guided-onboarding__step p4-w2 p4-w2--profile px-panel px-panel--raised"
     >
       <h2 id="guided-profile-heading">{copy.profileHeading}</h2>
-      <details className="p4-w2__info">
+      <details className="p4-w2__info px-info">
         <summary>ⓘ {copy.p4Help}</summary>
         <p>{copy.profileDescription}</p>
       </details>
@@ -2374,7 +2374,7 @@ function ProfileStep({
             </span>
           )}
         </label>
-        <details className="p4-w2__info p4-w2__wide">
+        <details className="p4-w2__info p4-w2__wide px-info">
           <summary>ⓘ {copy.githubLoginLabel}</summary>
           <p id="guided-profile-github-help">{copy.githubLoginHelp}</p>
         </details>
@@ -2688,7 +2688,7 @@ function DraftStep({
     >
       <h2 id="guided-draft-heading">{copy.draftHeading}</h2>
       <p>{copy.draftDescription}</p>
-      <details className="p4-w2__info">
+      <details className="p4-w2__info px-info">
         <summary>ⓘ {copy.p4Help}</summary>
         <p>
           {chinese

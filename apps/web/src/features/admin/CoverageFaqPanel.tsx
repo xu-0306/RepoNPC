@@ -212,7 +212,7 @@ export function CoverageFaqPanel({
       <h2 id="faq-heading">
         {zh ? "涵蓋檢查與 FAQ 審核" : "Coverage and FAQ review"}
       </h2>
-      <details className="publication-info">
+      <details className="publication-info px-info">
         <summary>
           ⓘ {zh ? "模型使用與審核說明" : "Model use and review"}
         </summary>

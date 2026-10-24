@@ -407,7 +407,7 @@ export function GitHubShareGuide({
     >
       <p className="publication-kicker px-meta">GitHub</p>
       <h2 id="github-share-guide-heading">{copy.title}</h2>
-      <details className="publication-info">
+      <details className="publication-info px-info">
         <summary>
           ⓘ {locale === "zh-TW" ? "分享方式" : "How sharing works"}
         </summary>
@@ -421,7 +421,7 @@ export function GitHubShareGuide({
       )}
 
       <div className="github-share__stage">
-        <details className="publication-info">
+        <details className="publication-info px-info">
           <summary>
             ⓘ {locale === "zh-TW" ? "檔案內容" : "File contents"}
           </summary>
@@ -714,7 +714,7 @@ export function GitHubShareGuide({
                 )}
               </>
             ) : (
-              <p>
+              <div className="publication-link">
                 <a
                   href="#pages-share-panel-heading"
                   onClick={() => {
@@ -733,7 +733,7 @@ export function GitHubShareGuide({
                 >
                   {copy.verifyPages}
                 </a>
-              </p>
+              </div>
             )}
 
             <div className="publication-message">

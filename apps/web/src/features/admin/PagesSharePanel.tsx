@@ -260,7 +260,7 @@ export function PagesSharePanel({
           value={pagesUrl}
         />
       </label>
-      <details className="publication-info">
+      <details className="publication-info px-info">
         <summary>ⓘ {zh ? "網址說明" : "URL help"}</summary>
         <p id="pages-share-url-help">{copy.urlHelp}</p>
       </details>
@@ -324,7 +324,7 @@ export function PagesSharePanel({
       </p>
       {notice && <p role="alert">{notice}</p>}
       {state?.configured && !urlChanged && (
-        <p>
+        <div className="publication-link">
           <a
             data-testid="pages-site-download"
             download="reponpc-site.zip"
@@ -332,17 +332,17 @@ export function PagesSharePanel({
           >
             {copy.downloadReady}
           </a>
-        </p>
+        </div>
       )}
-      <details className="publication-info">
+      <details className="publication-info px-info">
         <summary>ⓘ {copy.uploadTitle}</summary>
-        <p>
+        <div className="publication-link">
           <a href={sharingGuideUrl} download="PAGES_SHARING_GUIDE.md">
             {zh
               ? "下載完整雙語分享指南"
               : "Download the full bilingual sharing guide"}
           </a>
-        </p>
+        </div>
         <ol>
           {copy.uploadSteps.map((step) => (
             <li key={step}>{step}</li>

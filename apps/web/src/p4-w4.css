@@ -229,27 +229,51 @@
 .admin-maintenance p {
   margin-block: 12px;
 }
-.admin-maintenance summary {
+.admin-maintenance__section > summary {
   color: var(--px-accent);
   cursor: pointer;
   font-size: max(14px, 0.875rem);
   min-height: 44px;
   padding-block: 10px;
 }
-.admin-maintenance__status {
+.admin-maintenance__group {
+  border-top: 1px dashed var(--px-muted);
+  margin-top: 16px;
+  padding-top: 12px;
+}
+.admin-maintenance .admin-maintenance__group-title {
+  border: 0;
+  font-size: max(16px, 1rem);
+  margin: 0 0 10px;
+  padding: 0;
+}
+.admin-maintenance__status,
+.admin-maintenance__data {
   align-items: start;
   display: grid;
   gap: 10px 16px;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
-.admin-maintenance__status dt {
+.admin-maintenance__status dt,
+.admin-maintenance__data dt {
   font-size: max(14px, 0.875rem);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
 }
-.admin-maintenance__status dd {
+.admin-maintenance__status dd,
+.admin-maintenance__data dd {
+  align-items: center;
+  display: flex;
   justify-self: start;
   margin: 0;
   max-width: 100%;
+  min-height: 44px;
   overflow-wrap: anywhere;
+}
+.admin-maintenance__data dd {
+  color: var(--px-ink);
+  font-size: max(14px, 0.875rem);
 }
 .admin-maintenance__section {
   border-top: 2px solid var(--px-line);
@@ -309,7 +333,7 @@
 .admin-workspace__yaml-model-info .model-form__technical summary {
   min-height: 44px;
 }
-.admin-workspace__yaml-model-info > summary {
+.admin-workspace__yaml-model-info:not(.px-info) > summary {
   color: var(--px-accent);
   cursor: pointer;
   font-size: max(14px, 0.875rem);
@@ -437,11 +461,13 @@
   .admin-workspace__yaml .px-button {
     flex: 1 1 100%;
   }
-  .admin-maintenance__status {
+  .admin-maintenance__status,
+  .admin-maintenance__data {
     gap: 6px;
     grid-template-columns: minmax(0, 1fr);
   }
-  .admin-maintenance__status dd {
+  .admin-maintenance__status dd,
+  .admin-maintenance__data dd {
     margin-bottom: 8px;
   }
 }

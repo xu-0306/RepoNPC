@@ -405,7 +405,7 @@ it.each([
     );
     expect(
       header.match(/class="admin-workspace__utility-label"/g),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(header).toMatch(
       new RegExp(`<button[^>]*aria-label="${display}"[^>]*>`),
     );
@@ -418,8 +418,9 @@ it.each([
       ),
     );
     expect(header).toContain(
-      `<span aria-hidden="true">R</span>${owner}</span>`,
+      `<span aria-hidden="true">R</span><span class="admin-workspace__utility-label">${owner}</span>`,
     );
+    expect(header).toContain(`aria-label="${owner}"`);
     expect(header).toMatch(
       new RegExp(
         `<button class="admin-workspace__logout[^>]*>${logout}</button>`,

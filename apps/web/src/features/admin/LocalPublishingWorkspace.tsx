@@ -564,19 +564,32 @@ export function LocalPublishingWorkspace({
               : zh
                 ? "尚未準備本機 NPC。"
                 : "Local NPC has not been prepared.";
+  const prepareNotice =
+    !pending && !preparing && content && !selection?.eligible
+      ? (prepareReason ?? "").replace(/[。.]$/, zh ? "；" : "; ") +
+        (zh
+          ? "內容草稿會保留，完成後可返回準備 NPC。"
+          : "Your content draft is kept; return here after setup to prepare the NPC.")
+      : prepareReason;
   return (
     <div className="local-publication" lang={locale}>
       <header className="local-publication__heading">
         <p className="px-display">WORKSHOP / SHARE</p>
         <h1>{zh ? "預覽與分享" : "Preview & share"}</h1>
         <nav aria-label={zh ? "預覽與分享步驟" : "Preview and sharing steps"}>
-          <a href="#local-publication-heading">
+          <a
+            aria-current="step"
+            className="px-chip"
+            href="#local-publication-heading"
+          >
             {zh ? "01 預覽" : "01 Preview"}
           </a>
-          <a href="#publication-appearance">
+          <a className="px-chip" href="#publication-appearance">
             {zh ? "02 外觀（選填）" : "02 Appearance (optional)"}
           </a>
-          <a href="#visitor-gateway-heading">{zh ? "03 分享" : "03 Share"}</a>
+          <a className="px-chip" href="#visitor-gateway-heading">
+            {zh ? "03 分享" : "03 Share"}
+          </a>
         </nav>
       </header>
       <section
@@ -674,9 +687,9 @@ export function LocalPublishingWorkspace({
             {notice.message}
           </p>
         )}
-        {(prepareReason || !selection?.eligible) && (
-          <p id="local-prepare-reason">
-            {prepareReason}{" "}
+        {(prepareNotice || !selection?.eligible) && (
+          <div className="publication-status px-panel px-panel--inset">
+            <p id="local-prepare-reason">{prepareNotice}</p>
             {!selection?.eligible && onConfigureModels && (
               <button
                 className="px-button px-button--secondary"
@@ -685,12 +698,8 @@ export function LocalPublishingWorkspace({
               >
                 {zh ? "前往設定模型" : "Set up models"}
               </button>
-            )}{" "}
-            {!selection?.eligible &&
-              (zh
-                ? "內容草稿會保留，完成後可返回準備 NPC。"
-                : "Your content draft is kept. Return here to prepare the NPC after setup.")}
-          </p>
+            )}
+          </div>
         )}
         <p role="status">{publicationMessage}</p>
         {status?.error_code && (
@@ -704,17 +713,35 @@ export function LocalPublishingWorkspace({
           </p>
         )}
         {status?.index_ready && (
-          <a href="/" target="_blank" rel="noreferrer">
+          <a
+            className="px-button px-button--quiet publication-current-version"
+            href="/"
+            target="_blank"
+            rel="noreferrer"
+          >
             {zh
               ? "開啟目前版本並試聊"
               : "Open current version and try chatting"}
           </a>
         )}
-        <p>
+        <p className="publication-impact">
           {zh
-            ? "套用才會更新訪客看到的內容。試聊會使用已選模型；一般預覽不會。"
-            : "Applying updates visitor content. Chat uses your selected models; preview does not."}
+            ? "套用才會更新訪客看到的內容。"
+            : "Applying updates visitor content."}
         </p>
+        <details className="px-info publication-impact-details">
+          <summary>
+            ⓘ{" "}
+            {zh
+              ? "試聊與一般預覽的模型"
+              : "Models used by try-chat and preview"}
+          </summary>
+          <p>
+            {zh
+              ? "試聊會使用已選模型；一般預覽不會。"
+              : "Chat uses your selected models; preview does not."}
+          </p>
+        </details>
         {profile && (
           <article>
             <h3>{profile.display_name}</h3>

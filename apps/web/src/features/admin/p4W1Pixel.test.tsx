@@ -151,7 +151,7 @@ it("keeps 17 repository choices compact while retaining their options, safety an
   expect(rows).toHaveLength(17);
   rows.forEach((row, index) => {
     const [header, details] = row.split(
-      '<details class="p4-w1-repository__details">',
+      '<details class="p4-w1-repository__details px-info">',
     );
     expect(header).toContain(`<strong>project-${index}</strong>`);
     expect(header).toContain(

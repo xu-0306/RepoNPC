@@ -1,4 +1,11 @@
 /* P4 w1: the same stepped panels and page-level action bars as Set F. */
+.guided-onboarding .guided-onboarding__step h2 {
+  color: var(--px-ink);
+  font-family: var(--px-font-body);
+  font-size: max(18px, 1.125rem);
+  font-weight: 700;
+  line-height: 1.4;
+}
 .guided-onboarding
   .guided-onboarding__step:not(.guided-onboarding__step--models) {
   background: var(--px-surface);
@@ -72,6 +79,10 @@
 .p4-w1-repositories p,
 .guided-analysis > p {
   margin: 0;
+}
+.guided-analysis > p {
+  font-size: 15px;
+  line-height: 1.5;
 }
 .p4-w1-intro__route {
   border-top: 1px dashed var(--px-muted);
@@ -156,16 +167,12 @@
 .p4-w1-repository__details > summary {
   grid-column: 2;
   grid-row: 1;
-  list-style: none;
   text-align: center;
   width: 44px;
 }
 .p4-w1-repository__details > :not(summary) {
   grid-column: 1 / -1;
   min-width: 0;
-}
-.p4-w1-repository__details > summary::-webkit-details-marker {
-  display: none;
 }
 .p4-w1-repositories .guided-onboarding__repository-meta,
 .batch-analysis-panel .guided-onboarding__repository-meta {
