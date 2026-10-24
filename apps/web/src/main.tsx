@@ -6,8 +6,10 @@ import {
   applyAdminUiScale,
   readAdminUiScale,
 } from "./features/admin/adminUiScale";
+import { claimReactAriaPressableStyle } from "./reactAriaPressableStyle";
 import "./styles.css";
 
+claimReactAriaPressableStyle();
 const adminRoute = window.location.pathname.startsWith("/admin");
 document.documentElement.classList.toggle("admin-route", adminRoute);
 document.body.classList.toggle("admin-route", adminRoute);
