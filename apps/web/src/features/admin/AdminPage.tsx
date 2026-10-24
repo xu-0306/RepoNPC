@@ -871,7 +871,7 @@ export function AdminAccessPanel({
             )}
           </p>
           <button
-            className="admin-auth__secondary-action"
+            className="admin-auth__secondary-action px-button px-button--primary"
             disabled={busy}
             onClick={onRefreshSetupStatus}
             type="button"
@@ -892,7 +892,7 @@ export function AdminAccessPanel({
           </p>
           <code>reponpc admin set-password --data-dir &lt;dir&gt;</code>
           <button
-            className="admin-auth__secondary-action"
+            className="admin-auth__secondary-action px-button px-button--primary"
             disabled={busy}
             onClick={onRefreshSetupStatus}
             type="button"
@@ -944,6 +944,7 @@ export function AdminAccessPanel({
                 {copyFor(locale, "一次性設定碼", "One-time setup code")}
               </label>
               <input
+                className="px-field"
                 autoComplete="one-time-code"
                 id="admin-setup-code"
                 onChange={(event) => onSetupCodeChange(event.target.value)}
@@ -957,6 +958,7 @@ export function AdminAccessPanel({
                 {copyFor(locale, "管理員帳號", "Administrator username")}
               </label>
               <input
+                className="px-field"
                 autoComplete="username"
                 id="admin-setup-username"
                 maxLength={64}
@@ -971,6 +973,7 @@ export function AdminAccessPanel({
                 {copyFor(locale, "密碼", "Password")}
               </label>
               <input
+                className="px-field"
                 aria-describedby="admin-password-requirements"
                 autoComplete="new-password"
                 id="admin-setup-password"
@@ -996,6 +999,7 @@ export function AdminAccessPanel({
                 {copyFor(locale, "確認密碼", "Confirm password")}
               </label>
               <input
+                className="px-field"
                 autoComplete="new-password"
                 id="admin-setup-password-confirmation"
                 maxLength={128}
@@ -1007,7 +1011,11 @@ export function AdminAccessPanel({
                 value={setupPasswordConfirmation}
               />
             </div>
-            <button disabled={busy} type="submit">
+            <button
+              className="px-button px-button--primary"
+              disabled={busy}
+              type="submit"
+            >
               {busy
                 ? copyFor(locale, "建立中…", "Creating…")
                 : copyFor(locale, "建立我的管理員", "Create my administrator")}
@@ -1028,8 +1036,8 @@ export function AdminAccessPanel({
           <p className="admin-auth__intro">
             {copyFor(
               locale,
-              "這個本機資料目錄已完成首次設定。請使用你建立的管理員帳密登入。",
-              "First-time setup is complete for this local data directory. Sign in with the administrator credentials you created.",
+              "請使用你建立的管理員帳密登入。",
+              "Sign in with the administrator credentials you created.",
             )}
           </p>
           <form className="admin-auth__form" onSubmit={onLogin}>
@@ -1038,6 +1046,7 @@ export function AdminAccessPanel({
                 {copyFor(locale, "管理員帳號", "Username")}
               </label>
               <input
+                className="px-field"
                 autoComplete="username"
                 id="admin-username"
                 maxLength={64}
@@ -1052,6 +1061,7 @@ export function AdminAccessPanel({
                 {copyFor(locale, "密碼", "Password")}
               </label>
               <input
+                className="px-field"
                 autoComplete="current-password"
                 id="admin-password"
                 maxLength={1024}
@@ -1061,7 +1071,11 @@ export function AdminAccessPanel({
                 value={password}
               />
             </div>
-            <button disabled={busy} type="submit">
+            <button
+              className="px-button px-button--primary"
+              disabled={busy}
+              type="submit"
+            >
               {busy
                 ? copyFor(locale, "登入中…", "Signing in…")
                 : copyFor(locale, "登入管理介面", "Sign in to admin")}

@@ -1,3 +1,4 @@
+import "../../p4-w3.css";
 import type { ChangeEvent } from "react";
 
 import { githubAccount, verifiedPagesMarkdown } from "./sharing";
@@ -371,16 +372,17 @@ export function GitHubShareGuide({
       <>
         <label htmlFor={id}>{copy.markdownLabel}</label>
         <textarea
+          className="px-field"
           aria-describedby={`${id}-status`}
           id={id}
           readOnly
           rows={7}
           value={value}
         />
-        <div className="admin-workspace__actions" aria-label={copy.stageReadme}>
+        <div className="publication-actions" aria-label={copy.stageReadme}>
           <button
             aria-describedby={empty ? `${id}-status` : undefined}
-            className="ux-primary"
+            className="px-button px-button--secondary"
             disabled={busy || empty}
             onClick={() => onCopy(value)}
             type="button"
@@ -399,27 +401,37 @@ export function GitHubShareGuide({
     <section
       aria-busy={busy}
       aria-labelledby="github-share-guide-heading"
-      className="admin-surface"
+      className="github-share px-panel"
       data-testid="github-share-guide"
       lang={locale}
     >
-      <p className="admin-section-kicker">GitHub</p>
+      <p className="publication-kicker px-meta">GitHub</p>
       <h2 id="github-share-guide-heading">{copy.title}</h2>
-      <p>{copy.subtitle}</p>
+      <details className="publication-info">
+        <summary>
+          ⓘ {locale === "zh-TW" ? "分享方式" : "How sharing works"}
+        </summary>
+        <p>{copy.subtitle}</p>
+      </details>
 
       {notice.trim().length > 0 && (
-        <p className="admin-workspace__notice" role="alert">
+        <p className="publication-notice" role="alert">
           {notice}
         </p>
       )}
 
-      <div className="guided-onboarding__step">
-        <p>{copy.readmeContents}</p>
+      <div className="github-share__stage">
+        <details className="publication-info">
+          <summary>
+            ⓘ {locale === "zh-TW" ? "檔案內容" : "File contents"}
+          </summary>
+          <p>{copy.readmeContents}</p>
+        </details>
         <p id="github-share-readme-placement">{copy.readmePlacement}</p>
-        <div className="admin-workspace__actions">
+        <div className="publication-actions">
           <button
             type="button"
-            className="ux-primary"
+            className="px-button px-button--primary"
             disabled={!pagesReady}
             aria-disabled={busy || !pagesReady}
             aria-describedby="github-share-readme-placement github-share-readme-download-status"
@@ -430,6 +442,7 @@ export function GitHubShareGuide({
             {copy.downloadReadme}
           </button>
           <button
+            className="px-button px-button--secondary"
             type="button"
             disabled={!pagesReady}
             aria-disabled={busy || !pagesReady}
@@ -451,6 +464,7 @@ export function GitHubShareGuide({
               {copy.previewReadme}
             </label>
             <textarea
+              className="px-field"
               id="github-share-readme-preview"
               aria-describedby="github-share-readme-preview-help"
               readOnly
@@ -464,281 +478,295 @@ export function GitHubShareGuide({
         )}
       </div>
 
-      <section
-        aria-labelledby="github-share-profile-heading"
-        className="guided-onboarding__step"
-        data-stage="profile"
-      >
-        <details open={profileOpen}>
-          <summary id="github-share-profile-heading">
-            <span aria-hidden="true" className="admin-section-kicker">
-              1
-            </span>{" "}
-            {copy.stageProfile}
-          </summary>
-          <label htmlFor="github-share-account">
-            {copy.accountLabel}
-            <input
-              aria-describedby="github-share-account-help"
-              disabled={busy}
-              id="github-share-account"
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                onAccountChange(event.target.value)
-              }
-              placeholder={copy.accountPlaceholder}
-              value={account}
-            />
-          </label>
-          <p id="github-share-account-help">{copy.accountHelp}</p>
+      <details className="github-share__alternative">
+        <summary>
+          {locale === "zh-TW"
+            ? "其他方式：下載卡片、上傳與複製到 README"
+            : "Other way: download a card, upload and copy into README"}
+        </summary>
+        <section
+          aria-labelledby="github-share-profile-heading"
+          className="github-share__stage"
+          data-stage="profile"
+        >
+          <details open={profileOpen}>
+            <summary id="github-share-profile-heading">
+              <span aria-hidden="true" className="publication-kicker px-meta">
+                1
+              </span>{" "}
+              {copy.stageProfile}
+            </summary>
+            <label htmlFor="github-share-account">
+              {copy.accountLabel}
+              <input
+                className="px-field"
+                aria-describedby="github-share-account-help"
+                disabled={busy}
+                id="github-share-account"
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  onAccountChange(event.target.value)
+                }
+                placeholder={copy.accountPlaceholder}
+                value={account}
+              />
+            </label>
+            <p id="github-share-account-help">{copy.accountHelp}</p>
 
-          <div
-            className="admin-workspace__actions"
-            aria-label={copy.stageProfile}
-          >
-            <button
-              aria-describedby={
-                accountIsEmpty ? "github-share-account-help" : undefined
-              }
-              className="ux-primary"
-              disabled={busy || accountIsEmpty}
-              onClick={onCheckProfile}
-              type="button"
-            >
-              {copy.checkProfile}
-            </button>
-          </div>
-
-          <p
-            className="ux-missing-fields"
-            data-status={profileStatus}
-            id="github-share-profile-status"
-            role={profileStatus === "unavailable" ? "alert" : "status"}
-          >
-            {copy.profileStatus[profileStatus]}
-          </p>
-
-          <section aria-labelledby="github-share-repository-details-heading">
-            <h4 id="github-share-repository-details-heading">
-              {copy.repositoryDetails}
-            </h4>
-            <dl>
-              <div>
-                <dt>{copy.accountLabel}</dt>
-                <dd>
-                  <code>{account || copy.accountNotEntered}</code>
-                </dd>
-              </div>
-              <div>
-                <dt>{copy.publicRepository}</dt>
-                <dd>
-                  <code>
-                    {normalizedAccount
-                      ? `${normalizedAccount}/${normalizedAccount}`
-                      : "—"}
-                  </code>
-                </dd>
-              </div>
-              <div>
-                <dt>{copy.rootReadme}</dt>
-                <dd>
-                  <code>README.md</code>
-                </dd>
-              </div>
-            </dl>
-          </section>
-
-          {profileStatus === "missing" && (
-            <div className="ux-missing-fields">
-              <h4>{copy.createProfileHeading}</h4>
-              <p>{copy.createProfileIntro}</p>
-              <ol>
-                <li>
-                  {copy.repositoryName}{" "}
-                  <code>{account || copy.accountNotEntered}</code>.
-                </li>
-                <li>{copy.choosePublic}</li>
-                <li>{copy.addReadme}</li>
-                <li>{copy.createRepository}</li>
-              </ol>
-              {createUrl ? (
-                <ExternalLink href={createUrl} label={copy.openCreatePage} />
-              ) : (
-                <p>{copy.linkUnavailable}</p>
-              )}
-            </div>
-          )}
-
-          {profileStatus === "missing_readme" && (
-            <p className="ux-missing-fields">{copy.existingRepositoryReadme}</p>
-          )}
-
-          <div
-            className="ux-actions"
-            aria-label={copy.stageProfile}
-            role="group"
-          >
-            {repositoryUrl && (
-              <ExternalLink href={repositoryUrl} label={copy.openRepository} />
-            )}
-            {readmeUrl && profileStatus === "ready" && (
-              <ExternalLink href={readmeUrl} label={copy.openReadme} />
-            )}
-            {profileUrl && (
-              <ExternalLink href={profileUrl} label={copy.openProfile} />
-            )}
-            {profileStatus === "unchecked" && (
-              <p role="status">{copy.notCheckedAction}</p>
-            )}
-          </div>
-        </details>
-      </section>
-
-      <section
-        aria-labelledby="github-share-card-heading"
-        className="guided-onboarding__step"
-        data-stage="card"
-      >
-        <details open={cardOpen}>
-          <summary id="github-share-card-heading">
-            <span aria-hidden="true" className="admin-section-kicker">
-              2
-            </span>{" "}
-            {copy.stageCard}
-          </summary>
-          <p>{copy.cardIntro}</p>
-          <dl>
-            <div>
-              <dt>{copy.filenameLabel}</dt>
-              <dd>
-                <code>{filename || copy.filenameMissing}</code>
-              </dd>
-            </div>
-          </dl>
-          <div
-            className="admin-workspace__actions"
-            aria-label={copy.stageCard}
-            role="group"
-          >
-            <button
-              aria-describedby={
-                !cardReady ? "github-share-download-reason" : undefined
-              }
-              className="ux-primary"
-              disabled={busy || !cardReady}
-              onClick={onDownload}
-              type="button"
-            >
-              {copy.downloadCard}
-            </button>
-            <button disabled={busy} onClick={onCheckImage} type="button">
-              {copy.checkImage}
-            </button>
-          </div>
-          <p id="github-share-download-reason" role="status">
-            {cardReady ? copy.cardReady : copy.downloadDisabled}
-          </p>
-          <p
-            className="ux-missing-fields"
-            data-status={imageStatus}
-            id="github-share-image-status"
-            role={imageStatus === "unavailable" ? "alert" : "status"}
-          >
-            {copy.imageStatus[imageStatus]}
-          </p>
-          {imageStatus === "ready" && (
-            <p className="ux-missing-fields">{copy.imageReadyNote}</p>
-          )}
-          <h4>{copy.uploadStepsHeading}</h4>
-          <ol>
-            {copy.uploadSteps.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-          <p>{copy.protectedBranch}</p>
-          {repositoryUrl ? (
-            <ExternalLink href={repositoryUrl} label={copy.openRepository} />
-          ) : (
-            <p>{copy.linkUnavailable}</p>
-          )}
-        </details>
-      </section>
-
-      <section
-        aria-labelledby="github-share-readme-heading"
-        className="guided-onboarding__step"
-        data-stage="readme"
-      >
-        <details open={readmeOpen}>
-          <summary id="github-share-readme-heading">
-            <span aria-hidden="true" className="admin-section-kicker">
-              3
-            </span>{" "}
-            {copy.stageReadme}
-          </summary>
-          <p>{copy.readmeIntro}</p>
-
-          {verifiedPagesUrl ? (
-            <>
-              <h4>{copy.markdownPreviewHeading}</h4>
-              {markdownField(
-                verifiedPagesMarkdown(verifiedPagesUrl, locale),
-                "github-share-pages-markdown",
-              )}
-            </>
-          ) : (
-            <p>
-              <a
-                href="#pages-share-panel-heading"
-                onClick={() => {
-                  const heading = document.getElementById(
-                    "pages-share-panel-heading",
-                  );
-                  if (heading) {
-                    heading.tabIndex = -1;
-                    heading.focus({ preventScroll: true });
-                    heading.scrollIntoView({
-                      block: "start",
-                      behavior: "instant",
-                    });
-                  }
-                }}
+            <div className="publication-actions" aria-label={copy.stageProfile}>
+              <button
+                aria-describedby={
+                  accountIsEmpty ? "github-share-account-help" : undefined
+                }
+                className="px-button px-button--secondary"
+                disabled={busy || accountIsEmpty}
+                onClick={onCheckProfile}
+                type="button"
               >
-                {copy.verifyPages}
-              </a>
-            </p>
-          )}
+                {copy.checkProfile}
+              </button>
+            </div>
 
-          <div className="ux-missing-fields">
-            <h4>{copy.preserveReadmeHeading}</h4>
-            <ol>
-              {copy.preserveReadmeSteps.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
-            <div className="ux-actions">
+            <p
+              className="publication-message"
+              data-status={profileStatus}
+              id="github-share-profile-status"
+              role={profileStatus === "unavailable" ? "alert" : "status"}
+            >
+              {copy.profileStatus[profileStatus]}
+            </p>
+
+            <section aria-labelledby="github-share-repository-details-heading">
+              <h4 id="github-share-repository-details-heading">
+                {copy.repositoryDetails}
+              </h4>
+              <dl>
+                <div>
+                  <dt>{copy.accountLabel}</dt>
+                  <dd>
+                    <code>{account || copy.accountNotEntered}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>{copy.publicRepository}</dt>
+                  <dd>
+                    <code>
+                      {normalizedAccount
+                        ? `${normalizedAccount}/${normalizedAccount}`
+                        : "—"}
+                    </code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>{copy.rootReadme}</dt>
+                  <dd>
+                    <code>README.md</code>
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            {profileStatus === "missing" && (
+              <div className="publication-message">
+                <h4>{copy.createProfileHeading}</h4>
+                <p>{copy.createProfileIntro}</p>
+                <ol>
+                  <li>
+                    {copy.repositoryName}{" "}
+                    <code>{account || copy.accountNotEntered}</code>.
+                  </li>
+                  <li>{copy.choosePublic}</li>
+                  <li>{copy.addReadme}</li>
+                  <li>{copy.createRepository}</li>
+                </ol>
+                {createUrl ? (
+                  <ExternalLink href={createUrl} label={copy.openCreatePage} />
+                ) : (
+                  <p>{copy.linkUnavailable}</p>
+                )}
+              </div>
+            )}
+
+            {profileStatus === "missing_readme" && (
+              <p className="publication-message">
+                {copy.existingRepositoryReadme}
+              </p>
+            )}
+
+            <div
+              className="publication-actions"
+              aria-label={copy.stageProfile}
+              role="group"
+            >
+              {repositoryUrl && (
+                <ExternalLink
+                  href={repositoryUrl}
+                  label={copy.openRepository}
+                />
+              )}
               {readmeUrl && profileStatus === "ready" && (
                 <ExternalLink href={readmeUrl} label={copy.openReadme} />
               )}
-              {profileStatus === "ready" && profileUrl ? (
+              {profileUrl && (
                 <ExternalLink href={profileUrl} label={copy.openProfile} />
-              ) : (
-                <p>{copy.profileLinkPending}</p>
+              )}
+              {profileStatus === "unchecked" && (
+                <p role="status">{copy.notCheckedAction}</p>
               )}
             </div>
-          </div>
+          </details>
+        </section>
 
-          <div className="ux-missing-fields">
-            <h4>{copy.testHeading}</h4>
-            <p>{copy.testInstruction}</p>
-            <ul>
-              {copy.testChecks.map((check) => (
-                <li key={check}>{check}</li>
+        <section
+          aria-labelledby="github-share-card-heading"
+          className="github-share__stage"
+          data-stage="card"
+        >
+          <details open={cardOpen}>
+            <summary id="github-share-card-heading">
+              <span aria-hidden="true" className="publication-kicker px-meta">
+                2
+              </span>{" "}
+              {copy.stageCard}
+            </summary>
+            <p>{copy.cardIntro}</p>
+            <dl>
+              <div>
+                <dt>{copy.filenameLabel}</dt>
+                <dd>
+                  <code>{filename || copy.filenameMissing}</code>
+                </dd>
+              </div>
+            </dl>
+            <div
+              className="publication-actions"
+              aria-label={copy.stageCard}
+              role="group"
+            >
+              <button
+                aria-describedby={
+                  !cardReady ? "github-share-download-reason" : undefined
+                }
+                className="px-button px-button--secondary"
+                disabled={busy || !cardReady}
+                onClick={onDownload}
+                type="button"
+              >
+                {copy.downloadCard}
+              </button>
+              <button
+                className="px-button px-button--secondary"
+                disabled={busy}
+                onClick={onCheckImage}
+                type="button"
+              >
+                {copy.checkImage}
+              </button>
+            </div>
+            <p id="github-share-download-reason" role="status">
+              {cardReady ? copy.cardReady : copy.downloadDisabled}
+            </p>
+            <p
+              className="publication-message"
+              data-status={imageStatus}
+              id="github-share-image-status"
+              role={imageStatus === "unavailable" ? "alert" : "status"}
+            >
+              {copy.imageStatus[imageStatus]}
+            </p>
+            {imageStatus === "ready" && (
+              <p className="publication-message">{copy.imageReadyNote}</p>
+            )}
+            <h4>{copy.uploadStepsHeading}</h4>
+            <ol>
+              {copy.uploadSteps.map((step) => (
+                <li key={step}>{step}</li>
               ))}
-            </ul>
-          </div>
-        </details>
-      </section>
+            </ol>
+            <p>{copy.protectedBranch}</p>
+            {repositoryUrl ? (
+              <ExternalLink href={repositoryUrl} label={copy.openRepository} />
+            ) : (
+              <p>{copy.linkUnavailable}</p>
+            )}
+          </details>
+        </section>
 
+        <section
+          aria-labelledby="github-share-readme-heading"
+          className="github-share__stage"
+          data-stage="readme"
+        >
+          <details open={readmeOpen}>
+            <summary id="github-share-readme-heading">
+              <span aria-hidden="true" className="publication-kicker px-meta">
+                3
+              </span>{" "}
+              {copy.stageReadme}
+            </summary>
+            <p>{copy.readmeIntro}</p>
+
+            {verifiedPagesUrl ? (
+              <>
+                <h4>{copy.markdownPreviewHeading}</h4>
+                {markdownField(
+                  verifiedPagesMarkdown(verifiedPagesUrl, locale),
+                  "github-share-pages-markdown",
+                )}
+              </>
+            ) : (
+              <p>
+                <a
+                  href="#pages-share-panel-heading"
+                  onClick={() => {
+                    const heading = document.getElementById(
+                      "pages-share-panel-heading",
+                    );
+                    if (heading) {
+                      heading.tabIndex = -1;
+                      heading.focus({ preventScroll: true });
+                      heading.scrollIntoView({
+                        block: "start",
+                        behavior: "instant",
+                      });
+                    }
+                  }}
+                >
+                  {copy.verifyPages}
+                </a>
+              </p>
+            )}
+
+            <div className="publication-message">
+              <h4>{copy.preserveReadmeHeading}</h4>
+              <ol>
+                {copy.preserveReadmeSteps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+              <div className="publication-actions">
+                {readmeUrl && profileStatus === "ready" && (
+                  <ExternalLink href={readmeUrl} label={copy.openReadme} />
+                )}
+                {profileStatus === "ready" && profileUrl ? (
+                  <ExternalLink href={profileUrl} label={copy.openProfile} />
+                ) : (
+                  <p>{copy.profileLinkPending}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="publication-message">
+              <h4>{copy.testHeading}</h4>
+              <p>{copy.testInstruction}</p>
+              <ul>
+                {copy.testChecks.map((check) => (
+                  <li key={check}>{check}</li>
+                ))}
+              </ul>
+            </div>
+          </details>
+        </section>
+      </details>
       {busy && <p role="status">{copy.busy}</p>}
     </section>
   );

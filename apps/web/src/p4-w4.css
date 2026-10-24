@@ -1,0 +1,447 @@
+/* Set F access, raw configuration, maintenance and shared owner feedback. */
+.admin-auth-shell.admin-auth-shell {
+  background: var(--px-bg);
+  color: var(--px-ink);
+  font-family: var(--px-font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  padding: 24px;
+}
+.admin-auth-card.px-panel {
+  background: var(--px-surface);
+  box-shadow:
+    4px 0 0 var(--px-line),
+    -4px 0 0 var(--px-line),
+    0 4px 0 var(--px-line),
+    0 -4px 0 var(--px-line),
+    10px 10px 0 var(--px-shadow);
+  border: 0;
+  border-radius: 0;
+  margin: auto;
+  overflow: visible;
+  padding: 24px;
+  width: min(100%, 560px);
+}
+.admin-auth-card.px-panel::before {
+  content: none;
+}
+.admin-auth-card .admin-auth__header {
+  border: 0;
+  padding: 0 0 16px;
+}
+.admin-auth-card .admin-auth__eyebrow {
+  color: var(--px-muted);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  margin: 0 0 8px;
+}
+.admin-auth-card .admin-auth__title {
+  display: grid;
+  font-size: 24px;
+  gap: 8px;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+.admin-auth-card .admin-auth__product {
+  color: var(--px-accent);
+  font-family: var(--px-font-display);
+  font-size: 22px;
+  font-weight: 400;
+}
+.admin-auth__scene.px-scene {
+  --px-night: 0;
+  border: 0;
+  height: 64px;
+  min-height: 64px;
+}
+.admin-auth__scene .px-scene__celestial {
+  height: 16px;
+  width: 16px;
+}
+.admin-auth-card .admin-auth__content {
+  margin-top: 16px;
+}
+.admin-auth-card .admin-auth__intro {
+  font-size: 15px;
+  line-height: 1.6;
+}
+.admin-auth-card .admin-auth__form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.admin-auth-card .admin-auth__field {
+  gap: 4px;
+}
+.admin-auth-card .admin-auth__field label {
+  font-size: 14px;
+}
+.admin-auth-card .admin-auth__field .px-field {
+  background: var(--px-surface);
+  border: 2px solid var(--px-line);
+  border-radius: 0;
+  color: var(--px-ink);
+  min-height: 44px;
+}
+.admin-auth-card .admin-auth__form .px-button,
+.admin-auth-card .admin-auth__secondary-action {
+  background: var(--px-accent);
+  color: var(--px-accent-ink);
+  font-weight: 400;
+  margin: 4px 0;
+  width: 100%;
+}
+.admin-auth-card .admin-auth__form .px-button:hover:not(:disabled),
+.admin-auth-card .admin-auth__secondary-action:hover:not(:disabled) {
+  background: var(--px-accent);
+}
+.admin-auth-card .admin-auth__privacy-note {
+  border-color: var(--px-muted);
+  color: var(--px-muted);
+  font-size: 13px;
+  margin-top: 16px;
+  padding-top: 12px;
+}
+.admin-auth-card .admin-auth__field-help {
+  color: var(--px-muted);
+  font-size: 13px;
+}
+.admin-auth-card :is(.admin-auth__status, .admin-auth__alert) {
+  background: var(--px-surface-alt);
+  border: 2px solid var(--px-line);
+  border-radius: 0;
+  color: var(--px-ink);
+  font-size: 15px;
+  margin-top: 16px;
+  padding: 12px;
+}
+.admin-auth-card .admin-auth__alert {
+  border-color: var(--px-danger);
+}
+.admin-auth-card code {
+  overflow-wrap: anywhere;
+}
+.admin-workspace__content > [class*="admin-workspace__yaml"] {
+  font-size: max(15px, 1rem);
+  margin-block: 4px 24px;
+}
+.admin-workspace__content > [class*="admin-workspace__yaml"] h2 {
+  font-size: clamp(22px, 2vw, 28px);
+  line-height: 1.4;
+  margin: 0 0 16px;
+}
+.admin-workspace__yaml :is(label, h3),
+.admin-workspace__yaml-snippet label {
+  font-size: max(14px, 0.875rem);
+}
+.admin-workspace__yaml .px-field,
+.admin-workspace__yaml-snippet .px-field {
+  display: block;
+  font-family: ui-monospace, monospace;
+  margin-block: 12px;
+  resize: vertical;
+  width: 100%;
+}
+.admin-workspace__yaml .px-field {
+  background: var(--px-surface-alt);
+  height: 240px;
+}
+.admin-workspace__yaml .px-button:hover:not(:disabled),
+.admin-workspace__yaml-snippet .px-button:hover:not(:disabled),
+.admin-maintenance .px-button {
+  border-color: var(--px-line);
+}
+.admin-workspace__yaml .px-button--primary:hover:not(:disabled),
+.admin-maintenance .px-button--primary:hover:not(:disabled) {
+  color: var(--px-accent-ink);
+}
+.admin-workspace__yaml .px-button--secondary:hover:not(:disabled),
+.admin-workspace__yaml-snippet .px-button--secondary:hover:not(:disabled),
+.admin-maintenance .px-button--secondary:hover:not(:disabled) {
+  color: var(--px-ink);
+}
+.admin-maintenance .px-button--danger:hover:not(:disabled) {
+  color: var(--px-danger-ink);
+}
+.admin-workspace__yaml .admin-workspace__actions {
+  background: var(--px-surface-alt);
+  border-top: 2px solid var(--px-line);
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 -20px -20px;
+  padding: 16px 20px;
+  position: sticky;
+  z-index: 2;
+}
+.admin-workspace__yaml-result ul {
+  list-style: none;
+  padding: 0;
+}
+.admin-workspace__yaml-result li {
+  border-top: 1px dashed var(--px-muted);
+  overflow-wrap: anywhere;
+  padding-block: 8px;
+}
+.admin-workspace__yaml-result [role="alert"] {
+  color: var(--px-danger);
+}
+.admin-workspace__yaml-result [role="status"] {
+  color: var(--px-success);
+}
+.admin-workspace__yaml-preview article {
+  border-top: 1px dashed var(--px-muted);
+  margin-top: 16px;
+}
+.admin-workspace__yaml-preview ul {
+  list-style: none;
+  padding: 0;
+}
+.admin-workspace__yaml-preview figure {
+  margin: 16px 0;
+}
+.admin-workspace__preview-banner {
+  font-size: max(14px, 0.875rem);
+}
+.admin-workspace__yaml-status dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.admin-workspace__yaml-status dl > div {
+  border-top: 1px dashed var(--px-muted);
+  padding-block: 8px;
+}
+.admin-maintenance.px-panel {
+  font-size: max(15px, 1rem);
+}
+.admin-maintenance h2 {
+  font-size: clamp(24px, 2.4vw, 34px);
+  margin: 0 0 12px;
+}
+.admin-maintenance h3 {
+  border-top: 1px dashed var(--px-muted);
+  font-size: max(18px, 1.125rem);
+  margin-top: 24px;
+  padding-top: 16px;
+}
+.admin-maintenance p {
+  margin-block: 12px;
+}
+.admin-maintenance summary {
+  color: var(--px-accent);
+  cursor: pointer;
+  font-size: max(14px, 0.875rem);
+  min-height: 44px;
+  padding-block: 10px;
+}
+.admin-maintenance__status {
+  align-items: start;
+  display: grid;
+  gap: 10px 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.admin-maintenance__status dt {
+  font-size: max(14px, 0.875rem);
+}
+.admin-maintenance__status dd {
+  justify-self: start;
+  margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.admin-maintenance__section {
+  border-top: 2px solid var(--px-line);
+  padding-block: 8px;
+}
+.admin-maintenance form {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.admin-maintenance label {
+  font-size: max(14px, 0.875rem);
+}
+.admin-maintenance .px-button.px-button--primary {
+  background: var(--px-accent);
+  color: var(--px-accent-ink);
+}
+.admin-maintenance .px-button.px-button--secondary {
+  background: var(--px-surface-alt);
+  color: var(--px-ink);
+}
+.admin-maintenance .px-button.px-button--danger {
+  background: var(--px-danger);
+  color: var(--px-danger-ink);
+}
+.admin-maintenance input[type="file"] {
+  width: 100%;
+}
+.admin-maintenance input::file-selector-button {
+  background: var(--px-surface-alt);
+  border: 2px solid var(--px-line);
+  color: var(--px-ink);
+  font: inherit;
+  min-height: 44px;
+}
+.admin-maintenance [role="alert"] {
+  border-left: 4px solid var(--px-danger);
+  padding-left: 12px;
+}
+.admin-maintenance [role="status"] {
+  border-left: 4px solid var(--px-success);
+  padding-left: 12px;
+}
+.admin-maintenance a {
+  color: var(--px-accent);
+  display: inline-block;
+  min-height: 44px;
+  padding-block: 10px;
+}
+.model-setup-workspace a,
+.model-setup-workspace summary,
+.model-setup-workspace .model-card__technical summary,
+.model-setup-workspace .model-form__technical summary,
+.admin-workspace__yaml-model-info a,
+.admin-workspace__yaml-model-info summary,
+.admin-workspace__yaml-model-info .model-card__technical summary,
+.admin-workspace__yaml-model-info .model-form__technical summary {
+  min-height: 44px;
+}
+.admin-workspace__yaml-model-info > summary {
+  color: var(--px-accent);
+  cursor: pointer;
+  font-size: max(14px, 0.875rem);
+  min-height: 44px;
+  padding-block: 10px;
+}
+.model-setup-workspace a,
+.admin-workspace__yaml-model-info a {
+  display: inline-block;
+  padding-block: 10px;
+}
+.admin-confirm-overlay.admin-confirm-overlay {
+  align-items: safe center;
+  background: color-mix(in srgb, var(--px-ink) 55%, transparent);
+  overflow-y: auto;
+  padding: 20px;
+}
+.admin-confirm-modal.admin-confirm-modal {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--px-ink);
+  max-height: none;
+  max-width: 520px;
+  overflow: visible;
+}
+.admin-confirm-dialog.px-dialog {
+  outline: none;
+  padding: 24px 24px 36px;
+}
+.admin-confirm-dialog .admin-confirm-dialog__description {
+  color: var(--px-muted);
+  font-size: 15px;
+  white-space: pre-line;
+}
+.admin-confirm-dialog .admin-confirm-dialog__actions {
+  gap: 12px;
+}
+.admin-confirm-dialog .px-button {
+  border-width: 2px;
+  font-weight: 400;
+}
+.admin-confirm-dialog .px-button--danger {
+  border-width: 4px;
+}
+.admin-auth-card :focus-visible,
+.admin-maintenance :focus-visible,
+.admin-workspace__content > [class*="admin-workspace__yaml"] :focus-visible,
+.admin-confirm-dialog button[data-focus-visible] {
+  outline: 3px solid var(--px-focus);
+  outline-offset: 4px;
+}
+.admin-success-toast.admin-success-toast {
+  background: var(--px-success-soft);
+  border: 2px solid var(--px-success);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--px-shadow);
+  color: var(--px-success);
+  font-family: var(--px-font-body);
+  font-size: 15px;
+}
+.admin-workspace__notice.admin-workspace__notice {
+  background: var(--px-warning-soft);
+  border: 2px solid var(--px-line);
+  border-radius: 0;
+  color: var(--px-warning);
+  font-size: max(15px, 1rem);
+}
+.admin-status-cards .admin-status-card {
+  background: var(--px-surface);
+  border: 2px solid var(--px-line);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--px-shadow);
+}
+.admin-status-card .admin-status-card__icon {
+  background: var(--px-surface-alt);
+  border-radius: 0;
+  color: var(--px-accent);
+}
+.admin-status-card .admin-status-card__progress-ring {
+  background: var(--px-surface-alt);
+  border: 2px solid var(--px-line);
+  border-radius: 0;
+  color: var(--px-accent);
+  font-size: 14px;
+}
+.admin-status-card .admin-status-card__label {
+  color: var(--px-ink);
+  font-size: max(14px, 0.875rem);
+}
+.admin-status-card .admin-status-card__detail {
+  color: var(--px-muted);
+  font-size: max(13px, 0.8125rem);
+}
+.admin-status-card .admin-status-card__badge {
+  background: var(--px-surface-alt);
+  border: 2px solid var(--px-line);
+  border-radius: 0;
+  color: var(--px-ink);
+  font-size: max(14px, 0.875rem);
+}
+.admin-status-card .admin-status-card__badge--selected {
+  background: var(--px-success-soft);
+  color: var(--px-success);
+}
+.admin-status-card .admin-status-card__badge--unavailable {
+  background: var(--px-danger);
+  color: var(--px-danger-ink);
+}
+.admin-status-card .admin-status-card__badge--testing {
+  background: var(--px-warning-soft);
+  color: var(--px-warning);
+}
+@media (max-width: 760px) {
+  .admin-auth-shell.admin-auth-shell {
+    padding: 20px;
+  }
+  .admin-auth-card.px-panel {
+    padding: 20px;
+  }
+  .admin-auth-card .admin-auth__title {
+    font-size: 22px;
+  }
+  .admin-workspace__yaml .px-button {
+    flex: 1 1 100%;
+  }
+  .admin-maintenance__status {
+    gap: 6px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-maintenance__status dd {
+    margin-bottom: 8px;
+  }
+}

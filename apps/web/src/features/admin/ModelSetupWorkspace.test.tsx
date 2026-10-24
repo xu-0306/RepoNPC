@@ -124,6 +124,8 @@ it("reserves the measured confirmation height as it changes and disconnects on u
     const confirm = {
       previousElementSibling: slots,
       getBoundingClientRect: () => ({ height }),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
     };
     let resized: (() => void) | undefined;
     const observe = vi.fn();
@@ -162,8 +164,77 @@ it("reserves the measured confirmation height as it changes and disconnects on u
       }
       if (typeof cleanup === "function") cleanup();
       expect(disconnect).toHaveBeenCalledTimes(supported ? 1 : 0);
+      expect(confirm.addEventListener).toHaveBeenCalledWith(
+        "toggle",
+        expect.any(Function),
+        true,
+      );
+      expect(confirm.removeEventListener).toHaveBeenCalledWith(
+        "toggle",
+        expect.any(Function),
+        true,
+      );
     } finally {
       vi.unstubAllGlobals();
     }
+  }
+});
+
+it("reveals a covered slot heading only when inline confirmation help opens", () => {
+  const scrollBy = vi.fn();
+  vi.stubGlobal("window", { scrollBy });
+  try {
+    const tree = ModelSetupWorkspace({
+      locale: "en",
+      selectionView: null,
+      chatConnectionView: null,
+      embeddingConnectionView: null,
+      chatView: null,
+      embeddingView: null,
+    });
+    const footer = tree.props.children[0].props.children.at(-1);
+    let bottom = 640;
+    const target = {
+      open: true,
+      classList: {
+        contains: (name: string): boolean => name === "model-selection__info",
+      },
+    };
+    let toggle: (event: unknown) => void = () => {};
+    const currentTarget = {
+      previousElementSibling: { style: { paddingBottom: "" } },
+      addEventListener: (_name: string, callback: (event: unknown) => void) => {
+        toggle = callback;
+      },
+      removeEventListener: vi.fn(),
+      parentElement: {
+        querySelector: () => ({
+          getBoundingClientRect: () => ({ top: bottom - 30, bottom }),
+        }),
+      },
+      getBoundingClientRect: () => ({ top: 570, bottom: 844, height: 274 }),
+    };
+    const cleanup = footer.props.ref(currentTarget);
+    const event = { target, currentTarget };
+    toggle(event);
+    expect(scrollBy).toHaveBeenCalledExactlyOnceWith({
+      top: 86,
+      behavior: "instant",
+    });
+    scrollBy.mockClear();
+    bottom = 530;
+    toggle(event);
+    expect(scrollBy).not.toHaveBeenCalled();
+    target.open = false;
+    bottom = 640;
+    toggle(event);
+    expect(scrollBy).not.toHaveBeenCalled();
+    target.open = true;
+    target.classList.contains = () => false;
+    toggle(event);
+    expect(scrollBy).not.toHaveBeenCalled();
+    cleanup();
+  } finally {
+    vi.unstubAllGlobals();
   }
 });

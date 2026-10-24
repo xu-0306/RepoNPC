@@ -386,10 +386,10 @@ describe("GuidedOnboardingView", () => {
         locale === "zh-TW" ? "資料查找模型" : "Content finder",
       );
       expect(markup).toContain(
-        `confirmed-chat-model · ${locale === "zh-TW" ? "已測試" : "Tested"}`,
+        `<span>confirmed-chat-model</span><span class="px-badge">${locale === "zh-TW" ? "已測試" : "Tested"}</span>`,
       );
       expect(markup).toContain(
-        `confirmed-search-model · ${locale === "zh-TW" ? "已測試" : "Tested"}`,
+        `<span>confirmed-search-model</span><span class="px-badge">${locale === "zh-TW" ? "已測試" : "Tested"}</span>`,
       );
       expect(markup).not.toContain("1970");
       expect(markup).not.toContain("private-chat-profile");
@@ -709,14 +709,26 @@ describe("GuidedOnboardingView", () => {
   it.each(["en", "zh-TW"] as const)(
     "expands only the statement and all source links in %s",
     (locale) => {
+      const facts = [
+        ...analysis.facts,
+        {
+          ...analysis.facts[0],
+          evidence_id: "E_docs",
+          path: "docs/guide.md",
+          url: "https://github.com/octocat/demo/blob/main/docs/guide.md",
+        },
+      ];
       directHooks.values = [];
       try {
         const render = () => {
           directHooks.cursor = 0;
           return AnalysisHighlight({
-            inference: analysis.inferences[0],
+            inference: {
+              ...analysis.inferences[0],
+              supporting_evidence_ids: facts.map((fact) => fact.evidence_id),
+            },
             locale,
-            facts: analysis.facts,
+            facts,
           });
         };
         const collapsed = render();
@@ -744,6 +756,12 @@ describe("GuidedOnboardingView", () => {
         ).toEqual(["p", "ul"]);
         expect(markup).toContain(analysis.inferences[0].statement[locale]);
         expect(markup).toContain(`href="${analysis.facts[0].url}"`);
+        expect(markup.split(`href="${analysis.facts[0].url}"`)).toHaveLength(2);
+        expect(markup).not.toContain('class="guided-analysis__source-chip"');
+        expect(markup).toContain(
+          '<span class="guided-analysis__more" aria-hidden="true">+1</span>',
+        );
+        expect(markup.split(`href="${facts[1].url}"`)).toHaveLength(2);
         (
           elements(expanded).find((node) => node.type === "button")!.props
             .onClick as () => void
@@ -1044,6 +1062,16 @@ describe("GuidedOnboardingView", () => {
     expect(markup).toContain("Reject and rewrite");
     expect(markup).toContain(
       "Only explicit confirmation makes this your confirmed contribution",
+    );
+    expect(
+      markup.split("Describe your work and boundaries in your own words."),
+    ).toHaveLength(2);
+    expect(markup).toMatch(
+      /<\/section><\/section><footer class="p4-w2__confirm">/,
+    );
+    expect(markup).toContain('class="p4-w2__fields"');
+    expect(markup).toContain(
+      '<span aria-hidden="true" class="p4-w2__actions-icon">⋯</span><span class="p4-w2__actions-text">Other actions</span></summary>',
     );
   });
 

@@ -102,7 +102,10 @@ describe("ConfirmDialogView", () => {
       expect(paragraphs).toHaveLength(1);
       expect(paragraphs[0].props.id).toBe("description-id");
       expect(paragraphs[0].props.children).toBe(request.description);
-      expect(paragraphs[0].props.style).toEqual({ whiteSpace: "pre-line" });
+      expect(paragraphs[0].props.className).toBe(
+        "admin-confirm-dialog__description",
+      );
+      expect(paragraphs[0].props.style).toBeUndefined();
       const buttons = nodes.filter((node) => node.type === Button);
       expect(buttons).toHaveLength(2);
       expect(buttons[0].props.children).toBe(
@@ -134,7 +137,7 @@ describe("ConfirmDialogView", () => {
     );
     expect(
       nodes.filter((node) => node.type === Button)[1].props.className,
-    ).toBe("admin-confirm-dialog__confirm");
+    ).toBe("admin-confirm-dialog__confirm px-button px-button--primary");
   });
 });
 

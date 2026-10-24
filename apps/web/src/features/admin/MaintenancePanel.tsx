@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { Locale } from "../../i18n/messages";
 import { CheckboxField } from "./CheckboxField";
+import "../../p4-w4.css";
 
 export interface MaintenanceStatus {
   active_bundle_id: string | null;
@@ -297,18 +298,27 @@ function MaintenanceContent({
 
   return (
     <section
-      className="admin-surface model-panel"
+      className="admin-maintenance px-panel px-panel--raised"
+      lang={locale}
       aria-labelledby="admin-maintenance-heading"
       aria-busy={pending}
     >
       <h2 id="admin-maintenance-heading">{copy.heading}</h2>
-      <p id={`${id}-scope`}>{copy.scope}</p>
-      <button type="button" disabled={pending} onClick={onRefresh}>
+      <details className="admin-maintenance__scope">
+        <summary>ⓘ {copy.preview}</summary>
+        <p id={`${id}-scope`}>{copy.scope}</p>
+      </details>
+      <button
+        className="px-button px-button--secondary"
+        type="button"
+        disabled={pending}
+        onClick={onRefresh}
+      >
         {copy.refresh}
       </button>
-      <dl>
+      <dl className="admin-maintenance__status">
         <dt>{copy.local}</dt>
-        <dd>
+        <dd className="px-badge">
           {status
             ? status.local_ready
               ? copy.ready
@@ -316,7 +326,7 @@ function MaintenanceContent({
             : copy.unknown}
         </dd>
         <dt>{copy.gateway}</dt>
-        <dd>
+        <dd className="px-badge">
           {status
             ? status.gateway_configured
               ? copy.configured
@@ -324,7 +334,7 @@ function MaintenanceContent({
             : copy.unknown}
         </dd>
         <dt>{copy.verified}</dt>
-        <dd>
+        <dd className="px-badge">
           {status
             ? status.externally_verified
               ? copy.checked
@@ -364,7 +374,7 @@ function MaintenanceContent({
         </p>
       )}
       {error && <p role="alert">{error}</p>}
-      <details className="model-editor">
+      <details className="admin-maintenance__section">
         <summary>{copy.backup}</summary>
         <form
           aria-label={copy.backup}
@@ -383,6 +393,7 @@ function MaintenanceContent({
           <p id={`${id}-password-help`}>{copy.passwordHelp}</p>
           <label htmlFor={`${id}-backup-password`}>{copy.password}</label>
           <input
+            className="px-field"
             id={`${id}-backup-password`}
             type="password"
             autoComplete="new-password"
@@ -398,6 +409,7 @@ function MaintenanceContent({
             {copy.confirmation}
           </label>
           <input
+            className="px-field"
             id={`${id}-backup-confirmation`}
             type="password"
             autoComplete="new-password"
@@ -411,6 +423,7 @@ function MaintenanceContent({
           />
           <p id={`${id}-match-help`}>{copy.matchHelp}</p>
           <button
+            className="px-button px-button--primary"
             type="submit"
             disabled={!backupAllowed}
             aria-describedby={`${id}-password-help ${id}-match-help`}
@@ -419,7 +432,10 @@ function MaintenanceContent({
           </button>
         </form>
       </details>
-      <details className="model-editor" open={!!restorePreview || undefined}>
+      <details
+        className="admin-maintenance__section"
+        open={!!restorePreview || undefined}
+      >
         <summary>{copy.restore}</summary>
         <form
           aria-label={copy.inspect}
@@ -436,6 +452,7 @@ function MaintenanceContent({
         >
           <label htmlFor={`${id}-restore-file`}>{copy.file}</label>
           <input
+            className="px-field"
             id={`${id}-restore-file`}
             ref={fileInput}
             type="file"
@@ -454,6 +471,7 @@ function MaintenanceContent({
           {!!file && !validFile(file) && <p role="alert">{copy.fileInvalid}</p>}
           <label htmlFor={`${id}-restore-password`}>{copy.password}</label>
           <input
+            className="px-field"
             id={`${id}-restore-password`}
             type="password"
             autoComplete="off"
@@ -471,6 +489,7 @@ function MaintenanceContent({
           />
           <p id={`${id}-inspect-help`}>{copy.inspectHelp}</p>
           <button
+            className="px-button px-button--secondary"
             type="submit"
             disabled={!inspectAllowed}
             aria-describedby={`${id}-inspect-help`}
@@ -513,6 +532,7 @@ function MaintenanceContent({
               {copy.restoreConsent}
             </CheckboxField>
             <button
+              className="px-button px-button--danger"
               type="button"
               disabled={!restoreAllowed}
               aria-describedby={`${id}-restore-help ${id}-auto-backup`}
@@ -535,6 +555,7 @@ function MaintenanceContent({
           </div>
         )}
         <button
+          className="px-button px-button--secondary"
           type="button"
           disabled={pending}
           onClick={() => {
@@ -564,6 +585,7 @@ function MaintenanceContent({
         {copy.pinConsent}
       </CheckboxField>
       <button
+        className="px-button px-button--danger"
         type="button"
         disabled={!pinAllowed}
         aria-describedby={`${id}-pin-help`}
@@ -586,6 +608,7 @@ function MaintenanceContent({
         </p>
       )}
       <button
+        className="px-button px-button--secondary"
         type="button"
         disabled={pending || !status?.gateway_configured}
         aria-describedby={`${id}-stop-help${!status?.gateway_configured ? ` ${id}-gateway-unavailable` : ""}`}

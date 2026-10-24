@@ -1,3 +1,4 @@
+import "../../p4-w3.css";
 import { useEffect, useRef, useState } from "react";
 import sharingGuideUrl from "../../../../../docs/PAGES_SHARING_GUIDE.md?url&no-inline";
 
@@ -234,16 +235,17 @@ export function PagesSharePanel({
     <section
       aria-labelledby="pages-share-panel-heading"
       aria-busy={pending}
-      className="admin-surface"
+      className="pages-share px-panel"
       data-testid="pages-share-panel"
       lang={locale}
     >
-      <p className="admin-section-kicker">Pages</p>
+      <p className="publication-kicker px-meta">Pages</p>
       <h2 id="pages-share-panel-heading">{copy.title}</h2>
       <p>{copy.intro}</p>
       <label htmlFor="pages-share-url">
         {copy.url}
         <input
+          className="px-field"
           autoComplete="url"
           aria-describedby="pages-share-url-help"
           disabled={pending}
@@ -258,9 +260,13 @@ export function PagesSharePanel({
           value={pagesUrl}
         />
       </label>
-      <p id="pages-share-url-help">{copy.urlHelp}</p>
-      <div className="admin-workspace__actions">
+      <details className="publication-info">
+        <summary>ⓘ {zh ? "網址說明" : "URL help"}</summary>
+        <p id="pages-share-url-help">{copy.urlHelp}</p>
+      </details>
+      <div className="publication-actions">
         <button
+          className="px-button px-button--primary"
           disabled={pending || !pagesUrl.trim() || !urlChanged}
           onClick={() => void run(savePagesUrl)}
           type="button"
@@ -269,18 +275,23 @@ export function PagesSharePanel({
         </button>
         {state?.configured && !urlChanged ? (
           <a
-            className="button"
+            className="px-button px-button--secondary"
             download="reponpc-site.zip"
             href="/api/admin/sharing/export"
           >
             {copy.export}
           </a>
         ) : (
-          <button disabled type="button">
+          <button
+            className="px-button px-button--secondary"
+            disabled
+            type="button"
+          >
             {copy.export}
           </button>
         )}
         <button
+          className="px-button px-button--secondary"
           disabled={pending || urlChanged || !state?.configured}
           onClick={() => void run(verifySite)}
           type="button"
@@ -288,6 +299,7 @@ export function PagesSharePanel({
           {copy.verify}
         </button>
         <button
+          className="px-button px-button--secondary"
           disabled={pending}
           onClick={() => void run(loadState)}
           type="button"
@@ -322,19 +334,21 @@ export function PagesSharePanel({
           </a>
         </p>
       )}
-      <h3>{copy.uploadTitle}</h3>
-      <p>
-        <a href={sharingGuideUrl} download="PAGES_SHARING_GUIDE.md">
-          {zh
-            ? "下載完整雙語分享指南"
-            : "Download the full bilingual sharing guide"}
-        </a>
-      </p>
-      <ol>
-        {copy.uploadSteps.map((step) => (
-          <li key={step}>{step}</li>
-        ))}
-      </ol>
+      <details className="publication-info">
+        <summary>ⓘ {copy.uploadTitle}</summary>
+        <p>
+          <a href={sharingGuideUrl} download="PAGES_SHARING_GUIDE.md">
+            {zh
+              ? "下載完整雙語分享指南"
+              : "Download the full bilingual sharing guide"}
+          </a>
+        </p>
+        <ol>
+          {copy.uploadSteps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      </details>
     </section>
   );
 }

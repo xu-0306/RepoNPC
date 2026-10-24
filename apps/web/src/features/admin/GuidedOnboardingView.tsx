@@ -4,6 +4,8 @@ import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { Button, Dialog, DialogTrigger, Popover } from "react-aria-components";
 
 import "./guidedAnalysis.css";
+import "../../p4-w1.css";
+import "../../p4-w2.css";
 
 import type { Locale } from "../../i18n/messages";
 import {
@@ -133,6 +135,9 @@ type Copy = {
   inferencePrivacyLabel: string;
   inferencePrivacy: string;
   noInferences: string;
+  p4Help: string;
+  p4Required: string;
+  p4Actions: string;
   contributionsHeading: string;
   contributionsDescription: string;
   ownerStatementLabel: string;
@@ -321,7 +326,10 @@ const COPY: Record<Locale, Copy> = {
     inferencePrivacyLabel: "隱私說明",
     inferencePrivacy: "不會公開，也不會自動寫進作品集。",
     noInferences: "沒有 AI 推論。",
-    contributionsHeading: "你對這個專案的貢獻",
+    p4Help: "填寫說明",
+    p4Required: "必填",
+    p4Actions: "其他操作",
+    contributionsHeading: "描述你的貢獻",
     contributionsDescription:
       "請用自己的話描述工作與不應歸屬給你的內容。AI 建議只是草稿，必須由你確認或編輯。",
     ownerStatementLabel: "你的貢獻說明",
@@ -536,7 +544,10 @@ const COPY: Record<Locale, Copy> = {
     inferencePrivacy:
       "Never public, never added to your portfolio automatically.",
     noInferences: "No AI inferences.",
-    contributionsHeading: "Your contribution to this project",
+    p4Help: "Field guidance",
+    p4Required: "Required",
+    p4Actions: "Other actions",
+    contributionsHeading: "Describe your contribution",
     contributionsDescription:
       "Describe your work and boundaries in your own words. AI suggestions are drafts that require explicit confirmation or editing.",
     ownerStatementLabel: "Your contribution description",
@@ -802,8 +813,13 @@ export function AnalysisHighlight({
           type="button"
         >
           {localized(inference.title, locale)}
+          {expanded && facts.length > 1 && (
+            <span className="guided-analysis__more" aria-hidden="true">
+              +{facts.length - 1}
+            </span>
+          )}
         </button>
-        {firstSource && (
+        {firstSource && !expanded && (
           <div className="guided-analysis__source-chip">
             <a
               href={firstSource.url}
@@ -910,8 +926,9 @@ function EvidenceGroups({
                 inference={inference}
                 key={`${repository.metadata.slug}-inference-${index}`}
                 locale={locale}
-                facts={inference.supporting_evidence_ids.flatMap((id) =>
-                  analysis.facts.filter((fact) => fact.evidence_id === id),
+                facts={[...new Set(inference.supporting_evidence_ids)].flatMap(
+                  (id) =>
+                    analysis.facts.filter((fact) => fact.evidence_id === id),
                 )}
               />
             ))}
@@ -1020,70 +1037,83 @@ function RepositoryRow({
           }}
         >
           <strong>{repository.metadata.name}</strong>
-          <code>{repository.metadata.slug}</code>
+          <span className="visually-hidden">{repository.metadata.slug}</span>
         </CheckboxField>
-        <span>
+        {repository.metadata.primary_language && (
+          <span className="px-badge">
+            {repository.metadata.primary_language}
+          </span>
+        )}
+      </div>
+      <details className="p4-w1-repository__details">
+        <summary
+          aria-label={`${copy.optionsLegend}: ${repository.metadata.name}`}
+        >
+          ⓘ
+        </summary>
+        <code>{repository.metadata.slug}</code>
+        <span className="px-meta">
           {repository.selected ? copy.selected : ""}
           {repository.metadata.is_archived ? ` · ${copy.archived}` : ""}
           {repository.metadata.is_fork ? ` · ${copy.fork}` : ""}
         </span>
-      </div>
-      {repository.metadata.description && (
-        <p>{repository.metadata.description}</p>
-      )}
-      <dl className="guided-onboarding__repository-meta">
-        {repository.metadata.primary_language && (
-          <>
-            <dt>{copy.languageLabel}</dt>
-            <dd>{repository.metadata.primary_language}</dd>
-          </>
+        {repository.metadata.description && (
+          <p>{repository.metadata.description}</p>
         )}
-        <dt>{copy.defaultBranchLabel}</dt>
-        <dd>{repository.metadata.default_branch}</dd>
-        <dt>{copy.githubLabel}</dt>
-        <dd>
-          <a
-            href={repository.metadata.html_url}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            {repository.metadata.html_url}
-          </a>
-        </dd>
-      </dl>
-      {!selectionLocked && (
-        <details>
-          <summary>{copy.optionsLegend}</summary>
-          <fieldset disabled={busy}>
-            <legend>{copy.optionsLegend}</legend>
-            <label htmlFor={`guided-ref-${slugId}`}>
-              {copy.refLabel} ({copy.refOptional})
-              <input
-                id={`guided-ref-${slugId}`}
-                onChange={(event) => optionChange("ref", event)}
-                value={repository.ref ?? ""}
-              />
-            </label>
-            <label htmlFor={`guided-include-${slugId}`}>
-              {copy.includeLabel}
-              <input
-                id={`guided-include-${slugId}`}
-                onChange={(event) => optionChange("include", event)}
-                value={repository.include.join(", ")}
-              />
-            </label>
-            <label htmlFor={`guided-exclude-${slugId}`}>
-              {copy.excludeLabel}
-              <input
-                id={`guided-exclude-${slugId}`}
-                onChange={(event) => optionChange("exclude", event)}
-                value={repository.exclude.join(", ")}
-              />
-            </label>
-          </fieldset>
-        </details>
-      )}
-      {selectionLocked && <p>{copy.selectionLocked}</p>}
+        <dl className="guided-onboarding__repository-meta">
+          {repository.metadata.primary_language && (
+            <>
+              <dt>{copy.languageLabel}</dt>
+              <dd>{repository.metadata.primary_language}</dd>
+            </>
+          )}
+          <dt>{copy.defaultBranchLabel}</dt>
+          <dd>{repository.metadata.default_branch}</dd>
+          <dt>{copy.githubLabel}</dt>
+          <dd>
+            <a
+              href={repository.metadata.html_url}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              {repository.metadata.html_url}
+            </a>
+          </dd>
+        </dl>
+        {!selectionLocked && (
+          <details>
+            <summary>{copy.optionsLegend}</summary>
+            <fieldset disabled={busy}>
+              <legend>{copy.optionsLegend}</legend>
+              <label htmlFor={`guided-ref-${slugId}`}>
+                {copy.refLabel} ({copy.refOptional})
+                <input
+                  id={`guided-ref-${slugId}`}
+                  onChange={(event) => optionChange("ref", event)}
+                  value={repository.ref ?? ""}
+                />
+              </label>
+              <label htmlFor={`guided-include-${slugId}`}>
+                {copy.includeLabel}
+                <input
+                  id={`guided-include-${slugId}`}
+                  onChange={(event) => optionChange("include", event)}
+                  value={repository.include.join(", ")}
+                />
+              </label>
+              <label htmlFor={`guided-exclude-${slugId}`}>
+                {copy.excludeLabel}
+                <input
+                  id={`guided-exclude-${slugId}`}
+                  onChange={(event) => optionChange("exclude", event)}
+                  value={repository.exclude.join(", ")}
+                />
+              </label>
+            </fieldset>
+          </details>
+        )}
+        {selectionLocked && <p>{copy.selectionLocked}</p>}
+      </details>
     </li>
   );
 }
@@ -1157,262 +1187,300 @@ function ContributionEditor({
   return (
     <article
       aria-labelledby={`guided-contribution-${slugId}`}
-      className="guided-onboarding__contribution"
+      className="guided-onboarding__contribution p4-w2__contribution"
       data-slug={repository.metadata.slug}
     >
-      <h4 id={`guided-contribution-${slugId}`}>{repository.metadata.name}</h4>
-      <p>{copy.contributionsDescription}</p>
+      <h4 className="visually-hidden" id={`guided-contribution-${slugId}`}>
+        {repository.metadata.name}
+      </h4>
       <label htmlFor={`guided-owner-statement-${slugId}`}>
         {copy.ownerStatementLabel}
         <textarea
+          className="px-field"
           aria-describedby={`guided-owner-statement-help-${slugId}`}
           disabled={busy}
           id={`guided-owner-statement-${slugId}`}
           onChange={ownerStatementChange}
-          rows={4}
+          rows={2}
           value={repository.ownerStatement}
         />
       </label>
-      <p id={`guided-owner-statement-help-${slugId}`}>
-        {copy.ownerStatementHelp}
-      </p>
-      <button
-        aria-describedby={
-          suggestReason ? `guided-suggest-reason-${slugId}` : undefined
-        }
-        disabled={suggestDisabled}
-        onClick={() => onSuggestContribution(repository.metadata.slug)}
-        type="button"
-      >
-        {busy ? copy.suggesting : copy.suggest}
-      </button>
-      {disabledReason(suggestReason, `guided-suggest-reason-${slugId}`)}
-
-      {!proposal && !repository.confirmedContribution && (
-        <>
-          <p>{copy.manualEntryHelp}</p>
+      <section className="p5-contribution__suggestion px-panel px-panel--inset">
+        <header className="p4-w2__tools">
+          {proposal && (
+            <h5 id={`guided-proposal-${slugId}`}>
+              {repository.confirmedContribution
+                ? copy.assertionConfirmed
+                : repository.proposalSource === "model"
+                  ? copy.proposalHeading
+                  : copy.manualProposalHeading}
+            </h5>
+          )}
           <button
+            className="px-button px-button--secondary"
             aria-describedby={
               suggestReason ? `guided-suggest-reason-${slugId}` : undefined
             }
-            disabled={busy || statementMissing}
-            onClick={() =>
-              onAction({
-                type: "BEGIN_MANUAL_CONTRIBUTION",
-                slug: repository.metadata.slug,
-              })
-            }
+            disabled={suggestDisabled}
+            onClick={() => onSuggestContribution(repository.metadata.slug)}
             type="button"
           >
-            {copy.manualEntry}
+            {busy ? copy.suggesting : copy.suggest}
           </button>
-        </>
-      )}
+          {disabledReason(suggestReason, `guided-suggest-reason-${slugId}`)}
+        </header>
 
-      {repository.confirmedContribution && (
-        <>
-          <p className="guided-onboarding__confirmed" role="status">
-            {copy.assertionConfirmed}
-          </p>
-          <button
-            disabled={busy}
-            onClick={() =>
-              onAction({
-                type: "EDIT_CONFIRMED_CONTRIBUTION",
-                slug: repository.metadata.slug,
-              })
-            }
-            type="button"
-          >
-            {copy.editConfirmed}
-          </button>
-        </>
-      )}
+        {!proposal && !repository.confirmedContribution && (
+          <>
+            <p>{copy.manualEntryHelp}</p>
+            <button
+              className="px-button px-button--secondary"
+              aria-describedby={
+                suggestReason ? `guided-suggest-reason-${slugId}` : undefined
+              }
+              disabled={busy || statementMissing}
+              onClick={() =>
+                onAction({
+                  type: "BEGIN_MANUAL_CONTRIBUTION",
+                  slug: repository.metadata.slug,
+                })
+              }
+              type="button"
+            >
+              {copy.manualEntry}
+            </button>
+          </>
+        )}
 
-      {proposal && (
-        <section
-          aria-labelledby={`guided-proposal-${slugId}`}
-          className="guided-onboarding__proposal"
-          data-evidence-class="OWNER_ASSERTION"
-          data-confirmed={repository.confirmedContribution ? "true" : "false"}
-        >
-          <h5 id={`guided-proposal-${slugId}`}>
-            {repository.confirmedContribution
-              ? copy.assertionConfirmed
-              : repository.proposalSource === "model"
-                ? copy.proposalHeading
-                : copy.manualProposalHeading}
-          </h5>
-          <p>
-            {repository.proposalSource === "model"
-              ? copy.proposalDescription
-              : copy.manualProposalDescription}
-          </p>
-          <p>
-            <strong>{copy.originalStatement}:</strong>{" "}
-            {repository.ownerStatement}
-          </p>
+        {repository.confirmedContribution && (
+          <>
+            <p className="guided-onboarding__confirmed" role="status">
+              {copy.assertionConfirmed}
+            </p>
+            <button
+              className="px-button px-button--secondary"
+              disabled={busy}
+              onClick={() =>
+                onAction({
+                  type: "EDIT_CONFIRMED_CONTRIBUTION",
+                  slug: repository.metadata.slug,
+                })
+              }
+              type="button"
+            >
+              {copy.editConfirmed}
+            </button>
+          </>
+        )}
+
+        {proposal && (
           <section
-            aria-labelledby={`guided-proposed-assertions-${slugId}`}
-            className="guided-onboarding__evidence guided-onboarding__evidence--proposed-assertions"
+            aria-labelledby={`guided-proposal-${slugId}`}
+            className="guided-onboarding__proposal"
+            data-evidence-class="OWNER_ASSERTION"
+            data-confirmed={repository.confirmedContribution ? "true" : "false"}
           >
-            <h6 id={`guided-proposed-assertions-${slugId}`}>
-              {proposalLocked ? copy.confirmed : copy.proposedAssertionsHeading}
-            </h6>
-            {!proposalLocked && <p>{copy.proposedAssertionsDescription}</p>}
-            {(["zh-TW", "en"] as const).map((proposalLocale) => (
-              <label
-                htmlFor={`guided-role-${slugId}-${proposalLocale}`}
-                key={`role-${proposalLocale}`}
+            <section
+              aria-labelledby={`guided-proposed-assertions-${slugId}`}
+              className="guided-onboarding__evidence guided-onboarding__evidence--proposed-assertions"
+            >
+              <h6
+                className="visually-hidden"
+                id={`guided-proposed-assertions-${slugId}`}
               >
-                {copy.roleLabel} ({copy.profileLocale(proposalLocale)})
-                <input
-                  disabled={busy || proposalLocked}
-                  id={`guided-role-${slugId}-${proposalLocale}`}
-                  onChange={(event) =>
-                    proposalChange(
-                      proposalWithField(
-                        proposal,
-                        "role",
-                        proposalLocale,
-                        event.target.value,
-                      ),
-                    )
-                  }
-                  value={localized(proposal.role, proposalLocale)}
-                />
-              </label>
-            ))}
-            {(["zh-TW", "en"] as const).map((proposalLocale) => (
-              <label
-                htmlFor={`guided-summary-${slugId}-${proposalLocale}`}
-                key={`summary-${proposalLocale}`}
-              >
-                {copy.summaryLabel} ({copy.profileLocale(proposalLocale)})
-                <textarea
-                  disabled={busy || proposalLocked}
-                  id={`guided-summary-${slugId}-${proposalLocale}`}
-                  onChange={(event) =>
-                    proposalChange(
-                      proposalWithField(
-                        proposal,
-                        "summary",
-                        proposalLocale,
-                        event.target.value,
-                      ),
-                    )
-                  }
-                  rows={3}
-                  value={localized(proposal.summary, proposalLocale)}
-                />
-              </label>
-            ))}
-            <fieldset disabled={busy || proposalLocked}>
-              <legend>{copy.claimsHeading}</legend>
-              <label htmlFor={`guided-new-claim-kind-${slugId}`}>
-                {copy.claimsHeading}
-                <select
-                  id={`guided-new-claim-kind-${slugId}`}
-                  value={newClaimKind}
-                  onChange={(event) =>
-                    setNewClaimKind(event.target.value as ClaimKind)
-                  }
-                >
-                  {(
-                    [
-                      "role",
-                      "responsibility",
-                      "achievement",
-                      "context",
-                    ] as const
-                  ).map((kind) => (
-                    <option key={kind} value={kind}>
-                      {copy.claimLabel(kind)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                onClick={() =>
-                  proposalChange({
-                    ...proposal,
-                    claims: [
-                      ...proposal.claims,
-                      {
-                        id: `claim_${crypto.randomUUID().replaceAll("-", "")}`,
-                        kind: newClaimKind,
-                        statement: { "zh-TW": "", en: "" },
-                      },
-                    ],
-                  })
-                }
-              >
-                {locale === "en" ? "Add owner statement" : "新增自述"}
-              </button>
-              {proposal.claims.flatMap((claim, index) =>
-                (["zh-TW", "en"] as const).map((proposalLocale) => (
+                {proposalLocked
+                  ? copy.confirmed
+                  : copy.proposedAssertionsHeading}
+              </h6>
+              <div className="p4-w2__fields">
+                {(["zh-TW", "en"] as const).map((proposalLocale) => (
                   <label
-                    htmlFor={`guided-claim-${slugId}-${index}-${proposalLocale}`}
-                    key={`${claim.id}-${proposalLocale}`}
+                    htmlFor={`guided-role-${slugId}-${proposalLocale}`}
+                    key={`role-${proposalLocale}`}
                   >
-                    {copy.claimLabel(claim.kind)} (
-                    {copy.profileLocale(proposalLocale)})
-                    <textarea
-                      id={`guided-claim-${slugId}-${index}-${proposalLocale}`}
+                    {copy.roleLabel} ({copy.profileLocale(proposalLocale)})
+                    <input
+                      className="px-field"
+                      disabled={busy || proposalLocked}
+                      id={`guided-role-${slugId}-${proposalLocale}`}
                       onChange={(event) =>
                         proposalChange(
-                          updateClaim(
+                          proposalWithField(
                             proposal,
-                            index,
+                            "role",
                             proposalLocale,
                             event.target.value,
                           ),
                         )
                       }
-                      rows={2}
-                      value={localized(claim.statement, proposalLocale)}
+                      value={localized(proposal.role, proposalLocale)}
                     />
                   </label>
-                )),
-              )}
-              {proposal.claims.map((claim, index) => (
-                <button
-                  key={claim.id}
-                  type="button"
-                  onClick={() =>
-                    proposalChange({
-                      ...proposal,
-                      claims: proposal.claims.filter(
-                        (_, position) => position !== index,
-                      ),
-                    })
-                  }
-                >
-                  {locale === "en" ? "Remove owner statement" : "移除自述"}{" "}
-                  {index + 1}
-                </button>
-              ))}
-            </fieldset>
+                ))}
+                {(["zh-TW", "en"] as const).map((proposalLocale) => (
+                  <label
+                    htmlFor={`guided-summary-${slugId}-${proposalLocale}`}
+                    key={`summary-${proposalLocale}`}
+                  >
+                    {copy.summaryLabel} ({copy.profileLocale(proposalLocale)})
+                    <textarea
+                      className="px-field"
+                      disabled={busy || proposalLocked}
+                      id={`guided-summary-${slugId}-${proposalLocale}`}
+                      onChange={(event) =>
+                        proposalChange(
+                          proposalWithField(
+                            proposal,
+                            "summary",
+                            proposalLocale,
+                            event.target.value,
+                          ),
+                        )
+                      }
+                      rows={3}
+                      value={localized(proposal.summary, proposalLocale)}
+                    />
+                  </label>
+                ))}
+              </div>
+              <fieldset
+                className="p5-contribution__claims"
+                disabled={busy || proposalLocked}
+              >
+                <legend id={`guided-claims-heading-${slugId}`}>
+                  {copy.claimsHeading}
+                </legend>
+                <div className="p5-contribution__add">
+                  <select
+                    className="px-field"
+                    aria-labelledby={`guided-claims-heading-${slugId}`}
+                    id={`guided-new-claim-kind-${slugId}`}
+                    value={newClaimKind}
+                    onChange={(event) =>
+                      setNewClaimKind(event.target.value as ClaimKind)
+                    }
+                  >
+                    {(
+                      [
+                        "role",
+                        "responsibility",
+                        "achievement",
+                        "context",
+                      ] as const
+                    ).map((kind) => (
+                      <option key={kind} value={kind}>
+                        {copy.claimLabel(kind)}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="px-button px-button--secondary"
+                    type="button"
+                    onClick={() =>
+                      proposalChange({
+                        ...proposal,
+                        claims: [
+                          ...proposal.claims,
+                          {
+                            id: `claim_${crypto.randomUUID().replaceAll("-", "")}`,
+                            kind: newClaimKind,
+                            statement: { "zh-TW": "", en: "" },
+                          },
+                        ],
+                      })
+                    }
+                  >
+                    {locale === "en" ? "Add owner statement" : "新增自述"}
+                  </button>
+                </div>
+                {proposal.claims.map((claim, index) => (
+                  <section
+                    className="p5-contribution__claim px-panel px-panel--inset"
+                    key={claim.id}
+                  >
+                    <header className="p4-w2__tools">
+                      <span className="px-badge">
+                        {copy.claimLabel(claim.kind)}
+                      </span>
+                      <button
+                        className="px-button px-button--quiet"
+                        type="button"
+                        onClick={() =>
+                          proposalChange({
+                            ...proposal,
+                            claims: proposal.claims.filter(
+                              (_, position) => position !== index,
+                            ),
+                          })
+                        }
+                      >
+                        {locale === "en"
+                          ? "Remove owner statement"
+                          : "移除自述"}{" "}
+                        {index + 1}
+                      </button>
+                    </header>
+                    <div className="p4-w2__fields">
+                      {(["zh-TW", "en"] as const).map((proposalLocale) => (
+                        <label
+                          htmlFor={`guided-claim-${slugId}-${index}-${proposalLocale}`}
+                          key={`${claim.id}-${proposalLocale}`}
+                        >
+                          {copy.claimLabel(claim.kind)} (
+                          {copy.profileLocale(proposalLocale)})
+                          <textarea
+                            className="px-field"
+                            id={`guided-claim-${slugId}-${index}-${proposalLocale}`}
+                            onChange={(event) =>
+                              proposalChange(
+                                updateClaim(
+                                  proposal,
+                                  index,
+                                  proposalLocale,
+                                  event.target.value,
+                                ),
+                              )
+                            }
+                            rows={2}
+                            value={localized(claim.statement, proposalLocale)}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </fieldset>
+            </section>
           </section>
-          {!proposalLocked && (
-            <>
-              <div className="guided-onboarding__proposal-actions">
-                <button
-                  aria-describedby={
-                    proposalDisabledReason
-                      ? `guided-proposal-reason-${slugId}`
-                      : undefined
-                  }
-                  disabled={Boolean(proposalDisabledReason)}
-                  className="ux-primary"
-                  onClick={() => confirmContribution(proposal)}
-                  type="button"
-                >
-                  {copy.accept}
-                </button>
+        )}
+      </section>
+      {proposal && !proposalLocked && (
+        <>
+          <footer className="p4-w2__confirm">
+            <div className="guided-onboarding__proposal-actions">
+              <button
+                aria-describedby={
+                  proposalDisabledReason
+                    ? `guided-proposal-reason-${slugId}`
+                    : undefined
+                }
+                disabled={Boolean(proposalDisabledReason)}
+                className="ux-primary px-button px-button--primary"
+                onClick={() => confirmContribution(proposal)}
+                type="button"
+              >
+                {copy.accept}
+              </button>
+              <details className="p4-w2__info">
+                <summary>
+                  <span aria-hidden="true" className="p4-w2__actions-icon">
+                    ⋯
+                  </span>
+                  <span className="p4-w2__actions-text">{copy.p4Actions}</span>
+                </summary>
                 {repository.previousContribution && (
                   <button
+                    className="px-button px-button--secondary"
                     disabled={busy}
                     onClick={() =>
                       onAction({
@@ -1426,6 +1494,7 @@ function ContributionEditor({
                   </button>
                 )}
                 <button
+                  className="px-button px-button--secondary"
                   disabled={busy}
                   onClick={() =>
                     onAction({
@@ -1437,14 +1506,14 @@ function ContributionEditor({
                 >
                   {copy.reject}
                 </button>
-              </div>
-              {disabledReason(
-                proposalDisabledReason,
-                `guided-proposal-reason-${slugId}`,
-              )}
-            </>
-          )}
-        </section>
+              </details>
+            </div>
+            {disabledReason(
+              proposalDisabledReason,
+              `guided-proposal-reason-${slugId}`,
+            )}
+          </footer>
+        </>
       )}
       {!proposal && !repository.confirmedContribution && (
         <p>{copy.proposalRequired}</p>
@@ -1467,28 +1536,34 @@ function IntroStep({
   return (
     <section
       aria-labelledby="guided-intro-heading"
-      className="guided-onboarding__step"
+      className="guided-onboarding__step p4-w1-intro px-panel"
     >
       <h2 id="guided-intro-heading">{copy.introTitle}</h2>
       <p>{copy.introBody}</p>
-      <button
-        aria-describedby="guided-start-ai-help"
-        disabled={busy}
-        onClick={() => onAction({ type: "START_AI" })}
-        type="button"
-      >
-        {copy.startAi}
-      </button>
-      <p id="guided-start-ai-help">{copy.startAiHelp}</p>
-      <button
-        aria-describedby="guided-start-manual-help"
-        disabled={busy}
-        onClick={() => onAction({ type: "START_MANUAL" })}
-        type="button"
-      >
-        {copy.startManual}
-      </button>
-      <p id="guided-start-manual-help">{copy.startManualHelp}</p>
+      <div className="p4-w1-intro__route">
+        <button
+          className="px-button px-button--primary"
+          aria-describedby="guided-start-ai-help"
+          disabled={busy}
+          onClick={() => onAction({ type: "START_AI" })}
+          type="button"
+        >
+          {copy.startAi}
+        </button>
+        <p id="guided-start-ai-help">{copy.startAiHelp}</p>
+      </div>
+      <div className="p4-w1-intro__route">
+        <button
+          className="px-button px-button--secondary"
+          aria-describedby="guided-start-manual-help"
+          disabled={busy}
+          onClick={() => onAction({ type: "START_MANUAL" })}
+          type="button"
+        >
+          {copy.startManual}
+        </button>
+        <p id="guided-start-manual-help">{copy.startManualHelp}</p>
+      </div>
       {disabledReason(busy ? copy.disabledBusy : null, "guided-start-reason")}
       <details>
         <summary>{copy.outcome}</summary>
@@ -1499,7 +1574,7 @@ function IntroStep({
         </ul>
       </details>
       <button
-        className="guided-onboarding__advanced-link"
+        className="guided-onboarding__advanced-link px-button px-button--quiet"
         disabled={busy}
         onClick={() => onAction({ type: "SET_MODE", mode: "advanced" })}
         type="button"
@@ -1625,62 +1700,79 @@ function RepositoriesStep({
   return (
     <section
       aria-labelledby="guided-repositories-heading"
-      className="guided-onboarding__step"
+      className="guided-onboarding__step p4-w1-repositories px-panel"
     >
       <h2 id="guided-repositories-heading">{copy.accountHeading}</h2>
-      <label htmlFor="guided-github-account">{copy.accountLabel}</label>
-      <input
-        aria-describedby="guided-account-help"
-        disabled={state.selectionConfirmed || busy}
-        id="guided-github-account"
-        onChange={(event) =>
-          onAction({ type: "SET_ACCOUNT", account: event.target.value })
-        }
-        value={state.githubAccount}
-      />
-      <p id="guided-account-help">{copy.accountHelp}</p>
-      <button
-        aria-describedby={discoverReason ? "guided-discover-reason" : undefined}
-        disabled={Boolean(discoverReason)}
-        onClick={() => {
-          const account = state.githubAccount.trim();
-          const page = state.discoveryPage + 1;
-          onDiscover(account, page);
-        }}
-        type="button"
-      >
-        {state.discoveryPage > 0 ? copy.discoverAgain : copy.discover}
-      </button>
-      {disabledReason(discoverReason, "guided-discover-reason")}
-
-      <form aria-labelledby="guided-manual-heading" onSubmit={resolve}>
-        <h3 id="guided-manual-heading">{copy.manualHeading}</h3>
-        <label htmlFor="guided-manual-repository">{copy.repositoryLabel}</label>
-        <input
-          aria-describedby="guided-manual-help"
-          disabled={state.selectionConfirmed || busy}
-          id="guided-manual-repository"
-          name="repository"
-          required
-        />
-        <p id="guided-manual-help">{copy.repositoryHelp}</p>
-        <label htmlFor="guided-manual-ref">
-          {copy.refLabel} ({copy.refOptional})
-        </label>
-        <input
-          disabled={state.selectionConfirmed || busy}
-          id="guided-manual-ref"
-          name="ref"
-        />
-        <button disabled={state.selectionConfirmed || busy} type="submit">
-          {copy.resolve}
-        </button>
-      </form>
+      <details className="p4-w1-sources" open={state.repositories.length === 0}>
+        <summary>{copy.discover}</summary>
+        <details
+          className="p4-w1-discovery"
+          open={state.repositories.length === 0}
+        >
+          <summary>{copy.accountLabel}</summary>
+          <label htmlFor="guided-github-account">{copy.accountLabel}</label>
+          <input
+            aria-describedby="guided-account-help"
+            disabled={state.selectionConfirmed || busy}
+            id="guided-github-account"
+            onChange={(event) =>
+              onAction({ type: "SET_ACCOUNT", account: event.target.value })
+            }
+            value={state.githubAccount}
+          />
+          <p id="guided-account-help">{copy.accountHelp}</p>
+          <button
+            aria-describedby={
+              discoverReason ? "guided-discover-reason" : undefined
+            }
+            disabled={Boolean(discoverReason)}
+            onClick={() => {
+              const account = state.githubAccount.trim();
+              const page = state.discoveryPage + 1;
+              onDiscover(account, page);
+            }}
+            type="button"
+          >
+            {state.discoveryPage > 0 ? copy.discoverAgain : copy.discover}
+          </button>
+          {disabledReason(discoverReason, "guided-discover-reason")}
+        </details>
+        <details className="p4-w1-manual">
+          <summary>{copy.manualHeading}</summary>
+          <form aria-labelledby="guided-manual-heading" onSubmit={resolve}>
+            <h3 id="guided-manual-heading">{copy.manualHeading}</h3>
+            <label htmlFor="guided-manual-repository">
+              {copy.repositoryLabel}
+            </label>
+            <input
+              aria-describedby="guided-manual-help"
+              disabled={state.selectionConfirmed || busy}
+              id="guided-manual-repository"
+              name="repository"
+              required
+            />
+            <p id="guided-manual-help">{copy.repositoryHelp}</p>
+            <label htmlFor="guided-manual-ref">
+              {copy.refLabel} ({copy.refOptional})
+            </label>
+            <input
+              disabled={state.selectionConfirmed || busy}
+              id="guided-manual-ref"
+              name="ref"
+            />
+            <button disabled={state.selectionConfirmed || busy} type="submit">
+              {copy.resolve}
+            </button>
+          </form>
+        </details>
+      </details>
 
       <section aria-labelledby="guided-repository-list-heading">
-        <h3 id="guided-repository-list-heading">{copy.repositoryHeading}</h3>
+        <h3 className="visually-hidden" id="guided-repository-list-heading">
+          {copy.repositoryHeading}
+        </h3>
         <p>{copy.repositoryCount(selectedCount, state.repositories.length)}</p>
-        <p>{copy.repositoryDescription}</p>
+        <p className="visually-hidden">{copy.repositoryDescription}</p>
         <label htmlFor="guided-repository-search">{copy.searchLabel}</label>
         <input
           id="guided-repository-search"
@@ -1705,19 +1797,22 @@ function RepositoriesStep({
           <p>{copy.noRepositories}</p>
         )}
       </section>
-      <button
-        aria-describedby={
-          selectionReason ? "guided-selection-reason" : undefined
-        }
-        disabled={Boolean(selectionReason)}
-        onClick={() => onAction({ type: "CONFIRM_SELECTION" })}
-        type="button"
-      >
-        {state.route === "manual"
-          ? copy.confirmManualSelection
-          : copy.confirmSelection}
-      </button>
-      {disabledReason(selectionReason, "guided-selection-reason")}
+      <footer className="p4-w1-confirm">
+        <button
+          className="px-button px-button--primary"
+          aria-describedby={
+            selectionReason ? "guided-selection-reason" : undefined
+          }
+          disabled={Boolean(selectionReason)}
+          onClick={() => onAction({ type: "CONFIRM_SELECTION" })}
+          type="button"
+        >
+          {state.route === "manual"
+            ? copy.confirmManualSelection
+            : copy.confirmSelection}
+        </button>
+        {disabledReason(selectionReason, "guided-selection-reason")}
+      </footer>
     </section>
   );
 }
@@ -1751,7 +1846,7 @@ function AnalysisModelStatusPanel({
   return (
     <div
       aria-labelledby="guided-provider-heading"
-      className="guided-onboarding__provider-status"
+      className="guided-onboarding__provider-status p4-w1-model-status"
       role="group"
     >
       <div>
@@ -1765,11 +1860,13 @@ function AnalysisModelStatusPanel({
           <dl>
             <dt>{copy.chatModel}</dt>
             <dd>
-              {status.chat.model_id} · {copy.modelTested}
+              <span>{status.chat.model_id}</span>
+              <span className="px-badge">{copy.modelTested}</span>
             </dd>
             <dt>{copy.searchModel}</dt>
             <dd>
-              {status.embedding.model_id} · {copy.modelTested}
+              <span>{status.embedding.model_id}</span>
+              <span className="px-badge">{copy.modelTested}</span>
             </dd>
           </dl>
         ) : (
@@ -1868,10 +1965,49 @@ function AnalysisStep({
         </div>
       );
     });
+  const startBatchAction = onCreateBatch && (
+    <div className="guided-onboarding__analysis-action">
+      <button
+        className={
+          batchAnalysisTerminal
+            ? "px-button px-button--secondary"
+            : "px-button px-button--primary"
+        }
+        aria-busy={batchCreatePending || undefined}
+        aria-describedby={
+          !batchCanCreate || batchCreatePending
+            ? "guided-batch-create-reason"
+            : undefined
+        }
+        disabled={!batchCanCreate || batchCreatePending}
+        onClick={onCreateBatch}
+        type="button"
+      >
+        {copy.createBatch}
+      </button>
+      {(!batchCanCreate || batchCreatePending) && (
+        <p
+          className="guided-onboarding__disabled-reason"
+          id="guided-batch-create-reason"
+          role={batchCreatePending ? "status" : undefined}
+        >
+          {batchCreatePending
+            ? copy.batchCreationPending
+            : copy.batchPreflightRequired}
+        </p>
+      )}
+    </div>
+  );
+  const batchDetails = (
+    <>
+      {batchAnalysisView}
+      {(batchAnalysisTerminal || hasActiveBatch) && startBatchAction}
+    </>
+  );
   return (
     <section
       aria-labelledby="guided-analysis-heading"
-      className="guided-onboarding__step guided-analysis"
+      className="guided-onboarding__step guided-analysis px-panel"
     >
       <h2 id="guided-analysis-heading">
         {allTerminal && !hasActiveBatch && repositories.some(analysisReady)
@@ -1881,40 +2017,23 @@ function AnalysisStep({
       <p>{copy.analysisDescription}</p>
       {hasBatchAnalysis ? (
         <>
-          {batchAnalysisView}
+          {batchAnalysisTerminal ? (
+            <details className="p4-w1-diagnostics">
+              <summary>
+                {locale === "zh-TW"
+                  ? "分析診斷與批次詳情"
+                  : "Analysis diagnostics and batch details"}
+              </summary>
+              {batchDetails}
+            </details>
+          ) : (
+            batchDetails
+          )}
           <BatchAnalysisResults
             copy={copy}
             locale={locale}
             repositories={repositories}
           />
-          {onCreateBatch && (
-            <div className="guided-onboarding__analysis-action">
-              <button
-                aria-busy={batchCreatePending || undefined}
-                aria-describedby={
-                  !batchCanCreate || batchCreatePending
-                    ? "guided-batch-create-reason"
-                    : undefined
-                }
-                disabled={!batchCanCreate || batchCreatePending}
-                onClick={onCreateBatch}
-                type="button"
-              >
-                {copy.createBatch}
-              </button>
-              {(!batchCanCreate || batchCreatePending) && (
-                <p
-                  className="guided-onboarding__disabled-reason"
-                  id="guided-batch-create-reason"
-                  role={batchCreatePending ? "status" : undefined}
-                >
-                  {batchCreatePending
-                    ? copy.batchCreationPending
-                    : copy.batchPreflightRequired}
-                </p>
-              )}
-            </div>
-          )}
         </>
       ) : (
         <>
@@ -1968,14 +2087,22 @@ function AnalysisStep({
           )}
         </>
       )}
-      <div className="guided-analysis__actions">
+      <footer className="guided-analysis__actions">
+        {hasBatchAnalysis &&
+          !batchAnalysisTerminal &&
+          !hasActiveBatch &&
+          startBatchAction}
         <button
           aria-describedby={
             continueReason ? "guided-analysis-continue-reason" : undefined
           }
           disabled={Boolean(continueReason)}
           onClick={() => onAction({ type: "CONTINUE_TO_CONTRIBUTIONS" })}
-          className="ux-primary"
+          className={
+            allTerminal || batchAnalysisTerminal
+              ? "px-button px-button--primary"
+              : "px-button px-button--secondary"
+          }
           type="button"
         >
           {allTerminal || batchAnalysisTerminal
@@ -1983,8 +2110,8 @@ function AnalysisStep({
             : copy.continueManually}
         </button>
         {analysisActions}
-      </div>
-      {disabledReason(continueReason, "guided-analysis-continue-reason")}
+        {disabledReason(continueReason, "guided-analysis-continue-reason")}
+      </footer>
     </section>
   );
 }
@@ -2018,26 +2145,70 @@ function ContributionsStep({
   return (
     <section
       aria-labelledby="guided-contributions-heading"
-      className="guided-onboarding__step"
+      className="guided-onboarding__step p4-w2 p4-w2--contributions px-panel px-panel--raised"
     >
-      <h2 id="guided-contributions-heading">{copy.contributionsHeading}</h2>
-      <p>{copy.contributionsDescription}</p>
-      <p role="status">
-        {copy.confirmed}:{" "}
-        {
-          repositories.filter(
-            (repository) => repository.confirmedContribution !== null,
-          ).length
-        }
-        /{repositories.length}
-      </p>
+      <header className="p4-w2__tools p5-contributions__header">
+        <h2 id="guided-contributions-heading">{copy.contributionsHeading}</h2>
+        <details className="p4-w2__info">
+          <summary>ⓘ {copy.p4Help}</summary>
+          <p>{copy.contributionsDescription}</p>
+          {repositories.map((repository) => {
+            const slugId = repository.metadata.slug.replace(
+              /[^a-zA-Z0-9_-]/g,
+              "-",
+            );
+            return (
+              <section key={repository.metadata.slug}>
+                <h3>{repository.metadata.slug}</h3>
+                <p id={`guided-owner-statement-help-${slugId}`}>
+                  {copy.ownerStatementHelp}
+                </p>
+                {repository.proposal && (
+                  <>
+                    <p>
+                      {repository.proposalSource === "model"
+                        ? copy.proposalDescription
+                        : copy.manualProposalDescription}
+                    </p>
+                    <p>
+                      <strong>{copy.originalStatement}:</strong>{" "}
+                      {repository.ownerStatement}
+                    </p>
+                    {!repository.confirmedContribution && (
+                      <p>{copy.proposedAssertionsDescription}</p>
+                    )}
+                  </>
+                )}
+              </section>
+            );
+          })}
+        </details>
+        <p className="px-meta" role="status">
+          {copy.confirmed}:{" "}
+          {
+            repositories.filter(
+              (repository) => repository.confirmedContribution !== null,
+            ).length
+          }
+          /{repositories.length}
+        </p>
+      </header>
       {repositories.map((repository, index) => (
-        <details key={repository.metadata.slug} open={index === 0}>
-          <summary>
-            {repository.metadata.slug} ·{" "}
-            {repository.confirmedContribution
-              ? copy.confirmed
-              : copy.notConfirmed}
+        <details
+          className="p5-contributions__project px-panel"
+          key={repository.metadata.slug}
+          open={index === 0}
+        >
+          <summary className="p5-contributions__project-heading">
+            <strong>{repository.metadata.slug}</strong>
+            <span className="px-badge">
+              {repository.confirmedContribution
+                ? copy.confirmed
+                : copy.notConfirmed}
+            </span>
+            <span className="p5-contributions__chevron" aria-hidden="true">
+              ▶
+            </span>
           </summary>
           <ContributionEditor
             locale={locale}
@@ -2050,18 +2221,22 @@ function ContributionsStep({
           />
         </details>
       ))}
-      <button
-        aria-describedby={
-          continueReason ? "guided-contributions-continue-reason" : undefined
-        }
-        disabled={Boolean(continueReason)}
-        onClick={() => onAction({ type: "CONTINUE_TO_PROFILE" })}
-        className="ux-primary"
-        type="button"
+      <footer
+        className={confirmationsComplete ? "p4-w2__confirm" : "p4-w2__next"}
       >
-        {copy.profileHeading}
-      </button>
-      {disabledReason(continueReason, "guided-contributions-continue-reason")}
+        <button
+          aria-describedby={
+            continueReason ? "guided-contributions-continue-reason" : undefined
+          }
+          disabled={Boolean(continueReason)}
+          onClick={() => onAction({ type: "CONTINUE_TO_PROFILE" })}
+          className={`px-button ${confirmationsComplete ? "ux-primary px-button--primary" : "px-button--secondary"}`}
+          type="button"
+        >
+          {copy.profileHeading}
+        </button>
+        {disabledReason(continueReason, "guided-contributions-continue-reason")}
+      </footer>
     </section>
   );
 }
@@ -2111,160 +2286,259 @@ function ProfileStep({
   return (
     <section
       aria-labelledby="guided-profile-heading"
-      className="guided-onboarding__step"
+      className="guided-onboarding__step p4-w2 p4-w2--profile px-panel px-panel--raised"
     >
       <h2 id="guided-profile-heading">{copy.profileHeading}</h2>
-      <p>{copy.profileDescription}</p>
+      <details className="p4-w2__info">
+        <summary>ⓘ {copy.p4Help}</summary>
+        <p>{copy.profileDescription}</p>
+      </details>
       {missing.length > 0 && (
-        <aside className="ux-missing-fields" aria-label={copy.profileRequired}>
-          <p>{copy.profileRequired}</p>
-          <ul>
-            {missing.map((field) => (
-              <li key={field.id}>
-                <a
-                  href={`#${field.id}`}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    document.getElementById(field.id)?.focus();
-                  }}
-                >
-                  {field.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </aside>
+        <details className="p4-w2__info">
+          <summary>{copy.profileRequired}</summary>
+          <aside
+            className="ux-missing-fields"
+            aria-label={copy.profileRequired}
+          >
+            <ul>
+              {missing.map((field) => (
+                <li key={field.id}>
+                  <a
+                    href={`#${field.id}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      document.getElementById(field.id)?.focus();
+                    }}
+                  >
+                    {field.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </aside>
+        </details>
       )}
-      <label htmlFor="guided-profile-display-name">
-        {copy.displayNameLabel}
-        <input
-          disabled={busy}
-          id="guided-profile-display-name"
-          required
-          onChange={(event) =>
-            setProfile(profileWithDisplayName(profile, event.target.value))
+      <div className="p4-w2__profile-fields p4-w2__fields">
+        <label htmlFor="guided-profile-display-name">
+          {copy.displayNameLabel}
+          <input
+            className="px-field"
+            disabled={busy}
+            id="guided-profile-display-name"
+            aria-invalid={!profile.displayName.trim() || undefined}
+            aria-describedby={
+              !profile.displayName.trim()
+                ? "guided-profile-display-name-required"
+                : undefined
+            }
+            required
+            onChange={(event) =>
+              setProfile(profileWithDisplayName(profile, event.target.value))
+            }
+            value={profile.displayName}
+          />
+          {!profile.displayName.trim() && (
+            <span
+              className="p4-w2__required"
+              id="guided-profile-display-name-required"
+            >
+              {copy.p4Required}
+            </span>
+          )}
+        </label>
+        <label htmlFor="guided-profile-github-login">
+          {copy.githubLoginLabel}
+          <input
+            className="px-field"
+            disabled={busy}
+            id="guided-profile-github-login"
+            aria-invalid={!profile.githubLogin.trim() || undefined}
+            aria-describedby={
+              !profile.githubLogin.trim()
+                ? "guided-profile-github-login-required"
+                : "guided-profile-github-help"
+            }
+            required
+            pattern="[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?"
+            onChange={(event) =>
+              setProfile({ ...profile, githubLogin: event.target.value })
+            }
+            value={profile.githubLogin}
+          />
+          {!profile.githubLogin.trim() && (
+            <span
+              className="p4-w2__required"
+              id="guided-profile-github-login-required"
+            >
+              {copy.p4Required}
+            </span>
+          )}
+        </label>
+        <details className="p4-w2__info p4-w2__wide">
+          <summary>ⓘ {copy.githubLoginLabel}</summary>
+          <p id="guided-profile-github-help">{copy.githubLoginHelp}</p>
+        </details>
+        <label className="p4-w2__wide" htmlFor="guided-profile-aliases">
+          {copy.aliasesLabel}
+          <textarea
+            className="px-field"
+            disabled={busy}
+            id="guided-profile-aliases"
+            onChange={(event) =>
+              setProfile({ ...profile, aliasesText: event.target.value })
+            }
+            rows={2}
+            value={profile.aliasesText}
+          />
+        </label>
+        <fieldset className="p4-w2__fields p4-w2__wide" disabled={busy}>
+          <legend>{copy.headlineLabel}</legend>
+          {(["zh-TW", "en"] as const).map((profileLocale) => (
+            <label
+              htmlFor={`guided-profile-headline-${profileLocale}`}
+              key={profileLocale}
+            >
+              {copy.profileLocale(profileLocale)}
+              <input
+                className="px-field"
+                id={`guided-profile-headline-${profileLocale}`}
+                aria-invalid={
+                  !localized(profile.headline, profileLocale).trim() ||
+                  undefined
+                }
+                aria-describedby={
+                  !localized(profile.headline, profileLocale).trim()
+                    ? `guided-profile-headline-${profileLocale}-required`
+                    : undefined
+                }
+                required
+                onChange={(event) =>
+                  setProfile(
+                    profileWithField(
+                      profile,
+                      "headline",
+                      profileLocale,
+                      event.target.value,
+                    ),
+                  )
+                }
+                value={localized(profile.headline, profileLocale)}
+              />
+              {!localized(profile.headline, profileLocale).trim() && (
+                <span
+                  className="p4-w2__required"
+                  id={`guided-profile-headline-${profileLocale}-required`}
+                >
+                  {copy.p4Required}
+                </span>
+              )}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className="p4-w2__fields p4-w2__wide" disabled={busy}>
+          <legend>{copy.bioLabel}</legend>
+          {(["zh-TW", "en"] as const).map((profileLocale) => (
+            <label
+              htmlFor={`guided-profile-bio-${profileLocale}`}
+              key={profileLocale}
+            >
+              {copy.profileLocale(profileLocale)}
+              <textarea
+                className="px-field"
+                id={`guided-profile-bio-${profileLocale}`}
+                aria-invalid={
+                  !localized(profile.bio, profileLocale).trim() || undefined
+                }
+                aria-describedby={
+                  !localized(profile.bio, profileLocale).trim()
+                    ? `guided-profile-bio-${profileLocale}-required`
+                    : undefined
+                }
+                required
+                onChange={(event) =>
+                  setProfile(
+                    profileWithField(
+                      profile,
+                      "bio",
+                      profileLocale,
+                      event.target.value,
+                    ),
+                  )
+                }
+                rows={4}
+                value={localized(profile.bio, profileLocale)}
+              />
+              {!localized(profile.bio, profileLocale).trim() && (
+                <span
+                  className="p4-w2__required"
+                  id={`guided-profile-bio-${profileLocale}-required`}
+                >
+                  {copy.p4Required}
+                </span>
+              )}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className="p4-w2__fields p4-w2__wide" disabled={busy}>
+          <legend>{copy.greetingLabel}</legend>
+          {(["zh-TW", "en"] as const).map((profileLocale) => (
+            <label
+              htmlFor={`guided-profile-greeting-${profileLocale}`}
+              key={profileLocale}
+            >
+              {copy.profileLocale(profileLocale)}
+              <textarea
+                className="px-field"
+                id={`guided-profile-greeting-${profileLocale}`}
+                aria-invalid={
+                  !localized(profile.greeting, profileLocale).trim() ||
+                  undefined
+                }
+                aria-describedby={
+                  !localized(profile.greeting, profileLocale).trim()
+                    ? `guided-profile-greeting-${profileLocale}-required`
+                    : undefined
+                }
+                required
+                onChange={(event) =>
+                  setProfile(
+                    profileWithField(
+                      profile,
+                      "greeting",
+                      profileLocale,
+                      event.target.value,
+                    ),
+                  )
+                }
+                rows={3}
+                value={localized(profile.greeting, profileLocale)}
+              />
+              {!localized(profile.greeting, profileLocale).trim() && (
+                <span
+                  className="p4-w2__required"
+                  id={`guided-profile-greeting-${profileLocale}-required`}
+                >
+                  {copy.p4Required}
+                </span>
+              )}
+            </label>
+          ))}
+        </fieldset>
+      </div>
+      <footer className="p4-w2__confirm">
+        <button
+          aria-describedby={
+            confirmationReason ? "guided-profile-confirm-reason" : undefined
           }
-          value={profile.displayName}
-        />
-      </label>
-      <label htmlFor="guided-profile-github-login">
-        {copy.githubLoginLabel}
-        <input
-          disabled={busy}
-          id="guided-profile-github-login"
-          required
-          pattern="[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?"
-          onChange={(event) =>
-            setProfile({ ...profile, githubLogin: event.target.value })
-          }
-          value={profile.githubLogin}
-        />
-      </label>
-      <p>{copy.githubLoginHelp}</p>
-      <label htmlFor="guided-profile-aliases">
-        {copy.aliasesLabel}
-        <textarea
-          disabled={busy}
-          id="guided-profile-aliases"
-          onChange={(event) =>
-            setProfile({ ...profile, aliasesText: event.target.value })
-          }
-          rows={2}
-          value={profile.aliasesText}
-        />
-      </label>
-      <fieldset disabled={busy}>
-        <legend>{copy.headlineLabel}</legend>
-        {(["zh-TW", "en"] as const).map((profileLocale) => (
-          <label
-            htmlFor={`guided-profile-headline-${profileLocale}`}
-            key={profileLocale}
-          >
-            {copy.profileLocale(profileLocale)}
-            <input
-              id={`guided-profile-headline-${profileLocale}`}
-              required
-              onChange={(event) =>
-                setProfile(
-                  profileWithField(
-                    profile,
-                    "headline",
-                    profileLocale,
-                    event.target.value,
-                  ),
-                )
-              }
-              value={localized(profile.headline, profileLocale)}
-            />
-          </label>
-        ))}
-      </fieldset>
-      <fieldset disabled={busy}>
-        <legend>{copy.bioLabel}</legend>
-        {(["zh-TW", "en"] as const).map((profileLocale) => (
-          <label
-            htmlFor={`guided-profile-bio-${profileLocale}`}
-            key={profileLocale}
-          >
-            {copy.profileLocale(profileLocale)}
-            <textarea
-              id={`guided-profile-bio-${profileLocale}`}
-              required
-              onChange={(event) =>
-                setProfile(
-                  profileWithField(
-                    profile,
-                    "bio",
-                    profileLocale,
-                    event.target.value,
-                  ),
-                )
-              }
-              rows={4}
-              value={localized(profile.bio, profileLocale)}
-            />
-          </label>
-        ))}
-      </fieldset>
-      <fieldset disabled={busy}>
-        <legend>{copy.greetingLabel}</legend>
-        {(["zh-TW", "en"] as const).map((profileLocale) => (
-          <label
-            htmlFor={`guided-profile-greeting-${profileLocale}`}
-            key={profileLocale}
-          >
-            {copy.profileLocale(profileLocale)}
-            <textarea
-              id={`guided-profile-greeting-${profileLocale}`}
-              required
-              onChange={(event) =>
-                setProfile(
-                  profileWithField(
-                    profile,
-                    "greeting",
-                    profileLocale,
-                    event.target.value,
-                  ),
-                )
-              }
-              rows={3}
-              value={localized(profile.greeting, profileLocale)}
-            />
-          </label>
-        ))}
-      </fieldset>
-      <button
-        aria-describedby={
-          confirmationReason ? "guided-profile-confirm-reason" : undefined
-        }
-        disabled={Boolean(confirmationReason)}
-        onClick={() => onAction({ type: "CONFIRM_PROFILE" })}
-        className="ux-primary"
-        type="button"
-      >
-        {copy.confirmProfile}
-      </button>
-      {disabledReason(confirmationReason, "guided-profile-confirm-reason")}
+          disabled={Boolean(confirmationReason)}
+          onClick={() => onAction({ type: "CONFIRM_PROFILE" })}
+          className="ux-primary px-button px-button--primary"
+          type="button"
+        >
+          {copy.confirmProfile}
+        </button>
+        {disabledReason(confirmationReason, "guided-profile-confirm-reason")}
+      </footer>
     </section>
   );
 }
@@ -2286,11 +2560,14 @@ function ReviewStep({
   return (
     <section
       aria-labelledby="guided-review-heading"
-      className="guided-onboarding__step"
+      className="guided-onboarding__step p4-w2 p4-w2--review px-panel px-panel--raised"
     >
       <h2 id="guided-review-heading">{copy.reviewHeading}</h2>
       <p>{copy.reviewDescription}</p>
-      <section aria-labelledby="guided-review-profile-heading">
+      <section
+        className="p4-w2__review-profile"
+        aria-labelledby="guided-review-profile-heading"
+      >
         <h3 id="guided-review-profile-heading">{copy.profileHeading}</h3>
         <dl>
           <dt>{copy.displayNameLabel}</dt>
@@ -2315,7 +2592,7 @@ function ReviewStep({
           ))}
         </dl>
       </section>
-      <ul>
+      <ul className="p4-w2__review-repositories">
         {repositories.map((repository) => (
           <li key={repository.metadata.slug}>
             <strong>{repository.metadata.slug}</strong>
@@ -2361,21 +2638,24 @@ function ReviewStep({
           </li>
         ))}
       </ul>
-      <button
-        disabled={busy}
-        onClick={() => onAction({ type: "GO_BACK" })}
-        type="button"
-      >
-        {copy.back} · {copy.profileHeading}
-      </button>
-      <button
-        className="ux-primary"
-        disabled={busy}
-        onClick={onCreateDraft}
-        type="button"
-      >
-        {copy.createDraft}
-      </button>
+      <footer className="p4-w2__confirm">
+        <button
+          className="px-button px-button--secondary"
+          disabled={busy}
+          onClick={() => onAction({ type: "GO_BACK" })}
+          type="button"
+        >
+          {copy.back} · {copy.profileHeading}
+        </button>
+        <button
+          className="ux-primary px-button px-button--primary"
+          disabled={busy}
+          onClick={onCreateDraft}
+          type="button"
+        >
+          {copy.createDraft}
+        </button>
+      </footer>
     </section>
   );
 }
@@ -2404,71 +2684,86 @@ function DraftStep({
   return (
     <section
       aria-labelledby="guided-draft-heading"
-      className="guided-onboarding__step"
+      className="guided-onboarding__step p4-w2 p4-w2--draft px-panel px-panel--raised"
     >
       <h2 id="guided-draft-heading">{copy.draftHeading}</h2>
       <p>{copy.draftDescription}</p>
-      <p>
-        {chinese
-          ? "內容草稿已完成，尚未套用。前往「預覽與分享」預覽、準備 NPC 並取得 GitHub 卡片。下方設定檔僅供備份／搬移，不是已上線網站。"
-          : "Content is complete but not applied. Open Preview & share to preview, prepare your NPC and get its GitHub card. The settings file below is a backup, not a deployed website."}
+      <details className="p4-w2__info">
+        <summary>ⓘ {copy.p4Help}</summary>
+        <p>
+          {chinese
+            ? "內容草稿已完成，尚未套用。前往「預覽與分享」預覽、準備 NPC 並取得 GitHub 卡片。下方設定檔僅供備份／搬移，不是已上線網站。"
+            : "Content is complete but not applied. Open Preview & share to preview, prepare your NPC and get its GitHub card. The settings file below is a backup, not a deployed website."}
+        </p>
+      </details>
+      <p className="px-badge" role="status">
+        {copy.draftReady}
       </p>
-      <p role="status">{copy.draftReady}</p>
-      <div className="guided-onboarding__draft-actions">
+      <footer className="p4-w2__confirm p4-w2__draft-confirm">
+        <div className="guided-onboarding__draft-actions">
+          <button
+            className="px-button px-button--secondary"
+            disabled={busy || copyStatus === "pending"}
+            onClick={async () => {
+              setCopyStatus("pending");
+              try {
+                await onCopyDraft();
+                setCopyStatus("done");
+              } catch {
+                setCopyStatus("failed");
+              }
+            }}
+            type="button"
+          >
+            {copyStatus === "done"
+              ? chinese
+                ? "已複製"
+                : "Copied"
+              : copy.copyDraft}
+          </button>
+          <button
+            className="px-button px-button--secondary"
+            disabled={busy}
+            onClick={onDownloadDraft}
+            type="button"
+          >
+            {copy.downloadDraft}
+          </button>
+        </div>
+        {copyStatus === "done" && (
+          <p role="status">
+            {chinese
+              ? "設定草稿已複製到剪貼簿。"
+              : "Configuration copied to clipboard."}
+          </p>
+        )}
+        {copyStatus === "failed" && (
+          <p role="alert">
+            {chinese
+              ? "無法使用剪貼簿，請改用備份設定（YAML）。"
+              : "Clipboard unavailable. Download the YAML instead."}
+          </p>
+        )}
+        {state.rawYamlHasUnmappedChanges && (
+          <p role="alert">{copy.rawYamlWarning}</p>
+        )}
         <button
-          disabled={busy || copyStatus === "pending"}
-          onClick={async () => {
-            setCopyStatus("pending");
-            try {
-              await onCopyDraft();
-              setCopyStatus("done");
-            } catch {
-              setCopyStatus("failed");
-            }
-          }}
+          className="px-button px-button--secondary"
+          disabled={busy}
+          onClick={() => onAction({ type: "SET_MODE", mode: "advanced" })}
           type="button"
         >
-          {copyStatus === "done"
-            ? chinese
-              ? "已複製"
-              : "Copied"
-            : copy.copyDraft}
+          {copy.advancedMode}
         </button>
-        <button disabled={busy} onClick={onDownloadDraft} type="button">
-          {copy.downloadDraft}
+        <button
+          className="px-button px-button--secondary"
+          disabled={busy}
+          onClick={() => onAction({ type: "SET_MODE", mode: "guided" })}
+          type="button"
+        >
+          {copy.guidedMode}
         </button>
-      </div>
-      {copyStatus === "done" && (
-        <p role="status">
-          {chinese
-            ? "設定草稿已複製到剪貼簿。"
-            : "Configuration copied to clipboard."}
-        </p>
-      )}
-      {copyStatus === "failed" && (
-        <p role="alert">
-          {chinese
-            ? "無法使用剪貼簿，請改用備份設定（YAML）。"
-            : "Clipboard unavailable. Download the YAML instead."}
-        </p>
-      )}
-      {state.rawYamlHasUnmappedChanges && (
-        <p role="alert">{copy.rawYamlWarning}</p>
-      )}
-      <button
-        disabled={busy}
-        onClick={() => onAction({ type: "SET_MODE", mode: "advanced" })}
-        type="button"
-      >
-        {copy.advancedMode}
-      </button>
-      <button
-        disabled={busy}
-        onClick={() => onAction({ type: "SET_MODE", mode: "guided" })}
-        type="button"
-      >
-        {copy.guidedMode}
-      </button>
+      </footer>
     </section>
   );
 }
@@ -2542,13 +2837,23 @@ export function GuidedOnboardingView({
       }}
     >
       <header className="guided-onboarding__header">
-        <h2 id="guided-onboarding-heading" ref={headingRef} tabIndex={-1}>
+        <h2
+          className="px-display"
+          id="guided-onboarding-heading"
+          ref={headingRef}
+          tabIndex={-1}
+          onBlur={(event) => delete event.currentTarget.dataset.keyboardFocus}
+          onKeyDown={(event) => {
+            event.currentTarget.dataset.keyboardFocus = "true";
+          }}
+        >
           <span className="visually-hidden">{copy.title} · </span>
           {copy.steps[state.step]}
         </h2>
         {state.step !== "intro" && (
           <div className="guided-onboarding__navigation-actions">
             <button
+              className="px-button px-button--secondary"
               aria-describedby={
                 navigationBatchActive
                   ? "guided-navigation-batch-reason"
@@ -2560,12 +2865,13 @@ export function GuidedOnboardingView({
             >
               {copy.back}
             </button>
-            <details>
+            <details className="guided-onboarding__navigation-disclosure">
               <summary>
                 {locale === "zh-TW" ? "編輯或重新開始" : "Edit or start over"}
               </summary>
               {state.step !== "repositories" && state.step !== "analysis" && (
                 <button
+                  className="px-button px-button--secondary"
                   aria-describedby={
                     navigationBatchActive
                       ? "guided-navigation-batch-reason"
@@ -2579,6 +2885,7 @@ export function GuidedOnboardingView({
                 </button>
               )}
               <ConfirmButton
+                className="px-button px-button--danger"
                 aria-describedby={
                   navigationBatchActive
                     ? "guided-navigation-batch-reason"

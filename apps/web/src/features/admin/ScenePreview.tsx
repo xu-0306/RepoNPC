@@ -98,6 +98,7 @@ export function ScenePreview({
   const desktopHeroRef = useRef<HTMLDivElement | null>(null);
   const phoneHeroRef = useRef<HTMLDivElement | null>(null);
   const visibleViewportRef = useRef<HTMLDivElement | null>(null);
+  const logicalPageRef = useRef<HTMLDivElement | null>(null);
   const focusImageRef = useRef<HTMLImageElement | null>(null);
   const focusMapRef = useRef<HTMLDivElement | null>(null);
   const focusDragging = useRef(false);
@@ -105,6 +106,7 @@ export function ScenePreview({
     viewport === "desktop" ? DESKTOP_REFERENCE_WIDTH : PHONE_REFERENCE_WIDTH;
   const [visibleScale, setVisibleScale] = useState(1);
   const [logicalViewportHeight, setLogicalViewportHeight] = useState(800);
+  const [logicalContentHeight, setLogicalContentHeight] = useState(800);
   const zh = locale === "zh-TW";
   const selectedScheme = schemes.find(
     (scheme) => scheme.id === settings.color_scheme,
@@ -131,6 +133,9 @@ export function ScenePreview({
         visibleViewportRef.current?.clientWidth ?? referenceWidth;
       setVisibleScale(previewScaleForWidth(referenceWidth, availableWidth));
       setLogicalViewportHeight(window.innerHeight);
+      setLogicalContentHeight(
+        Math.max(window.innerHeight, logicalPageRef.current?.scrollHeight ?? 0),
+      );
     };
     const observer =
       typeof ResizeObserver === "undefined"
@@ -138,6 +143,7 @@ export function ScenePreview({
         : new ResizeObserver(measure);
     if (visibleViewportRef.current)
       observer?.observe(visibleViewportRef.current);
+    if (logicalPageRef.current) observer?.observe(logicalPageRef.current);
     window.addEventListener("resize", measure);
     measure();
     return () => {
@@ -241,7 +247,100 @@ export function ScenePreview({
   }
 
   return (
-    <section className="scene-preview" aria-labelledby="scene-preview-title">
+    <section
+      className="scene-preview"
+      lang={locale}
+      aria-labelledby="scene-preview-title"
+    >
+      <fieldset
+        className="scene-preview__scheme-gallery"
+        role="radiogroup"
+        aria-labelledby="scene-preview-schemes-title"
+      >
+        <legend id="scene-preview-schemes-title">
+          {zh ? "配色方案" : "Color schemes"}
+        </legend>
+        <p>
+          {zh
+            ? "選擇方案：左淺右深，範例預覽即時更新。"
+            : "Choose a scheme: light left, dark right, with live sample previews."}
+        </p>
+        <div className="scene-preview__scheme-list">
+          {schemes.map((scheme) => {
+            const scene = sceneForScheme(scheme, selectedScene, settings);
+            return (
+              <article
+                className="scene-preview__scheme-card"
+                data-selected={settings.color_scheme === scheme.id}
+                key={scheme.id}
+              >
+                <span className="scene-preview__scheme-choice">
+                  <input
+                    className="px-field"
+                    checked={settings.color_scheme === scheme.id}
+                    id={`${idPrefix}-scene-preview-scheme-${scheme.id}`}
+                    name={`${idPrefix}-scene-preview-scheme`}
+                    onChange={() => onSchemeChange(scheme.id)}
+                    type="radio"
+                  />
+                  <label
+                    htmlFor={`${idPrefix}-scene-preview-scheme-${scheme.id}`}
+                  >
+                    {scheme.labels[locale]}
+                  </label>
+                </span>
+                <div
+                  aria-hidden="true"
+                  className="scene-preview__miniatures"
+                  inert
+                >
+                  {(["light", "dark"] as const).map((theme) => (
+                    <div
+                      className={`scene-preview__miniature scene-preview__miniature--${theme}`}
+                      key={theme}
+                    >
+                      <span className="scene-preview__miniature-label">
+                        {modeLabel(theme)}
+                      </span>
+                      <div className="scene-preview__miniature-canvas">
+                        <VisitorPage
+                          canAskSuggestion={() => false}
+                          chatAvailable={chatAvailable}
+                          characterState="idle"
+                          locale={locale}
+                          mode="preview"
+                          onLocaleChange={() => undefined}
+                          onQuestionChange={() => undefined}
+                          onRecheckStatus={() => undefined}
+                          onRetry={() => undefined}
+                          onRetryProfile={() => undefined}
+                          onSelectSuggestion={() => undefined}
+                          onSubmit={() => undefined}
+                          pending={false}
+                          previewMode={theme}
+                          profile={profile}
+                          profileError={false}
+                          question=""
+                          reducedMotion={reducedMotion}
+                          sampleContent
+                          sampleConversation={
+                            conversationMode === "conversation"
+                          }
+                          sceneOverride={scene}
+                          backgroundUrlOverride={protectedBackground}
+                          suggestions={profile.suggested_questions}
+                          turns={[]}
+                          compactPreview
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </fieldset>
       <div className="scene-preview__heading">
         <div>
           <h3 id="scene-preview-title">
@@ -257,6 +356,7 @@ export function ScenePreview({
           <fieldset>
             <legend>{zh ? "畫面" : "Viewport"}</legend>
             <button
+              className="px-button px-button--secondary"
               aria-pressed={viewport === "desktop"}
               onClick={() => setViewport("desktop")}
               type="button"
@@ -264,6 +364,7 @@ export function ScenePreview({
               {zh ? "桌面" : "Desktop"}
             </button>
             <button
+              className="px-button px-button--secondary"
               aria-pressed={viewport === "mobile"}
               onClick={() => setViewport("mobile")}
               type="button"
@@ -274,6 +375,7 @@ export function ScenePreview({
           <fieldset>
             <legend>{zh ? "套用狀態" : "Appearance"}</legend>
             <button
+              className="px-button px-button--secondary"
               aria-pressed={!showProposal}
               onClick={() => setShowProposal(false)}
               type="button"
@@ -281,6 +383,7 @@ export function ScenePreview({
               {zh ? "目前" : "Applied"}
             </button>
             <button
+              className="px-button px-button--secondary"
               aria-pressed={showProposal}
               onClick={() => setShowProposal(true)}
               type="button"
@@ -291,6 +394,7 @@ export function ScenePreview({
           <fieldset>
             <legend>{zh ? "色彩版本" : "Color variant"}</legend>
             <button
+              className="px-button px-button--secondary"
               aria-pressed={variant === "light"}
               onClick={() => setVariant("light")}
               type="button"
@@ -298,6 +402,7 @@ export function ScenePreview({
               {modeLabel("light")}
             </button>
             <button
+              className="px-button px-button--secondary"
               aria-pressed={variant === "dark"}
               onClick={() => setVariant("dark")}
               type="button"
@@ -309,6 +414,7 @@ export function ScenePreview({
             <legend>{zh ? "歡迎畫面" : "Conversation"}</legend>
             <label>
               <input
+                className="px-field"
                 checked={conversationMode === "empty"}
                 name="scene-preview-conversation"
                 onChange={() => setConversationMode("empty")}
@@ -318,6 +424,7 @@ export function ScenePreview({
             </label>
             <label>
               <input
+                className="px-field"
                 checked={conversationMode === "conversation"}
                 name="scene-preview-conversation"
                 onChange={() => setConversationMode("conversation")}
@@ -330,6 +437,7 @@ export function ScenePreview({
             <legend>{zh ? "聊天狀態" : "Chat availability"}</legend>
             <label>
               <input
+                className="px-field"
                 checked={chatAvailable}
                 name="scene-preview-availability"
                 onChange={() => setChatAvailable(true)}
@@ -339,6 +447,7 @@ export function ScenePreview({
             </label>
             <label>
               <input
+                className="px-field"
                 checked={!chatAvailable}
                 name="scene-preview-availability"
                 onChange={() => setChatAvailable(false)}
@@ -352,6 +461,7 @@ export function ScenePreview({
       <div className="scene-preview__options">
         <label>
           <input
+            className="px-field"
             checked={reducedMotion}
             onChange={(event) => setReducedMotion(event.target.checked)}
             type="checkbox"
@@ -360,6 +470,7 @@ export function ScenePreview({
         </label>
         <label>
           <input
+            className="px-field"
             checked={showFocusFrame}
             onChange={(event) => setShowFocusFrame(event.target.checked)}
             type="checkbox"
@@ -376,14 +487,15 @@ export function ScenePreview({
         <div
           className="scene-preview__scaled-viewport"
           style={{
-            height: `${logicalViewportHeight * visibleScale}px`,
+            height: `${logicalContentHeight * visibleScale}px`,
             width: `${referenceWidth * visibleScale}px`,
           }}
         >
           <div
+            ref={logicalPageRef}
             className={`scene-preview__logical-page scene-preview__reference-layout scene-preview__reference-layout--${viewport === "mobile" ? "phone" : "desktop"}`}
             style={{
-              height: `${logicalViewportHeight}px`,
+              minHeight: `${logicalViewportHeight}px`,
               transform: `scale(${visibleScale})`,
               width: `${referenceWidth}px`,
             }}
@@ -554,6 +666,7 @@ export function ScenePreview({
         <legend>{zh ? "角色狀態" : "Character state"}</legend>
         {CHARACTER_STATES.map((state) => (
           <button
+            className="px-button px-button--secondary"
             aria-pressed={characterState === state}
             key={state}
             onClick={() => setCharacterState(state)}
@@ -599,86 +712,6 @@ export function ScenePreview({
           </figure>
         ))}
       </div>
-      <fieldset className="scene-preview__scheme-gallery">
-        <legend id="scene-preview-schemes-title">
-          {zh ? "配色方案" : "Color schemes"}
-        </legend>
-        <p>
-          {zh
-            ? "每張縮圖都是訪客頁面的即時預覽，左側淺色、右側深色；選擇後預覽會立即更新。內容為範例。"
-            : "Each tile is a live visitor-page preview, light on the left and dark on the right. Selecting one updates the preview. Content is sample text."}
-        </p>
-        <div className="scene-preview__scheme-list">
-          {schemes.map((scheme) => {
-            const scene = sceneForScheme(scheme, selectedScene, settings);
-            return (
-              <article className="scene-preview__scheme-card" key={scheme.id}>
-                <span className="scene-preview__scheme-choice">
-                  <input
-                    checked={settings.color_scheme === scheme.id}
-                    id={`${idPrefix}-scene-preview-scheme-${scheme.id}`}
-                    name={`${idPrefix}-scene-preview-scheme`}
-                    onChange={() => onSchemeChange(scheme.id)}
-                    type="radio"
-                  />
-                  <label
-                    htmlFor={`${idPrefix}-scene-preview-scheme-${scheme.id}`}
-                  >
-                    {scheme.labels[locale]}
-                  </label>
-                </span>
-                <div
-                  aria-hidden="true"
-                  className="scene-preview__miniatures"
-                  inert
-                >
-                  {(["light", "dark"] as const).map((theme) => (
-                    <div
-                      className={`scene-preview__miniature scene-preview__miniature--${theme}`}
-                      key={theme}
-                    >
-                      <span className="scene-preview__miniature-label">
-                        {modeLabel(theme)}
-                      </span>
-                      <div className="scene-preview__miniature-canvas">
-                        <VisitorPage
-                          canAskSuggestion={() => false}
-                          chatAvailable={chatAvailable}
-                          characterState="idle"
-                          locale={locale}
-                          mode="preview"
-                          onLocaleChange={() => undefined}
-                          onQuestionChange={() => undefined}
-                          onRecheckStatus={() => undefined}
-                          onRetry={() => undefined}
-                          onRetryProfile={() => undefined}
-                          onSelectSuggestion={() => undefined}
-                          onSubmit={() => undefined}
-                          pending={false}
-                          previewMode={theme}
-                          profile={profile}
-                          profileError={false}
-                          question=""
-                          reducedMotion={reducedMotion}
-                          sampleContent
-                          sampleConversation={
-                            conversationMode === "conversation"
-                          }
-                          sceneOverride={scene}
-                          backgroundUrlOverride={protectedBackground}
-                          suggestions={profile.suggested_questions}
-                          turns={[]}
-                          compactPreview
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </fieldset>
       <div className="scene-preview__geometry-probes" aria-hidden="true" inert>
         <div
           className="scene-preview__geometry-probe scene-preview__geometry-probe--desktop scene-preview__reference-layout scene-preview__reference-layout--desktop"

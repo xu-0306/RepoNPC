@@ -232,9 +232,16 @@ describe("owner scene preview", () => {
       />,
     );
     expect(markup).toContain(
-      `<button disabled="" type="button">${label}</button>`,
+      `<button class="px-button px-button--secondary" disabled="" type="button">${label}</button>`,
     );
-    expect(markup).toContain('type="file"');
+    expect(markup).toContain(
+      'type="file" style="display:none" accept="image/png,image/webp,.png,.webp"',
+    );
+    expect(markup).toContain(
+      locale === "zh-TW"
+        ? "選擇 PNG 或 WebP 圖片</button>"
+        : "Choose a PNG or WebP image</button>",
+    );
   });
 
   it("uses ten real visitor page miniatures for the five light/dark scheme pairs", () => {

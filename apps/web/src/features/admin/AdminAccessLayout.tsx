@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "../../p4-w4.css";
 
 export function AdminAccessLayout({
   locale,
@@ -16,7 +17,7 @@ export function AdminAccessLayout({
   return (
     <main className="admin-auth-shell" lang={locale}>
       <section
-        className="admin-auth-card"
+        className="admin-auth-card px-panel px-panel--raised"
         aria-labelledby={headingId}
         data-mode={mode}
       >
@@ -28,6 +29,15 @@ export function AdminAccessLayout({
             {title}
           </h1>
         </header>
+        <div className="admin-auth__scene px-scene" aria-hidden="true">
+          <span className="px-scene__horizon" />
+          <span className="px-scene__celestial" />
+          <span className="px-scene__hill-far" />
+          <span className="px-scene__hill-near" />
+          <span className="px-scene__grass" />
+          <span className="px-scene__ground" />
+          <span className="px-scene__sign" />
+        </div>
         {children}
       </section>
     </main>

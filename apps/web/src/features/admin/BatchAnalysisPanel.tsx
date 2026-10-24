@@ -634,18 +634,33 @@ export function BatchAnalysisPanel({
       lang={locale}
     >
       <header className="guided-onboarding__header">
-        <p className="guided-onboarding__eyebrow">{copy.eyebrow}</p>
-        <h2 id="batch-analysis-heading">{copy.title}</h2>
-        <p>{copy.description}</p>
+        <p className="visually-hidden">{copy.eyebrow}</p>
+        <h2 className="visually-hidden" id="batch-analysis-heading">
+          {copy.title}
+        </h2>
+        <details className="p4-w1-batch-info">
+          <summary>
+            {locale === "zh-TW"
+              ? "分析與隱私說明"
+              : "Analysis and privacy details"}
+          </summary>
+          <p>{copy.description}</p>
+        </details>
       </header>
 
-      <PreflightSummary
-        canRetry={!activeJob}
-        copy={copy}
-        locale={locale}
-        onRetry={onRetryPreflight}
-        preflight={preflight}
-      />
+      <details
+        className="p4-w1-preflight"
+        open={!job && preflight.status !== "ready"}
+      >
+        <summary>{copy.preflightHeading}</summary>
+        <PreflightSummary
+          canRetry={!activeJob}
+          copy={copy}
+          locale={locale}
+          onRetry={onRetryPreflight}
+          preflight={preflight}
+        />
+      </details>
 
       {actions.error && (
         <div className="guided-onboarding__error" role="alert">
@@ -671,7 +686,7 @@ export function BatchAnalysisPanel({
             <div className="guided-onboarding__provider-status">
               <div>
                 <h4>{copy.status}</h4>
-                <p data-batch-status={job.status}>
+                <p className="px-badge" data-batch-status={job.status}>
                   {copy.batchStatus(job.status)}
                 </p>
               </div>
@@ -900,12 +915,19 @@ function ProgressSummary({
     >
       <h4 id="batch-aggregate-progress-heading">{copy.progress}</h4>
       <p>{copy.progressSummary(progress)}</p>
-      <progress
-        max={Math.max(progress.totalItems, 1)}
-        value={progress.processedItems}
-      >
-        {progress.processedItems}/{progress.totalItems}
-      </progress>
+      <div
+        className="px-progress"
+        role="progressbar"
+        aria-label={copy.progress}
+        aria-valuemin={0}
+        aria-valuemax={Math.max(progress.totalItems, 1)}
+        aria-valuenow={progress.processedItems}
+        style={
+          {
+            "--px-progress": `${(progress.processedItems / Math.max(progress.totalItems, 1)) * 100}%`,
+          } as import("react").CSSProperties
+        }
+      />
       <p
         aria-atomic="true"
         aria-live="polite"
@@ -917,32 +939,37 @@ function ProgressSummary({
           ? copy.progressAnnouncement(progress.announcement)
           : ""}
       </p>
-      <dl className="guided-onboarding__repository-meta">
-        <dt>{copy.elapsed}</dt>
-        <dd>{formatDuration(progress.elapsedSeconds, locale)}</dd>
-        <dt>{copy.remaining}</dt>
-        <dd>
-          {progress.estimatedRemaining
-            ? formatDurationRange(progress.estimatedRemaining, locale)
-            : copy.noEstimate}
-        </dd>
-        <dt>{copy.effectiveConcurrency}</dt>
-        <dd>{progress.effectiveConcurrency ?? copy.notReported}</dd>
-        <dt>{copy.serverConcurrency}</dt>
-        <dd>{progress.serverConcurrency ?? copy.notReported}</dd>
-        <dt>{copy.processed}</dt>
-        <dd>{progress.processedItems}</dd>
-        <dt>{copy.completed}</dt>
-        <dd>{progress.successfulItems}</dd>
-        <dt>{copy.active}</dt>
-        <dd>{progress.activeItems}</dd>
-        <dt>{copy.failed}</dt>
-        <dd>{progress.failedItems}</dd>
-        <dt>{copy.attention}</dt>
-        <dd>{progress.attentionItems}</dd>
-        <dt>{copy.cancelled}</dt>
-        <dd>{progress.cancelledItems}</dd>
-      </dl>
+      <details className="p4-w1-progress-details">
+        <summary>
+          {copy.elapsed} / {copy.remaining}
+        </summary>
+        <dl className="guided-onboarding__repository-meta">
+          <dt>{copy.elapsed}</dt>
+          <dd>{formatDuration(progress.elapsedSeconds, locale)}</dd>
+          <dt>{copy.remaining}</dt>
+          <dd>
+            {progress.estimatedRemaining
+              ? formatDurationRange(progress.estimatedRemaining, locale)
+              : copy.noEstimate}
+          </dd>
+          <dt>{copy.effectiveConcurrency}</dt>
+          <dd>{progress.effectiveConcurrency ?? copy.notReported}</dd>
+          <dt>{copy.serverConcurrency}</dt>
+          <dd>{progress.serverConcurrency ?? copy.notReported}</dd>
+          <dt>{copy.processed}</dt>
+          <dd>{progress.processedItems}</dd>
+          <dt>{copy.completed}</dt>
+          <dd>{progress.successfulItems}</dd>
+          <dt>{copy.active}</dt>
+          <dd>{progress.activeItems}</dd>
+          <dt>{copy.failed}</dt>
+          <dd>{progress.failedItems}</dd>
+          <dt>{copy.attention}</dt>
+          <dd>{progress.attentionItems}</dd>
+          <dt>{copy.cancelled}</dt>
+          <dd>{progress.cancelledItems}</dd>
+        </dl>
+      </details>
     </section>
   );
 }
@@ -1073,7 +1100,7 @@ function RepositoryList({
             >
               <div className="guided-onboarding__repository-header">
                 <h5 id={`batch-repository-${itemId}`}>{item.slug}</h5>
-                <p>{repositoryStateLabel(item, locale)}</p>
+                <p className="px-badge">{repositoryStateLabel(item, locale)}</p>
               </div>
               <dl className="guided-onboarding__repository-meta">
                 <dt>{copy.stage}</dt>

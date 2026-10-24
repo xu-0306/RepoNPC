@@ -1,3 +1,4 @@
+import "../../p4-w3.css";
 import { useEffect, useRef, useState } from "react";
 import { guidedErrorMessage } from "./guidedOnboarding";
 import { githubRateLimitMessage } from "./githubRetry";
@@ -564,26 +565,22 @@ export function LocalPublishingWorkspace({
                 ? "尚未準備本機 NPC。"
                 : "Local NPC has not been prepared.";
   return (
-    <div className="local-publication">
-      <nav aria-label={zh ? "預覽與分享步驟" : "Preview and sharing steps"}>
-        <a href="#local-publication-heading">
-          {zh ? "1. 本機準備與試聊" : "1. Prepare and try locally"}
-        </a>
-        {" · "}
-        <a href="#visitor-gateway-heading">
-          {zh ? "2. 訪客連線" : "2. Visitor access"}
-        </a>
-        {" · "}
-        <a href="#pages-share-panel-heading">
-          {zh ? "3. 上傳與核對網站" : "3. Upload and verify site"}
-        </a>
-        {" · "}
-        <a href="#github-share-guide-heading">
-          {zh ? "4. 分享卡片" : "4. Share card"}
-        </a>
-      </nav>
+    <div className="local-publication" lang={locale}>
+      <header className="local-publication__heading">
+        <p className="px-display">WORKSHOP / SHARE</p>
+        <h1>{zh ? "預覽與分享" : "Preview & share"}</h1>
+        <nav aria-label={zh ? "預覽與分享步驟" : "Preview and sharing steps"}>
+          <a href="#local-publication-heading">
+            {zh ? "01 預覽" : "01 Preview"}
+          </a>
+          <a href="#publication-appearance">
+            {zh ? "02 外觀（選填）" : "02 Appearance (optional)"}
+          </a>
+          <a href="#visitor-gateway-heading">{zh ? "03 分享" : "03 Share"}</a>
+        </nav>
+      </header>
       <section
-        className="admin-surface"
+        className="publication-local px-panel"
         aria-labelledby="local-publication-heading"
       >
         <h2 id="local-publication-heading">
@@ -591,8 +588,8 @@ export function LocalPublishingWorkspace({
         </h2>
         <p>
           {zh
-            ? "先預覽作品與卡片、儲存草稿，再準備或更新 NPC；完成後就能在這台電腦試聊。分享到 GitHub 是下一步：GitHub 顯示卡片，訪客點開後才會前往你的 RepoNPC 網站。"
-            : "Preview your portfolio and card, save the draft, then prepare or update the NPC. Once it is ready, try it on this computer. Sharing on GitHub comes next: GitHub shows the card, and visitors click it to open your RepoNPC site."}
+            ? "先預覽作品與卡片，再儲存草稿並準備 NPC。"
+            : "Preview your portfolio and card, then save the draft and prepare the NPC."}
         </p>
         {!content && (
           <p>
@@ -602,14 +599,19 @@ export function LocalPublishingWorkspace({
           </p>
         )}
         {!content && (
-          <button type="button" onClick={onCreateDraft}>
+          <button
+            className="px-button px-button--primary"
+            type="button"
+            onClick={onCreateDraft}
+          >
             {zh
               ? "從已確認內容建立草稿"
               : "Create draft from confirmed content"}
           </button>
         )}
-        <div className="admin-workspace__actions">
+        <div className="publication-actions publication-local__actions">
           <button
+            className="px-button px-button--primary"
             type="button"
             disabled={pending || !content}
             onClick={() => void run("local", showPreview)}
@@ -617,6 +619,7 @@ export function LocalPublishingWorkspace({
             {zh ? "預覽作品集與卡片" : "Preview portfolio and card"}
           </button>
           <button
+            className="px-button px-button--secondary"
             type="button"
             disabled={!content}
             aria-disabled={pending || !content}
@@ -627,6 +630,7 @@ export function LocalPublishingWorkspace({
             {zh ? "儲存本機草稿" : "Save local draft"}
           </button>
           <button
+            className="px-button px-button--secondary"
             type="button"
             aria-describedby={
               prepareReason ? "local-prepare-reason" : undefined
@@ -644,6 +648,7 @@ export function LocalPublishingWorkspace({
           </button>
           {preparing && (
             <button
+              className="px-button px-button--secondary"
               type="button"
               disabled={pending}
               onClick={() =>
@@ -663,7 +668,7 @@ export function LocalPublishingWorkspace({
         </div>
         {notice?.scope === "local" && (
           <p
-            className={notice.error ? "admin-workspace__notice" : undefined}
+            className={notice.error ? "publication-notice" : undefined}
             role={notice.error ? "alert" : "status"}
           >
             {notice.message}
@@ -673,7 +678,11 @@ export function LocalPublishingWorkspace({
           <p id="local-prepare-reason">
             {prepareReason}{" "}
             {!selection?.eligible && onConfigureModels && (
-              <button type="button" onClick={onConfigureModels}>
+              <button
+                className="px-button px-button--secondary"
+                type="button"
+                onClick={onConfigureModels}
+              >
                 {zh ? "前往設定模型" : "Set up models"}
               </button>
             )}{" "}
@@ -752,6 +761,84 @@ export function LocalPublishingWorkspace({
           />
         )}
       </section>
+      <details
+        id="publication-appearance"
+        className="publication-optional px-panel"
+      >
+        <summary>
+          {zh ? "選填：調整訪客外觀" : "Optional: customize visitor appearance"}
+        </summary>
+        {notice?.scope === "appearance" && (
+          <p className="publication-notice" role="alert">
+            {notice.message}
+          </p>
+        )}
+        {status?.scene_state ? (
+          <AppearancePanel
+            locale={locale}
+            initialState={status.scene_state}
+            request={request}
+            applyDisabled={
+              draftUnsaved || revision !== status.scene_state.draft_revision
+            }
+            onStateChange={(updated) => {
+              sceneGeneration.current += 1;
+              pagesGeneration.current += 1;
+              setPagesSharingState(null);
+              setStatus((current) =>
+                current ? { ...current, scene_state: updated } : current,
+              );
+              onActiveSceneChangeRef.current?.(updated);
+              const contentAtApply = contentRef.current;
+              const spriteAtApply = spriteRef.current;
+              void request<LocalDraftBody>("/api/admin/portfolio")
+                .then((saved) => {
+                  if (!mounted.current) return;
+                  if (
+                    previewInputsMatch(
+                      contentRef.current,
+                      spriteRef.current,
+                      contentAtApply,
+                      spriteAtApply,
+                    )
+                  ) {
+                    onStored(saved);
+                  } else {
+                    setNotice({
+                      scope: "appearance",
+                      message: zh
+                        ? "外觀已套用；草稿在讀回期間有新編輯，請重新載入並核對草稿後再儲存。"
+                        : "Appearance applied. The draft changed during refresh; reload and review it before saving.",
+                    });
+                  }
+                })
+                .catch(() => {
+                  if (mounted.current)
+                    setNotice({
+                      scope: "appearance",
+                      message: zh
+                        ? "外觀已套用，但草稿版本讀回失敗；請重新載入後再儲存。"
+                        : "Appearance applied, but the saved draft could not be refreshed. Reload before saving.",
+                    });
+                });
+            }}
+          />
+        ) : (
+          <section
+            className="publication-local px-panel"
+            aria-labelledby="scene-appearance-title"
+          >
+            <h2 id="scene-appearance-title">
+              {zh ? "訪客外觀" : "Visitor appearance"}
+            </h2>
+            <p>
+              {zh
+                ? "先準備本機 NPC，再預覽及套用外觀。"
+                : "Prepare the local NPC before previewing and applying appearance."}
+            </p>
+          </section>
+        )}
+      </details>
       <VisitorGatewayPanel
         locale={locale}
         request={request}
@@ -808,82 +895,7 @@ export function LocalPublishingWorkspace({
           })
         }
       />
-      <details className="admin-surface publication-optional">
-        <summary>
-          {zh ? "選填：調整訪客外觀" : "Optional: customize visitor appearance"}
-        </summary>
-        {notice?.scope === "appearance" && (
-          <p className="admin-workspace__notice" role="alert">
-            {notice.message}
-          </p>
-        )}
-        {status?.scene_state ? (
-          <AppearancePanel
-            locale={locale}
-            initialState={status.scene_state}
-            request={request}
-            applyDisabled={
-              draftUnsaved || revision !== status.scene_state.draft_revision
-            }
-            onStateChange={(updated) => {
-              sceneGeneration.current += 1;
-              pagesGeneration.current += 1;
-              setPagesSharingState(null);
-              setStatus((current) =>
-                current ? { ...current, scene_state: updated } : current,
-              );
-              onActiveSceneChangeRef.current?.(updated);
-              const contentAtApply = contentRef.current;
-              const spriteAtApply = spriteRef.current;
-              void request<LocalDraftBody>("/api/admin/portfolio")
-                .then((saved) => {
-                  if (!mounted.current) return;
-                  if (
-                    previewInputsMatch(
-                      contentRef.current,
-                      spriteRef.current,
-                      contentAtApply,
-                      spriteAtApply,
-                    )
-                  ) {
-                    onStored(saved);
-                  } else {
-                    setNotice({
-                      scope: "appearance",
-                      message: zh
-                        ? "外觀已套用；草稿在讀回期間有新編輯，請重新載入並核對草稿後再儲存。"
-                        : "Appearance applied. The draft changed during refresh; reload and review it before saving.",
-                    });
-                  }
-                })
-                .catch(() => {
-                  if (mounted.current)
-                    setNotice({
-                      scope: "appearance",
-                      message: zh
-                        ? "外觀已套用，但草稿版本讀回失敗；請重新載入後再儲存。"
-                        : "Appearance applied, but the saved draft could not be refreshed. Reload before saving.",
-                    });
-                });
-            }}
-          />
-        ) : (
-          <section
-            className="admin-surface"
-            aria-labelledby="scene-appearance-title"
-          >
-            <h2 id="scene-appearance-title">
-              {zh ? "訪客外觀" : "Visitor appearance"}
-            </h2>
-            <p>
-              {zh
-                ? "先準備本機 NPC，再預覽及套用外觀。"
-                : "Prepare the local NPC before previewing and applying appearance."}
-            </p>
-          </section>
-        )}
-      </details>
-      <details className="admin-surface publication-optional">
+      <details className="publication-optional px-panel">
         <summary>
           {zh
             ? "選填：檢查涵蓋範圍與審核 FAQ"

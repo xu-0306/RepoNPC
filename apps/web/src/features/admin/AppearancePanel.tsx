@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
+import { Button, FileTrigger } from "react-aria-components";
 
 import type { PublicProfile, PublicScene } from "../../app/publicTypes";
 import type { ScenePreviewSettings, SceneSchemeOption } from "./ScenePreview";
 import { ScenePreview } from "./ScenePreview";
 import "./scene.css";
+import "../../p4-w3.css";
 
 export interface SceneAppearanceState {
   source_bundle_id: string;
@@ -402,19 +404,22 @@ export function AppearancePanel({
 
   return (
     <section
-      className="scene-appearance admin-surface"
+      className="scene-appearance"
+      lang={locale}
       aria-labelledby="scene-appearance-title"
     >
       <header className="scene-appearance__header">
         <div>
           <h2 id="scene-appearance-title">{copy.title}</h2>
-          <p>{copy.description}</p>
+          <details className="publication-info">
+            <summary>ⓘ {copy.noModel}</summary>
+            <p>{copy.description}</p>
+          </details>
           <p className="scene-appearance__revision">
             {copy.revision}: {state.character_revision} ·{" "}
             {copy.appearanceRevision}: {state.appearance_revision}
           </p>
         </div>
-        <p className="scene-appearance__no-model">{copy.noModel}</p>
       </header>
 
       {!hasPrivateReceipt && (
@@ -432,6 +437,24 @@ export function AppearancePanel({
         </p>
       )}
 
+      {matchingProfile && (
+        <ScenePreview
+          appliedScene={state.scene}
+          desktopFrameLabel={copy.desktopFrame}
+          focusCoordinatesLabel={copy.focusCoordinates}
+          focusLabel={copy.focusPicker}
+          focusTitle={copy.focus}
+          locale={locale}
+          onFocusChange={(focus) => update({ focus })}
+          onSchemeChange={(color_scheme) => update({ color_scheme })}
+          phoneFrameLabel={copy.phoneFrame}
+          profile={matchingProfile}
+          proposalPending={dirty}
+          proposedScene={proposalScene}
+          schemes={state.schemes}
+          settings={settings}
+        />
+      )}
       <div className="scene-appearance__form">
         {!matchingProfile && (
           <fieldset>
@@ -440,6 +463,7 @@ export function AppearancePanel({
               {state.schemes.map((scheme) => (
                 <label key={scheme.id}>
                   <input
+                    className="px-field"
                     checked={settings.color_scheme === scheme.id}
                     name="appearance-color-scheme"
                     onChange={() => update({ color_scheme: scheme.id })}
@@ -456,6 +480,7 @@ export function AppearancePanel({
           <label>
             {copy.mode}
             <select
+              className="px-field"
               value={settings.color_mode}
               onChange={(event) =>
                 update({
@@ -471,7 +496,10 @@ export function AppearancePanel({
           </label>
           <label className="scene-appearance__toggle">
             <input
+              className="px-field"
               checked={settings.visitor_mode_toggle}
+              role="switch"
+              aria-checked={settings.visitor_mode_toggle}
               onChange={(event) =>
                 update({ visitor_mode_toggle: event.target.checked })
               }
@@ -481,7 +509,10 @@ export function AppearancePanel({
           </label>
           <label className="scene-appearance__toggle">
             <input
+              className="px-field"
               checked={settings.visitor_scheme_choice}
+              role="switch"
+              aria-checked={settings.visitor_scheme_choice}
               onChange={(event) =>
                 update({ visitor_scheme_choice: event.target.checked })
               }
@@ -489,9 +520,15 @@ export function AppearancePanel({
             />
             {copy.schemeChoice}
           </label>
+        </div>
+        <details className="scene-appearance__advanced">
+          <summary>
+            {locale === "zh-TW" ? "進階：強調色" : "Advanced: accent color"}
+          </summary>
           <label>
             {copy.accent}
             <input
+              className="px-field"
               aria-label={copy.accent}
               disabled={!selectedScheme}
               onChange={(event) =>
@@ -501,10 +538,14 @@ export function AppearancePanel({
               value={accentValue}
             />
           </label>
-          <button onClick={() => update({ accent: null })} type="button">
+          <button
+            className="px-button px-button--secondary"
+            onClick={() => update({ accent: null })}
+            type="button"
+          >
             {copy.useSchemeAccent}
           </button>
-        </div>
+        </details>
 
         <fieldset
           className={`scene-appearance__upload-zone${dropActive ? " scene-appearance__upload-zone--active" : ""}`}
@@ -534,6 +575,7 @@ export function AppearancePanel({
           <div className="scene-appearance__radio-row">
             <label>
               <input
+                className="px-field"
                 checked={settings.background === "current"}
                 name="appearance-background"
                 onChange={() => update({ background: "current" })}
@@ -543,6 +585,7 @@ export function AppearancePanel({
             </label>
             <label>
               <input
+                className="px-field"
                 checked={settings.background === "none"}
                 name="appearance-background"
                 onChange={() => update({ background: "none" })}
@@ -554,20 +597,22 @@ export function AppearancePanel({
               <span>{copy.backgroundDraftSelected}</span>
             )}
           </div>
-          <label className="scene-appearance__upload">
-            {copy.upload}
-            <input
-              accept="image/png,image/webp,.png,.webp"
-              disabled={busy && operationKind.current !== "preview"}
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0];
-                event.currentTarget.value = "";
-                if (file) void uploadBackground(file);
-              }}
-              type="file"
-            />
-          </label>
+          <FileTrigger
+            acceptedFileTypes={["image/png", "image/webp", ".png", ".webp"]}
+            onSelect={(files) => {
+              const file = files?.[0];
+              if (file) void uploadBackground(file);
+            }}
+          >
+            <Button
+              className="px-button px-button--secondary"
+              isDisabled={busy && operationKind.current !== "preview"}
+            >
+              {copy.upload}
+            </Button>
+          </FileTrigger>
           <button
+            className="px-button px-button--secondary"
             disabled={
               (busy && operationKind.current !== "preview") ||
               settings.background === "none"
@@ -585,6 +630,7 @@ export function AppearancePanel({
           <label>
             {copy.horizontal} ({settings.focus.x}%)
             <input
+              className="px-field"
               max="100"
               min="0"
               onChange={(event) =>
@@ -599,6 +645,7 @@ export function AppearancePanel({
           <label>
             {copy.vertical} ({settings.focus.y}%)
             <input
+              className="px-field"
               max="100"
               min="0"
               onChange={(event) =>
@@ -617,6 +664,7 @@ export function AppearancePanel({
           <label>
             {copy.dim}
             <select
+              className="px-field"
               value={settings.dim}
               onChange={(event) =>
                 update({
@@ -636,6 +684,7 @@ export function AppearancePanel({
           <label>
             {copy.scaling}
             <select
+              className="px-field"
               value={settings.scaling}
               onChange={(event) =>
                 update({
@@ -651,8 +700,30 @@ export function AppearancePanel({
         </div>
       </div>
 
-      <div className="scene-appearance__actions">
+      <div className="publication-actions">
         <button
+          className="px-button px-button--secondary"
+          disabled={busy && operationKind.current !== "preview"}
+          onClick={resetDefaults}
+          type="button"
+        >
+          {copy.reset}
+        </button>
+        <button
+          className="px-button px-button--secondary"
+          disabled={
+            (busy && operationKind.current !== "preview") ||
+            (!dirty && !privateDraftId.current)
+          }
+          onClick={() => void cancelChanges()}
+          type="button"
+        >
+          {copy.cancel}
+        </button>
+      </div>
+      <footer className="scene-appearance__actions">
+        <button
+          className="px-button px-button--secondary"
           disabled={busy || !dirty || !matchingProfile}
           onClick={() => void preview()}
           type="button"
@@ -660,6 +731,7 @@ export function AppearancePanel({
           {copy.preview}
         </button>
         <button
+          className="px-button px-button--primary"
           disabled={
             busy ||
             applyDisabled ||
@@ -673,24 +745,7 @@ export function AppearancePanel({
         >
           {copy.apply}
         </button>
-        <button
-          disabled={busy && operationKind.current !== "preview"}
-          onClick={resetDefaults}
-          type="button"
-        >
-          {copy.reset}
-        </button>
-        <button
-          disabled={
-            (busy && operationKind.current !== "preview") ||
-            (!dirty && !privateDraftId.current)
-          }
-          onClick={() => void cancelChanges()}
-          type="button"
-        >
-          {copy.cancel}
-        </button>
-      </div>
+      </footer>
       {applyDisabled && <p role="status">{copy.saveDraftFirst}</p>}
 
       {notices.length > 0 && (
@@ -717,25 +772,6 @@ export function AppearancePanel({
             })}
           </ul>
         </div>
-      )}
-
-      {matchingProfile && (
-        <ScenePreview
-          appliedScene={state.scene}
-          desktopFrameLabel={copy.desktopFrame}
-          focusCoordinatesLabel={copy.focusCoordinates}
-          focusLabel={copy.focusPicker}
-          focusTitle={copy.focus}
-          locale={locale}
-          onFocusChange={(focus) => update({ focus })}
-          onSchemeChange={(color_scheme) => update({ color_scheme })}
-          phoneFrameLabel={copy.phoneFrame}
-          profile={matchingProfile}
-          proposalPending={dirty}
-          proposedScene={proposalScene}
-          schemes={state.schemes}
-          settings={settings}
-        />
       )}
     </section>
   );

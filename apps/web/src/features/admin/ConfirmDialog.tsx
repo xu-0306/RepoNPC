@@ -9,6 +9,7 @@ import {
 } from "react-aria-components";
 
 import type { Locale } from "../../i18n/messages";
+import "../../p4-w4.css";
 
 interface ConfirmRequest {
   title: string;
@@ -42,27 +43,27 @@ export function ConfirmDialogView({
       <Modal className="admin-confirm-modal">
         <Dialog
           role="alertdialog"
-          className="admin-confirm-dialog"
+          className="admin-confirm-dialog px-dialog"
           aria-describedby={descriptionId}
           lang={locale}
         >
           <Heading slot="title">{title}</Heading>
-          <p
-            id={descriptionId}
-            className="admin-confirm-dialog__description"
-            style={{ whiteSpace: "pre-line" }}
-          >
+          <p id={descriptionId} className="admin-confirm-dialog__description">
             {description}
           </p>
           <div className="admin-confirm-dialog__actions">
-            <Button autoFocus onPress={() => onClose(false)}>
+            <Button
+              className="px-button px-button--secondary"
+              autoFocus
+              onPress={() => onClose(false)}
+            >
               {locale === "zh-TW" ? "取消" : "Cancel"}
             </Button>
             <Button
               className={
                 destructive
-                  ? "admin-confirm-dialog__confirm admin-confirm-dialog__confirm--destructive"
-                  : "admin-confirm-dialog__confirm"
+                  ? "admin-confirm-dialog__confirm admin-confirm-dialog__confirm--destructive px-button px-button--danger"
+                  : "admin-confirm-dialog__confirm px-button px-button--primary"
               }
               onPress={() => onClose(true)}
             >

@@ -281,7 +281,7 @@ describe("local publication operation feedback", () => {
       click(zh ? "儲存本機草稿" : "Save local draft");
       await expectLocal(zh ? "操作未完成" : "Could not complete");
       expect(localAlerts()[0].props.role).toBe("alert");
-      expect(localAlerts()[0].props.className).toBe("admin-workspace__notice");
+      expect(localAlerts()[0].props.className).toBe("publication-notice");
       expect(onStored).toHaveBeenCalledTimes(1);
 
       failure = "/api/admin/portfolio/prepare";

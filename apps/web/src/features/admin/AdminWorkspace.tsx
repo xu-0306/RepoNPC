@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 import { Button, Dialog, DialogTrigger, Popover } from "react-aria-components";
+import "../../p4-w4.css";
 
 import { Base64PngCanvas } from "./Base64PngCanvas";
 import { CharacterRenderer } from "../character/CharacterRenderer";
@@ -171,6 +172,7 @@ const COPY = {
     characterMode: "角色與動畫",
     advancedMode: "進階：編輯原始 YAML",
     maintenanceMode: "維護",
+    modelInfo: "模型與裝置資訊",
   },
   en: {
     title: "RepoNPC admin workspace",
@@ -227,6 +229,7 @@ const COPY = {
     characterMode: "Character & animation",
     advancedMode: "Advanced: edit raw YAML",
     maintenanceMode: "Maintenance",
+    modelInfo: "Models and device information",
   },
 } as const;
 
@@ -508,10 +511,6 @@ export function AdminWorkspace({
             </p>
           )}
 
-          {authenticated &&
-            (!guidedView || workspaceMode === "advanced") &&
-            embeddingProfileView}
-
           {authenticated && workspaceMode === "character" && characterAssetView}
 
           {!authenticated && (
@@ -528,17 +527,18 @@ export function AdminWorkspace({
             <>
               <section
                 aria-labelledby="admin-draft-heading"
-                className="admin-surface"
+                className="admin-workspace__yaml px-panel px-panel--raised"
               >
                 <h2 id="admin-draft-heading">{copy.draftHeading}</h2>
                 <label htmlFor="admin-config-draft">{copy.draftLabel}</label>
                 <p id="admin-draft-help">{copy.draftHelp}</p>
                 <textarea
+                  className="px-field"
                   aria-describedby="admin-draft-help"
                   disabled={!authenticated || busy}
                   id="admin-config-draft"
                   onChange={handleDraftChange}
-                  rows={18}
+                  rows={10}
                   value={draft}
                 />
                 <div
@@ -546,6 +546,7 @@ export function AdminWorkspace({
                   aria-label={copy.draftHeading}
                 >
                   <button
+                    className="px-button px-button--primary"
                     disabled={!authenticated || busy}
                     onClick={onValidate}
                     type="button"
@@ -553,6 +554,7 @@ export function AdminWorkspace({
                     {copy.validate}
                   </button>
                   <button
+                    className="px-button px-button--secondary"
                     disabled={!authenticated || busy}
                     onClick={onPreview}
                     type="button"
@@ -565,7 +567,7 @@ export function AdminWorkspace({
 
               <section
                 aria-labelledby="admin-validation-heading"
-                className="admin-surface"
+                className="admin-workspace__yaml-result px-panel"
               >
                 <h2 id="admin-validation-heading">{copy.validationHeading}</h2>
                 {validation?.valid === true && errors.length === 0 && (
@@ -597,10 +599,15 @@ export function AdminWorkspace({
               {preview && (
                 <section
                   aria-labelledby="admin-preview-heading"
-                  className="admin-surface"
+                  className="admin-workspace__yaml-preview px-panel"
                 >
                   <h2 id="admin-preview-heading">{copy.previewHeading}</h2>
-                  <p role="status">{copy.unsaved}</p>
+                  <p
+                    className="admin-workspace__preview-banner px-badge"
+                    role="status"
+                  >
+                    {copy.unsaved}
+                  </p>
                   {profile && (
                     <article aria-labelledby="admin-preview-profile-heading">
                       <h3 id="admin-preview-profile-heading">{copy.profile}</h3>
@@ -655,7 +662,7 @@ export function AdminWorkspace({
 
               <section
                 aria-labelledby="admin-status-heading"
-                className="admin-surface"
+                className="admin-workspace__yaml-status px-panel"
               >
                 <h2 id="admin-status-heading">{copy.statusHeading}</h2>
                 <dl>
@@ -685,23 +692,35 @@ export function AdminWorkspace({
               {snippetValue && (
                 <section
                   aria-labelledby="admin-snippet-heading"
-                  className="admin-surface"
+                  className="admin-workspace__yaml-snippet px-panel"
                 >
                   <h2 id="admin-snippet-heading">{copy.snippetHeading}</h2>
                   <label htmlFor="admin-readme-snippet">
                     {copy.snippetLabel}
                   </label>
                   <textarea
+                    className="px-field"
                     id="admin-readme-snippet"
                     readOnly
                     rows={4}
                     value={snippetValue}
                   />
-                  <button disabled={busy} onClick={onCopy} type="button">
+                  <button
+                    className="px-button px-button--secondary"
+                    disabled={busy}
+                    onClick={onCopy}
+                    type="button"
+                  >
                     {copy.copy}
                   </button>
                   <p role="status">{copy.copyReady}</p>
                 </section>
+              )}
+              {authenticated && embeddingProfileView && (
+                <details className="admin-workspace__yaml-model-info">
+                  <summary>ⓘ {copy.modelInfo}</summary>
+                  {embeddingProfileView}
+                </details>
               )}
             </>
           )}

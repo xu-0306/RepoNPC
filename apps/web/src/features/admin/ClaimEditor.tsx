@@ -1,3 +1,5 @@
+import "../../p4-w2.css";
+
 import type { SuggestedClaim } from "./guidedOnboarding";
 
 export type ClaimKind = SuggestedClaim["kind"];
@@ -27,10 +29,11 @@ export function ClaimEditor({
     context: zh ? "背景與期間" : "Context and duration",
   };
   return (
-    <fieldset disabled={disabled}>
+    <fieldset className="p4-w2-claim p4-w2__fields" disabled={disabled}>
       <legend>{zh ? "作者陳述" : "Owner statement"}</legend>
       <label htmlFor={`${id}-kind`}>{zh ? "陳述種類" : "Statement kind"}</label>
       <select
+        className="px-field"
         id={`${id}-kind`}
         value={kind}
         onChange={(event) =>
@@ -47,6 +50,7 @@ export function ClaimEditor({
         <label key={language} htmlFor={`${id}-${language}`}>
           {zh ? "作者陳述" : "Owner statement"} ({language})
           <textarea
+            className="px-field"
             id={`${id}-${language}`}
             maxLength={4000}
             rows={3}

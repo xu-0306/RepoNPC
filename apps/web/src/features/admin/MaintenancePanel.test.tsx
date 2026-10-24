@@ -200,11 +200,15 @@ describe("MaintenancePanel", () => {
 
   it("distinguishes local readiness, configuration and external verification", () => {
     const markup = render();
-    expect(markup).toContain("<dt>Local service</dt><dd>Ready</dd>");
     expect(markup).toContain(
-      "<dt>Visitor gateway configuration</dt><dd>Configured</dd>",
+      '<dt>Local service</dt><dd class="px-badge">Ready</dd>',
     );
-    expect(markup).toContain("<dt>External check</dt><dd>Not confirmed</dd>");
+    expect(markup).toContain(
+      '<dt>Visitor gateway configuration</dt><dd class="px-badge">Configured</dd>',
+    );
+    expect(markup).toContain(
+      '<dt>External check</dt><dd class="px-badge">Not confirmed</dd>',
+    );
     expect(markup).toContain("current-website-data");
     expect(markup).toContain("retained-website-data");
     expect(markup).toContain(`dateTime="${STATUS.last_backup_at}"`);

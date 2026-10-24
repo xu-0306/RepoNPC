@@ -34,8 +34,8 @@ describe("publication setup guidance", () => {
       );
       expect(markup).toContain(
         locale === "zh-TW"
-          ? '<button type="button">前往設定模型</button>'
-          : '<button type="button">Set up models</button>',
+          ? '<button class="px-button px-button--secondary" type="button">前往設定模型</button>'
+          : '<button class="px-button px-button--secondary" type="button">Set up models</button>',
       );
       expect(markup).toContain(
         locale === "zh-TW" ? "內容草稿會保留" : "Your content draft is kept",

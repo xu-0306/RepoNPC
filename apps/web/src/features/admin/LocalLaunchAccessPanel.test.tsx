@@ -10,7 +10,9 @@ describe("local access presentation", () => {
           <LocalLaunchAccessPanel locale={locale} state={state} />,
         );
         expect(markup).toContain(`class="admin-auth-shell" lang="${locale}"`);
-        expect(markup).toContain('class="admin-auth-card"');
+        expect(markup).toContain(
+          'class="admin-auth-card px-panel px-panel--raised"',
+        );
         expect(markup).toContain('class="admin-auth__title"');
         expect(markup).not.toMatch(/<(form|button|input)\b/);
         if (state === "checking") expect(markup).toContain('role="status"');

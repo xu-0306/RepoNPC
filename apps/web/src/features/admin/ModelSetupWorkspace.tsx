@@ -135,6 +135,25 @@ export function ModelSetupWorkspace({
   );
 }
 
+function revealSlotHeading(event: Event) {
+  const details = event.target as HTMLDetailsElement;
+  if (!details.open || !details.classList.contains("model-selection__info"))
+    return;
+  const footer = event.currentTarget as HTMLElement;
+  const heading = footer.parentElement?.querySelector(
+    "#chat-role-setup-heading",
+  );
+  if (!heading) return;
+  const slot = heading.getBoundingClientRect();
+  const bar = footer.getBoundingClientRect();
+  // Keep the slot context visible when inline help makes the pinned bar taller.
+  if (slot.bottom > bar.top && slot.top < bar.bottom)
+    window.scrollBy({
+      top: Math.ceil(slot.bottom - bar.top + 16),
+      behavior: "instant",
+    });
+}
+
 function reserveConfirmationSpace(confirm: HTMLElement | null) {
   if (!confirm) return;
   const slots = confirm.previousElementSibling as HTMLElement;
@@ -145,7 +164,11 @@ function reserveConfirmationSpace(confirm: HTMLElement | null) {
   const observer =
     typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reserve);
   observer?.observe(confirm);
-  return () => observer?.disconnect();
+  confirm.addEventListener("toggle", revealSlotHeading, true);
+  return () => {
+    observer?.disconnect();
+    confirm.removeEventListener("toggle", revealSlotHeading, true);
+  };
 }
 
 function ModelSlot({

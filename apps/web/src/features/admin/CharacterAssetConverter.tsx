@@ -794,6 +794,7 @@ export function CharacterAssetConverter({
             </div>
           </div>
           <div className="character-converter__source-result">
+            {status && <p role="status">{copy[status]}</p>}
             <details className="character-converter__instructions">
               <summary>ⓘ {copy.howTo}</summary>
               <p>{copy.introduction}</p>
@@ -886,7 +887,6 @@ export function CharacterAssetConverter({
                 {copy[error.kind]} ({error.detail})
               </p>
             )}
-            {status && <p role="status">{copy[status]}</p>}
             {selection && (
               <section aria-labelledby="character-candidate-heading">
                 <h3 id="character-candidate-heading">{copy.candidates}</h3>
@@ -1228,7 +1228,10 @@ export function CharacterAssetConverter({
           </div>
         </div>
         {result && (
-          <footer className="character-converter__confirm">
+          <footer
+            className="character-converter__confirm"
+            ref={reserveCharacterConfirmationSpace}
+          >
             {onApply && (
               <button
                 className="px-button px-button--primary"
@@ -1277,4 +1280,20 @@ export function CharacterAssetConverter({
       </div>
     </section>
   );
+}
+
+function reserveCharacterConfirmationSpace(footer: HTMLElement | null) {
+  if (!footer) return;
+  const editor = footer.previousElementSibling as HTMLElement;
+  const reserve = () => {
+    editor.style.setProperty(
+      "--character-confirm-height",
+      `${footer.getBoundingClientRect().height}px`,
+    );
+  };
+  reserve();
+  const observer =
+    typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reserve);
+  observer?.observe(footer);
+  return () => observer?.disconnect();
 }

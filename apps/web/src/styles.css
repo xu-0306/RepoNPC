@@ -480,7 +480,6 @@ input {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 .admin-status-overview > summary,
-.guided-onboarding__navigation-actions summary,
 .publication-optional > summary {
   cursor: pointer;
   min-height: 2.75rem;
@@ -576,7 +575,7 @@ input {
   background: #eeedf4;
   border-radius: 999px;
   color: #514f67;
-  font-size: 0.7rem;
+  font-size: max(14px, 0.875rem);
   font-weight: 800;
   padding: 0.25rem 0.5rem;
 }
@@ -604,18 +603,53 @@ input {
 }
 .guided-onboarding__header {
   display: grid;
-  gap: 0.75rem;
+  gap: 8px;
 }
-.guided-onboarding__header > h2 {
-  font-size: clamp(1.35rem, 2.3vw, 1.85rem);
+.guided-onboarding > .guided-onboarding__header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+}
+#guided-onboarding-heading {
+  border: 0;
+  border-radius: 0;
+  font-size: 28px;
   margin: 0;
   max-width: none;
+  outline: none;
+}
+.guided-onboarding
+  > .guided-onboarding__header
+  .guided-onboarding__navigation-actions
+  :focus-visible {
+  border-radius: 0;
+  outline: 3px solid var(--px-focus);
+  outline-offset: 2px;
+}
+#guided-onboarding-heading:focus-visible[data-keyboard-focus="true"] {
+  outline: 3px solid var(--px-focus);
+  outline-offset: 2px;
 }
 .guided-onboarding__navigation-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: start;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 8px 12px;
+}
+.guided-onboarding__navigation-actions > details > summary {
+  box-sizing: border-box;
+  color: var(--px-accent);
+  cursor: pointer;
+  font-family: var(--px-font-body);
+  font-size: 14px;
+  font-weight: 400;
+  min-height: 44px;
+  padding-block: 10px;
+}
+.guided-onboarding__navigation-actions > details > .px-button {
+  margin: 8px 12px 4px 0;
 }
 .guided-onboarding__step > h2 {
   font-size: clamp(1.45rem, 2.6vw, 2rem);
@@ -689,7 +723,7 @@ input {
 }
 .admin-section-kicker {
   color: var(--admin-primary);
-  font-size: 0.72rem;
+  font-size: max(14px, 0.875rem);
   font-weight: 850;
   letter-spacing: 0.08em;
   margin: 0 0 0.35rem;
@@ -833,7 +867,7 @@ input {
   background: var(--admin-primary-soft);
   border-radius: 999px;
   color: var(--admin-primary-dark);
-  font-size: 0.68rem;
+  font-size: max(14px, 0.875rem);
   font-weight: 800;
   padding: 0.25rem 0.5rem;
 }
@@ -1502,7 +1536,7 @@ form button {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
-  max-width: 33rem;
+  max-width: 40rem;
   min-width: 0;
 }
 .admin-workspace__locale {
@@ -1563,8 +1597,12 @@ form button {
   text-decoration: none;
 }
 .admin-workspace__help > span[aria-hidden="true"] {
-  border: 1px solid var(--px-line);
-  padding-inline: 5px;
+  align-items: center;
+  border: 2px solid var(--px-line);
+  display: inline-flex;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
 }
 .admin-workspace__owner {
   align-items: center;
@@ -1870,13 +1908,8 @@ form button {
 .model-selection__info > p {
   background: var(--px-surface);
   border: 2px solid var(--px-line);
-  bottom: calc(100% + 8px);
-  left: 20px;
-  margin: 0;
+  margin: 8px 0;
   padding: 12px;
-  position: absolute;
-  right: 20px;
-  z-index: 1;
 }
 .model-setup-workspace__confirm .model-selection label {
   font-size: 14px;
@@ -1961,7 +1994,7 @@ form button {
 }
 .character-converter__workbench:has(> .character-converter__confirm)
   .character-converter__editor {
-  padding-bottom: 84px;
+  padding-bottom: var(--character-confirm-height, 84px);
 }
 .model-setup-workspace :is(h3, button, input, select, summary),
 .character-converter :is(h3, h4, button, input, select, summary) {
@@ -2326,25 +2359,25 @@ form button {
     display: inline;
   }
   .guided-onboarding[data-step="models"],
-  .guided-onboarding[data-step="models"] .guided-onboarding__header,
+  .guided-onboarding__header,
   .guided-onboarding__step--models {
     gap: 8px;
   }
-  .guided-onboarding[data-step="models"]
-    .guided-onboarding__navigation-actions {
+  .guided-onboarding > .guided-onboarding__header {
+    gap: 8px;
+  }
+  #guided-onboarding-heading {
+    font-size: 20px;
+  }
+  .guided-onboarding__navigation-actions {
     align-items: center;
   }
-  .guided-onboarding[data-step="models"]
-    .guided-onboarding__navigation-actions
-    > button {
+  .guided-onboarding__navigation-actions > button {
     min-height: 44px;
     padding: 6px 12px;
     white-space: nowrap;
   }
-  .guided-onboarding[data-step="models"]
-    .guided-onboarding__navigation-actions
-    > details
-    > summary {
+  .guided-onboarding__navigation-actions > details > summary {
     min-height: 44px;
     padding-block: 6px;
     white-space: nowrap;
@@ -2399,17 +2432,14 @@ form button {
     padding-right: 128px;
   }
   .model-setup-workspace__confirm .model-selection__info {
-    position: absolute;
-    right: 6px;
-    top: 2px;
+    grid-row: 4;
   }
   .model-selection__info > summary {
-    min-height: 24px;
-  }
-  .model-selection__info > p {
-    left: auto;
-    right: 0;
-    width: 300px;
+    align-content: center;
+    min-height: 44px;
+    position: absolute;
+    right: 6px;
+    top: 0;
   }
   .model-setup-workspace__confirm .model-selection > p {
     align-self: center;

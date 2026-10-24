@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import "../../p4-w4.css";
 
 import type { Locale } from "../../i18n/messages";
 import {

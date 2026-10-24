@@ -22,15 +22,15 @@
 .scene-appearance__revision,
 .scene-appearance__no-model,
 .scene-appearance__unknown {
-  color: var(--admin-muted);
+  color: var(--px-muted);
 }
 
 .scene-appearance__unknown,
 .scene-appearance__notices,
 .scene-preview {
-  background: var(--admin-surface);
-  border: 1px solid var(--admin-border);
-  border-radius: 1rem;
+  background: var(--px-surface);
+  border: 1px solid var(--px-line);
+  border-radius: 0;
   padding: clamp(1rem, 2vw, 1.5rem);
 }
 
@@ -43,8 +43,8 @@
 .scene-appearance__controls-grid,
 .scene-preview__controls fieldset,
 .scene-preview__states {
-  border: 1px solid var(--admin-border);
-  border-radius: 0.8rem;
+  border: 1px solid var(--px-line);
+  border-radius: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 0.7rem;
@@ -86,7 +86,7 @@
 }
 
 .scene-appearance__form input[type="range"] {
-  accent-color: var(--admin-primary);
+  accent-color: var(--px-accent);
 }
 
 .scene-appearance__upload-zone {
@@ -96,19 +96,19 @@
 }
 
 .scene-appearance__upload-zone--active {
-  background: var(--admin-primary-soft);
-  outline: 2px solid var(--admin-primary);
+  background: var(--px-surface-alt);
+  outline: 2px solid var(--px-accent);
   outline-offset: -3px;
 }
 
 .scene-appearance__drop-hint {
-  color: var(--admin-muted);
+  color: var(--px-muted);
   margin: 0.45rem 0 0;
 }
 
 .scene-appearance__notice-reason {
   display: block;
-  color: var(--admin-muted);
+  color: var(--px-muted);
   margin-top: 0.2rem;
 }
 
@@ -142,11 +142,9 @@
 }
 
 .scene-preview__viewport {
-  border: 1px solid var(--admin-border);
-  border-radius: 1rem;
-  max-height: 48rem;
-  overflow: auto;
-  resize: vertical;
+  border: 1px solid var(--px-line);
+  border-radius: 0;
+  overflow: hidden;
 }
 
 .scene-preview__viewport--mobile {
@@ -162,16 +160,15 @@
 
 .scene-preview__logical-page {
   left: 0;
-  overflow-x: hidden;
-  overflow-y: scroll;
+  overflow: visible;
   position: absolute;
   top: 0;
   transform-origin: top left;
 }
 
 .scene-preview__focus {
-  border: 1px solid var(--admin-border);
-  border-radius: 0.8rem;
+  border: 1px solid var(--px-line);
+  border-radius: 0;
   display: grid;
   gap: 0.65rem;
   min-width: 0;
@@ -179,9 +176,9 @@
 }
 
 .scene-preview__focus-map {
-  background: var(--admin-field);
-  border: 1px solid var(--admin-border);
-  border-radius: 0.6rem;
+  background: var(--px-surface-alt);
+  border: 1px solid var(--px-line);
+  border-radius: 0;
   cursor: crosshair;
   justify-self: start;
   line-height: 0;
@@ -193,7 +190,7 @@
 }
 
 .scene-preview__focus-map:focus-visible {
-  outline: 3px solid var(--admin-primary);
+  outline: 3px solid var(--px-accent);
   outline-offset: 3px;
 }
 
@@ -207,13 +204,13 @@
 
 .scene-preview__focus-empty {
   aspect-ratio: 16 / 9;
-  background: linear-gradient(135deg, var(--admin-surface), var(--admin-field));
+  background: linear-gradient(135deg, var(--px-surface), var(--px-surface-alt));
   width: min(32rem, calc(100vw - 3rem));
 }
 
 .scene-preview__crop {
-  border: 2px dashed var(--admin-surface);
-  box-shadow: 0 0 0 2px var(--admin-primary);
+  border: 2px dashed var(--px-surface);
+  box-shadow: 0 0 0 2px var(--px-accent);
   pointer-events: none;
   position: absolute;
 }
@@ -221,14 +218,14 @@
 .scene-preview__crop--phone {
   border-style: solid;
   box-shadow:
-    0 0 0 2px var(--admin-surface),
-    0 0 0 4px var(--admin-primary);
+    0 0 0 2px var(--px-surface),
+    0 0 0 4px var(--px-accent);
 }
 
 .scene-preview__focus-point {
-  border: 2px solid var(--admin-surface);
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--admin-primary);
+  border: 2px solid var(--px-surface);
+  border-radius: 0;
+  box-shadow: 0 0 0 2px var(--px-accent);
   height: 0.9rem;
   pointer-events: none;
   position: absolute;
@@ -245,16 +242,16 @@
 
 .scene-preview__crop-legend > span {
   align-items: center;
-  background: var(--admin-surface);
-  border: 1px solid var(--admin-border);
-  border-radius: 999px;
+  background: var(--px-surface);
+  border: 1px solid var(--px-line);
+  border-radius: 0;
   display: inline-flex;
   gap: 0.4rem;
   padding: 0.25rem 0.55rem;
 }
 
 .scene-preview__crop-key {
-  border: 2px dashed var(--admin-primary);
+  border: 2px dashed var(--px-accent);
   display: inline-block;
   height: 0.8rem;
   width: 1.1rem;
@@ -269,7 +266,7 @@
 }
 
 .scene-preview__focus-help {
-  color: var(--admin-muted);
+  color: var(--px-muted);
   margin: 0;
 }
 
@@ -292,7 +289,7 @@
 .scene-preview__geometry-probe {
   height: 100vh;
   left: 0;
-  overflow-y: scroll;
+  overflow-y: hidden;
   position: absolute;
   top: 0;
 }
@@ -391,8 +388,8 @@
 
 .scene-preview__sprites figure {
   align-items: center;
-  border: 1px solid var(--admin-border);
-  border-radius: 0.8rem;
+  border: 1px solid var(--px-line);
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -408,13 +405,13 @@
 }
 
 .scene-preview__sprites figcaption {
-  color: var(--admin-muted);
-  font-size: 0.82rem;
+  color: var(--px-muted);
+  font-size: 13px;
   text-align: center;
 }
 
 .scene-preview__scheme-gallery {
-  border-top: 1px solid var(--admin-border);
+  border-top: 1px solid var(--px-line);
   padding-top: 1rem;
 }
 
@@ -430,8 +427,8 @@
 }
 
 .scene-preview__scheme-card {
-  border: 1px solid var(--admin-border);
-  border-radius: 0.8rem;
+  border: 1px solid var(--px-line);
+  border-radius: 0;
   cursor: pointer;
   display: block;
   min-width: 0;
@@ -440,7 +437,7 @@
 }
 
 .scene-preview__scheme-card:focus-within {
-  outline: 2px solid var(--admin-primary);
+  outline: 2px solid var(--px-accent);
   outline-offset: 2px;
 }
 
@@ -454,7 +451,7 @@
 }
 
 .scene-preview__scheme-choice input {
-  accent-color: var(--admin-primary);
+  accent-color: var(--px-accent);
 }
 
 .scene-preview__miniatures {
@@ -468,12 +465,12 @@
 }
 
 .scene-preview__miniature + .scene-preview__miniature {
-  border-left: 1px solid var(--admin-border);
+  border-left: 1px solid var(--px-line);
 }
 
 .scene-preview__miniature-label {
   display: block;
-  font-size: 0.75rem;
+  font-size: 13px;
   font-weight: 700;
   padding: 0.35rem 0.5rem;
 }
@@ -493,7 +490,7 @@
 }
 
 .scene-preview__miniature .visitor-preview-banner {
-  font-size: 0.7rem;
+  font-size: 13px;
   margin-inline: -1rem;
   padding: 0.3rem;
 }
@@ -545,7 +542,7 @@
 .scene-preview__miniature .visitor-log__heading p,
 .scene-preview__miniature .visitor-welcome-card,
 .scene-preview__miniature .turn {
-  font-size: 0.75rem;
+  font-size: 13px;
   line-height: 1.25;
 }
 

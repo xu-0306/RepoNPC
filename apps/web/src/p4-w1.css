@@ -1,0 +1,415 @@
+/* P4 w1: the same stepped panels and page-level action bars as Set F. */
+.guided-onboarding
+  .guided-onboarding__step:not(.guided-onboarding__step--models) {
+  background: var(--px-surface);
+  border: 0;
+  border-radius: 0;
+  box-shadow:
+    4px 0 0 var(--px-line),
+    -4px 0 0 var(--px-line),
+    0 4px 0 var(--px-line),
+    0 -4px 0 var(--px-line),
+    8px 8px 0 var(--px-shadow);
+  color: var(--px-ink);
+  font-family: var(--px-font-body);
+  font-size: max(15px, 1rem);
+  gap: 12px;
+  margin: 4px;
+  padding: 20px;
+}
+.guided-onboarding[data-step="intro"],
+.guided-onboarding[data-step="repositories"],
+.guided-onboarding[data-step="analysis"] {
+  gap: 16px;
+}
+.guided-onboarding:is(
+    [data-step="intro"],
+    [data-step="repositories"],
+    [data-step="analysis"]
+  )
+  :focus-visible {
+  outline: 3px solid var(--px-focus);
+  outline-offset: 4px;
+}
+.guided-onboarding:is(
+    [data-step="intro"],
+    [data-step="repositories"],
+    [data-step="analysis"]
+  )
+  button:not(.px-button):not(.guided-analysis__toggle):not(
+    .guided-analysis__info
+  ),
+.batch-analysis-panel button {
+  background: var(--px-surface-alt);
+  border: 2px solid var(--px-line);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 var(--px-shadow);
+  color: var(--px-ink);
+  font-family: var(--px-font-body);
+  font-size: max(14px, 0.875rem);
+  line-height: 1.5;
+  min-height: 44px;
+  padding: 8px 12px;
+}
+.guided-onboarding:is(
+    [data-step="intro"],
+    [data-step="repositories"],
+    [data-step="analysis"]
+  )
+  :is(input:not([type="checkbox"]), select) {
+  background: var(--px-surface);
+  border: 2px solid var(--px-line);
+  border-radius: 0;
+  box-shadow: inset 3px 3px 0 var(--px-surface-alt);
+  color: var(--px-ink);
+  font-family: var(--px-font-body);
+  font-size: max(15px, 1rem);
+  min-height: 44px;
+  min-width: 0;
+  width: 100%;
+}
+.p4-w1-intro p,
+.p4-w1-repositories p,
+.guided-analysis > p {
+  margin: 0;
+}
+.p4-w1-intro__route {
+  border-top: 1px dashed var(--px-muted);
+  display: grid;
+  gap: 10px;
+  padding-top: 16px;
+}
+.p4-w1-intro__route button {
+  justify-self: start;
+}
+.p4-w1-intro .guided-onboarding__advanced-link {
+  justify-self: start;
+}
+.guided-onboarding:is(
+    [data-step="intro"],
+    [data-step="repositories"],
+    [data-step="analysis"]
+  )
+  summary,
+.batch-analysis-panel summary {
+  box-sizing: border-box;
+  color: var(--px-accent);
+  cursor: pointer;
+  font-size: max(14px, 0.875rem);
+  min-height: 44px;
+  padding-block: 10px;
+}
+.p4-w1-repositories .p4-w1-manual form,
+.p4-w1-repositories fieldset {
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  padding: 12px 0;
+}
+.p4-w1-repositories > section > h3 {
+  margin: 0;
+}
+.p4-w1-repositories > section > p {
+  color: var(--px-muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.p4-w1-repositories > section > ul {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0 0 100px;
+}
+.p4-w1-repositories .guided-onboarding__repository {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--px-line);
+  border-radius: 0;
+  display: grid;
+  gap: 0 8px;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  margin: 0;
+  padding: 4px 0;
+}
+.p4-w1-repositories .guided-onboarding__repository-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+.p4-w1-repositories .checkbox-field {
+  align-items: center;
+  flex: 1;
+  font-size: 15px;
+  min-height: 44px;
+  padding-block: 4px;
+}
+.p4-w1-repositories .checkbox-field__text {
+  display: block;
+}
+.p4-w1-repositories .px-badge {
+  flex: none;
+  font-size: 14px;
+}
+.p4-w1-repository__details {
+  display: contents;
+}
+.p4-w1-repository__details > summary {
+  grid-column: 2;
+  grid-row: 1;
+  list-style: none;
+  text-align: center;
+  width: 44px;
+}
+.p4-w1-repository__details > :not(summary) {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.p4-w1-repository__details > summary::-webkit-details-marker {
+  display: none;
+}
+.p4-w1-repositories .guided-onboarding__repository-meta,
+.batch-analysis-panel .guided-onboarding__repository-meta {
+  font-size: 13px;
+  margin-block: 8px;
+}
+.p4-w1-confirm,
+.guided-analysis__actions {
+  align-items: center;
+  background: var(--px-surface-alt);
+  border-top: 2px solid var(--px-line);
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0 -20px -20px;
+  padding: 12px 20px;
+  position: sticky;
+  z-index: 2;
+}
+.p4-w1-confirm > p,
+.guided-analysis__actions > p {
+  font-size: 13px;
+  margin: 0;
+}
+.guided-analysis__results,
+.guided-analysis__repositories {
+  padding-bottom: 100px;
+}
+.p4-w1-model-status.guided-onboarding__provider-status,
+.guided-analysis .batch-analysis-panel .guided-onboarding__provider-status {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed var(--px-muted);
+  border-radius: 0;
+  padding: 12px 0;
+}
+.p4-w1-model-status dl {
+  display: grid;
+  gap: 8px 16px;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin: 8px 0;
+}
+.p4-w1-model-status dd {
+  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+}
+.p4-w1-model-status dd > span:first-child {
+  flex: 1 1 16rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.p4-w1-model-status .px-badge {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.guided-analysis .batch-analysis-panel.guided-onboarding__step {
+  background: transparent;
+  box-shadow: none;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+.batch-analysis-panel .guided-onboarding__eyebrow {
+  color: var(--px-accent);
+  font-size: 13px;
+}
+.batch-analysis-panel :is(h2, h3, h4, h5, p) {
+  margin-block: 4px;
+}
+.batch-analysis-panel h5 {
+  font-size: 15px;
+}
+.batch-analysis-panel .guided-onboarding__repository {
+  border: 0;
+  border-bottom: 1px solid var(--px-line);
+  border-radius: 0;
+  padding: 8px 0;
+}
+.batch-analysis-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.batch-analysis-panel .px-badge {
+  flex: 0 0 auto;
+}
+.batch-analysis-panel__progress {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+.guided-analysis__row .guided-analysis__toggle {
+  font-family: var(--px-font-body);
+  font-size: max(15px, 1rem);
+}
+.guided-analysis__chip {
+  color: var(--px-muted);
+}
+.guided-analysis__body a,
+.guided-analysis__source-chip a {
+  box-sizing: border-box;
+  font-size: 14px;
+  min-height: 44px;
+}
+@media (max-width: 760px) {
+  .guided-onboarding
+    .guided-onboarding__step:not(.guided-onboarding__step--models) {
+    padding: 12px;
+  }
+  .guided-onboarding:is(
+    [data-step="intro"],
+    [data-step="repositories"],
+    [data-step="analysis"]
+  ) {
+    gap: 8px;
+  }
+  .p4-w1-repositories .guided-onboarding__repository-header {
+    align-items: start;
+    flex-direction: column;
+    gap: 0;
+  }
+  .p4-w1-repositories .guided-onboarding__repository-header .px-badge {
+    margin-left: 32px;
+  }
+  .p4-w1-confirm,
+  .guided-analysis__actions {
+    border: 2px solid var(--px-line);
+    bottom: 0;
+    box-shadow: 0 -4px 0 var(--px-shadow);
+    left: 16px;
+    margin: 0;
+    padding: 10px 12px;
+    position: fixed;
+    right: 16px;
+  }
+  .p4-w1-confirm > button,
+  .guided-analysis__actions > button {
+    width: 100%;
+  }
+  .p4-w1-repositories > section > ul,
+  .guided-analysis__results,
+  .guided-analysis__repositories {
+    padding-bottom: 180px;
+  }
+  .p4-w1-model-status dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .p4-w1-model-status dd {
+    margin-bottom: 8px;
+  }
+}
+.guided-onboarding
+  :is(.p4-w1-intro, .p4-w1-repositories, .guided-analysis)
+  > h2 {
+  font-size: 24px;
+  line-height: 1.4;
+  max-width: none;
+}
+.guided-onboarding:is(
+    [data-step="intro"],
+    [data-step="repositories"],
+    [data-step="analysis"]
+  )
+  :is(input:not([type="checkbox"]), select) {
+  box-sizing: border-box;
+  height: 44px;
+  line-height: 1.5;
+  padding: 8px 12px;
+}
+.p4-w1-repositories > section {
+  display: grid;
+  gap: 4px 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.p4-w1-repositories > section > label {
+  font-size: 14px;
+  grid-column: 1;
+  grid-row: 1;
+}
+.p4-w1-repositories > section > p:not(.visually-hidden) {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+}
+.p4-w1-repositories > section > :is(input, ul) {
+  grid-column: 1 / -1;
+}
+.guided-analysis__repository {
+  padding-block: 8px;
+}
+.guided-analysis__highlights h4,
+.guided-analysis__note {
+  display: inline-flex;
+  margin: 0;
+}
+.guided-analysis__highlights h4 {
+  margin-right: 12px;
+}
+@media (max-width: 760px) {
+  .p4-w1-repositories > section {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .p4-w1-repositories > section > p:not(.visually-hidden) {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+.p4-w1-repositories input[type="checkbox"] {
+  accent-color: var(--px-accent);
+}
+.guided-onboarding:is(
+    [data-step="intro"],
+    [data-step="repositories"],
+    [data-step="analysis"]
+  )
+  .guided-onboarding__disabled-reason {
+  border-color: var(--px-warning);
+  color: var(--px-muted);
+  font-size: max(13px, 0.875rem);
+}
+.guided-analysis .guided-onboarding__confirmed {
+  background: var(--px-success-soft);
+  border-color: var(--px-success);
+  color: var(--px-success);
+}
+.guided-analysis__actions > .guided-onboarding__analysis-action {
+  gap: 4px;
+}
+.guided-analysis__actions > .guided-onboarding__analysis-action > p {
+  font-size: 13px;
+  margin: 0;
+}
+@media (max-width: 760px) {
+  .guided-analysis__actions > .guided-onboarding__analysis-action,
+  .guided-analysis__actions > .guided-onboarding__analysis-action > button {
+    width: 100%;
+  }
+}
+.guided-analysis__toggle .guided-analysis__more {
+  margin-inline-start: auto;
+}

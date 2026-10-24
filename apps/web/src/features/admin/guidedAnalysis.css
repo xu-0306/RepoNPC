@@ -1,6 +1,5 @@
 .guided-onboarding__step.guided-analysis {
-  border-radius: 8px;
-  box-shadow: none;
+  border-radius: 0;
 }
 
 .guided-analysis__results > ul,
@@ -17,7 +16,7 @@
 }
 
 .guided-analysis__repository + .guided-analysis__repository {
-  border-top: 1px solid var(--admin-border);
+  border-top: 1px solid var(--px-line);
 }
 
 .guided-analysis__repo {
@@ -25,7 +24,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 0.75rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 8px;
 }
 
 .guided-analysis__repo h3,
@@ -37,16 +36,17 @@
 
 .guided-analysis__chip,
 .guided-analysis__source-chip a {
-  background: color-mix(in srgb, var(--admin-ink) 5%, var(--admin-surface));
-  border-radius: 6px;
-  font-size: 0.8rem;
+  background: var(--px-surface-alt);
+  border-radius: 0;
+  font-size: 14px;
+  border: 2px solid var(--px-line);
   padding: 0.25rem 0.55rem;
 }
 
 .guided-analysis__chip,
 .guided-analysis__note,
 .guided-analysis__more {
-  color: var(--admin-muted);
+  color: var(--px-muted);
 }
 
 .guided-analysis__note {
@@ -65,7 +65,7 @@
 .guided-analysis .guided-analysis__retry button {
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   color: inherit;
   min-height: 44px;
 }
@@ -77,10 +77,12 @@
 }
 
 .guided-analysis__popover {
-  background: var(--admin-ink);
-  border-radius: 6px;
-  color: var(--admin-surface);
-  font-size: 0.85rem;
+  background: var(--px-surface);
+  border: 2px solid var(--px-line);
+  box-shadow: 4px 4px 0 var(--px-shadow);
+  border-radius: 0;
+  color: var(--px-ink);
+  font-size: 13px;
   max-width: min(20rem, calc(100vw - 2rem));
   padding: 0.65rem 0.85rem;
 }
@@ -90,12 +92,12 @@
 }
 
 .guided-analysis__list {
-  border-bottom: 1px solid var(--admin-border);
+  border-bottom: 1px solid var(--px-line);
   margin-top: 0.5rem;
 }
 
 .guided-analysis__highlight {
-  border-top: 1px solid var(--admin-border);
+  border-top: 1px solid var(--px-line);
   overflow-wrap: anywhere;
 }
 
@@ -117,8 +119,8 @@
 }
 
 .guided-analysis__toggle::before {
-  border-bottom: 2px solid var(--admin-muted);
-  border-right: 2px solid var(--admin-muted);
+  border-bottom: 2px solid var(--px-muted);
+  border-right: 2px solid var(--px-muted);
   content: "";
   flex: none;
   height: 0.42rem;
@@ -149,7 +151,7 @@
 
 .guided-analysis__more {
   flex: none;
-  font-size: 0.85rem;
+  font-size: 13px;
 }
 
 .guided-analysis__body {
@@ -174,8 +176,8 @@
 }
 
 .guided-analysis__body .guided-analysis__missing {
-  color: var(--admin-muted);
-  font-size: 0.85rem;
+  color: var(--px-muted);
+  font-size: 13px;
   margin: 0.25rem 0 0;
 }
 
@@ -183,13 +185,13 @@
 .guided-analysis .guided-analysis__info:hover:not(:disabled),
 .guided-analysis .guided-analysis__toggle:hover:not(:disabled),
 .guided-analysis .guided-analysis__retry button:hover:not(:disabled) {
-  color: var(--admin-primary);
+  color: var(--px-accent);
 }
 
 .guided-analysis button:focus-visible,
 .guided-analysis a:focus-visible,
 .guided-analysis__popover [role="dialog"]:focus-visible {
-  outline: 3px solid var(--admin-primary);
+  outline: 3px solid var(--px-accent);
   outline-offset: 2px;
 }
 
@@ -206,11 +208,11 @@
 }
 
 .guided-analysis__actions button {
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 .guided-analysis .guided-analysis__retry button {
-  color: var(--admin-muted);
+  color: var(--px-muted);
 }
 
 @media (max-width: 40rem) {

@@ -120,8 +120,15 @@ it("lets the equipment and converter content scroll with the page around sticky 
     /\.model-setup-workspace__slots\s*\{[^}]*padding-bottom: 128px/s,
   );
   expect(css).toMatch(
-    /:has\(> \.character-converter__confirm\)[^{]*\{[^}]*padding-bottom: 84px/s,
+    /:has\(> \.character-converter__confirm\)[^{]*\{[^}]*padding-bottom: var\(--character-confirm-height, 84px\)/s,
   );
+  const converter = readFileSync(
+    new URL("CharacterAssetConverter.tsx", import.meta.url),
+    "utf8",
+  );
+  expect(converter).toContain("ref={reserveCharacterConfirmationSpace}");
+  expect(converter).toContain('"--character-confirm-height"');
+  expect(converter).toContain("new ResizeObserver(reserve)");
 });
 
 it("composes a compact phone header and two-row navigation without squeezing desktop chrome", () => {

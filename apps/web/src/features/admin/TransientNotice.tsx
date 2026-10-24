@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import "../../p4-w4.css";
 
 /** Mount with a new key for each confirmed operation, including repeated saves. */
 export function TransientNotice({ message }: { message: string }) {

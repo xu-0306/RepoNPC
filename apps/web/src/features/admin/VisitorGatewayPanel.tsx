@@ -1,3 +1,4 @@
+import "../../p4-w3.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AdminLocale } from "./AdminWorkspace";
 import { ModelSetupRequests } from "./modelSetupRequests";
@@ -405,7 +406,7 @@ export function VisitorGatewayPanel({
   return (
     <section
       aria-labelledby="visitor-gateway-heading"
-      className="admin-surface visitor-gateway"
+      className="visitor-gateway px-panel"
     >
       <h2 id="visitor-gateway-heading">
         {zh ? "2. 設定訪客連線" : "2. Set up visitor access"}
@@ -497,7 +498,16 @@ export function VisitorGatewayPanel({
         </>
       )}
 
+      {(!status || gateway.pending || !publicSharingAvailable) && (
+        <p className="visitor-gateway__lock px-badge">
+          <span aria-hidden="true">▣ </span>
+          {zh
+            ? "已鎖定：等待狀態或使用正式模式後可編輯"
+            : "Locked: wait for status or use production mode to edit"}
+        </p>
+      )}
       <fieldset
+        aria-disabled={!status || gateway.pending || !publicSharingAvailable}
         className="visitor-gateway__origins"
         disabled={!status || gateway.pending || !publicSharingAvailable}
       >
@@ -509,6 +519,7 @@ export function VisitorGatewayPanel({
         <label htmlFor="visitor-gateway-origin">
           {zh ? "Tailscale Funnel 訪客網址" : "Tailscale Funnel visitor origin"}
           <input
+            className="px-field"
             autoCapitalize="none"
             autoComplete="url"
             id="visitor-gateway-origin"
@@ -522,6 +533,7 @@ export function VisitorGatewayPanel({
         <label htmlFor="visitor-funnel-port">
           {zh ? "公開入口連接埠" : "Public entry port"}
           <select
+            className="px-field"
             id="visitor-funnel-port"
             onChange={(event) =>
               edit(
@@ -544,6 +556,7 @@ export function VisitorGatewayPanel({
             ? "GitHub Pages 網域（不含專案路徑）"
             : "GitHub Pages domain (without a project path)"}
           <input
+            className="px-field"
             aria-describedby="visitor-pages-origin-help"
             placeholder="https://account.github.io"
             autoCapitalize="none"
@@ -559,6 +572,7 @@ export function VisitorGatewayPanel({
         <label htmlFor="visitor-local-port">
           {zh ? "本機訪客服務連接埠" : "Local visitor service port"}
           <input
+            className="px-field"
             id="visitor-local-port"
             inputMode="numeric"
             max={65535}
@@ -574,16 +588,19 @@ export function VisitorGatewayPanel({
           <p>{zh ? "目前使用預設值" : "Using the default"}</p>
         )}
       </fieldset>
-      <p id="visitor-pages-origin-help">
-        {zh
-          ? "例如網站是 https://account.github.io/project/，這裡只填 https://account.github.io。下一步再填完整網站網址。儲存後啟動本機訪客服務，並依下方說明在 Tailscale 啟用 Funnel。"
-          : "For https://account.github.io/project/, enter only https://account.github.io here. Enter the full site URL in the next step. After saving, start the local visitor service and enable Funnel in Tailscale using the instructions below."}
-      </p>
-      <p>
-        {zh
-          ? "必須同時填入兩個網址，或同時清空。儲存不會驗證 Pages 託管狀態、GitHub 卡片或外網連線。gateway 執行中時，須先停止才能變更來源。"
-          : "Enter both origins or clear both. Saving does not verify Pages hosting, GitHub cards, or external reachability. Stop the gateway before changing origins while it is running."}
-      </p>
+      <details className="publication-info">
+        <summary>ⓘ {zh ? "來源網址與儲存說明" : "Origins and saving"}</summary>
+        <p id="visitor-pages-origin-help">
+          {zh
+            ? "例如網站是 https://account.github.io/project/，這裡只填 https://account.github.io。下一步再填完整網站網址。儲存後啟動本機訪客服務，並依下方說明在 Tailscale 啟用 Funnel。"
+            : "For https://account.github.io/project/, enter only https://account.github.io here. Enter the full site URL in the next step. After saving, start the local visitor service and enable Funnel in Tailscale using the instructions below."}
+        </p>
+        <p>
+          {zh
+            ? "必須同時填入兩個網址，或同時清空。儲存不會驗證 Pages 託管狀態、GitHub 卡片或外網連線。gateway 執行中時，須先停止才能變更來源。"
+            : "Enter both origins or clear both. Saving does not verify Pages hosting, GitHub cards, or external reachability. Stop the gateway before changing origins while it is running."}
+        </p>
+      </details>
       {changed && status?.external_verified && (
         <p role="status">
           {zh
@@ -613,8 +630,9 @@ export function VisitorGatewayPanel({
         </p>
       )}
 
-      <div className="admin-workspace__actions visitor-gateway__actions">
+      <div className="publication-actions visitor-gateway__actions">
         <button
+          className="px-button px-button--secondary"
           disabled={
             !status ||
             !publicSharingAvailable ||
@@ -631,6 +649,7 @@ export function VisitorGatewayPanel({
         </button>
         {changed && (
           <button
+            className="px-button px-button--secondary"
             disabled={gateway.pending}
             onClick={() => {
               setDraft(null);
@@ -643,7 +662,12 @@ export function VisitorGatewayPanel({
               : "Discard changes and load latest settings"}
           </button>
         )}
-        <button disabled={!canStart} onClick={() => void start()} type="button">
+        <button
+          className="px-button px-button--secondary"
+          disabled={!canStart}
+          onClick={() => void start()}
+          type="button"
+        >
           {status?.enabled
             ? zh
               ? "重試啟動訪客連線"
@@ -652,10 +676,16 @@ export function VisitorGatewayPanel({
               ? "啟動訪客連線"
               : "Start visitor access"}
         </button>
-        <button disabled={!canStop} onClick={() => void stop()} type="button">
+        <button
+          className="px-button px-button--secondary"
+          disabled={!canStop}
+          onClick={() => void stop()}
+          type="button"
+        >
           {zh ? "停止本機訪客連線" : "Stop local visitor access"}
         </button>
         <button
+          className="px-button px-button--secondary"
           disabled={!status || gateway.pending}
           onClick={() => void gateway.refresh()}
           type="button"
@@ -665,10 +695,12 @@ export function VisitorGatewayPanel({
       </div>
 
       {status && (
-        <section aria-labelledby="visitor-gateway-verification-heading">
-          <h3 id="visitor-gateway-verification-heading">
-            {zh ? "由擁有者確認外網連線" : "Owner-confirmed external checks"}
-          </h3>
+        <details className="visitor-gateway__verification">
+          <summary>
+            <h3 id="visitor-gateway-verification-heading">
+              {zh ? "由擁有者確認外網連線" : "Owner-confirmed external checks"}
+            </h3>
+          </summary>
           <p>
             {status.external_verified &&
             status.verification_method === "owner_reported"
@@ -702,6 +734,7 @@ export function VisitorGatewayPanel({
             {checklist.map((item, index) => (
               <label key={item}>
                 <input
+                  className="px-field"
                   checked={checks[index]}
                   onChange={(event) =>
                     setChecks(
@@ -717,6 +750,7 @@ export function VisitorGatewayPanel({
             ))}
           </fieldset>
           <button
+            className="px-button px-button--secondary"
             disabled={!canVerify}
             onClick={() => void verify()}
             type="button"
@@ -728,7 +762,7 @@ export function VisitorGatewayPanel({
               ? "重新啟動、停止或來源變更會清除檢查；版本與本機就緒變更不會清除這筆當時的觀察；Funnel 或網際網路的未觀察中斷不會被偵測。這不會驗證 GitHub Pages 或卡片。"
               : "Restart, stop or origin changes clear the check. Bundle and local readiness changes do not clear this dated observation. Unobserved Funnel or internet outages are not detected. This does not verify GitHub Pages or cards."}
           </p>
-        </section>
+        </details>
       )}
 
       <details className="visitor-gateway__commands">

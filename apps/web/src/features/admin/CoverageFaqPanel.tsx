@@ -1,3 +1,4 @@
+import "../../p4-w3.css";
 import { useEffect, useRef, useState } from "react";
 import type { ClaimKind } from "./ClaimEditor";
 
@@ -207,20 +208,25 @@ export function CoverageFaqPanel({
     );
   }
   return (
-    <section className="admin-surface" aria-labelledby="faq-heading">
+    <section className="coverage-faq px-panel" aria-labelledby="faq-heading">
       <h2 id="faq-heading">
         {zh ? "涵蓋檢查與 FAQ 審核" : "Coverage and FAQ review"}
       </h2>
-      <p>
-        {zh
-          ? "檢查目前已準備的本機版本，會使用已選模型。缺口不會阻擋發布；FAQ 只有核准後才提供給訪客。"
-          : "Check the prepared local version using your selected models. Gaps never block publication. Visitors receive only approved FAQ answers."}
-      </p>
-      <p>
-        {zh
-          ? "改寫會開啟貢獻編輯器。儲存陳述並更新 NPC 後，請重新生成及審核 FAQ；新回答不保證引用這段陳述。"
-          : "Rewrite opens the contribution editor. Save the statement and update the NPC, then regenerate and review the FAQ; the new answer may not cite this statement."}
-      </p>
+      <details className="publication-info">
+        <summary>
+          ⓘ {zh ? "模型使用與審核說明" : "Model use and review"}
+        </summary>
+        <p>
+          {zh
+            ? "檢查目前已準備的本機版本，會使用已選模型。缺口不會阻擋發布；FAQ 只有核准後才提供給訪客。"
+            : "Check the prepared local version using your selected models. Gaps never block publication. Visitors receive only approved FAQ answers."}
+        </p>
+        <p>
+          {zh
+            ? "改寫會開啟貢獻編輯器。儲存陳述並更新 NPC 後，請重新生成及審核 FAQ；新回答不保證引用這段陳述。"
+            : "Rewrite opens the contribution editor. Save the statement and update the NPC, then regenerate and review the FAQ; the new answer may not cite this statement."}
+        </p>
+      </details>
       {draftChanged && (
         <p>
           {zh
@@ -229,6 +235,7 @@ export function CoverageFaqPanel({
         </p>
       )}
       <button
+        className="px-button px-button--primary"
         type="button"
         disabled={busy || !bundleId}
         onClick={() => void run(check)}
@@ -237,10 +244,16 @@ export function CoverageFaqPanel({
           ? "使用模型檢查六個標準問題"
           : "Check six standard questions with models"}
       </button>
-      <button type="button" disabled={busy} onClick={() => void run(refresh)}>
+      <button
+        className="px-button px-button--secondary"
+        type="button"
+        disabled={busy}
+        onClick={() => void run(refresh)}
+      >
         {zh ? "重新整理審核佇列" : "Refresh review queue"}
       </button>
       <button
+        className="px-button px-button--secondary"
         type="button"
         disabled={busy || !bundleId}
         onClick={() =>
@@ -267,6 +280,7 @@ export function CoverageFaqPanel({
         {zh ? "補充陳述的專案" : "Project for the new statement"}
       </label>
       <select
+        className="px-field"
         id="faq-repository"
         value={
           repositories.includes(repository)
@@ -283,7 +297,11 @@ export function CoverageFaqPanel({
       </select>
       <p role="status">{notice}</p>
       {view?.entries.map((entry) => (
-        <article key={entry.entry_id} aria-label={entry.question}>
+        <article
+          className="coverage-faq__entry"
+          key={entry.entry_id}
+          aria-label={entry.question}
+        >
           <h3>{entry.question}</h3>
           {entry.variants.length > 0 && (
             <p>
@@ -318,7 +336,7 @@ export function CoverageFaqPanel({
                   : "Pending review"}
           </p>
           {entry.answer_markdown && (
-            <p style={{ whiteSpace: "pre-wrap" }}>{entry.answer_markdown}</p>
+            <p className="coverage-faq__answer">{entry.answer_markdown}</p>
           )}
           <ul>
             {entry.citations.map((citation, index) => (
@@ -350,6 +368,7 @@ export function CoverageFaqPanel({
             <p role="alert">{errorText(entry.error_code)}</p>
           )}
           <button
+            className="px-button px-button--secondary"
             type="button"
             disabled={
               busy ||
@@ -375,6 +394,7 @@ export function CoverageFaqPanel({
             {zh ? "核准" : "Approve"}
           </button>
           <button
+            className="px-button px-button--secondary"
             type="button"
             disabled={busy || entry.needs_reconfirmation}
             onClick={() =>
@@ -395,6 +415,7 @@ export function CoverageFaqPanel({
             {zh ? "拒絕" : "Reject"}
           </button>
           <button
+            className="px-button px-button--secondary"
             type="button"
             disabled={busy}
             onClick={() =>
@@ -406,6 +427,7 @@ export function CoverageFaqPanel({
             {zh ? "使用模型重新生成" : "Regenerate with models"}
           </button>
           <button
+            className="px-button px-button--secondary"
             type="button"
             disabled={busy || entry.needs_reconfirmation}
             onClick={() => {
@@ -423,6 +445,7 @@ export function CoverageFaqPanel({
                   : "Enter one alternate question per line (up to eight, 200 characters each)"}
               </label>
               <textarea
+                className="px-field"
                 id={`faq-variants-${entry.entry_id}`}
                 maxLength={1607}
                 onChange={(event) => setVariantsText(event.target.value)}
@@ -435,6 +458,7 @@ export function CoverageFaqPanel({
                   : "Saving returns this item to pending review; its answer is not changed."}
               </p>
               <button
+                className="px-button px-button--secondary"
                 type="button"
                 disabled={busy}
                 onClick={() =>
@@ -461,6 +485,7 @@ export function CoverageFaqPanel({
                 {zh ? "儲存替代問法" : "Save alternate questions"}
               </button>
               <button
+                className="px-button px-button--secondary"
                 type="button"
                 disabled={busy}
                 onClick={() => {
@@ -473,6 +498,7 @@ export function CoverageFaqPanel({
             </div>
           )}
           <button
+            className="px-button px-button--secondary"
             type="button"
             disabled={busy || !repositories.length}
             onClick={() =>
@@ -483,6 +509,7 @@ export function CoverageFaqPanel({
           </button>
           {entry.coverage_status !== "answered" && entry.topic && (
             <button
+              className="px-button px-button--secondary"
               type="button"
               disabled={busy || !repositories.length}
               onClick={() =>
