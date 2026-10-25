@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import type { Locale } from "../../i18n/messages";
 import type { AnalysisSelectionView } from "./AnalysisSelectionPanel";
+import type { AdminValidation } from "./AdminWorkspace";
 
 export type LocalizedText = Record<Locale, string>;
 
@@ -200,6 +201,9 @@ export type GuidedOnboardingAction =
 
 export interface GuidedOnboardingViewProps {
   locale: Locale;
+  draft: string;
+  validation: AdminValidation | null;
+  onOpenPublication: () => void;
   state: GuidedOnboardingState;
   busy: boolean;
   errorCode: string;

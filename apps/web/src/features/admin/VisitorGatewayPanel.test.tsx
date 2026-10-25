@@ -93,12 +93,8 @@ describe("visitor gateway panel", () => {
       const markup = renderToStaticMarkup(
         <VisitorGatewayPanel locale={locale} request={request} />,
       );
-      const funnelLabel =
-        locale === "zh-TW" ? "公開入口連接埠" : "Public entry port";
-      const localLabel =
-        locale === "zh-TW"
-          ? "本機訪客服務連接埠"
-          : "Local visitor service port";
+      const funnelLabel = locale === "zh-TW" ? "公開連接埠" : "Public port";
+      const localLabel = locale === "zh-TW" ? "本機連接埠" : "Local port";
 
       expect(markup).toContain(`>${funnelLabel}<`);
       expect(markup).toContain('for="visitor-funnel-port"');

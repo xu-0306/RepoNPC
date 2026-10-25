@@ -519,6 +519,15 @@ export function AppearancePanel({
               type="checkbox"
             />
             {copy.schemeChoice}
+            <span className="px-badge" role="status">
+              {settings.visitor_scheme_choice
+                ? locale === "zh-TW"
+                  ? "開啟"
+                  : "On"
+                : locale === "zh-TW"
+                  ? "關閉"
+                  : "Off"}
+            </span>
           </label>
         </div>
         <details className="scene-appearance__advanced">

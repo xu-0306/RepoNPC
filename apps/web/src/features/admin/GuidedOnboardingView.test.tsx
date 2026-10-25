@@ -179,6 +179,9 @@ function props(
     state: initialGuidedOnboardingState(),
     busy: false,
     errorCode: "",
+    draft: "",
+    validation: null,
+    onOpenPublication: vi.fn(),
     analysisSelection: null,
     analysisSelectionPending: false,
     onAction: vi.fn(),
@@ -220,6 +223,68 @@ const confirmedModels: AnalysisSelectionView = {
 };
 
 describe("GuidedOnboardingView", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "renders the exact escaped draft with bounded keyboard scrolling and validation counts in %s",
+    (locale) => {
+      const draft = `name: '<img src=x onerror=alert(1)>'\nlong: ${"x".repeat(300)}\n`;
+      const input = props({
+        locale,
+        state: state({ step: "draft" }),
+        draft,
+        validation: {
+          valid: false,
+          errors: [{ path: "profile", message: "Invalid profile" }],
+          warnings: [{ path: "repositories", message: "Review repository" }],
+        },
+      });
+      const html = renderToStaticMarkup(<GuidedOnboardingView {...input} />);
+      const preview = html.match(/<pre([^>]*)>([\s\S]*?)<\/pre>/)!;
+      expect(preview[1]).toContain('class="p7-draft-yaml px-field"');
+      expect(preview[1]).toContain('role="region"');
+      expect(preview[1]).toContain('tabindex="0"');
+      expect(preview[1]).toContain("aria-label=");
+      expect(preview[2]).toBe(
+        draft
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll("'", "&#x27;"),
+      );
+      expect(html).toContain(
+        `<span class="px-badge" role="alert">${locale === "en" ? "Errors" : "錯誤"}: 1 · ${locale === "en" ? "Warnings" : "警告"}: 1</span>`,
+      );
+      expect(html).toContain('role="alert"><h3>');
+      expect(html).toContain("Invalid profile");
+      expect(html).toContain("Review repository");
+      expect(html).not.toContain("<img src=x");
+    },
+  );
+
+  it("forwards publication navigation and keeps copy/download callbacks independent", () => {
+    directHooks.values = [];
+    try {
+      const input = props({ state: state({ step: "draft" }) });
+      const step = elements(GuidedOnboardingView(input)).find(
+        (node) =>
+          typeof node.type === "function" && node.type.name === "DraftStep",
+      )!;
+      const tree = (step.type as (props: Record<string, unknown>) => ReactNode)(
+        step.props,
+      );
+      const primary = elements(tree).find(
+        (node) =>
+          node.type === "button" &&
+          node.props.className === "px-button px-button--primary",
+      )!;
+      (primary.props.onClick as () => void)();
+      expect(input.onOpenPublication).toHaveBeenCalledOnce();
+      expect(input.onCopyDraft).not.toHaveBeenCalled();
+      expect(input.onDownloadDraft).not.toHaveBeenCalled();
+    } finally {
+      directHooks.values = null;
+    }
+  });
+
   it.each(["zh-TW", "en"] as const)(
     "focuses mount and async draft restoration without scrolling, but scrolls user step changes in %s",
     (locale) => {

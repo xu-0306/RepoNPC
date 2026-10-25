@@ -1,3 +1,4 @@
+import { InfoParagraphs } from "./InfoParagraphs";
 import "../../p4-w3.css";
 import { useEffect, useRef, useState } from "react";
 import sharingGuideUrl from "../../../../../docs/PAGES_SHARING_GUIDE.md?url&no-inline";
@@ -154,7 +155,7 @@ export function PagesSharePanel({
     setNotice(
       zh
         ? "Pages 網址已儲存；如需確認遠端內容，請重新核對。"
-        : "Pages URL saved. Verify the remote content when it is ready.",
+        : "Saved Verify the remote content when it is ready.",
     );
   }
 
@@ -183,51 +184,51 @@ export function PagesSharePanel({
   const urlChanged = Boolean(state && pagesUrl.trim() !== state.pages_url);
   const copy = zh
     ? {
-        title: "3. 上傳並核對 GitHub Pages 網站",
+        title: "3. GitHub Pages",
         intro:
           "輸入與訪客入口設定相符的 GitHub Pages 網址。匯出不會啟用 Funnel、呼叫模型或修改 GitHub。",
-        url: "GitHub Pages 完整網站網址（包含專案路徑）",
+        url: "Pages URL",
         urlHelp:
           "網域須與上一步的 Pages 網域相同。這裡需包含網站路徑，例如 https://account.github.io/project/；若網站在根目錄，填 https://account.github.io/。",
-        save: "儲存 Pages 網址",
-        export: "下載靜態網站",
-        verify: "核對已上傳網站",
-        refresh: "重新讀取狀態",
+        save: "儲存",
+        export: "下載網站",
+        verify: "核對",
+        refresh: "重新整理",
         downloadReady: "下載網站封存檔",
-        uploadTitle: "手動上傳與核對",
+        uploadTitle: "上傳說明",
         uploadSteps: [
           "下載封存檔，解壓縮後將所有檔案和資料夾放到同一個 Pages 發布來源。",
           "保留根目錄中的 .nojekyll、index.html 與 export-manifest.json。",
-          "等待 Pages 更新後，再按「核對已上傳網站」。",
+          "等待 Pages 更新後，再按「核對」。",
         ],
-        configured: "Pages 網址已儲存。",
-        missing: "先儲存有效的 Pages 網址。",
-        verified: "已核對此 Pages 網站。",
-        unverified: "尚未核對目前 Pages 網站。",
+        configured: "已儲存",
+        missing: "未設定",
+        verified: "已核對",
+        unverified: "未核對",
         digest: "已核對內容識別碼",
       }
     : {
-        title: "3. Upload and verify your GitHub Pages site",
+        title: "3. GitHub Pages",
         intro:
           "Enter the GitHub Pages URL that matches the visitor-entry configuration. Export does not enable Funnel, call a model, or edit GitHub.",
-        url: "Full GitHub Pages site URL (including project path)",
+        url: "Pages URL",
         urlHelp:
           "Use the same domain as the Pages domain in the previous step. Include the site path here, such as https://account.github.io/project/, or https://account.github.io/ for a root site.",
-        save: "Save Pages URL",
-        export: "Download static site",
-        verify: "Verify uploaded site",
-        refresh: "Refresh status",
+        save: "Save",
+        export: "Download site",
+        verify: "Verify",
+        refresh: "Refresh",
         downloadReady: "Download site archive",
-        uploadTitle: "Upload and verify manually",
+        uploadTitle: "Upload help",
         uploadSteps: [
           "Download and extract the archive, then place every file and folder in the same Pages publishing source.",
           "Keep .nojekyll, index.html, and export-manifest.json at the root.",
-          "After Pages updates, select Verify uploaded site.",
+          "After Pages updates, select Verify.",
         ],
-        configured: "Pages URL saved.",
-        missing: "Save a valid Pages URL first.",
-        verified: "This Pages site has been verified.",
-        unverified: "The current Pages site has not been verified.",
+        configured: "Saved",
+        missing: "Not configured",
+        verified: "Verified",
+        unverified: "Unverified",
         digest: "Verified content identity",
       };
 
@@ -241,7 +242,6 @@ export function PagesSharePanel({
     >
       <p className="publication-kicker px-meta">Pages</p>
       <h2 id="pages-share-panel-heading">{copy.title}</h2>
-      <p>{copy.intro}</p>
       <label htmlFor="pages-share-url">
         {copy.url}
         <input
@@ -262,11 +262,16 @@ export function PagesSharePanel({
       </label>
       <details className="publication-info px-info">
         <summary>ⓘ {zh ? "網址說明" : "URL help"}</summary>
-        <p id="pages-share-url-help">{copy.urlHelp}</p>
+        <InfoParagraphs locale={locale} text={copy.intro} />
+        <InfoParagraphs
+          locale={locale}
+          id="pages-share-url-help"
+          text={copy.urlHelp}
+        />
       </details>
       <div className="publication-actions">
         <button
-          className="px-button px-button--primary"
+          className="px-button px-button--secondary"
           disabled={pending || !pagesUrl.trim() || !urlChanged}
           onClick={() => void run(savePagesUrl)}
           type="button"
@@ -307,14 +312,7 @@ export function PagesSharePanel({
           {copy.refresh}
         </button>
       </div>
-      <dl>
-        <div>
-          <dt>{copy.digest}</dt>
-          <dd>
-            <code>{state?.verified_content_sha256 ?? "—"}</code>
-          </dd>
-        </div>
-      </dl>
+
       <p role="status">
         {!state?.configured
           ? copy.missing
@@ -343,6 +341,14 @@ export function PagesSharePanel({
               : "Download the full bilingual sharing guide"}
           </a>
         </div>
+        <dl>
+          <div>
+            <dt>{copy.digest}</dt>
+            <dd>
+              <code>{state?.verified_content_sha256 ?? "—"}</code>
+            </dd>
+          </div>
+        </dl>
         <ol>
           {copy.uploadSteps.map((step) => (
             <li key={step}>{step}</li>

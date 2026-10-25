@@ -228,6 +228,7 @@ export function AnalysisSelectionPanel({
       </label>
       <button
         disabled={!canSelect}
+        className="px-button px-button--primary"
         onClick={() =>
           onSelect(
             chatProfileId,

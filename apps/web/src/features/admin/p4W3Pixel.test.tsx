@@ -72,12 +72,10 @@ const state: SceneAppearanceState = {
     },
   ],
 };
-const request = vi.fn(
-  (...args: [string, RequestInit?]) => {
-    void args;
-    return Promise.resolve({});
-  },
-) as unknown as <T>(path: string, options?: RequestInit) => Promise<T>;
+const request = vi.fn((...args: [string, RequestInit?]) => {
+  void args;
+  return Promise.resolve({});
+}) as unknown as <T>(path: string, options?: RequestInit) => Promise<T>;
 
 describe("P4 w3 pixel publication", () => {
   it.each(["zh-TW", "en"] as const)(
@@ -148,6 +146,9 @@ describe("P4 w3 pixel publication", () => {
         ),
       ).toHaveLength(2);
       expect(markup.match(/type="file"/g)).toHaveLength(1);
+      expect(markup).toContain(
+        `<span class="px-badge" role="status">${enabled ? "On" : "Off"}</span>`,
+      );
       expect(markup).toContain(
         'type="file" style="display:none" accept="image/png,image/webp,.png,.webp"',
       );

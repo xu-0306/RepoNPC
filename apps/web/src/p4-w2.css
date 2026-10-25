@@ -1,4 +1,28 @@
 /* Set F guided contribution, character card, review and draft interiors. */
+.guided-onboarding:has(.px-info[open])
+  :is(
+    .p4-w1-confirm,
+    .guided-analysis__actions,
+    .p4-w2__confirm,
+    .model-setup-workspace__confirm
+  ),
+.scene-appearance:has(.px-info[open]) .scene-appearance__actions {
+  position: static;
+}
+.p7-draft-yaml {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  max-height: min(32vh, 18rem);
+  min-width: 0;
+  overflow: auto;
+  white-space: pre;
+  width: 100%;
+}
+@media (max-width: 760px) {
+  .guided-onboarding:has(.p4-w1-confirm, .guided-analysis__actions) {
+    padding-bottom: var(--px-owner-actions-space, 0px);
+  }
+}
 .p4-w2.px-panel {
   background: var(--px-surface);
   box-shadow:
@@ -223,6 +247,13 @@
 .p4-w2__draft-confirm .guided-onboarding__draft-actions {
   gap: 12px;
   margin: 0;
+}
+.p4-w2 .p4-w2__draft-confirm > .px-button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.p4-w2 .p4-w2__draft-confirm > .px-info {
+  flex: 0 0 auto;
 }
 @media (max-width: 760px) {
   .p4-w2.px-panel {

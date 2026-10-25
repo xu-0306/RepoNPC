@@ -10,7 +10,13 @@ it("uses only pixel tokens and keeps form content on the page around pinned acti
   expect(css).toMatch(
     /\.p4-w2 \.p4-w2__confirm\s*\{[^}]*bottom: 0;[^}]*position: sticky/s,
   );
-  expect(css).not.toMatch(/overflow-y:\s*(auto|scroll)|max-height:/);
+  const bounded = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((rule) =>
+    /overflow-y:\s*(auto|scroll)|max-height:/.test(rule[2]),
+  );
+  expect(bounded.map((rule) => rule[1].trim())).toEqual([".p7-draft-yaml"]);
+  expect(bounded[0][2]).toMatch(/max-height:\s*min\(32vh, 18rem\)/);
+  expect(bounded[0][2]).toContain("overflow: auto");
+  expect(bounded[0][2]).toContain("white-space: pre");
   expect(css).toContain("repeat(2, minmax(0, 1fr))");
   expect(css).toContain("grid-template-columns: minmax(0, 1fr)");
   expect(css).toMatch(

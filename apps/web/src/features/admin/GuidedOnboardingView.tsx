@@ -27,6 +27,7 @@ import {
 import { ConfirmButton } from "./ConfirmDialog";
 import { CheckboxField } from "./CheckboxField";
 import type { ClaimKind } from "./ClaimEditor";
+import { DraftValidation } from "./AdminWorkspace";
 
 const EMPTY_WORKSPACE_STATUS: AdminWorkspaceStatus = {
   chat: {
@@ -2661,6 +2662,9 @@ function ReviewStep({
 }
 
 function DraftStep({
+  draft,
+  validation,
+  onOpenPublication,
   state,
   copy,
   locale,
@@ -2669,6 +2673,9 @@ function DraftStep({
   onCopyDraft,
   onDownloadDraft,
 }: {
+  draft: GuidedOnboardingViewProps["draft"];
+  validation: GuidedOnboardingViewProps["validation"];
+  onOpenPublication: GuidedOnboardingViewProps["onOpenPublication"];
   state: GuidedOnboardingState;
   copy: Copy;
   locale: Locale;
@@ -2699,37 +2706,78 @@ function DraftStep({
       <p className="px-badge" role="status">
         {copy.draftReady}
       </p>
+      <DraftValidation locale={locale} validation={validation} />
+      <pre
+        className="p7-draft-yaml px-field"
+        role="region"
+        aria-label={chinese ? "設定草稿（YAML）" : "Configuration draft (YAML)"}
+        tabIndex={0}
+      >
+        {draft}
+      </pre>
       <footer className="p4-w2__confirm p4-w2__draft-confirm">
-        <div className="guided-onboarding__draft-actions">
+        <button
+          className="px-button px-button--primary"
+          disabled={busy}
+          onClick={onOpenPublication}
+          type="button"
+        >
+          {chinese ? "預覽與分享" : "Preview & share"}
+        </button>
+        <details className="p4-w2__info px-info">
+          <summary>
+            <span aria-hidden="true" className="p4-w2__actions-icon">
+              ⋯
+            </span>
+            <span className="p4-w2__actions-text">{copy.p4Actions}</span>
+          </summary>
+          <div className="guided-onboarding__draft-actions">
+            <button
+              className="px-button px-button--secondary"
+              disabled={busy || copyStatus === "pending"}
+              onClick={async () => {
+                setCopyStatus("pending");
+                try {
+                  await onCopyDraft();
+                  setCopyStatus("done");
+                } catch {
+                  setCopyStatus("failed");
+                }
+              }}
+              type="button"
+            >
+              {copyStatus === "done"
+                ? chinese
+                  ? "已複製"
+                  : "Copied"
+                : copy.copyDraft}
+            </button>
+            <button
+              className="px-button px-button--secondary"
+              disabled={busy}
+              onClick={onDownloadDraft}
+              type="button"
+            >
+              {copy.downloadDraft}
+            </button>
+          </div>
           <button
             className="px-button px-button--secondary"
-            disabled={busy || copyStatus === "pending"}
-            onClick={async () => {
-              setCopyStatus("pending");
-              try {
-                await onCopyDraft();
-                setCopyStatus("done");
-              } catch {
-                setCopyStatus("failed");
-              }
-            }}
+            disabled={busy}
+            onClick={() => onAction({ type: "SET_MODE", mode: "advanced" })}
             type="button"
           >
-            {copyStatus === "done"
-              ? chinese
-                ? "已複製"
-                : "Copied"
-              : copy.copyDraft}
+            {copy.advancedMode}
           </button>
           <button
             className="px-button px-button--secondary"
             disabled={busy}
-            onClick={onDownloadDraft}
+            onClick={() => onAction({ type: "SET_MODE", mode: "guided" })}
             type="button"
           >
-            {copy.downloadDraft}
+            {copy.guidedMode}
           </button>
-        </div>
+        </details>
         {copyStatus === "done" && (
           <p role="status">
             {chinese
@@ -2747,28 +2795,15 @@ function DraftStep({
         {state.rawYamlHasUnmappedChanges && (
           <p role="alert">{copy.rawYamlWarning}</p>
         )}
-        <button
-          className="px-button px-button--secondary"
-          disabled={busy}
-          onClick={() => onAction({ type: "SET_MODE", mode: "advanced" })}
-          type="button"
-        >
-          {copy.advancedMode}
-        </button>
-        <button
-          className="px-button px-button--secondary"
-          disabled={busy}
-          onClick={() => onAction({ type: "SET_MODE", mode: "guided" })}
-          type="button"
-        >
-          {copy.guidedMode}
-        </button>
       </footer>
     </section>
   );
 }
 
 export function GuidedOnboardingView({
+  draft,
+  validation,
+  onOpenPublication,
   locale,
   state,
   busy,
@@ -3031,6 +3066,9 @@ export function GuidedOnboardingView({
           )}
           {state.step === "draft" && (
             <DraftStep
+              draft={draft}
+              validation={validation}
+              onOpenPublication={onOpenPublication}
               busy={busy}
               copy={copy}
               locale={locale}

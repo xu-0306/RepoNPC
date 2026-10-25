@@ -3136,7 +3136,7 @@ export function AdminPage({
         result = { ...result, content: applied.content };
       }
       setDraft(result.content);
-      setPublicationOpen(true);
+      setPublicationOpen(false);
       setCharacterWorkspaceOpen(false);
       setValidation(result.validation);
       setGuidedState((current) =>
@@ -3831,6 +3831,13 @@ export function AdminPage({
             onAnalyze={(slug) => void analyzeRepository(slug)}
             onCreateBatch={() => void createAnalysisBatch()}
             onCopyDraft={copyGuidedDraft}
+            draft={draft}
+            validation={validation}
+            onOpenPublication={() => {
+              setCharacterWorkspaceOpen(false);
+              setMaintenanceOpen(false);
+              setPublicationOpen(true);
+            }}
             onCreateDraft={() => void createGuidedDraft()}
             onDiscover={(account, page) =>
               void discoverRepositories(account, page)

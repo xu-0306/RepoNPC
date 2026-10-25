@@ -240,10 +240,6 @@
   margin: 0;
   padding: 0;
 }
-.batch-analysis-panel .guided-onboarding__eyebrow {
-  color: var(--px-accent);
-  font-size: 13px;
-}
 .batch-analysis-panel :is(h2, h3, h4, h5, p) {
   margin-block: 4px;
 }

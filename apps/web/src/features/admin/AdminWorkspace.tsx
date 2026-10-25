@@ -323,7 +323,63 @@ export function AdminWorkspace({
   }
 
   return (
-    <div aria-busy={busy} className="admin-workspace" lang={locale}>
+    <div
+      aria-busy={busy}
+      className="admin-workspace"
+      lang={locale}
+      onFocusCapture={(event) => {
+        const target = event.target as HTMLElement;
+        requestAnimationFrame(() => {
+          const rect = target.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            rect.left + rect.width / 2,
+            rect.top + rect.height / 2,
+          );
+          if (hit && (target === hit || target.contains(hit))) return;
+          target.scrollIntoView({ block: "center", behavior: "instant" });
+        });
+      }}
+      ref={(root) => {
+        if (!root) return;
+        const actions = root.querySelectorAll<HTMLElement>(
+          ".p4-w1-confirm, .guided-analysis__actions",
+        );
+        const reserve = () => {
+          const height = Math.max(
+            0,
+            ...Array.from(actions, (bar) => {
+              const style = getComputedStyle(bar);
+              return style.position === "fixed"
+                ? bar.getBoundingClientRect().height +
+                    (parseFloat(style.bottom) || 0) +
+                    16
+                : 0;
+            }),
+          );
+          root.style.setProperty("--px-owner-actions-space", `${height}px`);
+        };
+        const observer =
+          typeof ResizeObserver === "undefined"
+            ? null
+            : new ResizeObserver(reserve);
+        actions.forEach((bar) => observer?.observe(bar));
+        reserve();
+        const reveal = (event: Event) => {
+          const target = event.target as HTMLDetailsElement;
+          if (target.open && target.classList.contains("px-info"))
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() =>
+                target.scrollIntoView({ block: "center", behavior: "instant" }),
+              ),
+            );
+        };
+        root.addEventListener("toggle", reveal, true);
+        return () => {
+          root.removeEventListener("toggle", reveal, true);
+          observer?.disconnect();
+        };
+      }}
+    >
       <header className="admin-workspace__header">
         <div className="admin-workspace__brand">
           <span className="admin-workspace__logo" aria-hidden="true">
@@ -731,6 +787,44 @@ export function AdminWorkspace({
           )}
         </main>
       </div>
+    </div>
+  );
+}
+
+export function DraftValidation({
+  locale,
+  validation,
+}: {
+  locale: AdminLocale;
+  validation: AdminValidation | null;
+}) {
+  if (!validation) return null;
+  const copy = COPY[locale];
+  const errors = validation.errors ?? [];
+  const warnings = validation.warnings ?? [];
+  return (
+    <div>
+      <span
+        className="px-badge"
+        role={errors.length || validation.valid === false ? "alert" : "status"}
+      >
+        {copy.errors}: {errors.length} · {copy.warnings}: {warnings.length}
+      </span>
+      {(errors.length > 0 || warnings.length > 0) && (
+        <details className="px-info">
+          <summary>ⓘ {copy.validationHeading}</summary>
+          {errors.length > 0 && (
+            <IssueList heading={copy.errors} issues={errors} role="alert" />
+          )}
+          {warnings.length > 0 && (
+            <IssueList
+              heading={copy.warnings}
+              issues={warnings}
+              role="status"
+            />
+          )}
+        </details>
+      )}
     </div>
   );
 }

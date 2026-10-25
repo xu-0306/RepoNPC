@@ -164,13 +164,6 @@
   font-size: max(16px, 1rem);
   font-weight: 700;
 }
-.publication-optional > :is(.coverage-faq, .publication-empty) {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  margin: 0;
-  padding: 16px 0 0;
-}
 .publication-kicker {
   color: var(--px-accent);
   margin-top: 0;
@@ -519,7 +512,10 @@
   overflow: visible;
 }
 .scene-preview .scene-preview__controls {
+  display: grid;
+  flex-basis: 100%;
   gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
 }
 .scene-preview .scene-preview__controls fieldset {
   flex: 1 1 180px;

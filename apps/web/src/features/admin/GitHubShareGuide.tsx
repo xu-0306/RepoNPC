@@ -1,3 +1,4 @@
+import { InfoParagraphs } from "./InfoParagraphs";
 import "../../p4-w3.css";
 import type { ChangeEvent } from "react";
 
@@ -102,7 +103,7 @@ type GuideCopy = {
 
 const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
   "zh-TW": {
-    title: "4. 把 RepoNPC 卡片放到 GitHub 個人頁",
+    title: "4. GitHub 個人頁",
     subtitle:
       "下載完整 README.md，手動上傳到 GitHub 個人頁使用的 repository。卡片使用已核對 Pages 網站的公開圖片，不必另外上傳圖片；GitHub 只顯示名片，點擊連結才會前往 RepoNPC 網站對話。",
     downloadReadme: "下載 README.md",
@@ -119,9 +120,9 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
       "先到第 3 段上傳並核對 Pages 網站，才能下載含公開卡片的 README.md；也可沿用下方的卡片下載、上傳與複製區塊。",
     existingReadme:
       "已有 README？請保留原文，使用下方「複製要貼進 README 的文字」追加名片。上傳完整檔案前先比較內容；RepoNPC 不會自動覆寫 GitHub README。",
-    stageProfile: "確認個人頁的同名 repository",
-    stageCard: "下載卡片並上傳到同一個 repository",
-    stageReadme: "把卡片加入 README 並檢查結果",
+    stageProfile: "同名 repository",
+    stageCard: "上傳卡片",
+    stageReadme: "README",
     accountLabel: "GitHub 帳號",
     accountHelp:
       "輸入 GitHub 使用者名稱或個人頁網址。這一步只查公開資料，不會登入帳號或建立 repository。",
@@ -214,7 +215,7 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     notCheckedAction: "在 GitHub 建立或修改後，回來按「檢查同名 repository」。",
   },
   en: {
-    title: "4. Put your RepoNPC card on your GitHub profile",
+    title: "4. GitHub profile",
     subtitle:
       "Download a complete README.md and manually upload it to your GitHub profile repository. The card uses a public image from your verified Pages site, so no separate image upload is needed. GitHub displays the card; its link opens the RepoNPC site for conversations.",
     downloadReadme: "Download README.md",
@@ -231,9 +232,9 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
       "Upload and verify your Pages site in section 3 before downloading a README.md with a public card. You can also use the card download, upload and copy steps below.",
     existingReadme:
       "Already have a README? Keep its text and use Copy text for README below to append the card. Compare content before uploading a complete file; RepoNPC never overwrites your GitHub README automatically.",
-    stageProfile: "Check the repository used for your profile",
-    stageCard: "Download the card and upload it to the same repository",
-    stageReadme: "Add the card to README and check the result",
+    stageProfile: "Matching repository",
+    stageCard: "Upload card",
+    stageReadme: "README",
     accountLabel: "GitHub account",
     accountHelp:
       "Enter your GitHub username or profile URL. This step only checks public information; it does not sign in or create a repository.",
@@ -411,7 +412,13 @@ export function GitHubShareGuide({
         <summary>
           ⓘ {locale === "zh-TW" ? "分享方式" : "How sharing works"}
         </summary>
-        <p>{copy.subtitle}</p>
+        <InfoParagraphs locale={locale} text={copy.subtitle} />
+        <InfoParagraphs
+          locale={locale}
+          id="github-share-readme-placement"
+          text={copy.readmePlacement}
+        />
+        <InfoParagraphs locale={locale} text={copy.existingReadme} />
       </details>
 
       {notice.trim().length > 0 && (
@@ -425,13 +432,16 @@ export function GitHubShareGuide({
           <summary>
             ⓘ {locale === "zh-TW" ? "檔案內容" : "File contents"}
           </summary>
-          <p>{copy.readmeContents}</p>
+          <InfoParagraphs locale={locale} text={copy.readmeContents} />
+          <InfoParagraphs
+            locale={locale}
+            text={pagesReady ? copy.readmeReady : copy.readmeUnavailable}
+          />
         </details>
-        <p id="github-share-readme-placement">{copy.readmePlacement}</p>
         <div className="publication-actions">
           <button
             type="button"
-            className="px-button px-button--primary"
+            className="px-button px-button--secondary"
             disabled={!pagesReady}
             aria-disabled={busy || !pagesReady}
             aria-describedby="github-share-readme-placement github-share-readme-download-status"
@@ -455,9 +465,14 @@ export function GitHubShareGuide({
           </button>
         </div>
         <p id="github-share-readme-download-status" role="status">
-          {pagesReady ? copy.readmeReady : copy.readmeUnavailable}
+          {pagesReady
+            ? locale === "zh-TW"
+              ? "已核對"
+              : "Verified"
+            : locale === "zh-TW"
+              ? "未核對 Pages"
+              : "Pages unverified"}
         </p>
-        <p>{copy.existingReadme}</p>
         {readmePreview !== null && (
           <>
             <label htmlFor="github-share-readme-preview">
@@ -480,9 +495,7 @@ export function GitHubShareGuide({
 
       <details className="github-share__alternative">
         <summary>
-          {locale === "zh-TW"
-            ? "其他方式：下載卡片、上傳與複製到 README"
-            : "Other way: download a card, upload and copy into README"}
+          {locale === "zh-TW" ? "卡片 → README" : "Card → README"}
         </summary>
         <section
           aria-labelledby="github-share-profile-heading"
@@ -510,7 +523,14 @@ export function GitHubShareGuide({
                 value={account}
               />
             </label>
-            <p id="github-share-account-help">{copy.accountHelp}</p>
+            <details className="publication-info px-info">
+              <summary>ⓘ {copy.accountLabel}</summary>
+              <InfoParagraphs
+                locale={locale}
+                id="github-share-account-help"
+                text={copy.accountHelp}
+              />
+            </details>
 
             <div className="publication-actions" aria-label={copy.stageProfile}>
               <button
@@ -526,14 +546,17 @@ export function GitHubShareGuide({
               </button>
             </div>
 
-            <p
+            <div
               className="publication-message"
               data-status={profileStatus}
               id="github-share-profile-status"
               role={profileStatus === "unavailable" ? "alert" : "status"}
             >
-              {copy.profileStatus[profileStatus]}
-            </p>
+              <InfoParagraphs
+                locale={locale}
+                text={copy.profileStatus[profileStatus]}
+              />
+            </div>
 
             <section aria-labelledby="github-share-repository-details-heading">
               <h4 id="github-share-repository-details-heading">
@@ -568,7 +591,10 @@ export function GitHubShareGuide({
             {profileStatus === "missing" && (
               <div className="publication-message">
                 <h4>{copy.createProfileHeading}</h4>
-                <p>{copy.createProfileIntro}</p>
+                <InfoParagraphs
+                  locale={locale}
+                  text={copy.createProfileIntro}
+                />
                 <ol>
                   <li>
                     {copy.repositoryName}{" "}
@@ -581,7 +607,7 @@ export function GitHubShareGuide({
                 {createUrl ? (
                   <ExternalLink href={createUrl} label={copy.openCreatePage} />
                 ) : (
-                  <p>{copy.linkUnavailable}</p>
+                  <InfoParagraphs locale={locale} text={copy.linkUnavailable} />
                 )}
               </div>
             )}
@@ -628,7 +654,7 @@ export function GitHubShareGuide({
               </span>{" "}
               {copy.stageCard}
             </summary>
-            <p>{copy.cardIntro}</p>
+            <InfoParagraphs locale={locale} text={copy.cardIntro} />
             <dl>
               <div>
                 <dt>{copy.filenameLabel}</dt>
@@ -682,11 +708,11 @@ export function GitHubShareGuide({
                 <li key={step}>{step}</li>
               ))}
             </ol>
-            <p>{copy.protectedBranch}</p>
+            <InfoParagraphs locale={locale} text={copy.protectedBranch} />
             {repositoryUrl ? (
               <ExternalLink href={repositoryUrl} label={copy.openRepository} />
             ) : (
-              <p>{copy.linkUnavailable}</p>
+              <InfoParagraphs locale={locale} text={copy.linkUnavailable} />
             )}
           </details>
         </section>
@@ -703,7 +729,7 @@ export function GitHubShareGuide({
               </span>{" "}
               {copy.stageReadme}
             </summary>
-            <p>{copy.readmeIntro}</p>
+            <InfoParagraphs locale={locale} text={copy.readmeIntro} />
 
             {verifiedPagesUrl ? (
               <>
@@ -750,14 +776,17 @@ export function GitHubShareGuide({
                 {profileStatus === "ready" && profileUrl ? (
                   <ExternalLink href={profileUrl} label={copy.openProfile} />
                 ) : (
-                  <p>{copy.profileLinkPending}</p>
+                  <InfoParagraphs
+                    locale={locale}
+                    text={copy.profileLinkPending}
+                  />
                 )}
               </div>
             </div>
 
             <div className="publication-message">
               <h4>{copy.testHeading}</h4>
-              <p>{copy.testInstruction}</p>
+              <InfoParagraphs locale={locale} text={copy.testInstruction} />
               <ul>
                 {copy.testChecks.map((check) => (
                   <li key={check}>{check}</li>

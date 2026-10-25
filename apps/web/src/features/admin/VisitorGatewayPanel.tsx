@@ -1,3 +1,4 @@
+import { InfoParagraphs } from "./InfoParagraphs";
 import "../../p4-w3.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AdminLocale } from "./AdminWorkspace";
@@ -409,20 +410,8 @@ export function VisitorGatewayPanel({
       className="visitor-gateway px-panel"
     >
       <h2 id="visitor-gateway-heading">
-        {zh ? "2. 設定訪客連線" : "2. Set up visitor access"}
+        {zh ? "2. 訪客連線" : "2. Visitor access"}
       </h2>
-      <p>
-        {zh
-          ? "這裡只設定 RepoNPC 的訪客入口。主機與已選回答模型必須保持可用；停止分享不會影響本機預覽、準備內容、FAQ 審核或一般編輯。"
-          : "Configure only the RepoNPC visitor entry here. The host and selected answer model must stay available. Stopping sharing does not affect local preview, preparation, FAQ review, or ordinary editing."}
-      </p>
-      {!publicSharingAvailable && (
-        <p role="note">
-          {zh
-            ? "目前是本機試用模式，無法公開分享。本機預覽和卡片圖仍可使用；要公開分享，請改用正式模式啟動 RepoNPC。"
-            : "RepoNPC is running in local trial mode, so public sharing is unavailable. Local preview and the card image still work; to share publicly, start RepoNPC in production mode."}
-        </p>
-      )}
 
       {gateway.loading && !status && (
         <p role="status">
@@ -442,21 +431,19 @@ export function VisitorGatewayPanel({
         <>
           <dl className="visitor-gateway__facts">
             <div>
-              <dt>{zh ? "本機內容與聊天" : "Local content and chat"}</dt>
+              <dt>{zh ? "NPC" : "NPC"}</dt>
               <dd>{fact(status.local_ready)}</dd>
             </div>
             <div>
-              <dt>{zh ? "訪客網址設定" : "Visitor address configuration"}</dt>
+              <dt>{zh ? "網址" : "URL"}</dt>
               <dd>{fact(status.entry_configured)}</dd>
             </div>
             <div>
-              <dt>
-                {zh ? "擁有者回報的外網檢查" : "Owner-reported external check"}
-              </dt>
+              <dt>{zh ? "外網檢查" : "External check"}</dt>
               <dd>{fact(status.external_verified)}</dd>
             </div>
             <div>
-              <dt>{zh ? "本機訪客服務" : "Local visitor service"}</dt>
+              <dt>{zh ? "Gateway" : "Gateway"}</dt>
               <dd>
                 {status.listener_ready
                   ? zh
@@ -478,23 +465,6 @@ export function VisitorGatewayPanel({
               {visitorGatewayErrorMessage(status.error_code, locale)}
             </p>
           )}
-          {status.local_ready === false && (
-            <p>
-              {zh
-                ? "先在本機準備可用版本，並確認已選回答模型可用，再啟動訪客入口。"
-                : "Prepare a local version and make sure the selected answer model is available before starting the visitor entry."}
-            </p>
-          )}
-
-          <p>
-            {status.client_identity_mode === "aggregate"
-              ? zh
-                ? "訪客保護模式：共用每日額度與同時工作上限；不採用轉送的訪客身分。"
-                : "Visitor protection: shared daily and concurrency limits; forwarded visitor identity is ignored."
-              : zh
-                ? "訪客保護模式：使用已設定的 loopback proxy 身分限制。依賴該 proxy 的來源位址覆寫行為；未完成外網確認前請勿依賴個別 IP 保護。"
-                : "Visitor protection: configured loopback-proxy identity limits. These depend on the proxy's source-address overwrite behavior; do not rely on per-IP protection until externally confirmed."}
-          </p>
         </>
       )}
 
@@ -511,13 +481,9 @@ export function VisitorGatewayPanel({
         className="visitor-gateway__origins"
         disabled={!status || gateway.pending || !publicSharingAvailable}
       >
-        <legend>
-          {zh
-            ? "填入聊天入口與網站網域"
-            : "Enter the chat address and site domain"}
-        </legend>
+        <legend>{zh ? "連線" : "Connection"}</legend>
         <label htmlFor="visitor-gateway-origin">
-          {zh ? "Tailscale Funnel 訪客網址" : "Tailscale Funnel visitor origin"}
+          {zh ? "Funnel URL" : "Funnel URL"}
           <input
             className="px-field"
             autoCapitalize="none"
@@ -531,7 +497,7 @@ export function VisitorGatewayPanel({
           />
         </label>
         <label htmlFor="visitor-funnel-port">
-          {zh ? "公開入口連接埠" : "Public entry port"}
+          {zh ? "公開連接埠" : "Public port"}
           <select
             className="px-field"
             id="visitor-funnel-port"
@@ -552,9 +518,7 @@ export function VisitorGatewayPanel({
           </select>
         </label>
         <label htmlFor="visitor-pages-origin">
-          {zh
-            ? "GitHub Pages 網域（不含專案路徑）"
-            : "GitHub Pages domain (without a project path)"}
+          {zh ? "Pages 網域" : "Pages domain"}
           <input
             className="px-field"
             aria-describedby="visitor-pages-origin-help"
@@ -570,7 +534,7 @@ export function VisitorGatewayPanel({
           />
         </label>
         <label htmlFor="visitor-local-port">
-          {zh ? "本機訪客服務連接埠" : "Local visitor service port"}
+          {zh ? "本機連接埠" : "Local port"}
           <input
             className="px-field"
             id="visitor-local-port"
@@ -585,21 +549,71 @@ export function VisitorGatewayPanel({
           />
         </label>
         {status?.visitor_port_source === "environment" && (
-          <p>{zh ? "目前使用預設值" : "Using the default"}</p>
+          <InfoParagraphs
+            locale={locale}
+            text={zh ? "目前使用預設值" : "Using the default"}
+          />
         )}
       </fieldset>
       <details className="publication-info px-info">
-        <summary>ⓘ {zh ? "來源網址與儲存說明" : "Origins and saving"}</summary>
-        <p id="visitor-pages-origin-help">
-          {zh
-            ? "例如網站是 https://account.github.io/project/，這裡只填 https://account.github.io。下一步再填完整網站網址。儲存後啟動本機訪客服務，並依下方說明在 Tailscale 啟用 Funnel。"
-            : "For https://account.github.io/project/, enter only https://account.github.io here. Enter the full site URL in the next step. After saving, start the local visitor service and enable Funnel in Tailscale using the instructions below."}
-        </p>
-        <p>
-          {zh
-            ? "必須同時填入兩個網址，或同時清空。儲存不會驗證 Pages 託管狀態、GitHub 卡片或外網連線。gateway 執行中時，須先停止才能變更來源。"
-            : "Enter both origins or clear both. Saving does not verify Pages hosting, GitHub cards, or external reachability. Stop the gateway before changing origins while it is running."}
-        </p>
+        <summary>ⓘ {zh ? "連線說明" : "Connection details"}</summary>
+        <InfoParagraphs
+          locale={locale}
+          text={
+            zh
+              ? "這裡只設定 RepoNPC 的訪客入口。主機與已選回答模型必須保持可用；停止分享不會影響本機預覽、準備內容、FAQ 審核或一般編輯。"
+              : "Configure only the RepoNPC visitor entry here. The host and selected answer model must stay available. Stopping sharing does not affect local preview, preparation, FAQ review, or ordinary editing."
+          }
+        />
+        {!publicSharingAvailable && (
+          <p role="note">
+            {zh
+              ? "目前是本機試用模式，無法公開分享。本機預覽和卡片圖仍可使用；要公開分享，請改用正式模式啟動 RepoNPC。"
+              : "RepoNPC is running in local trial mode, so public sharing is unavailable. Local preview and the card image still work; to share publicly, start RepoNPC in production mode."}
+          </p>
+        )}
+
+        {status && (
+          <>
+            {status.local_ready === false && (
+              <InfoParagraphs
+                locale={locale}
+                text={
+                  zh
+                    ? "先在本機準備可用版本，並確認已選回答模型可用，再啟動訪客入口。"
+                    : "Prepare a local version and make sure the selected answer model is available before starting the visitor entry."
+                }
+              />
+            )}
+
+            <p>
+              {status.client_identity_mode === "aggregate"
+                ? zh
+                  ? "訪客保護模式：共用每日額度與同時工作上限；不採用轉送的訪客身分。"
+                  : "Visitor protection: shared daily and concurrency limits; forwarded visitor identity is ignored."
+                : zh
+                  ? "訪客保護模式：使用已設定的 loopback proxy 身分限制。依賴該 proxy 的來源位址覆寫行為；未完成外網確認前請勿依賴個別 IP 保護。"
+                  : "Visitor protection: configured loopback-proxy identity limits. These depend on the proxy's source-address overwrite behavior; do not rely on per-IP protection until externally confirmed."}
+            </p>
+          </>
+        )}
+        <InfoParagraphs
+          locale={locale}
+          id="visitor-pages-origin-help"
+          text={
+            zh
+              ? "例如網站是 https://account.github.io/project/，這裡只填 https://account.github.io。下一步再填完整網站網址。儲存後啟動本機訪客服務，並依下方說明在 Tailscale 啟用 Funnel。"
+              : "For https://account.github.io/project/, enter only https://account.github.io here. Enter the full site URL in the next step. After saving, start the local visitor service and enable Funnel in Tailscale using the instructions below."
+          }
+        />
+        <InfoParagraphs
+          locale={locale}
+          text={
+            zh
+              ? "必須同時填入兩個網址，或同時清空。儲存不會驗證 Pages 託管狀態、GitHub 卡片或外網連線。gateway 執行中時，須先停止才能變更來源。"
+              : "Enter both origins or clear both. Saving does not verify Pages hosting, GitHub cards, or external reachability. Stop the gateway before changing origins while it is running."
+          }
+        />
       </details>
       {changed && status?.external_verified && (
         <p role="status">
@@ -645,7 +659,7 @@ export function VisitorGatewayPanel({
           onClick={() => void save()}
           type="button"
         >
-          {zh ? "儲存來源網址" : "Save origins"}
+          {zh ? "儲存" : "Save"}
         </button>
         {changed && (
           <button
@@ -673,8 +687,8 @@ export function VisitorGatewayPanel({
               ? "重試啟動訪客連線"
               : "Retry starting visitor access"
             : zh
-              ? "啟動訪客連線"
-              : "Start visitor access"}
+              ? "啟動"
+              : "Start"}
         </button>
         <button
           className="px-button px-button--secondary"
@@ -682,7 +696,7 @@ export function VisitorGatewayPanel({
           onClick={() => void stop()}
           type="button"
         >
-          {zh ? "停止本機訪客連線" : "Stop local visitor access"}
+          {zh ? "停止" : "Stop"}
         </button>
         <button
           className="px-button px-button--secondary"
@@ -690,7 +704,7 @@ export function VisitorGatewayPanel({
           onClick={() => void gateway.refresh()}
           type="button"
         >
-          {zh ? "重新整理狀態" : "Refresh status"}
+          {zh ? "重新整理" : "Refresh"}
         </button>
       </div>
 
@@ -757,25 +771,27 @@ export function VisitorGatewayPanel({
           >
             {zh ? "記錄擁有者回報檢查" : "Record owner-reported check"}
           </button>
-          <p>
-            {zh
-              ? "重新啟動、停止或來源變更會清除檢查；版本與本機就緒變更不會清除這筆當時的觀察；Funnel 或網際網路的未觀察中斷不會被偵測。這不會驗證 GitHub Pages 或卡片。"
-              : "Restart, stop or origin changes clear the check. Bundle and local readiness changes do not clear this dated observation. Unobserved Funnel or internet outages are not detected. This does not verify GitHub Pages or cards."}
-          </p>
+          <InfoParagraphs
+            locale={locale}
+            text={
+              zh
+                ? "重新啟動、停止或來源變更會清除檢查；版本與本機就緒變更不會清除這筆當時的觀察；Funnel 或網際網路的未觀察中斷不會被偵測。這不會驗證 GitHub Pages 或卡片。"
+                : "Restart, stop or origin changes clear the check. Bundle and local readiness changes do not clear this dated observation. Unobserved Funnel or internet outages are not detected. This does not verify GitHub Pages or cards."
+            }
+          />
         </details>
       )}
 
       <details className="visitor-gateway__commands">
-        <summary>
-          {zh
-            ? "官方 Tailscale Funnel 指令（僅顯示）"
-            : "Official Tailscale Funnel commands (display only)"}
-        </summary>
-        <p>
-          {zh
-            ? "請自行在 Tailscale 官方流程安裝、登入、授權並執行指令。RepoNPC 不會執行命令或管理 Tailscale。"
-            : "Install, sign in, authorize, and run these commands yourself through Tailscale's official flow. RepoNPC does not run commands or manage Tailscale."}
-        </p>
+        <summary>{zh ? "Tailscale Funnel" : "Tailscale Funnel"}</summary>
+        <InfoParagraphs
+          locale={locale}
+          text={
+            zh
+              ? "請自行在 Tailscale 官方流程安裝、登入、授權並執行指令。RepoNPC 不會執行命令或管理 Tailscale。"
+              : "Install, sign in, authorize, and run these commands yourself through Tailscale's official flow. RepoNPC does not run commands or manage Tailscale."
+          }
+        />
         <p>
           {status && funnelPort
             ? zh
@@ -794,19 +810,25 @@ export function VisitorGatewayPanel({
             {`tailscale funnel --bg --https=${funnelPortText} http://127.0.0.1:${visitorPortText}`}
           </code>
         </pre>
-        <p>
-          {zh
-            ? "停用 Funnel 的官方指令："
-            : "Official command to turn Funnel off:"}
-        </p>
+        <InfoParagraphs
+          locale={locale}
+          text={
+            zh
+              ? "停用 Funnel 的官方指令："
+              : "Official command to turn Funnel off:"
+          }
+        />
         <pre>
           <code>{`tailscale funnel --https=${funnelPortText} off`}</code>
         </pre>
-        <p>
-          {zh
-            ? "停止本機 Gateway 不代表 Funnel 已停用。Funnel 可能有 beta 狀態、使用限制與方案資格條件；啟用前請確認 Tailscale 官方最新說明與你的方案。"
-            : "Stopping the local gateway does not turn Funnel off. Funnel may have beta status, usage limits, or plan eligibility requirements; check Tailscale's current official guidance and your plan before enabling it."}
-        </p>
+        <InfoParagraphs
+          locale={locale}
+          text={
+            zh
+              ? "停止本機 Gateway 不代表 Funnel 已停用。Funnel 可能有 beta 狀態、使用限制與方案資格條件；啟用前請確認 Tailscale 官方最新說明與你的方案。"
+              : "Stopping the local gateway does not turn Funnel off. Funnel may have beta status, usage limits, or plan eligibility requirements; check Tailscale's current official guidance and your plan before enabling it."
+          }
+        />
       </details>
     </section>
   );
