@@ -481,7 +481,10 @@ it.each(["zh-TW", "en"] as const)(
       const alerts = () =>
         view.render().filter((node) => node.props.role === "alert");
       const expectRecovery = async () => {
-        await vi.waitFor(() => expect(alerts()).toHaveLength(1));
+        // 75 polls per test: the default 50 ms interval alone costs ~4 s.
+        await vi.waitFor(() => expect(alerts()).toHaveLength(1), {
+          interval: 1,
+        });
         const text = elements(alerts()[0])
           .map((node) =>
             Children.toArray(node.props.children as ReactNode)
