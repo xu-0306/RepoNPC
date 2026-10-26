@@ -224,6 +224,46 @@ const confirmedModels: AnalysisSelectionView = {
 
 describe("GuidedOnboardingView", () => {
   it.each(["zh-TW", "en"] as const)(
+    "keeps draft validation beside compact guidance before the YAML in %s",
+    (locale) => {
+      const html = renderToStaticMarkup(
+        <GuidedOnboardingView
+          {...props({
+            locale,
+            state: state({ step: "draft" }),
+            validation: { valid: true, errors: [], warnings: [] },
+          })}
+        />,
+      );
+      expect(html).toContain(
+        '<h2 class="visually-hidden" id="guided-draft-heading">',
+      );
+      const tools = html.match(
+        /<div class="p4-w2__tools">([\s\S]*?)<\/details><\/div><pre/,
+      )![1];
+      expect(tools).toMatch(
+        /<span class="px-badge" role="status">[^<]+: 0 · [^<]+: 0<\/span>/,
+      );
+      expect(tools).toContain(
+        `<summary>ⓘ <span class="visually-hidden">${locale === "en" ? "Field guidance" : "填寫說明"}</span></summary>`,
+      );
+      const help = tools.slice(tools.indexOf('<details class="p4-w2__info'));
+      expect(help).not.toContain(' open=""');
+      expect(help).toContain(
+        locale === "en" ? "Keep the draft on your host" : "草稿保存在你的主機",
+      );
+      expect(help).toContain(
+        locale === "en"
+          ? "Content is ready. Open Preview &amp; share to prepare the NPC."
+          : "內容已完成，可前往「預覽與分享」準備 NPC。",
+      );
+      expect(help).toContain(
+        locale === "en" ? "not a deployed website" : "不是已上線網站",
+      );
+    },
+  );
+
+  it.each(["zh-TW", "en"] as const)(
     "renders the exact escaped draft with bounded keyboard scrolling and validation counts in %s",
     (locale) => {
       const draft = `name: '<img src=x onerror=alert(1)>'\nlong: ${"x".repeat(300)}\n`;

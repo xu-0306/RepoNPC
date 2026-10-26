@@ -446,90 +446,92 @@ const publicationErrors = [
   ["untrusted-runtime-canary", "無法確認原因", "cause is unknown"],
 ] as const;
 
-it.each(["zh-TW", "en"] as const)(
-  "shows safe actionable failures for requests, partial saves and stored status in %s",
-  async (locale) => {
-    for (const [code, zh, en] of publicationErrors) {
-      hooks.values = [];
-      let mode: "save" | "prepare" | "status" = "save";
-      const request = vi.fn(async (path: string) => {
-        if (
-          mode === "save" ||
-          (mode === "prepare" && path.endsWith("/prepare"))
-        )
-          throw new Error(code);
-        if (path.endsWith("/prepare"))
-          return {
-            state: "failed",
-            index_ready: true,
-            draft_changed: true,
-            error_code: code,
-            retry_at: null,
-            revision: "saved",
-            active_bundle_id: "previous",
-          };
-        return {
-          content: "retained draft",
-          sprite_base64: null,
-          revision: "saved",
-        };
-      });
-      const view = workspace(
-        locale,
-        request as <T>(path: string) => Promise<T>,
-      );
-      const alerts = () =>
-        view.render().filter((node) => node.props.role === "alert");
-      const expectRecovery = async () => {
-        // 75 polls per test: the default 50 ms interval alone costs ~4 s.
-        await vi.waitFor(() => expect(alerts()).toHaveLength(1), {
-          interval: 1,
-        });
-        const text = elements(alerts()[0])
-          .map((node) =>
-            Children.toArray(node.props.children as ReactNode)
-              .filter((child) => typeof child === "string")
-              .join(""),
+describe.each(["zh-TW", "en"] as const)(
+  "safe actionable publication failures in %s",
+  (locale) => {
+    it.each(publicationErrors)(
+      "shows safe actionable failures for requests, partial saves and stored status: %s",
+      async (code, zh, en) => {
+        hooks.values = [];
+        let mode: "save" | "prepare" | "status" = "save";
+        const request = vi.fn(async (path: string) => {
+          if (
+            mode === "save" ||
+            (mode === "prepare" && path.endsWith("/prepare"))
           )
-          .join("");
-        expect(text).toContain(locale === "zh-TW" ? zh : en);
-        expect(text).not.toContain(code);
-        if (sourceFailureCodes.has(code)) {
-          expect(text).not.toMatch(/維護|Maintenance/);
-          expect(text).not.toMatch(/重新測試|retest/);
-        }
-        expect(view.input.content).toBe("retained draft");
-      };
-      (
-        view.button(locale === "zh-TW" ? "儲存本機草稿" : "Save local draft")
-          .props.onClick as () => void
-      )();
-      await expectRecovery();
-      expect(view.input.onStored).not.toHaveBeenCalled();
-      mode = "prepare";
-      (
-        view.button(
-          locale === "zh-TW" ? "準備 NPC 並套用" : "Prepare and apply NPC",
-        ).props.onClick as () => void
-      )();
-      await expectRecovery();
-      expect(alerts()[0].props.children).toContain(
-        locale === "zh-TW" ? "草稿已儲存" : "draft was saved",
-      );
-      expect(view.input.onStored).toHaveBeenCalledTimes(1);
-      mode = "status";
-      (
-        view.button(
-          locale === "zh-TW" ? "準備 NPC 並套用" : "Prepare and apply NPC",
-        ).props.onClick as () => void
-      )();
-      await expectRecovery();
-      expect(
-        view
-          .render()
-          .some((node) => node.type === "a" && node.props.href === "/"),
-      ).toBe(true);
-    }
+            throw new Error(code);
+          if (path.endsWith("/prepare"))
+            return {
+              state: "failed",
+              index_ready: true,
+              draft_changed: true,
+              error_code: code,
+              retry_at: null,
+              revision: "saved",
+              active_bundle_id: "previous",
+            };
+          return {
+            content: "retained draft",
+            sprite_base64: null,
+            revision: "saved",
+          };
+        });
+        const view = workspace(
+          locale,
+          request as <T>(path: string) => Promise<T>,
+        );
+        const alerts = () =>
+          view.render().filter((node) => node.props.role === "alert");
+        const expectRecovery = async () => {
+          await vi.waitFor(() => expect(alerts()).toHaveLength(1), {
+            interval: 1,
+          });
+          const text = elements(alerts()[0])
+            .map((node) =>
+              Children.toArray(node.props.children as ReactNode)
+                .filter((child) => typeof child === "string")
+                .join(""),
+            )
+            .join("");
+          expect(text).toContain(locale === "zh-TW" ? zh : en);
+          expect(text).not.toContain(code);
+          if (sourceFailureCodes.has(code)) {
+            expect(text).not.toMatch(/維護|Maintenance/);
+            expect(text).not.toMatch(/重新測試|retest/);
+          }
+          expect(view.input.content).toBe("retained draft");
+        };
+        (
+          view.button(locale === "zh-TW" ? "儲存本機草稿" : "Save local draft")
+            .props.onClick as () => void
+        )();
+        await expectRecovery();
+        expect(view.input.onStored).not.toHaveBeenCalled();
+        mode = "prepare";
+        (
+          view.button(
+            locale === "zh-TW" ? "準備 NPC 並套用" : "Prepare and apply NPC",
+          ).props.onClick as () => void
+        )();
+        await expectRecovery();
+        expect(alerts()[0].props.children).toContain(
+          locale === "zh-TW" ? "草稿已儲存" : "draft was saved",
+        );
+        expect(view.input.onStored).toHaveBeenCalledTimes(1);
+        mode = "status";
+        (
+          view.button(
+            locale === "zh-TW" ? "準備 NPC 並套用" : "Prepare and apply NPC",
+          ).props.onClick as () => void
+        )();
+        await expectRecovery();
+        expect(
+          view
+            .render()
+            .some((node) => node.type === "a" && node.props.href === "/"),
+        ).toBe(true);
+      },
+    );
   },
 );
 

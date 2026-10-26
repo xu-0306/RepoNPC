@@ -2693,20 +2693,26 @@ function DraftStep({
       aria-labelledby="guided-draft-heading"
       className="guided-onboarding__step p4-w2 p4-w2--draft px-panel px-panel--raised"
     >
-      <h2 id="guided-draft-heading">{copy.draftHeading}</h2>
-      <p>{copy.draftDescription}</p>
-      <details className="p4-w2__info px-info">
-        <summary>ⓘ {copy.p4Help}</summary>
-        <p>
-          {chinese
-            ? "內容草稿已完成，尚未套用。前往「預覽與分享」預覽、準備 NPC 並取得 GitHub 卡片。下方設定檔僅供備份／搬移，不是已上線網站。"
-            : "Content is complete but not applied. Open Preview & share to preview, prepare your NPC and get its GitHub card. The settings file below is a backup, not a deployed website."}
-        </p>
-      </details>
-      <p className="px-badge" role="status">
-        {copy.draftReady}
-      </p>
-      <DraftValidation locale={locale} validation={validation} />
+      <h2 className="visually-hidden" id="guided-draft-heading">
+        {copy.draftHeading}
+      </h2>
+      <div className="p4-w2__tools">
+        <DraftValidation locale={locale} validation={validation} />
+        <details className="p4-w2__info px-info">
+          <summary>
+            ⓘ <span className="visually-hidden">{copy.p4Help}</span>
+          </summary>
+          <p>{copy.draftDescription}</p>
+          <p>
+            {chinese
+              ? "內容草稿已完成，尚未套用。前往「預覽與分享」預覽、準備 NPC 並取得 GitHub 卡片。下方設定檔僅供備份／搬移，不是已上線網站。"
+              : "Content is complete but not applied. Open Preview & share to preview, prepare your NPC and get its GitHub card. The settings file below is a backup, not a deployed website."}
+          </p>
+          <p className="px-badge" role="status">
+            {copy.draftReady}
+          </p>
+        </details>
+      </div>
       <pre
         className="p7-draft-yaml px-field"
         role="region"

@@ -13,6 +13,7 @@
   box-sizing: border-box;
   flex-shrink: 0;
   max-height: min(32vh, 18rem);
+  min-height: min(8lh, 24vh);
   min-width: 0;
   overflow: auto;
   white-space: pre;
@@ -300,6 +301,10 @@
 }
 .p4-w2 .p4-w2__tools > .p4-w2__info[open] {
   flex-basis: 100%;
+}
+.p4-w2--draft .p4-w2__tools > .px-info > summary {
+  min-width: 44px;
+  text-align: center;
 }
 .p4-w2 .px-button.px-button--primary,
 .p4-w2 .px-button.px-button--primary:hover:not(:disabled) {

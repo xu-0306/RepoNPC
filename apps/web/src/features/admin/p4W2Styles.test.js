@@ -15,8 +15,12 @@ it("uses only pixel tokens and keeps form content on the page around pinned acti
   );
   expect(bounded.map((rule) => rule[1].trim())).toEqual([".p7-draft-yaml"]);
   expect(bounded[0][2]).toMatch(/max-height:\s*min\(32vh, 18rem\)/);
+  expect(bounded[0][2]).toMatch(/min-height:\s*min\(8lh, 24vh\)/);
   expect(bounded[0][2]).toContain("overflow: auto");
   expect(bounded[0][2]).toContain("white-space: pre");
+  expect(css).toMatch(
+    /\.p4-w2--draft \.p4-w2__tools > \.px-info > summary\s*\{[^}]*min-width: 44px;/s,
+  );
   expect(css).toContain("repeat(2, minmax(0, 1fr))");
   expect(css).toContain("grid-template-columns: minmax(0, 1fr)");
   expect(css).toMatch(
