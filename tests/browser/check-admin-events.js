@@ -17,7 +17,7 @@ export async function checkAdminEvents(tab) {
       .getByRole("region", { name: "可用的 AI 服務", exact: true })
       .getByRole("button", { name: "重新整理", exact: true })
       .click();
-  await button("進階：編輯原始 YAML").click();
+  await button("進階：編輯 raw YAML").click();
   await button("預覽變更").click();
   verify(
     (await tab.playwright
@@ -30,7 +30,7 @@ export async function checkAdminEvents(tab) {
     () => document.querySelector("#admin-config-draft").value,
   );
   await tab.playwright
-    .getByRole("textbox", { name: "reponpc.yml 原始 YAML", exact: true })
+    .getByRole("textbox", { name: "reponpc.yml raw YAML", exact: true })
     .fill(previousDraft + "\n# synthetic edit");
   verify(
     (await tab.playwright

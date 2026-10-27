@@ -68,8 +68,8 @@ const COPY = {
     editService: "編輯 AI 服務",
     name: "服務名稱（方便自己辨認）",
     provider: "連線方式",
-    chatInterface: "聊天連線方式",
-    address: "服務網址",
+    chatInterface: "聊天 API 接口",
+    address: "服務網址（API 位址）",
     key: "服務金鑰（API key，可選）",
     create: "儲存服務",
     update: "更新服務",
@@ -348,7 +348,7 @@ export function ModelConnectionPanel({
           <h3>{editingId ? copy.editService : copy.addService}</h3>
           <p>
             {locale === "zh-TW"
-              ? "從服務商的設定頁複製服務網址與金鑰。金鑰只用於連線。送出或離開表單後會清除輸入。重試時請重新填入。"
+              ? "從服務商的設定頁複製服務網址與 API key。金鑰只用於連線。送出或離開表單後會清除輸入。重試時請重新填入。"
               : "Copy the service URL and API key from your service's settings. RepoNPC uses the key only to connect to the service. The form clears your key after submission or when you leave it. Enter the key again for each retry."}
           </p>
           {editingHostConnection && (
@@ -391,7 +391,7 @@ export function ModelConnectionPanel({
           </label>
           {provider === "openai_compatible" && purpose !== "embedding" && (
             <label htmlFor={`model-connection-chat-api${idSuffix}`}>
-              {locale === "zh-TW" ? "聊天連線方式" : "Chat API interface"}
+              {locale === "zh-TW" ? "聊天 API 接口" : "Chat API interface"}
               <select
                 id={`model-connection-chat-api${idSuffix}`}
                 disabled={pending}

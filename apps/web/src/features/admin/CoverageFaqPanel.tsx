@@ -210,7 +210,7 @@ export function CoverageFaqPanel({
   return (
     <section className="coverage-faq px-panel" aria-labelledby="faq-heading">
       <h2 id="faq-heading">
-        {zh ? "涵蓋檢查與常見問答審核" : "Coverage and FAQ review"}
+        {zh ? "涵蓋檢查與 FAQ 審核" : "Coverage and FAQ review"}
       </h2>
       <details className="publication-info px-info">
         <summary>
@@ -218,12 +218,12 @@ export function CoverageFaqPanel({
         </summary>
         <p>
           {zh
-            ? "檢查目前已準備的本機版本，會使用已選模型。缺口不會阻擋發布。常見問答只有核准後才提供給訪客。"
+            ? "檢查目前已準備的本機版本，會使用已選模型。缺口不會阻擋發布。FAQ 只有核准後才提供給訪客。"
             : "Check the prepared local version using your selected models. Gaps never block publication. Visitors receive only approved FAQ answers."}
         </p>
         <p>
           {zh
-            ? "改寫會開啟貢獻編輯器。儲存陳述並更新 NPC 後，請重新生成及審核常見問答。新回答不保證引用這段陳述。"
+            ? "改寫會開啟貢獻編輯器。儲存陳述並更新 NPC 後，請重新生成及審核 FAQ。新回答不保證引用這段陳述。"
             : "Rewrite opens the contribution editor. Save the statement and update the NPC. Then regenerate and review the FAQ. The new answer may not cite this statement."}
         </p>
       </details>
@@ -274,7 +274,7 @@ export function CoverageFaqPanel({
           })
         }
       >
-        {zh ? "下載已核准常見問答 JSON" : "Download approved FAQ JSON"}
+        {zh ? "下載已核准 FAQ JSON" : "Download approved FAQ JSON"}
       </button>
       <label htmlFor="faq-repository">
         {zh ? "補充陳述的專案" : "Project for the new statement"}

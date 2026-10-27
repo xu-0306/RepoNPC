@@ -16,7 +16,7 @@ no site has been uploaded or externally verified by this task.
    相符時，才會標示為已核對並提供 Pages 卡片連結。
 4. 按「預覽 README 內容」核對完整檔案，再按「下載 README.md」。
    下載時會再次核對目前內容與 Pages 公開卡片；不必另上傳圖片。
-   README.md 必須放在「與 GitHub 帳號同名的公開儲存庫」根目錄，
+   README.md 必須放在「與 GitHub 帳號同名的公開 repository」根目錄，
    才能顯示在個人首頁。已有 README 時先比較並保留原文，也可使用
    原有卡片 GIF 下載／上傳與複製區塊，追加名片。RepoNPC 不會自動覆寫。
 

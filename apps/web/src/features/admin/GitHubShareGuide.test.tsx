@@ -58,7 +58,7 @@ describe("Verified Pages README route", () => {
       );
       expect(markup).toContain(
         locale === "zh-TW"
-          ? "README.md 必須放在「與 GitHub 帳號同名的公開儲存庫」根目錄"
+          ? "README.md 必須放在「與 GitHub 帳號同名的公開 repository」根目錄"
           : "README.md must be at the root of a public repository with the same name as your GitHub account",
       );
       expect(markup).toContain(

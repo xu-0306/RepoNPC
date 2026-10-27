@@ -236,7 +236,7 @@ const COPY: Record<Locale, Copy> = {
     modelReturnHelp: "內容草稿已保留。完成模型設定後可返回準備 NPC。",
     modelsRequired:
       "請先測試回答模型與資料查找模型，再於選擇區按「確認用於分析」。",
-    advanced: "編輯原始 YAML",
+    advanced: "編輯 raw YAML",
     advancedDescription: "熟悉設定格式時，可直接編輯 reponpc.yml。",
     progress: "引導設定進度",
     steps: {
@@ -260,7 +260,7 @@ const COPY: Record<Locale, Copy> = {
     manualHeading: "手動加入專案",
     repositoryLabel: "專案識別字串或 GitHub 網址",
     repositoryHelp: "格式為 owner/name。也可用 https://github.com/owner/name。",
-    refLabel: "版本（分支、標籤或提交識別碼）",
+    refLabel: "版本（分支、標籤或commit SHA）",
     refOptional: "可選",
     resolve: "解析專案",
     repositoryHeading: "公開專案",
@@ -397,10 +397,9 @@ const COPY: Record<Locale, Copy> = {
     copyDraft: "複製 YAML",
     downloadDraft: "備份設定（YAML）",
     draftReady: "內容已完成，可前往「預覽與分享」準備 NPC。",
-    advancedMode: "進階原始 YAML 模式",
+    advancedMode: "進階 raw YAML 模式",
     guidedMode: "返回引導模式",
-    rawYamlWarning:
-      "原始 YAML 有無法對應回引導欄位的變更。請在進階模式中處理。",
+    rawYamlWarning: "raw YAML 有無法對應回引導欄位的變更。請在進階模式中處理。",
     busy: "正在處理；目前操作可能暫時停用。",
     errorHeading: "引導設定錯誤",
     disabledBusy: "目前操作進行中，請稍候。",

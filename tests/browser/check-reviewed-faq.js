@@ -20,14 +20,14 @@ export async function checkReviewedFaq(tab) {
     }
     throw new Error("Export state did not update");
   };
-  await wait("涵蓋檢查與常見問答審核");
+  await wait("涵蓋檢查與 FAQ 審核");
   await button("使用模型檢查六個標準問題").click();
   let content = await wait("涵蓋檢查已完成");
   verify(content.includes("部分回答") && content.includes("沒有相關內容"), "coverage uses three result states");
   verify(content.includes("尚未檢查"), "suggested candidate stays ungenerated");
   await tab.playwright.getByRole("button", { name: "核准", exact: true }).nth(0).click();
   await wait("已核准");
-  await button("下載已核准常見問答 JSON").click();
+  await button("下載已核准 FAQ JSON").click();
   await waitExport(1);
   let observation = await tab.playwright.evaluate(() => ({ logs: document.querySelector('[aria-label="Recorded operations"]')?.textContent,
     exported: document.querySelector('[aria-label="Exported FAQ"]')?.textContent }));
@@ -70,7 +70,7 @@ export async function checkReviewedFaq(tab) {
   verify(JSON.parse(observation.exported).entries.length === 0, "bundle switch withholds previous approvals from export");
   verify(observation.disabled === false, "coverage never gates update publication");
   await button("中文 / English").click();
-  await wait("涵蓋檢查與常見問答審核");
+  await wait("涵蓋檢查與 FAQ 審核");
   await button("Delay next generation fixture").click();
   await tab.playwright.getByRole("button", { name: "使用模型重新生成", exact: true }).nth(0).click();
   await wait("generation:held");

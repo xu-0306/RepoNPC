@@ -14,7 +14,7 @@ export async function checkServiceNotices(tab) {
     exact: true,
   });
   const toast = tab.playwright.locator(".admin-success-toast");
-  await button("進階：編輯原始 YAML").click();
+  await button("進階：編輯 raw YAML").click();
   await button("編輯 Synthetic Ollama").click();
   await mode.selectOption("failure");
   await button("更新服務").click();

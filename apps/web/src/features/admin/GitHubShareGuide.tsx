@@ -105,7 +105,7 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
   "zh-TW": {
     title: "4. GitHub 個人頁",
     subtitle:
-      "下載完整 README.md，手動上傳到 GitHub 個人頁使用的儲存庫。卡片使用已核對 Pages 網站的公開圖片，不必另外上傳圖片。GitHub 只顯示名片。點擊連結才會前往 RepoNPC 網站對話。",
+      "下載完整 README.md，手動上傳到 GitHub 個人頁使用的 repository。卡片使用已核對 Pages 網站的公開圖片，不必另外上傳圖片。GitHub 只顯示名片。點擊連結才會前往 RepoNPC 網站對話。",
     downloadReadme: "下載 README.md",
     previewReadme: "預覽 README 內容",
     readmePreviewHelp:
@@ -113,53 +113,53 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     readmeContents:
       "檔案包含公開介紹、作品連結、NPC 名片與「與我的 NPC 對話」入口。這些內容已套用並與 Pages 核對。尚未套用的草稿不會匯出。",
     readmePlacement:
-      "README.md 必須放在「與 GitHub 帳號同名的公開儲存庫」根目錄，才能顯示在個人首頁。",
+      "README.md 必須放在「與 GitHub 帳號同名的公開 repository」根目錄，才能顯示在個人首頁。",
     readmeReady:
       "下載時會再次核對目前內容與公開卡片。請確認瀏覽器完成下載，再手動上傳 README.md。",
     readmeUnavailable:
       "先到第 3 段上傳並核對 Pages 網站，才能下載含公開卡片的 README.md。也可沿用下方的卡片下載、上傳與複製區塊。",
     existingReadme:
       "已有 README？請保留原文，使用下方「複製要貼進 README 的文字」追加名片。上傳完整檔案前先比較內容。RepoNPC 不會自動覆寫 GitHub README。",
-    stageProfile: "同名儲存庫",
+    stageProfile: "同名 repository",
     stageCard: "上傳卡片",
     stageReadme: "README",
     accountLabel: "GitHub 帳號",
     accountHelp:
-      "輸入 GitHub 使用者名稱或個人頁網址。這一步只查公開資料，不會登入帳號或建立儲存庫。",
+      "輸入 GitHub 使用者名稱或個人頁網址。這一步只查公開資料，不會登入帳號或建立 repository。",
     accountPlaceholder: "輸入 GitHub 帳號",
     accountNotEntered: "尚未輸入帳號",
-    checkProfile: "檢查同名儲存庫",
+    checkProfile: "檢查同名 repository",
     profileStatus: {
       unchecked:
-        "尚未檢查同名儲存庫。GitHub 帳號存在，不代表個人頁的 README 已準備好。",
-      ready: "已找到同名公開儲存庫和根目錄 README.md。下一步請下載並上傳卡片。",
+        "尚未檢查同名 repository。GitHub 帳號存在，不代表個人頁的 README 已準備好。",
+      ready:
+        "已找到同名公開 repository 和根目錄 README.md。下一步請下載並上傳卡片。",
       missing:
-        "目前找不到可公開讀取的同名儲存庫。這不表示 GitHub 帳號不存在，也無法判斷是否有私人儲存庫。若已建立，請確認名稱和 Public（公開）設定。尚未建立則依下方步驟操作。",
+        "目前找不到可公開讀取的同名 repository。這不表示 GitHub 帳號不存在，也無法判斷是否有私人 repository。若已建立，請確認名稱和 Public（公開）設定。尚未建立則依下方步驟操作。",
       missing_readme:
-        "已找到同名公開儲存庫，但根目錄尚未找到 README.md。請在這個儲存庫新增 README.md，不用再建一個。",
+        "已找到同名公開 repository，但根目錄尚未找到 README.md。請在這個 repository 新增 README.md，不用再建一個。",
       unavailable:
-        "目前無法查證同名儲存庫。可能是存取限制、GitHub 限流或暫時故障；請稍後重試。這不表示帳號或儲存庫不存在。",
+        "目前無法查證同名 repository。可能是存取限制、GitHub 限流或暫時故障；請稍後重試。這不表示帳號或 repository 不存在。",
     },
     repositoryDetails: "這一步檢查的目標",
-    publicRepository: "個人頁使用的儲存庫",
+    publicRepository: "個人頁使用的 repository",
     rootReadme: "要編輯的檔案",
-    createProfileHeading: "尚未建立同名儲存庫？",
+    createProfileHeading: "尚未建立同名 repository？",
     createProfileIntro:
-      "只需建立一個與帳號同名的公開儲存庫，README 和卡片都放在這裡：",
-    repositoryName: "Repository name（儲存庫名稱）輸入",
+      "只需建立一個與帳號同名的公開 repository，README 和卡片都放在這裡：",
+    repositoryName: "Repository name 輸入",
     choosePublic: "確認 Owner（擁有者）是你的帳號，並選擇 Public（公開）。",
     addReadme: "勾選 Add a README file（新增說明檔），建立 README.md。",
-    createRepository:
-      "按 Create repository（建立儲存庫）。完成後回來重新檢查。",
+    createRepository: "按 Create repository。完成後回來重新檢查。",
     existingRepositoryReadme:
-      "儲存庫已存在，只需在根目錄新增 README.md，無須建立第二個儲存庫。",
-    openRepository: "查看同名儲存庫",
-    openCreatePage: "前往 GitHub 建立儲存庫",
+      "repository 已存在，只需在根目錄新增 README.md，無須建立第二個 repository。",
+    openRepository: "查看同名 repository",
+    openCreatePage: "前往 GitHub 建立 repository",
     openReadme: "編輯 README.md",
     openProfile: "查看 GitHub 帳號頁",
     verifyPages: "前往第 3 段上傳並核對 Pages 網站",
     cardIntro:
-      "先下載卡片，再把圖片上傳到第一步的同名儲存庫根目錄。不用建立另一個儲存庫。",
+      "先下載卡片，再把圖片上傳到第一步的同名 repository 根目錄。不用建立另一個 repository。",
     filenameLabel: "建議上傳檔名（根目錄）",
     filenameMissing: "尚未提供檔名",
     cardReady: "卡片已準備好，可以下載。",
@@ -170,24 +170,24 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     imageStatus: {
       unchecked: "尚未檢查圖片。上傳到 GitHub 後，按「檢查圖片是否已上傳」。",
       ready:
-        "已在同名儲存庫找到這個檔名的圖片；這只確認檔案存在，請在最後確認個人頁顯示的是新卡片。",
+        "已在同名 repository 找到這個檔名的圖片；這只確認檔案存在，請在最後確認個人頁顯示的是新卡片。",
       missing:
-        "尚未找到卡片圖片。請確認檔名正確、檔案放在儲存庫根目錄，並已存入預設分支。",
+        "尚未找到卡片圖片。請確認檔名正確、檔案放在 repository 根目錄，並已存入預設分支。",
       unavailable:
-        "目前無法確認圖片狀態；可能是未登入、沒有權限、儲存庫不可見、限流或服務暫時無法使用。請稍後重試或手動開啟儲存庫。",
+        "目前無法確認圖片狀態；可能是未登入、沒有權限、repository 不可見、限流或服務暫時無法使用。請稍後重試或手動開啟 repository。",
     },
     imageReadyNote:
       "這是狀態檢查結果，不代表 README 已更新；README 仍需下一步手動貼入。",
     uploadStepsHeading: "在 GitHub 依序操作",
     uploadSteps: [
-      "在第一步的同名儲存庫，按 Add file（新增檔案）→ Upload files（上傳檔案）。",
-      "選剛下載的圖片，放在儲存庫最外層（不要放進資料夾）。檔名保持為上方顯示的名稱。",
+      "在第一步的同名 repository，按 Add file（新增檔案）→ Upload files（上傳檔案）。",
+      "選剛下載的圖片，放在 repository 最外層（不要放進資料夾）。檔名保持為上方顯示的名稱。",
       "依 GitHub 畫面提交變更；若需要審查或合併，完成後再回來檢查圖片。",
     ],
     protectedBranch:
       "受保護的預設分支可能需要提案與合併；圖片進入預設分支前，不要把上傳視為完成。",
     readmeIntro:
-      "最後編輯同名儲存庫的 README.md。把下方文字貼到想顯示卡片的位置，保留原本的介紹。",
+      "最後編輯同名 repository 的 README.md。把下方文字貼到想顯示卡片的位置，保留原本的介紹。",
     markdownPreviewHeading: "已核對 Pages 網站的 README 文字",
     markdownLabel: "複製下方這段文字",
     markdownReady: "要貼進 README.md 的文字已準備好，可以複製。",
@@ -196,11 +196,12 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     copyMarkdown: "複製要貼進 README 的文字",
     preserveReadmeHeading: "在 README 保留原文",
     preserveReadmeSteps: [
-      "打開同名儲存庫的 README.md，點 GitHub 的編輯按鈕。",
+      "打開同名 repository 的 README.md，點 GitHub 的編輯按鈕。",
       "貼入上方複製的內容，保留原有介紹文字。",
       "先預覽圖片和連結，再依 GitHub 畫面提交變更。",
     ],
-    profileLinkPending: "請先完成第一步，確認同名公開儲存庫和 README.md。",
+    profileLinkPending:
+      "請先完成第一步，確認同名公開 repository 和 README.md。",
     testHeading: "從 GitHub 實際查看",
     testInstruction:
       "提交 README 後，開啟 GitHub 帳號頁。確認卡片出現在個人介紹。再點卡片進入公開 RepoNPC 網站並試問一次。",
@@ -211,7 +212,7 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     ],
     busy: "正在處理中…",
     linkUnavailable: "填入有效 GitHub 帳號後才會顯示連結。",
-    notCheckedAction: "在 GitHub 建立或修改後，回來按「檢查同名儲存庫」。",
+    notCheckedAction: "在 GitHub 建立或修改後，回來按「檢查同名 repository」。",
   },
   en: {
     title: "4. GitHub profile",

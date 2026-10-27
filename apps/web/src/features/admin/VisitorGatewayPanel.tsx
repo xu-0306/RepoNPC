@@ -50,11 +50,11 @@ const ERROR_MESSAGES: Record<GatewayError, Record<AdminLocale, string>> = {
   },
   configuration: {
     "zh-TW":
-      "網址或訪客服務狀態不符合設定條件；請檢查兩個網址，並在變更前先停止訪客服務。",
+      "網址或 gateway 狀態不符合設定條件；請檢查兩個網址，並在變更前先停止 gateway。",
     en: "The origins or visitor service state do not meet the configuration requirements. Check both origins and stop the visitor service before changing them.",
   },
   unavailable: {
-    "zh-TW": "本機訪客服務無法完成操作。請確認本機就緒狀態與連接埠後重試。",
+    "zh-TW": "本機 gateway 無法完成操作。請確認本機就緒狀態與連接埠後重試。",
     en: "The local visitor service could not complete the operation. Check local readiness and the port, then retry.",
   },
   auth: {
@@ -415,13 +415,13 @@ export function VisitorGatewayPanel({
 
       {gateway.loading && !status && (
         <p role="status">
-          {zh ? "正在載入訪客服務狀態…" : "Loading visitor service status…"}
+          {zh ? "正在載入 gateway 狀態…" : "Loading visitor service status…"}
         </p>
       )}
       {gateway.loadFailed && (
         <p role="alert">
           {zh
-            ? "無法讀取訪客服務狀態，請確認登入狀態後重新整理。"
+            ? "無法讀取 gateway 狀態，請確認登入狀態後重新整理。"
             : "RepoNPC could not read visitor service status. Check your sign-in status and refresh."}
         </p>
       )}
@@ -561,7 +561,7 @@ export function VisitorGatewayPanel({
           locale={locale}
           text={
             zh
-              ? "這裡只設定 RepoNPC 的訪客入口。主機與已選回答模型必須保持可用。停止分享不影響本機預覽、準備內容、常見問答審核或一般編輯。"
+              ? "這裡只設定 RepoNPC 的訪客入口。主機與已選回答模型必須保持可用。停止分享不影響本機預覽、準備內容、FAQ 審核或一般編輯。"
               : "Configure only the RepoNPC visitor entry here. The host and selected answer model must stay available. Stopping sharing does not affect local preview, preparation, FAQ review, or ordinary editing."
           }
         />
@@ -610,7 +610,7 @@ export function VisitorGatewayPanel({
           locale={locale}
           text={
             zh
-              ? "必須同時填入兩個網址，或同時清空。儲存不會驗證 Pages 託管狀態、GitHub 卡片或外網連線。訪客服務執行中時，須先停止才能變更來源。"
+              ? "必須同時填入兩個網址，或同時清空。儲存不會驗證 Pages 託管狀態、GitHub 卡片或外網連線。gateway 執行中時，須先停止才能變更來源。"
               : "Enter both origins or clear both. Saving does not check Pages hosting, GitHub cards, or external reachability. Stop the visitor service before changing origins while it is running."
           }
         />
@@ -639,7 +639,7 @@ export function VisitorGatewayPanel({
       {changed && status?.enabled && (
         <p role="status">
           {zh
-            ? "請先停止訪客服務，再儲存來源變更。"
+            ? "請先停止 gateway，再儲存來源變更。"
             : "Stop the visitor service before saving origin changes."}
         </p>
       )}
@@ -825,7 +825,7 @@ export function VisitorGatewayPanel({
           locale={locale}
           text={
             zh
-              ? "停止本機訪客服務不代表 Funnel 已停用。Funnel 可能在測試階段，或有使用限制與方案資格條件。啟用前請確認 Tailscale 官方最新說明與你的方案。"
+              ? "停止本機 gateway 不代表 Funnel 已停用。Funnel 可能在測試階段，或有使用限制與方案資格條件。啟用前請確認 Tailscale 官方最新說明與你的方案。"
               : "Stopping the local visitor service does not turn Funnel off. Funnel may have beta status, usage limits, or plan eligibility requirements. Check Tailscale's current official guidance and your plan before enabling it."
           }
         />

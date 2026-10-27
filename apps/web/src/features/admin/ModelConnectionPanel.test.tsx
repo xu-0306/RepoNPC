@@ -33,7 +33,7 @@ describe("ModelConnectionPanel", () => {
       );
       expect(markup).toContain("<dd>Responses</dd>");
       expect(markup).toContain(
-        locale === "en" ? "Chat API interface" : "聊天連線方式",
+        locale === "en" ? "Chat API interface" : "聊天 API 接口",
       );
     },
   );

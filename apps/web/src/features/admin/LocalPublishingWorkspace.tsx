@@ -82,23 +82,23 @@ function publicationErrorMessage(
         : "GitHub is temporarily unavailable; try again later.";
     case "NOT_FOUND":
       return zh
-        ? "找不到儲存庫或無法存取。"
+        ? "找不到 repository 或無法存取。"
         : "Repository not found or inaccessible.";
     case "ARCHIVED_NOT_ALLOWED":
       return zh
-        ? "儲存庫已封存，無法準備 NPC。"
+        ? "repository 已封存，無法準備 NPC。"
         : "The repository is archived and cannot be used to prepare the NPC.";
     case "ARCHIVE_TOO_LARGE":
       return zh
-        ? "儲存庫封存檔超過大小限制。"
+        ? "repository 封存檔超過大小限制。"
         : "The repository archive exceeds the size limit.";
     case "ARCHIVE_INVALID":
       return zh
-        ? "儲存庫封存檔無效，請稍後再試。"
+        ? "repository 封存檔無效，請稍後再試。"
         : "The repository archive is invalid; try again later.";
     case "ARCHIVE_UNSAFE":
       return zh
-        ? "儲存庫封存檔未通過安全檢查。"
+        ? "repository 封存檔未通過安全檢查。"
         : "The repository archive failed safety checks.";
     case "PORTFOLIO_CONFLICT":
       return zh
@@ -498,7 +498,7 @@ export function LocalPublishingWorkspace({
     setNotice({
       scope: "share",
       message: zh
-        ? "已交給瀏覽器下載 README.md；請確認下載完成，再上傳到與帳號同名的公開儲存庫根目錄。已有 README 時，先比較並保留原文。"
+        ? "已交給瀏覽器下載 README.md；請確認下載完成，再上傳到與帳號同名的公開 repository 根目錄。已有 README 時，先比較並保留原文。"
         : "Browser download requested: README.md. Confirm it completed, then upload it to the root of your public matching-name repository. Compare and keep existing README text first.",
     });
   }
@@ -926,7 +926,7 @@ export function LocalPublishingWorkspace({
       <details className="publication-optional px-panel">
         <summary>
           {zh
-            ? "選填：檢查涵蓋範圍與審核常見問答"
+            ? "選填：檢查涵蓋範圍與審核 FAQ"
             : "Optional: check coverage and review FAQ"}
         </summary>
         <CoverageFaqPanel
