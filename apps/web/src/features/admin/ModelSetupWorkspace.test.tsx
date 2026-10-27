@@ -19,7 +19,7 @@ describe("ModelSetupWorkspace", () => {
       />,
     );
 
-    expect(markup).toContain("分析使用這一組");
+    expect(markup).toContain("使用這組模型分析");
     expect(markup.indexOf("DEVICE CHECK AND MODEL GUIDANCE")).toBeGreaterThan(
       markup.indexOf("MODEL SELECTION"),
     );

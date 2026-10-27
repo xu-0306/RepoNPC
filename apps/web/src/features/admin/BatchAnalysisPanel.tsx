@@ -428,7 +428,7 @@ const COPY: Record<Locale, Copy> = {
     preflightReady: "Preflight is complete. The batch can be created.",
     preflightBlocked: "Preflight is blocked. Resolve the items below first.",
     preflightFailed:
-      "Preflight did not complete. Check again before creating a batch.",
+      "Preflight did not complete. Check status again before creating a batch.",
     repositories: "Selected repositories",
     cachePrediction: "Predicted cache hits",
     rateBudget: "Anonymous GitHub REST budget",

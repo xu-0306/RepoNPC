@@ -94,7 +94,7 @@ const COPY = {
     unknown: "Waiting for download progress information.",
     pending: "An operation is in progress. Please wait.",
     deferred:
-      "When setup is deferred, automatic builds are blocked until models are ready. You can continue editing content manually.",
+      "If you defer setup, RepoNPC blocks automatic builds until models are ready. You can continue editing content manually.",
     deferredNotice:
       "You chose to set up later. You can continue editing content manually.",
     error:

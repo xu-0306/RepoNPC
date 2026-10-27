@@ -477,7 +477,7 @@ export function ScenePreview({
           />
           {zh
             ? `顯示取景框（${selectedFocus.x}%, ${selectedFocus.y}%）`
-            : `Show crop focus frame (${selectedFocus.x}%, ${selectedFocus.y}%)`}
+            : `Display crop frame (${selectedFocus.x}%, ${selectedFocus.y}%)`}
         </label>
       </div>
       <div
@@ -650,8 +650,8 @@ export function ScenePreview({
           {protectedBackground
             ? focusLabel
             : zh
-              ? "加入背景圖片後即可拖曳圖片調整取景；滑桿仍可設定位置。"
-              : "Add a background to drag focus over the image; the sliders remain available."}
+              ? "加入背景圖片後，即可在圖片上拖曳調整取景位置。仍可用滑桿設定位置。"
+              : "Add a background to drag the crop position across the image. You can still use the sliders."}
         </p>
         <p
           aria-live="polite"

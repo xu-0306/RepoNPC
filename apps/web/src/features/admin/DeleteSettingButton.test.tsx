@@ -23,7 +23,7 @@ describe("DeleteSettingButton", () => {
       expect(button.props.description).toContain(
         "Remove or reassign models using this connection first.",
       );
-      expect(button.props.confirmLabel).toBe("Delete");
+      expect(button.props.confirmLabel).toBe("Delete setting");
       expect(button.props.destructive).toBe(true);
       expect(onDelete).not.toHaveBeenCalled();
       if (confirmed) button.props.onConfirm();
@@ -47,7 +47,7 @@ describe("DeleteSettingButton", () => {
     const button = element.props.children[0];
     expect(button.type).toBe(ConfirmButton);
     expect(button.props.disabled).toBe(true);
-    expect(button.props.confirmLabel).toBe("刪除");
+    expect(button.props.confirmLabel).toBe("刪除設定");
     button.props.onConfirm();
     expect(onDelete).not.toHaveBeenCalled();
   });

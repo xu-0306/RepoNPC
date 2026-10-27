@@ -73,7 +73,7 @@ describe("Verified Pages README route", () => {
       expect(unavailable).toContain(
         locale === "zh-TW"
           ? "先到第 3 段上傳並核對"
-          : "Upload and verify your Pages site in section 3",
+          : "Upload and check your Pages site in section 3",
       );
       expect(unavailable).not.toContain('id="github-share-markdown"');
       expect(input.onDownloadReadme).not.toHaveBeenCalled();

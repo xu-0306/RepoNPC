@@ -181,7 +181,7 @@ describe("BuiltinModelPanel", () => {
   it("explains deferred builds and preserves manual editing", () => {
     const markup = render();
     expect(markup).toContain(
-      "automatic builds are blocked until models are ready",
+      "RepoNPC blocks automatic builds until models are ready",
     );
     expect(markup).toContain("You can continue editing content manually");
     expectAssociatedReferences(markup);

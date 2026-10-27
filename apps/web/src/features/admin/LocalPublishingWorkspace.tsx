@@ -522,7 +522,7 @@ export function LocalPublishingWorkspace({
     : preparing
       ? zh
         ? "正在準備 NPC，完成後才能再次更新。"
-        : "The NPC is being prepared. Wait before updating again."
+        : "The NPC preparation must finish before you can update it again."
       : !content
         ? zh
           ? "先從已確認內容建立草稿。"
@@ -566,15 +566,16 @@ export function LocalPublishingWorkspace({
                 : "Local NPC has not been prepared.";
   const prepareNotice =
     !pending && !preparing && content && !selection?.eligible
-      ? (prepareReason ?? "").replace(/[。.]$/, zh ? "；" : "; ") +
+      ? (prepareReason ?? "") +
+        (zh ? "" : " ") +
         (zh
           ? "內容草稿會保留，完成後可返回準備 NPC。"
-          : "Your content draft is kept; return here after setup to prepare the NPC.")
+          : "RepoNPC keeps your content draft. Return here after setup to prepare the NPC.")
       : prepareReason;
   return (
     <div className="local-publication" lang={locale}>
       <header className="local-publication__heading">
-        <p className="px-display">WORKSHOP / SHARE</p>
+        <p className="px-display">{zh ? "工作區／分享" : "WORKSHOP / SHARE"}</p>
         <h1>{zh ? "預覽與分享" : "Preview & share"}</h1>
         <nav aria-label={zh ? "預覽與分享步驟" : "Preview and sharing steps"}>
           <a
@@ -738,8 +739,8 @@ export function LocalPublishingWorkspace({
           </summary>
           <p>
             {zh
-              ? "試聊會使用已選模型；一般預覽不會。"
-              : "Chat uses your selected models; preview does not."}
+              ? "試聊會使用已選模型。一般預覽不會使用模型。"
+              : "Chat uses your selected models. Preview does not use models."}
           </p>
         </details>
         {profile && (
@@ -925,7 +926,7 @@ export function LocalPublishingWorkspace({
       <details className="publication-optional px-panel">
         <summary>
           {zh
-            ? "選填：檢查涵蓋範圍與審核 FAQ"
+            ? "選填：檢查涵蓋範圍與審核常見問答"
             : "Optional: check coverage and review FAQ"}
         </summary>
         <CoverageFaqPanel

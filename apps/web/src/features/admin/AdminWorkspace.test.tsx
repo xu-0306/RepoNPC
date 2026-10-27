@@ -150,7 +150,7 @@ describe("AdminWorkspace", () => {
   it("keeps local validation and preview tools usable", () => {
     const markup = renderToStaticMarkup(<AdminWorkspace {...props()} />);
 
-    expect(markup).toMatch(/<button[^>]*>Validate configuration<\/button>/);
+    expect(markup).toMatch(/<button[^>]*>Check configuration<\/button>/);
     expect(markup).toMatch(/<button[^>]*>Preview changes<\/button>/);
   });
 

@@ -78,7 +78,7 @@ const COPY = {
     heading: "Analysis and answer models",
     guidedHeading: "Add and test models",
     description:
-      "Organizes project content and generates answers. A successful test is required before selection.",
+      "Organizes project content and generates answers. You must test the model successfully before selecting it.",
     guidedDescription:
       "Choose a service, enter its model name, and test the model. Then use Confirm analysis models to select it.",
     add: "Add model",
@@ -94,7 +94,7 @@ const COPY = {
     activate: "Use for Chat",
     remove: "Delete",
     active: "In use",
-    empty: "No Chat models configured yet.",
+    empty: "There are no answer models yet. Add and test an answer model.",
     noConnections: "Configure a model service first.",
     pending: "Working on Chat models…",
     revision: "Connection revision",

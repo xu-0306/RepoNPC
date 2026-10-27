@@ -194,8 +194,8 @@ const COPY = {
     draftHeading: "Public configuration draft",
     draftLabel: "Raw reponpc.yml YAML",
     draftHelp:
-      "Validate and preview this draft, then save it locally in the sharing workspace.",
-    validate: "Validate configuration",
+      "Check and preview this draft, then save it locally in the sharing workspace.",
+    validate: "Check configuration",
     preview: "Preview changes",
     logout: "Log out",
     validationHeading: "Validation result",

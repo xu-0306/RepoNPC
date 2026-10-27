@@ -29,7 +29,7 @@ const cases = [
   [
     "MODEL_AUTHORED_MARKUP",
     "回覆含不允許的連結或標記",
-    "Reply contained links or markup",
+    "Reply contained disallowed links or markup",
   ],
   ["INFERENCE_CYCLE", "推論引用了推論", "Inference cited an inference"],
   ["ALL_SEGMENTS_DROPPED", "每段都未通過檢查", "Every part failed checks"],

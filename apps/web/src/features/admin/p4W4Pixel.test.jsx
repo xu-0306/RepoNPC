@@ -53,7 +53,9 @@ it.each(["zh-TW", "en"])(
       'class="px-button px-button--primary" type="submit"',
     );
     expect(markup).toContain(
-      locale === "en" ? "never pushed to GitHub" : "不會推送到 GitHub",
+      locale === "en"
+        ? "never sends them to GitHub"
+        : "不會將帳密推送到 GitHub",
     );
     expect(markup).not.toMatch(/style="[^"]*(?:color|background)/);
   },

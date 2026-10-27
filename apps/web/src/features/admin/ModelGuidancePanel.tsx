@@ -65,7 +65,7 @@ const COPY = {
     vram: "GPU 記憶體",
     freeVram: "可用 GPU 記憶體",
     estimate:
-      "模型參數量 × 每個參數的位元數 ÷ 8 只能估算權重大小；實際執行還需要額外記憶體。這不是速度、效能或能否執行的保證。",
+      "模型參數量 × 每個參數的位元數 ÷ 8 只能估算權重大小。實際執行還需要額外記憶體。這不是速度、效能或能否執行的保證。",
     compare: "在 canirun.ai 查看模型與裝置估算（外部網站）",
     empty:
       "目前沒有通過完整驗證的推薦回答模型。你可以自行準備 Ollama 或相容 API 服務，在「分析與回答模型」新增、測試並選用；單次連線測試不代表回答品質已通過完整驗證。",
@@ -107,7 +107,7 @@ const COPY = {
   en: {
     heading: "Understand your device and data flow before choosing models",
     description:
-      'Device information is read only when you press "Check this host".',
+      'RepoNPC reads device information only when you press "Check this host".',
     check: "Check this host",
     pending: "Checking this host. Please wait.",
     checked: "Check complete; some readings may still be unknown.",
@@ -118,12 +118,12 @@ const COPY = {
     vram: "GPU VRAM",
     freeVram: "Available GPU VRAM",
     estimate:
-      "Parameter count × bits per parameter ÷ 8 estimates only weight size; running a model needs additional memory. This does not guarantee speed, performance, or that the model will run.",
+      "Parameter count × bits per parameter ÷ 8 estimates only weight size. Running a model needs additional memory. This does not guarantee speed, performance, or that the model will run.",
     compare: "Compare model and device estimates on canirun.ai (external site)",
     empty:
       "No recommended answer model has passed the complete verification yet. You can bring your own Ollama or compatible API service, then add, test and select it under Analysis and answer model. A connection test alone does not establish verified answer quality.",
     beforeCheck:
-      "Check this host reads capacity information and shows estimates only when verified entries exist. You still need to provide your own answer model service.",
+      "Check this host reads only capacity information. It displays estimates only when verified entries exist. You still need your own answer model service.",
     manual:
       "No model service yet? Choose the manual portfolio route to write content, preview, save and back up configuration. Preparing the NPC and live chat still require tested, selected answer and content finder models.",
     catalog: "Model entries available for reference",
@@ -148,7 +148,7 @@ const COPY = {
     source: "Model source (external site)",
     license: "License (external site)",
     choose: "Set up this answer model",
-    next: "Choosing opens setup. Confirm the service, explicitly add, test and select the model; no download or model switch happens automatically.",
+    next: "Choosing only opens setup. Confirm the service. Explicitly add, test and select the model. No download or model switch happens automatically.",
     details: "Estimate and test facts",
     runtime:
       "These are capacity estimates. Passing answer format tests does not mean your service is ready.",

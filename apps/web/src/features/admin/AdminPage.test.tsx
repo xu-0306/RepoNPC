@@ -451,7 +451,7 @@ describe("AdminAccessPanel", () => {
       expect(markup).toContain(
         locale === "zh-TW"
           ? "這裡沒有預設帳密。"
-          : "There are no default credentials.",
+          : "There is no default username or password.",
       );
     },
   );
@@ -477,7 +477,7 @@ describe("AdminAccessPanel", () => {
     expect(markup).toContain('id="admin-setup-username"');
     expect(markup).toContain('id="admin-setup-password"');
     expect(markup).toContain('maxLength="128"');
-    expect(markup).toContain("production 至少 15 個字元");
+    expect(markup).toContain("正式運作模式須為 15–128 個字元。");
     expect(markup).toContain("不限制大小寫、數字或符號");
     expect(markup).toContain("建立我的管理員");
     expect(markup).toContain("不會寫入 GitHub");
@@ -495,8 +495,8 @@ describe("AdminAccessPanel", () => {
     });
 
     expect(markup).toContain('data-mode="login"');
-    expect(markup).toContain("no default credentials");
-    expect(markup).toContain("never pushed to GitHub");
+    expect(markup).toContain("no default username or password");
+    expect(markup).toContain("never sends them to GitHub");
     expect(markup).toContain('id="admin-username"');
     expect(markup).not.toContain('id="admin-setup-code"');
   });
@@ -548,7 +548,7 @@ describe("AdminAccessPanel", () => {
     const markup = renderAccessPanel();
 
     expect(markup).toContain('data-mode="unavailable"');
-    expect(markup).toContain("重新檢查");
+    expect(markup).toContain("重新檢查設定狀態");
     expect(markup).not.toContain('id="admin-username"');
   });
 });

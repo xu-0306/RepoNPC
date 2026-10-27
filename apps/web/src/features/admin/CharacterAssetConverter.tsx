@@ -111,7 +111,7 @@ const COPY = {
     empty: "上傳素材後即可預覽角色。",
     apply: "套用到作品集",
     introduction:
-      "上傳你手上的圖片、ZIP 或整個素材資料夾，RepoNPC 會自動找出可用的角色圖。找到多張時，看預覽選擇即可；原始檔案不會被修改。",
+      "上傳你手上的圖片、ZIP 或整個素材資料夾，RepoNPC 會自動找出可用的角色圖。找到多張時，請看預覽選擇。RepoNPC 不會修改原始檔。",
     steps: ["選擇素材", "選擇角色", "預覽並儲存"],
     drop: "將 PNG 或 ZIP 拖到這裡",
     chooseFile: "選擇 PNG 或 ZIP",
@@ -122,7 +122,7 @@ const COPY = {
     strategy: "圖片處理方式",
     pixelize: "像素化（適合高解析度或抗鋸齒素材）",
     pixelExact: "像素精確（只接受整數倍率）",
-    convert: "找出角色動畫",
+    convert: "尋找角色動畫",
     converting: "正在尋找角色圖…",
     candidates: "選擇角色圖",
     candidatesFound: "系統找到可轉換的角色圖。請看縮圖選擇完整角色。",
@@ -157,7 +157,7 @@ const COPY = {
     cleanupKeep: "保留原版",
     applied:
       "角色已選用，將套用到目前作品集草稿。完成內容後可在「預覽與分享」查看。",
-    failed: "角色材料處理失敗；來源未被儲存。",
+    failed: "角色素材處理失敗，未儲存素材。請換檔案重試。",
     previewFailed: "圖片預覽無法顯示，請重新轉換或換一個檔案。",
     alignmentHeading: "角色位置跳動？",
     alignmentHelp:
@@ -208,7 +208,7 @@ const COPY = {
     empty: "Upload art to preview your character.",
     apply: "Apply to portfolio",
     introduction:
-      "Upload an image, ZIP, or whole asset folder. RepoNPC finds usable character art automatically and shows visual choices when several match. Your original files are never changed.",
+      "Upload an image, ZIP, or whole asset folder. RepoNPC finds usable character art automatically and displays visual choices when several match. RepoNPC never changes your original files.",
     steps: ["Choose assets", "Choose a character", "Preview and save"],
     drop: "Drop a PNG or ZIP here",
     chooseFile: "Choose PNG or ZIP",
@@ -229,7 +229,7 @@ const COPY = {
     animationPreview: "Animation preview",
     animationState: "Preview action",
     reducedMotionNote:
-      "The preview stays on its first frame when reduced motion is enabled on your system.",
+      "The preview stays on its first frame when your system uses reduced motion.",
     technicalDetails: "View full character sheet and technical details",
     sheetPreview: "Full character sheet",
     report: "Technical details",
@@ -237,13 +237,13 @@ const COPY = {
     sourcePath: "Source file",
     dimensions: "Output dimensions",
     warnings: "Review required",
-    noWarnings: "No automatic review warnings were detected.",
+    noWarnings: "The automatic review found no warnings.",
     download: "Download character image",
     filename: "Character filename",
     filenameHelp:
       "Use lowercase letters, digits, underscores, or hyphens and end with .png.",
     converted:
-      "Your character animation is ready. Preview each action before downloading or saving.",
+      "Your character animation is ready. Preview each action and confirm your choice before downloading or saving.",
     cleanupSuggested:
       "Possible edge spill from the row above was found. Compare both versions and choose one.",
     cleanupAccepted:
@@ -260,12 +260,13 @@ const COPY = {
     cleanupKeep: "Keep original conversion",
     applied:
       "Character selected for your portfolio draft. Finish your content, then open Preview & share.",
-    failed: "Character material processing failed; the source was not saved.",
+    failed:
+      "RepoNPC could not process the art and did not save it. Try another file.",
     previewFailed:
       "The image preview could not be shown. Try converting again or choose another file.",
     alignmentHeading: "Does the character jump around?",
     alignmentHelp:
-      "Conversion automatically corrects displacement shared across actions. Enter X/Y pixel offsets for each frame if needed, then apply and validate. Your source file stays untouched.",
+      "Conversion automatically corrects displacement shared across actions. Enter X/Y pixel offsets for each frame if needed, then apply and check. Your source file stays untouched.",
     alignmentSuggest: "Preview all alignment suggestions",
     alignmentInspecting: "Checking frame positions…",
     alignmentAutomatic:
@@ -289,7 +290,7 @@ const COPY = {
     alignmentPixels: "Pixel offset",
     alignmentInvalid:
       "Enter whole-pixel offsets that do not crop the character.",
-    alignmentApply: "Apply and validate alignment",
+    alignmentApply: "Apply and check alignment",
     alignmentApplying: "Validating aligned image…",
     alignmentRestore: "Restore alignment",
     alignmentRestored:

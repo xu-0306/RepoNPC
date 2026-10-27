@@ -33,7 +33,7 @@ describe("ModelConnectionPanel", () => {
       );
       expect(markup).toContain("<dd>Responses</dd>");
       expect(markup).toContain(
-        locale === "en" ? "Chat API interface" : "聊天 API 接口",
+        locale === "en" ? "Chat API interface" : "聊天連線方式",
       );
     },
   );
@@ -73,7 +73,7 @@ describe("ModelConnectionPanel", () => {
     expect(markup).toContain('class="model-connection-form"');
     expect(markup).toContain('class="model-connection-form__actions"');
     expect(markup.indexOf("Add an AI service")).toBeLessThan(
-      markup.indexOf("Save a service, then choose it"),
+      markup.indexOf("Saving a service does not finish model setup."),
     );
   });
 

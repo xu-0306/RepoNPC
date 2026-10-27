@@ -31,7 +31,7 @@ export function DeleteSettingButton({
         locale={locale}
         title={title}
         description={description}
-        confirmLabel={locale === "zh-TW" ? "刪除" : "Delete"}
+        confirmLabel={locale === "zh-TW" ? "刪除設定" : "Delete setting"}
         destructive
         disabled={pending || Boolean(blockedReason)}
         aria-label={`${label}: ${name}`}

@@ -46,11 +46,11 @@ const COPY = {
     embedding: "資料查找模型",
     embeddingDescription: "從專案中找出相關資料。",
     details: "設定細節",
-    confirm: "分析使用這一組",
+    confirm: "使用這組模型分析",
     guidance: "選模型有困難？查看裝置、推薦清單與手動路線",
   },
   en: {
-    heading: "Model equipment",
+    heading: "Models",
     usable: "usable",
     chat: "Analysis and answer model",
     chatDescription: "Analyzes and answers using your project information.",

@@ -17,7 +17,7 @@ const noMatchLabels = {
   },
   MODEL_AUTHORED_MARKUP: {
     "zh-TW": "回覆含不允許的連結或標記",
-    en: "Reply contained links or markup",
+    en: "Reply contained disallowed links or markup",
   },
   INFERENCE_CYCLE: {
     "zh-TW": "推論引用了推論",
@@ -144,7 +144,7 @@ export function CoverageFaqPanel({
     if (code === "FAQ_VARIANTS_INVALID")
       return zh
         ? "替代問法最多八個，每個不超過二百字，且必須彼此不同並與主問題不同。"
-        : "Use at most eight alternatives of 200 characters each; they must be unique and differ from the main question.";
+        : "Use at most eight alternatives of up to 200 characters each. They must be unique and differ from the main question.";
     if (code.includes("CONFLICT") || code.includes("STALE"))
       return zh
         ? "內容版本已變更，請重新檢查後操作。"
@@ -210,7 +210,7 @@ export function CoverageFaqPanel({
   return (
     <section className="coverage-faq px-panel" aria-labelledby="faq-heading">
       <h2 id="faq-heading">
-        {zh ? "涵蓋檢查與 FAQ 審核" : "Coverage and FAQ review"}
+        {zh ? "涵蓋檢查與常見問答審核" : "Coverage and FAQ review"}
       </h2>
       <details className="publication-info px-info">
         <summary>
@@ -218,13 +218,13 @@ export function CoverageFaqPanel({
         </summary>
         <p>
           {zh
-            ? "檢查目前已準備的本機版本，會使用已選模型。缺口不會阻擋發布；FAQ 只有核准後才提供給訪客。"
+            ? "檢查目前已準備的本機版本，會使用已選模型。缺口不會阻擋發布。常見問答只有核准後才提供給訪客。"
             : "Check the prepared local version using your selected models. Gaps never block publication. Visitors receive only approved FAQ answers."}
         </p>
         <p>
           {zh
-            ? "改寫會開啟貢獻編輯器。儲存陳述並更新 NPC 後，請重新生成及審核 FAQ；新回答不保證引用這段陳述。"
-            : "Rewrite opens the contribution editor. Save the statement and update the NPC, then regenerate and review the FAQ; the new answer may not cite this statement."}
+            ? "改寫會開啟貢獻編輯器。儲存陳述並更新 NPC 後，請重新生成及審核常見問答。新回答不保證引用這段陳述。"
+            : "Rewrite opens the contribution editor. Save the statement and update the NPC. Then regenerate and review the FAQ. The new answer may not cite this statement."}
         </p>
       </details>
       {draftChanged && (
@@ -274,7 +274,7 @@ export function CoverageFaqPanel({
           })
         }
       >
-        {zh ? "下載已核准 FAQ JSON" : "Download approved FAQ JSON"}
+        {zh ? "下載已核准常見問答 JSON" : "Download approved FAQ JSON"}
       </button>
       <label htmlFor="faq-repository">
         {zh ? "補充陳述的專案" : "Project for the new statement"}
@@ -505,7 +505,7 @@ export function CoverageFaqPanel({
               onAddClaim(repository || repositories[0], entry.claim_kind)
             }
           >
-            {zh ? "改寫為作者陳述" : "Rewrite as owner statement"}
+            {zh ? "改寫為我的自述" : "Rewrite as my statement"}
           </button>
           {entry.coverage_status !== "answered" && entry.topic && (
             <button
@@ -516,7 +516,7 @@ export function CoverageFaqPanel({
                 onAddClaim(repository || repositories[0], entry.claim_kind)
               }
             >
-              {zh ? "補一段自述" : "Add owner statement to fill gap"}
+              {zh ? "補一段自述" : "Add my statement to fill gap"}
             </button>
           )}
         </article>

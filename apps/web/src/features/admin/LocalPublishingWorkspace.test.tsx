@@ -38,7 +38,9 @@ describe("publication setup guidance", () => {
           : '<button class="px-button px-button--secondary" type="button">Set up models</button>',
       );
       expect(markup).toContain(
-        locale === "zh-TW" ? "內容草稿會保留" : "Your content draft is kept",
+        locale === "zh-TW"
+          ? "內容草稿會保留"
+          : "RepoNPC keeps your content draft",
       );
       const reason = markup.match(
         /<p id="local-prepare-reason">([\s\S]*?)<\/p>/,

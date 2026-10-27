@@ -273,7 +273,7 @@ describe("owner scene preview", () => {
       markup.match(/class="character-renderer visitor-turn__avatar"/g)?.length,
     ).toBeGreaterThanOrEqual(11);
     expect(markup).toContain("Preview reduced motion");
-    expect(markup).toContain("Show crop focus frame (50%, 50%)");
+    expect(markup).toContain("Display crop frame (50%, 50%)");
     expect(markup).toContain("What are the portfolio highlights?");
     expect(markup).toContain('class="scene-preview__focus-map"');
     expect(markup).toContain(

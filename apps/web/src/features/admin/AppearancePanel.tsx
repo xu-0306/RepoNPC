@@ -912,7 +912,7 @@ const appearanceCopy = {
     focus: "背景取景位置",
     horizontal: "水平",
     vertical: "垂直",
-    focusPicker: "點擊或拖曳圖片設定取景；滑桿也支援方向鍵。",
+    focusPicker: "在圖片上點擊或拖曳，設定取景位置。也可用方向鍵操作滑桿。",
     focusCoordinates: "目前取景位置",
     desktopFrame: "桌面裁切",
     phoneFrame: "手機裁切",
@@ -928,7 +928,7 @@ const appearanceCopy = {
     cancelled: "變更已取消，私人圖片草稿已刪除；公開外觀沒有變更。",
     applied: "外觀已套用；其他已儲存內容沒有發布。",
     appliedWithEdits: "已套用預覽時的設定；較新的編輯尚未套用。",
-    previewOutdated: "設定在預覽期間已變更，請重新預覽。",
+    previewOutdated: "設定在預覽期間已變更。請重新預覽後再套用。",
     noModel: "預覽和套用不會呼叫模型。",
     revision: "角色版本",
     appearanceRevision: "外觀版本",
@@ -962,7 +962,7 @@ const appearanceCopy = {
   en: {
     title: "Visitor appearance",
     description:
-      "Choose the visitor page colors and background. Applying appearance changes only the scene; it does not prepare or reindex projects.",
+      "Choose the visitor page colors and background. Applying appearance changes only the scene. It does not prepare or reindex projects.",
     receiptMissing:
       "The published scene is available, but its original appearance settings are not. Choose new settings explicitly before previewing or applying.",
     scheme: "Color scheme",
@@ -979,12 +979,12 @@ const appearanceCopy = {
     dropHint:
       "You can also drop a PNG or WebP (640×360 to 2560×1600, up to 2 MB).",
     removeBackground: "Remove background",
-    focus: "Background focus",
+    focus: "Background crop position",
     horizontal: "Horizontal",
     vertical: "Vertical",
     focusPicker:
-      "Click or drag the image to set focus; the sliders also support arrow keys.",
-    focusCoordinates: "Current focus",
+      "Click or drag on the image to set the crop position. You can also use the sliders with arrow keys.",
+    focusCoordinates: "Current crop position",
     desktopFrame: "Desktop crop",
     phoneFrame: "Phone crop",
     dim: "Background dimming",

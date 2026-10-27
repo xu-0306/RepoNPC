@@ -245,7 +245,7 @@ export function AnalysisSelectionPanel({
           (changed && (chatProfileId || embeddingProfileId)
             ? chinese
               ? "選擇尚未確認。按「確認用於分析」後才會套用。"
-              : "Your selection is not confirmed. Use for analysis applies these changes."
+              : "Your selection is not confirmed. Changes apply only after you select Use for analysis."
             : value?.eligible && !changed && chatProfileId && embeddingProfileId
               ? chinese
                 ? "兩個模型已選用，可開始分析。"

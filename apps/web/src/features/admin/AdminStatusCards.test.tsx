@@ -83,7 +83,7 @@ describe("admin workspace navigation and status", () => {
 
     expect(markup.match(/class="admin-status-card(?: |")/g)).toHaveLength(5);
     expect(markup).toContain("0/6 complete");
-    expect(markup).toContain("Tested; not selected");
+    expect(markup).toContain("Tested. Not selected.");
     expect(markup).toContain("Private gateway");
     expect(markup).toContain('class="model-brand-icon"');
     expect(markup).toContain("Not ready yet");

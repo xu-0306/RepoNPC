@@ -48,7 +48,7 @@ const COPY = {
       "此加密備份只還原同一台主機的 SQLite 設定。請保留原資料目錄內的密鑰、網站資料與圖片；備份不含模型權重，也不是完整搬移工具。",
     refresh: "更新狀態",
     local: "本機服務",
-    gateway: "訪客 gateway 設定",
+    gateway: "訪客服務設定",
     verified: "外網檢查",
     ready: "就緒",
     notReady: "尚未就緒",
@@ -88,7 +88,7 @@ const COPY = {
     expired: "檢查結果已過期或有效期限無法確認。請重新選擇檔案並檢查備份。",
     changed: "檔案或密碼已更改，請重新檢查備份。",
     autoBackup:
-      "還原前會先以剛上傳備份的密碼加密備份目前設定，並保留在這台主機。還原後 gateway 會保持關閉。",
+      "還原前會先以剛上傳備份的密碼加密備份目前設定，並保留在這台主機。還原後訪客服務會保持關閉。",
     restoreConsent: "我了解還原會取代目前的 SQLite 設定。",
     restoreHelp: "請先確認上方還原範圍，再勾選確認。",
     confirmRestore: "確認還原設定",
@@ -99,16 +99,15 @@ const COPY = {
     pinHelp: "此操作會固定使用保留的前一份網站資料；不會還原 SQLite 設定。",
     pinConsent: "我了解目前網站會改用上方保留的網站資料。",
     noPrevious: "目前沒有可回復的保留網站資料。",
-    stop: "停止訪客 gateway",
-    stopHelp:
-      "停止 gateway 會停止本機訪客服務，不代表已關閉 Tailscale Funnel。",
-    noGateway: "尚未設定訪客 gateway，無需停止。",
+    stop: "停止訪客服務",
+    stopHelp: "停止本機訪客服務，不會關閉 Tailscale Funnel。",
+    noGateway: "尚未設定訪客服務，無需停止。",
     updateHeading: "更新 RepoNPC",
     update:
       "執行較新版安裝程式以更新 RepoNPC，並保留原資料目錄。更新前請先建立備份。",
     funnelHeading: "關閉 Tailscale Funnel",
     funnel:
-      "停止 gateway 後，請另外依 Tailscale 的官方流程關閉 Funnel。RepoNPC 不會操作 Tailscale，也不會要求其憑證。",
+      "停止訪客服務後，請另外依 Tailscale 的官方流程關閉 Funnel。RepoNPC 不會操作 Tailscale，也不會要求其憑證。",
     funnelLink: "查看 Tailscale Funnel 官方說明（外部網站）",
     pending: "正在處理維護操作，請稍候。",
   },
@@ -120,7 +119,7 @@ const COPY = {
       "This encrypted backup restores only SQLite settings on the same host. Keep the keys, website data, and images in the original data directory. It excludes model weights and is not a full migration tool.",
     refresh: "Refresh status",
     local: "Local service",
-    gateway: "Visitor gateway configuration",
+    gateway: "Visitor service settings",
     verified: "External check",
     ready: "Ready",
     notReady: "Not ready yet",
@@ -140,7 +139,7 @@ const COPY = {
     password: "Backup password",
     confirmation: "Confirm the backup password",
     passwordHelp:
-      "Use 12–1024 characters and keep this password safe. It is not stored in the browser. Without the password, you cannot decrypt this backup.",
+      "Use 12–1024 characters and keep this password safe. RepoNPC does not store it in the browser. Without the password, you cannot decrypt this backup.",
     matchHelp: "Both passwords must match before you can create a backup.",
     create: "Create encrypted backup",
     download: "Download the encrypted backup",
@@ -161,7 +160,7 @@ const COPY = {
       "This inspection has expired or its expiry cannot be verified. Select the file and inspect it again.",
     changed: "The file or password changed. Inspect the backup again.",
     autoBackup:
-      "Before restoring, your current settings are automatically backed up, encrypted with the uploaded backup's password, and retained on this host. The gateway stays off after restoration.",
+      "Before restoring, your current settings are automatically backed up, encrypted with the uploaded backup's password, and retained on this host. The visitor service stays off after restoration.",
     restoreConsent:
       "I understand that restoring replaces the current SQLite settings.",
     restoreHelp:
@@ -169,24 +168,24 @@ const COPY = {
     confirmRestore: "Confirm settings restore",
     cancel: "Cancel restore",
     relogin:
-      "After restoring, reopen the admin page and sign in. For the local installation, reopen RepoNPC.",
+      "After restoring, reopen the admin page and sign in. For a local installation, you can reopen RepoNPC.",
     pin: "Restore retained website data",
     pinHelp:
       "This pins the retained previous website data. It does not restore SQLite settings.",
     pinConsent:
       "I understand that the website will use the retained data shown above.",
     noPrevious: "There is no retained previous website data to restore.",
-    stop: "Stop visitor gateway",
+    stop: "Stop visitor service",
     stopHelp:
-      "Stopping the gateway stops the local visitor service. It does not turn off Tailscale Funnel.",
+      "This stops the local visitor service. It does not disable Tailscale Funnel.",
     noGateway:
-      "The visitor gateway is not configured, so it does not need stopping.",
+      "The visitor service is not configured, so it does not need stopping.",
     updateHeading: "Update RepoNPC",
     update:
       "Run the newer installer to update RepoNPC and keep the original data directory. Create a backup before updating.",
-    funnelHeading: "Turn off Tailscale Funnel",
+    funnelHeading: "Disable Tailscale Funnel",
     funnel:
-      "After stopping the gateway, separately follow Tailscale's official steps to turn off Funnel. RepoNPC does not operate Tailscale or request its credentials.",
+      "After stopping the visitor service, separately follow Tailscale's official steps to turn off Funnel. RepoNPC does not operate Tailscale or request its credentials.",
     funnelLink:
       "Read the official Tailscale Funnel documentation (external site)",
     pending: "A maintenance operation is in progress. Please wait.",

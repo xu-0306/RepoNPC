@@ -48,12 +48,12 @@ const COPY = {
     inspected: "備份已檢查。請確認還原範圍與有效期限，再明確同意還原。",
     cancelled: "已取消還原並清除這次檢查結果。",
     restoring:
-      "還原已接受，請等本機服務完成還原，再重新開啟管理頁並登入。gateway 會保持關閉。",
+      "還原已接受，請等本機服務完成還原，再重新開啟管理頁並登入。訪客服務會保持關閉。",
     uncertain:
       "無法確認還原是否已接受。請重新開啟管理頁並確認本機狀態；確認前請勿再次送出還原。",
     pinned: "已固定使用保留的網站資料。",
     stopped:
-      "本機訪客 gateway 已停止。若要關閉 Funnel，請另外依 Tailscale 官方流程操作。",
+      "本機訪客服務已停止。若要關閉 Funnel，請另外依 Tailscale 官方流程操作。",
   },
   en: {
     failure:
@@ -68,7 +68,7 @@ const COPY = {
     resources:
       "The original data directory is missing required keys, website data, or images. Keep and check the original data directory first.",
     owner:
-      "This backup belongs to a different owner. Select a backup created for the current owner in the original data directory.",
+      "This backup belongs to a different owner. Select a backup that the current owner created in the original data directory.",
     secrets:
       "The saved model-service settings could not be unlocked. Check that the encryption keys in the original data directory are still available.",
     website:
@@ -100,14 +100,14 @@ const COPY = {
       "The backup was created, but its last-backup time could not be refreshed. Use Refresh status later to check it.",
     inspected:
       "The backup was inspected. Review the restore scope and expiry, then explicitly confirm restoration.",
-    cancelled: "Restoration was cancelled and this inspection was cleared.",
+    cancelled: "RepoNPC cancelled restoration and cleared this inspection.",
     restoring:
-      "Restoration was accepted. Wait for the local service to finish, then reopen the admin page and sign in. The gateway stays off.",
+      "Restoration was accepted. Wait for the local service to finish, then reopen the admin page and sign in. The visitor service stays off.",
     uncertain:
       "Restoration acceptance could not be confirmed. Reopen the admin page and check the local status. Do not submit restoration again until it is confirmed.",
     pinned: "The retained website data is now pinned.",
     stopped:
-      "The local visitor gateway stopped. To turn off Funnel, separately follow Tailscale's official steps.",
+      "The local visitor service stopped. To turn off Funnel, separately follow Tailscale's official steps.",
   },
 };
 

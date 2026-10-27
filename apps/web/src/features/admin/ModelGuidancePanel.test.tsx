@@ -67,7 +67,9 @@ describe("ModelGuidancePanel", () => {
     const markup = renderToStaticMarkup(<ModelGuidancePanel {...initial} />);
     expect(initial.onCheck).not.toHaveBeenCalled();
     expect(markup).toContain("Check this host");
-    expect(markup).toContain("Device information is read only when you press");
+    expect(markup).toContain(
+      "RepoNPC reads device information only when you press",
+    );
     const reason = markup.match(/aria-describedby="([^"]+)"/)?.[1];
     expect(markup).toContain(`id="${reason}"`);
     const heading = markup.match(/aria-labelledby="([^"]+)"/)?.[1];
@@ -211,7 +213,7 @@ describe("ModelGuidancePanel", () => {
     expect(markup).toContain('href="https://example.org/fixture-license"');
     expect(markup).toContain("fixture-revision");
     expect(markup).toContain(
-      "no download or model switch happens automatically",
+      "No download or model switch happens automatically",
     );
     expect(markup).toContain("No speed estimate is available");
     expect(choose).not.toHaveBeenCalled();

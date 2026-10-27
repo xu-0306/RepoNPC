@@ -56,7 +56,7 @@ export async function checkAnalysisCards(tab, viewport) {
     }
     await tab.playwright.getByRole("button", { name: "中文 / English", exact: true }).press("Enter");
   }
-  await tab.playwright.getByRole("button", { name: "下一步：描述我的貢獻", exact: true }).press("Enter");
+  await tab.playwright.getByRole("button", { name: "描述我的貢獻", exact: true }).press("Enter");
   const contribution = await tab.playwright.domSnapshot();
   verify(contribution.includes("你的貢獻說明") && contribution.includes("0/1") && !contribution.includes("此專案的貢獻已由你確認"), "next step requires owner input and does not confirm a contribution");
   await tab.playwright.getByRole("button", { name: "返回", exact: true }).press("Enter");

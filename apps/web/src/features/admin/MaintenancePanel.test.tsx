@@ -131,7 +131,7 @@ describe("MaintenancePanel", () => {
       expect(match[0]).not.toContain("readOnly");
     }
     expect(markup).toContain("Both passwords must match");
-    expect(markup).toContain("It is not stored in the browser");
+    expect(markup).toContain("RepoNPC does not store it in the browser");
     expectDisabledButton(markup, "Create encrypted backup");
     expect(markup).not.toMatch(/api_key|base_url|provider_secret|localStorage/);
   });
@@ -204,7 +204,7 @@ describe("MaintenancePanel", () => {
       '<dt>Local service</dt><dd class="px-badge">Ready</dd>',
     );
     expect(markup).toContain(
-      '<dt>Visitor gateway configuration</dt><dd class="px-badge">Configured</dd>',
+      '<dt>Visitor service settings</dt><dd class="px-badge">Configured</dd>',
     );
     expect(markup).toContain(
       '<dt>External check</dt><dd class="px-badge">Not confirmed</dd>',
@@ -221,7 +221,7 @@ describe("MaintenancePanel", () => {
     const unknown = render({ status: null });
     expect(unknown).toContain("Status not available yet");
     expect(unknown).not.toContain("No backup recorded yet");
-    expectDisabledButton(unknown, "Stop visitor gateway");
+    expectDisabledButton(unknown, "Stop visitor service");
     expectAssociatedReferences(unknown);
     const unavailable = render({
       status: {
@@ -242,7 +242,7 @@ describe("MaintenancePanel", () => {
     const markup = render();
     expect(markup).toContain("Run the newer installer");
     expect(markup).toContain("keep the original data directory");
-    expect(markup).toContain("does not turn off Tailscale Funnel");
+    expect(markup).toContain("does not disable Tailscale Funnel");
     expect(markup).toContain(
       "does not operate Tailscale or request its credentials",
     );
@@ -266,10 +266,10 @@ describe("MaintenancePanel", () => {
       "檢查備份",
       "我了解還原會取代目前的 SQLite 設定",
       "剛上傳備份的密碼加密備份目前設定",
-      "gateway 會保持關閉",
+      "訪客服務會保持關閉",
       "重新開啟管理頁並登入",
       "回復保留網站資料",
-      "停止訪客 gateway",
+      "停止訪客服務",
       "執行較新版安裝程式",
       "不會要求其憑證",
     ])
@@ -299,7 +299,7 @@ describe("MaintenancePanel", () => {
       "Cancel restore",
       "Confirm settings restore",
       "Restore retained website data",
-      "Stop visitor gateway",
+      "Stop visitor service",
     ])
       expectDisabledButton(markup, label);
     expect(markup).not.toMatch(

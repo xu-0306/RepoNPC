@@ -225,9 +225,9 @@ const COPY: Record<Locale, Copy> = {
     startAi: "設定 AI 並開始",
     startManual: "先手動建立作品集",
     startAiHelp:
-      "先設定、測試並確認選用回答／分析模型與資料查找模型，再選專案進行 AI 分析。進入設定不會自動下載或呼叫模型，也不會發布作品集。",
+      "先設定、測試並確認選用回答／分析模型與資料查找模型，再選專案讓 AI 分析。進入設定不會自動下載或呼叫模型，也不會發布作品集。",
     startManualHelp:
-      "不需模型即可手動填寫、確認、預覽、儲存及備份草稿。之後準備 NPC 與即時聊天仍需模型；建立草稿不等於公開分享。",
+      "不需模型即可手動填寫、確認、預覽、儲存及備份草稿。準備 NPC 與即時聊天仍需模型；建立草稿不等於公開分享。",
     modelsHeading: "設定 AI 模型",
     modelsDescription: "設定並測試兩種模型，或先手動填寫、預覽及儲存內容。",
     confirmModels: "完成模型設定並選擇專案",
@@ -236,8 +236,8 @@ const COPY: Record<Locale, Copy> = {
     modelReturnHelp: "內容草稿已保留。完成模型設定後可返回準備 NPC。",
     modelsRequired:
       "請先測試回答模型與資料查找模型，再於選擇區按「確認用於分析」。",
-    advanced: "使用進階 raw YAML",
-    advancedDescription: "熟悉 schema 的使用者可以直接編輯 reponpc.yml。",
+    advanced: "編輯原始 YAML",
+    advancedDescription: "熟悉設定格式時，可直接編輯 reponpc.yml。",
     progress: "引導設定進度",
     steps: {
       intro: "歡迎",
@@ -259,8 +259,8 @@ const COPY: Record<Locale, Copy> = {
     discoveryComplete: "已完成最多五頁的探索，或沒有更多公開專案。",
     manualHeading: "手動加入專案",
     repositoryLabel: "專案識別字串或 GitHub 網址",
-    repositoryHelp: "格式為 owner/name 或 https://github.com/owner/name。",
-    refLabel: "版本（分支、標籤或 commit SHA）",
+    repositoryHelp: "格式為 owner/name。也可用 https://github.com/owner/name。",
+    refLabel: "版本（分支、標籤或提交識別碼）",
     refOptional: "可選",
     resolve: "解析專案",
     repositoryHeading: "公開專案",
@@ -298,7 +298,7 @@ const COPY: Record<Locale, Copy> = {
       MODEL_CONNECTION_UNAVAILABLE: "模型服務目前無法使用",
     },
     providerUnknown: "無法取得分析模型狀態",
-    refreshProvider: "重新檢查",
+    refreshProvider: "檢查模型狀態",
     checkingProvider: "正在檢查分析模型…",
     analyze: "分析專案",
     analyzing: "分析中…",
@@ -312,7 +312,7 @@ const COPY: Record<Locale, Copy> = {
     createBatch: "開始批次分析",
     batchPreflightRequired: "請先完成可用的分析前檢查。",
     batchCreationPending: "正在建立批次分析。",
-    continueContributions: "下一步：描述我的貢獻",
+    continueContributions: "描述我的貢獻",
     continueManually: "略過分析，手動填寫貢獻",
     back: "返回",
     editSelection: "編輯專案選擇",
@@ -372,7 +372,7 @@ const COPY: Record<Locale, Copy> = {
       "每個已選專案都需要確認貢獻後才能繼續。拒絕建議後，請重新填寫並確認。",
     profileHeading: "填寫基本資料",
     profileDescription:
-      "這些公開文字會成為完整設定草稿的一部分；請提供中英文內容，不要讓模型替你猜測個人資料。",
+      "這些公開文字會成為完整設定草稿的一部分。請提供中英文內容。不要讓模型替你猜測個人資料。",
     displayNameLabel: "顯示名稱",
     githubLoginLabel: "你的 GitHub 帳號",
     githubLoginHelp:
@@ -397,9 +397,10 @@ const COPY: Record<Locale, Copy> = {
     copyDraft: "複製 YAML",
     downloadDraft: "備份設定（YAML）",
     draftReady: "內容已完成，可前往「預覽與分享」準備 NPC。",
-    advancedMode: "進階 raw YAML 模式",
+    advancedMode: "進階原始 YAML 模式",
     guidedMode: "返回引導模式",
-    rawYamlWarning: "raw YAML 有無法對應回引導欄位的變更；請在進階模式中處理。",
+    rawYamlWarning:
+      "原始 YAML 有無法對應回引導欄位的變更。請在進階模式中處理。",
     busy: "正在處理；目前操作可能暫時停用。",
     errorHeading: "引導設定錯誤",
     disabledBusy: "目前操作進行中，請稍候。",
@@ -411,7 +412,7 @@ const COPY: Record<Locale, Copy> = {
     disabledNeedsStatement: "填寫原始貢獻說明後才能產生建議。",
     disabledNeedsProposal: "先產生一份模型建議，或完成可確認的貢獻文字。",
     disabledNeedsBilingualContribution:
-      "請完成繁體中文與 English 的角色和摘要後才能接受。",
+      "請完成繁體中文與英文的角色和摘要後才能接受。",
     disabledNeedsConfirmation:
       "請確認每個專案的貢獻；拒絕建議後仍需重新填寫並確認。",
   },
@@ -420,7 +421,7 @@ const COPY: Record<Locale, Copy> = {
     title: "Guided portfolio setup",
     introTitle: "Let RepoNPC understand your work",
     introBody:
-      "Choose public GitHub projects, review information you can verify from them, and confirm your own contribution. The result is a complete bilingual configuration draft that you can validate, preview, copy, or download.",
+      "Choose public GitHub projects, review information you can verify from them, and confirm your own contribution. The result is a complete bilingual configuration draft that you can check, preview, copy, or download.",
     outcome: "You will get",
     outcomeItems: [
       "Project information you can verify, kept separate from AI inferences",
@@ -428,12 +429,12 @@ const COPY: Record<Locale, Copy> = {
       "A YAML configuration draft that works without a GitHub writeback token",
     ],
     start: "Start guided setup",
-    startAi: "Set up AI and begin",
+    startAi: "Set up AI and start",
     startManual: "Build manually first",
     startAiHelp:
-      "Set up, test and explicitly select both an answer/analysis model and a content-finder model before choosing projects for AI analysis. Entering setup does not download, call a model or publish your portfolio.",
+      "Before choosing projects for AI analysis, set up, test and explicitly select both answer/analysis and content finder models. Entering setup does not download, call a model or publish your portfolio.",
     startManualHelp:
-      "No model is needed to write, confirm, preview, save or back up a draft manually. Preparing the NPC and live chat still need models later; creating a draft does not publish it.",
+      "You can write, confirm, preview, save or back up a draft manually without a model. Preparing the NPC and live chat still need models later. Creating a draft does not publish it.",
     modelsHeading: "Set up AI models",
     modelsDescription:
       "Set up and test both model roles, or write, preview and save your content manually.",
@@ -460,7 +461,7 @@ const COPY: Record<Locale, Copy> = {
     accountHeading: "Discover public projects",
     accountLabel: "GitHub username or profile URL",
     accountHelp:
-      "Only public project information is read; no code is downloaded and no model call happens before you confirm the checkboxes.",
+      "RepoNPC reads only public project information. It downloads no code and makes no model calls before you confirm the checkboxes.",
     discover: "Discover projects",
     discoverAgain: "Load next page",
     searchLabel: "Filter loaded projects",
@@ -491,7 +492,7 @@ const COPY: Record<Locale, Copy> = {
     confirmSelection: "Confirm selection and continue to analysis",
     selectionRequired: "Select at least one project before continuing.",
     selectionLocked:
-      "Selection is confirmed. You can return and edit it from later steps.",
+      "You confirmed the selection. You can return and edit it from later steps.",
     analysisHeading: "Analyze selected projects",
     analysisResultsHeading:
       "Review the projects, then describe your contribution",
@@ -514,7 +515,7 @@ const COPY: Record<Locale, Copy> = {
       MODEL_CONNECTION_UNAVAILABLE: "Model service unavailable",
     },
     providerUnknown: "Analysis model status unavailable",
-    refreshProvider: "Recheck",
+    refreshProvider: "Check model status",
     checkingProvider: "Checking analysis models…",
     analyze: "Analyze project",
     analyzing: "Analyzing…",
@@ -529,7 +530,7 @@ const COPY: Record<Locale, Copy> = {
     createBatch: "Start batch analysis",
     batchPreflightRequired: "Complete an available preflight before starting.",
     batchCreationPending: "Creating the analysis batch.",
-    continueContributions: "Next: describe my contribution",
+    continueContributions: "Describe my contribution",
     continueManually: "Skip analysis and enter contribution manually",
     back: "Back",
     editSelection: "Edit project selection",
@@ -553,7 +554,7 @@ const COPY: Record<Locale, Copy> = {
       "Describe your work and boundaries in your own words. AI suggestions are drafts that require explicit confirmation or editing.",
     ownerStatementLabel: "Your contribution description",
     ownerStatementHelp:
-      "The original text stays beside every suggestion; project content cannot establish your identity or role.",
+      "The original text stays beside every suggestion. The project content cannot establish your identity or role.",
     suggest: "Generate editable suggestion",
     suggesting: "Generating suggestion…",
     manualEntry: "Enter contribution manually",
@@ -567,7 +568,7 @@ const COPY: Record<Locale, Copy> = {
       "Edit both languages, then explicitly confirm. Changes to confirmed content require confirmation again.",
     confirmManualSelection: "Confirm projects and enter contributions",
     proposalDescription:
-      "Edit these fields, then explicitly confirm the suggestion. Only explicit confirmation makes this your confirmed contribution.",
+      "You can edit these fields. Only explicit confirmation makes this your confirmed contribution.",
     originalStatement: "Your original contribution description",
     proposedAssertionsHeading:
       "Personal contribution awaiting your confirmation",
@@ -595,11 +596,11 @@ const COPY: Record<Locale, Copy> = {
       "Confirm a contribution for every selected project. After rejecting a suggestion, rewrite and confirm it before continuing.",
     profileHeading: "Add your basic profile",
     profileDescription:
-      "These public fields become part of the complete YAML draft. Supply both languages; do not ask a model to guess personal profile details.",
+      "These public fields become part of the complete YAML draft. Supply both languages. Please do not ask a model to guess personal profile details.",
     displayNameLabel: "Display name",
     githubLoginLabel: "Your GitHub login",
     githubLoginHelp:
-      "Confirm this is your account. Only visible commits linked to it are matched.",
+      "Confirm this is your account. RepoNPC matches only visible commits linked to it.",
     aliasesLabel: "Other names (optional, one per line)",
     headlineLabel: "One-line introduction",
     bioLabel: "Bio",
@@ -612,13 +613,13 @@ const COPY: Record<Locale, Copy> = {
     continueReview: "Continue to draft review",
     reviewHeading: "Review confirmed content",
     reviewDescription:
-      "Confirm which text enters the configuration draft; unconfirmed AI inferences stay out of the draft.",
+      "Confirm which text enters the configuration draft. Unconfirmed AI inferences do not enter it.",
     confirmed: "Confirmed",
     notConfirmed: "Not confirmed",
     createDraft: "Finish content and preview",
     draftHeading: "Draft ready",
     draftDescription:
-      "Keep the draft on your host and apply it to update your NPC. GitHub only needs the card.",
+      "The draft stays on your host. It updates your NPC only after you apply it. GitHub only needs the card.",
     copyDraft: "Copy YAML",
     downloadDraft: "Back up settings (YAML)",
     draftReady: "Content is ready. Open Preview & share to prepare the NPC.",
@@ -626,13 +627,13 @@ const COPY: Record<Locale, Copy> = {
     guidedMode: "Return to guided mode",
     rawYamlWarning:
       "Raw YAML has changes that cannot map back to guided fields; resolve them in advanced mode.",
-    busy: "Working; some actions are temporarily disabled.",
+    busy: "Working. Some actions may be temporarily disabled.",
     errorHeading: "Guided setup error",
     disabledBusy: "An operation is in progress; wait a moment.",
     disabledNeedsAccount:
       "Enter a GitHub username or URL before discovering projects.",
     disabledSelectionConfirmed:
-      "Selection is confirmed and cannot be edited at this step.",
+      "You confirmed the selection and cannot edit it at this step.",
     disabledNoSelection: "Select at least one project before continuing.",
     disabledAnalysisRunning: "Wait for the current analysis to finish.",
     disabledNeedsAnalysis:
@@ -1391,7 +1392,7 @@ function ContributionEditor({
                       })
                     }
                   >
-                    {locale === "en" ? "Add owner statement" : "新增自述"}
+                    {locale === "en" ? "Add my statement" : "新增自述"}
                   </button>
                 </div>
                 {proposal.claims.map((claim, index) => (
@@ -1415,9 +1416,7 @@ function ContributionEditor({
                           })
                         }
                       >
-                        {locale === "en"
-                          ? "Remove owner statement"
-                          : "移除自述"}{" "}
+                        {locale === "en" ? "Remove my statement" : "移除自述"}{" "}
                         {index + 1}
                       </button>
                     </header>
@@ -2706,7 +2705,7 @@ function DraftStep({
           <p>
             {chinese
               ? "內容草稿已完成，尚未套用。前往「預覽與分享」預覽、準備 NPC 並取得 GitHub 卡片。下方設定檔僅供備份／搬移，不是已上線網站。"
-              : "Content is complete but not applied. Open Preview & share to preview, prepare your NPC and get its GitHub card. The settings file below is a backup, not a deployed website."}
+              : "Content is complete but not applied. Open Preview & share to preview, prepare your NPC and get its GitHub card. The settings file below is for backup or transfer, not a deployed website."}
           </p>
           <p className="px-badge" role="status">
             {copy.draftReady}

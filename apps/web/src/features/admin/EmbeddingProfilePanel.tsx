@@ -84,7 +84,7 @@ const COPY = {
     heading: "資料查找模型",
     guidedHeading: "新增與測試模型",
     description:
-      "把作品內容整理成可查找的資料，讓回答模型找到相關依據。技術名稱是 Embedding model。私有 URL 與憑證不會顯示在此頁。",
+      "把作品內容整理成可查找的資料，讓回答模型找到相關依據。這是資料查找模型。私有 URL 與憑證不會顯示在此頁。",
     guidedDescription:
       "選擇服務、填入模型名稱，再按「測試模型」。通過後到「確認分析模型」選用。",
     add: "新增模型",
@@ -126,7 +126,8 @@ const COPY = {
       "Choose a service, enter its model name, and test the model. Then use Confirm analysis models to select it.",
     add: "Add model",
     cancel: "Cancel",
-    recommended: "Ollama recommendations appear after you choose Ollama.",
+    recommended:
+      "Suggested starting point: Ollama qwen3-embedding:0.6b (1024 dimensions).",
     provider: "Provider",
     model: "Model",
     dimension: "Dimensions",

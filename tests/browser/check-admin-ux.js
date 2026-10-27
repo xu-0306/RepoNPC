@@ -225,7 +225,7 @@ async (page) => {
   for (const locale of ["zh-TW", "en"]) {
     const zh = locale === "zh-TW";
     await button(zh ? "繁體中文" : "English").click();
-    await button(zh ? "設定 AI 並開始" : "Set up AI and begin").click();
+    await button(zh ? "設定 AI 並開始" : "Set up AI and start").click();
     await focusAt("guided-onboarding-heading");
     const add = await page
       .locator(".model-panel--connection .model-editor > summary")
@@ -241,7 +241,7 @@ async (page) => {
     });
     await button(zh ? "返回" : "Back").click();
   }
-  await button("Set up AI and begin").click();
+  await button("Set up AI and start").click();
   await page.reload();
   await page.waitForLoadState("networkidle");
   await focusAt("guided-onboarding-heading");

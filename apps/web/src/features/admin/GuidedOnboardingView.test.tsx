@@ -250,7 +250,7 @@ describe("GuidedOnboardingView", () => {
       const help = tools.slice(tools.indexOf('<details class="p4-w2__info'));
       expect(help).not.toContain(' open=""');
       expect(help).toContain(
-        locale === "en" ? "Keep the draft on your host" : "草稿保存在你的主機",
+        locale === "en" ? "The draft stays on your host" : "草稿保存在你的主機",
       );
       expect(help).toContain(
         locale === "en"
@@ -584,7 +584,7 @@ describe("GuidedOnboardingView", () => {
     expect(markup).toContain("Guided portfolio setup");
     expect(markup).toContain("Let RepoNPC understand your work");
     expect(markup).not.toContain('aria-label="Guided setup progress"');
-    expect(markup).toContain("Set up AI and begin");
+    expect(markup).toContain("Set up AI and start");
     expect(markup).toContain("Build manually first");
     expect(markup).toContain("Use advanced raw YAML");
     expect(markup).toContain('data-step="intro"');
@@ -798,9 +798,7 @@ describe("GuidedOnboardingView", () => {
         markup.lastIndexOf('class="guided-analysis__highlight"'),
       );
       const next =
-        locale === "en"
-          ? "Next: describe my contribution"
-          : "下一步：描述我的貢獻";
+        locale === "en" ? "Describe my contribution" : "描述我的貢獻";
       const retry = locale === "en" ? "Analyze again" : "重新分析";
       expect(actions).toContain(`>${next}</button>`);
       expect(actions).toContain(`>${retry}</button>`);
@@ -905,8 +903,8 @@ describe("GuidedOnboardingView", () => {
         );
         expect(markup).toMatch(
           locale === "en"
-            ? /<button[^>]*>Next: describe my contribution<\/button>/
-            : /<button[^>]*>下一步：描述我的貢獻<\/button>/,
+            ? /<button[^>]*>Describe my contribution<\/button>/
+            : /<button[^>]*>描述我的貢獻<\/button>/,
         );
         expect(markup).not.toContain("Other verifiable project content");
         expect(markup).not.toContain("其他可核對的專案內容");
@@ -1055,7 +1053,9 @@ describe("GuidedOnboardingView", () => {
           ? "回答模型尚未通過測試"
           : "Chat model has not passed testing",
       );
-      expect(markup).toContain(locale === "zh-TW" ? "重新檢查" : "Recheck");
+      expect(markup).toContain(
+        locale === "zh-TW" ? "檢查模型狀態" : "Check model status",
+      );
       expect(markup).not.toContain("1970");
       expect(markup).not.toContain("<time");
       expect(markup).not.toContain("connection_id");
@@ -1079,7 +1079,7 @@ describe("GuidedOnboardingView", () => {
       />,
     );
 
-    expect(markup).toContain("Next: describe my contribution");
+    expect(markup).toContain("Describe my contribution");
     expect(markup).not.toContain(
       "Complete analysis for every selected project before continuing.",
     );
@@ -1105,7 +1105,7 @@ describe("GuidedOnboardingView", () => {
     expect(activeMarkup).toContain("Start batch analysis");
     expect(activeMarkup).not.toContain("Model connection");
     expect(activeMarkup).toMatch(
-      /<button[^>]*disabled[^>]*>Next: describe my contribution<\/button>/,
+      /<button[^>]*disabled[^>]*>Describe my contribution<\/button>/,
     );
     expect(activeMarkup).toMatch(/<button[^>]*disabled[^>]*>Back<\/button>/);
     expect(activeMarkup).toMatch(
@@ -1128,10 +1128,10 @@ describe("GuidedOnboardingView", () => {
       />,
     );
     expect(terminalMarkup).toMatch(
-      /<button[^>]*>Next: describe my contribution<\/button>/,
+      /<button[^>]*>Describe my contribution<\/button>/,
     );
     expect(terminalMarkup).not.toMatch(
-      /<button[^>]*disabled[^>]*>Next: describe my contribution<\/button>/,
+      /<button[^>]*disabled[^>]*>Describe my contribution<\/button>/,
     );
     expect(terminalMarkup).toMatch(/<button[^>]*>Back<\/button>/);
     expect(terminalMarkup).toContain('data-analysis-result="octocat/demo"');
@@ -1413,7 +1413,9 @@ it.each(["zh-TW", "en"] as const)(
       locale === "zh-TW" ? "測試並確認選用" : "test and explicitly select",
     );
     expect(manual).toContain(
-      locale === "zh-TW" ? "不需模型" : "No model is needed",
+      locale === "zh-TW"
+        ? "不需模型"
+        : "You can write, confirm, preview, save or back up a draft manually without a model.",
     );
     expect(manual).toContain(
       locale === "zh-TW" ? "即時聊天仍需模型" : "live chat still need models",

@@ -46,7 +46,7 @@ export const ADMIN_MODEL_STATES = {
   en: {
     unconfigured: "Not configured",
     testing: "Working",
-    tested: "Tested; not selected",
+    tested: "Tested. Not selected.",
     selected: "Selected",
     unavailable: "Unavailable",
   },

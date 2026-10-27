@@ -68,8 +68,8 @@ const COPY = {
     editService: "編輯 AI 服務",
     name: "服務名稱（方便自己辨認）",
     provider: "連線方式",
-    chatInterface: "聊天 API 接口",
-    address: "服務網址（API 位址）",
+    chatInterface: "聊天連線方式",
+    address: "服務網址",
     key: "服務金鑰（API key，可選）",
     create: "儲存服務",
     update: "更新服務",
@@ -95,7 +95,7 @@ const COPY = {
     chatHeading: "Manage answer model services",
     embeddingHeading: "Manage content finder services",
     description:
-      "Save a service, then choose it when adding a model. Test the model before using it.",
+      "Saving a service does not finish model setup. Choose the service and enter a model name. Test the model before using it.",
     guidedDescription:
       "Add the service that provides your model, then choose it in Add model. Reuse a saved service when it fits.",
     hostChat: "Environment connection (answers)",
@@ -118,11 +118,11 @@ const COPY = {
     edit: "Edit",
     removeKey: "Remove saved key",
     refresh: "Refresh",
-    empty: "No model connections yet.",
+    empty: "There are no services yet. Add a service before adding a model.",
     configured: "Configured",
     notConfigured: "Not configured",
     remove: "Delete",
-    select: "Select the connection type your provider supports",
+    select: "Select the connection type your service supports",
     pending: "Working on model connections…",
     saveFailed: "Service change not completed",
     secretCleared:
@@ -348,8 +348,8 @@ export function ModelConnectionPanel({
           <h3>{editingId ? copy.editService : copy.addService}</h3>
           <p>
             {locale === "zh-TW"
-              ? "從服務商的設定頁複製服務網址與 API key。金鑰只用於連線，送出或離開表單後會清除輸入；重試時請重新填入。"
-              : "Copy the service URL and API key from your provider's settings. The typed key clears after submission or leaving this form; enter it again when retrying."}
+              ? "從服務商的設定頁複製服務網址與金鑰。金鑰只用於連線。送出或離開表單後會清除輸入。重試時請重新填入。"
+              : "Copy the service URL and API key from your service's settings. RepoNPC uses the key only to connect to the service. The form clears your key after submission or when you leave it. Enter the key again for each retry."}
           </p>
           {editingHostConnection && (
             <p className="model-card__note">{copy.hostReplacement}</p>
@@ -391,7 +391,7 @@ export function ModelConnectionPanel({
           </label>
           {provider === "openai_compatible" && purpose !== "embedding" && (
             <label htmlFor={`model-connection-chat-api${idSuffix}`}>
-              {locale === "zh-TW" ? "聊天 API 接口" : "Chat API interface"}
+              {locale === "zh-TW" ? "聊天連線方式" : "Chat API interface"}
               <select
                 id={`model-connection-chat-api${idSuffix}`}
                 disabled={pending}
@@ -405,8 +405,8 @@ export function ModelConnectionPanel({
               </select>
               <span>
                 {locale === "zh-TW"
-                  ? "請依服務商支援選擇。Responses 可顯示服務商提供的公開摘要；模型不一定提供摘要。變更後需重新測試模型。"
-                  : "Choose the interface supported by your service. Responses can show provider public summaries when the model supplies them. Test the model again after a change."}
+                  ? "請依服務商支援選擇。Responses 可顯示服務商提供的公開摘要。模型不一定提供摘要。變更後需重新測試模型。"
+                  : "Choose the interface supported by your service. Responses can display provider public summaries when the model supplies them. Test the model again after a change."}
               </span>
             </label>
           )}
@@ -431,7 +431,7 @@ export function ModelConnectionPanel({
             <p>
               {locale === "zh-TW"
                 ? "保留目前網址。勾選「更換服務網址」可載入原網址並修改；只改名稱不需要重新測試模型。"
-                : "Keep the current URL. Select Replace the service URL to load and edit it. Renaming does not require a new model test."}
+                : "Keep the current URL. Select Replace the service URL to load and edit it. Changing only the name does not require a new model test."}
             </p>
           )}
           {replaceAddress && (

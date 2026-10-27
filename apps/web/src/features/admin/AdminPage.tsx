@@ -711,7 +711,11 @@ export function loginErrorMessage(locale: Locale, error: unknown): string {
     );
   }
 
-  return copyFor(locale, "登入失敗。", "Sign-in failed.");
+  return copyFor(
+    locale,
+    "登入失敗，請檢查帳號密碼後重試。",
+    "Sign-in failed. Check your username and password, then try again.",
+  );
 }
 
 export function setupErrorMessage(locale: Locale, error: unknown): string {
@@ -876,7 +880,7 @@ export function AdminAccessPanel({
             onClick={onRefreshSetupStatus}
             type="button"
           >
-            {copyFor(locale, "重新檢查", "Check again")}
+            {copyFor(locale, "重新檢查設定狀態", "Check status again")}
           </button>
         </div>
       )}
@@ -886,7 +890,7 @@ export function AdminAccessPanel({
           <p className="admin-auth__intro">
             {copyFor(
               locale,
-              "這個資料目錄已有管理員，但目前沒有可用的 production 密碼。請在部署主機執行下方命令設定新密碼，再重新檢查。",
+              "這個資料目錄已有管理員，但沒有可用的正式環境密碼。請在部署主機執行下方命令設定新密碼，再重新檢查。",
               "This data directory has an administrator, but no production password is available. Run the command below on the deployment host to set a new password, then check again.",
             )}
           </p>
@@ -912,7 +916,7 @@ export function AdminAccessPanel({
             {copyFor(
               locale,
               "這裡沒有預設帳密。請使用部署主機產生的一次性設定碼，建立這個資料目錄的管理員。",
-              "There are no default credentials. Use the one-time code generated on the deployment host to create the administrator for this data directory.",
+              "There is no default username or password. Use the deployment host's one-time setup code to create this data directory's administrator.",
             )}
           </p>
           <p className="admin-auth__status" role="status">
@@ -924,7 +928,7 @@ export function AdminAccessPanel({
                 )
               : copyFor(
                   locale,
-                  "請在部署主機執行下列命令之一，產生一次性設定碼。",
+                  "請在部署主機執行以下任一命令，產生一次性設定碼。",
                   "Run one of these commands on the deployment host to generate a one-time setup code.",
                 )}
           </p>
@@ -989,8 +993,8 @@ export function AdminAccessPanel({
               >
                 {copyFor(
                   locale,
-                  "僅限 loopback evaluation 時至少 4 個字元；production 至少 15 個字元，兩者上限皆為 128。不限制大小寫、數字或符號，常見密碼會被拒絕。",
-                  "Loopback evaluation accepts 4–128 characters; production requires 15–128. Character composition is optional and common passwords are blocked.",
+                  "本機試用模式只允許這台電腦連線。此模式的密碼須為 4–128 個字元。正式運作模式須為 15–128 個字元。不限制大小寫、數字或符號。RepoNPC 拒絕常見密碼。",
+                  "Local trial mode permits connections only from this computer. Passwords in this mode must contain 4–128 characters. Production mode requires 15–128 characters. You can use any character types. RepoNPC blocks common passwords.",
                 )}
               </small>
             </div>
@@ -1024,7 +1028,7 @@ export function AdminAccessPanel({
           <p className="admin-auth__privacy-note">
             {copyFor(
               locale,
-              "帳號、密碼雜湊與登入工作階段都留在 runtime-data 本機資料中，不會寫入 GitHub。",
+              "帳號、密碼雜湊（單向轉換值）與登入工作階段都留在本機。存放於 runtime-data 資料夾，不會寫入 GitHub。",
               "The username, password hash, and sessions stay in local runtime-data and are never written to GitHub.",
             )}
           </p>
@@ -1036,8 +1040,8 @@ export function AdminAccessPanel({
           <p className="admin-auth__intro">
             {copyFor(
               locale,
-              "請使用你建立的管理員帳密登入。",
-              "Sign in with the administrator credentials you created.",
+              "請使用你建立的管理員帳號密碼登入。",
+              "Sign in with the administrator username and password you created.",
             )}
           </p>
           <form className="admin-auth__form" onSubmit={onLogin}>
@@ -1084,8 +1088,8 @@ export function AdminAccessPanel({
           <p className="admin-auth__privacy-note">
             {copyFor(
               locale,
-              "RepoNPC 沒有預設帳密。這組帳密由首次設定者建立，只保存在本機，不會推送到 GitHub。",
-              "RepoNPC has no default credentials. They were created during first-time setup, stay local, and are never pushed to GitHub.",
+              "RepoNPC 沒有預設帳密。首次設定者建立這組帳密。帳密只保存在本機。RepoNPC 不會將帳密推送到 GitHub。",
+              "RepoNPC has no default username or password. The first person to configure RepoNPC creates them. These credentials stay only on the local host. RepoNPC never sends them to GitHub.",
             )}
           </p>
         </div>
@@ -1580,7 +1584,7 @@ export function AdminPage({
         copyFor(
           locale,
           "清單更新失敗，已完成的操作仍然保留。請按「重新整理」再讀取。",
-          "The list could not refresh. Completed changes are kept. Use Refresh to load it again.",
+          "The list could not refresh, but RepoNPC keeps completed changes. Select Refresh to reload the list.",
         ),
       );
     } finally {
@@ -1606,7 +1610,7 @@ export function AdminPage({
           message: copyFor(
             locale,
             "服務清單更新失敗，已完成的操作仍然保留。請按「重新整理」再讀取。",
-            "The service list could not refresh. Completed changes are kept. Use Refresh to load it again.",
+            "The service list could not refresh, but RepoNPC keeps completed changes. Select Refresh to reload the list.",
           ),
         });
       } finally {
@@ -1630,7 +1634,7 @@ export function AdminPage({
         copyFor(
           locale,
           "清單更新失敗，已完成的操作仍然保留。請按「重新整理」再讀取。",
-          "The list could not refresh. Completed changes are kept. Use Refresh to load it again.",
+          "The list could not refresh, but RepoNPC keeps completed changes. Select Refresh to reload the list.",
         ),
       );
     } finally {
@@ -1694,8 +1698,8 @@ export function AdminPage({
       setAnalysisSelectionError(
         copyFor(
           locale,
-          "無法讀取分析模型狀態，請重新檢查。",
-          "Analysis model status could not be loaded. Recheck to continue.",
+          "無法讀取分析模型狀態。請再次檢查狀態後繼續。",
+          "RepoNPC could not load analysis model status. Check status again to continue.",
         ),
       );
       setGuidedState((current) =>

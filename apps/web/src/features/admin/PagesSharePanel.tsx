@@ -155,7 +155,7 @@ export function PagesSharePanel({
     setNotice(
       zh
         ? "Pages 網址已儲存；如需確認遠端內容，請重新核對。"
-        : "Saved Verify the remote content when it is ready.",
+        : "Pages URL saved. Check again if you need to confirm the remote content.",
     );
   }
 
@@ -187,19 +187,19 @@ export function PagesSharePanel({
         title: "3. GitHub Pages",
         intro:
           "輸入與訪客入口設定相符的 GitHub Pages 網址。匯出不會啟用 Funnel、呼叫模型或修改 GitHub。",
-        url: "Pages URL",
+        url: "Pages 網址",
         urlHelp:
-          "網域須與上一步的 Pages 網域相同。這裡需包含網站路徑，例如 https://account.github.io/project/；若網站在根目錄，填 https://account.github.io/。",
+          "網域須與上一步的 Pages 網域相同。這裡需包含網站路徑，例如 https://account.github.io/project/。若網站在根目錄，填 https://account.github.io/。",
         save: "儲存",
         export: "下載網站",
-        verify: "核對",
+        verify: "核對 Pages 網站",
         refresh: "重新整理",
         downloadReady: "下載網站封存檔",
         uploadTitle: "上傳說明",
         uploadSteps: [
           "下載封存檔，解壓縮後將所有檔案和資料夾放到同一個 Pages 發布來源。",
-          "保留根目錄中的 .nojekyll、index.html 與 export-manifest.json。",
-          "等待 Pages 更新後，再按「核對」。",
+          "保留根目錄中的 .nojekyll 與 index.html。也要保留 export-manifest.json。",
+          "等待 Pages 更新後，再按「核對 Pages 網站」。",
         ],
         configured: "已儲存",
         missing: "未設定",
@@ -216,14 +216,14 @@ export function PagesSharePanel({
           "Use the same domain as the Pages domain in the previous step. Include the site path here, such as https://account.github.io/project/, or https://account.github.io/ for a root site.",
         save: "Save",
         export: "Download site",
-        verify: "Verify",
+        verify: "Check Pages site",
         refresh: "Refresh",
         downloadReady: "Download site archive",
         uploadTitle: "Upload help",
         uploadSteps: [
           "Download and extract the archive, then place every file and folder in the same Pages publishing source.",
           "Keep .nojekyll, index.html, and export-manifest.json at the root.",
-          "After Pages updates, select Verify.",
+          "After Pages updates, select Check Pages site.",
         ],
         configured: "Saved",
         missing: "Not configured",
