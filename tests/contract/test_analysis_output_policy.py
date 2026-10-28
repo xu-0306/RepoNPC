@@ -107,3 +107,23 @@ def test_contribution_capability_stays_16384_when_analysis_budget_is_smaller(
 
     assert _analysis_chat_capabilities(settings).max_output_tokens == 1
     assert _contribution_chat_capabilities(settings).max_output_tokens == 16384
+
+
+def test_contribution_capability_leaves_half_of_a_small_context_for_the_request(
+    tmp_path: Path,
+) -> None:
+    settings = load_environment(
+        {
+            "REPONPC_DATA_DIR": str(tmp_path),
+            "REPONPC_PUBLIC_BASE_URL": "https://portfolio.example.com",
+            "REPONPC_CHAT_PROVIDER": "ollama",
+            "REPONPC_CHAT_MODEL": "fixture-chat",
+            "REPONPC_CHAT_BASE_URL": "http://127.0.0.1:11434",
+            "REPONPC_EMBEDDING_MODEL": "fixture-embed",
+            "REPONPC_EMBEDDING_BASE_URL": "http://127.0.0.1:11434",
+            "REPONPC_CHAT_MAX_CONTEXT_TOKENS": "8192",
+        },
+        secret_roots=(tmp_path,),
+    )
+
+    assert _contribution_chat_capabilities(settings).max_output_tokens == 4096

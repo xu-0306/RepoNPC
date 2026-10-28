@@ -386,7 +386,7 @@ export async function checkAnalysisRecovery(tab, options = {}) {
   await fillContributionStatement("TRUNCATE_BROWSER_CONTRIBUTION");
   await button("產生可編輯建議").nth(0).click();
   await waitForText(
-    "模型回覆達到輸出上限",
+    "達到上限，因此未採用不完整提案",
     "contribution truncation diagnosis",
   );
   const truncationFocus = await tab.playwright.evaluate(

@@ -892,11 +892,9 @@ class GuidedOnboardingService:
                 messages = _contribution_messages(normalized_slug, statement)
                 response_schema = _contribution_response_schema()
                 capabilities = providers.chat.capabilities()
-                output_tokens = min(
-                    CONTRIBUTION_MAX_OUTPUT_TOKENS,
-                    capabilities.max_output_tokens,
-                    capabilities.max_context_tokens,
-                )
+                output_tokens = _contribution_output_tokens(messages, response_schema, capabilities)
+                if output_tokens < 1:
+                    raise GuidedOnboardingError("CONFIG_INVALID")
                 _validate_contribution_request(
                     messages,
                     response_schema=response_schema,
@@ -1509,6 +1507,40 @@ def _parse_contribution(content: str | dict[str, Any], source_text: str) -> Cont
     return proposal
 
 
+def _contribution_output_tokens(
+    messages: Sequence[ProviderMessage],
+    response_schema: dict[str, Any],
+    capabilities: ProviderCapabilities,
+) -> int:
+    """Fit the fixed allowance into the context the request leaves free."""
+
+    free = (
+        capabilities.max_context_tokens
+        - _contribution_request_tokens(messages, response_schema)
+        - _CONTRIBUTION_CONTEXT_SAFETY_MARGIN_TOKENS
+    )
+    return min(CONTRIBUTION_MAX_OUTPUT_TOKENS, capabilities.max_output_tokens, free)
+
+
+def _contribution_request_tokens(
+    messages: Sequence[ProviderMessage], response_schema: dict[str, Any]
+) -> int:
+    """Return the larger of our UTF-8 estimate and the escaped JSON the Ollama adapter counts.
+
+    The adapter escapes non-ASCII text, so CJK costs six bytes per character there.
+    """
+
+    request = {
+        "messages": [{"role": item.role, "content": item.content} for item in messages],
+        "format": response_schema,
+    }
+    escaped = len(json.dumps(request, sort_keys=True, separators=(",", ":")).encode())
+    utf8 = _analysis_request_tokens(messages) + _conservative_token_count(
+        json.dumps(response_schema, ensure_ascii=False, sort_keys=True)
+    )
+    return max(escaped, utf8)
+
+
 def _validate_contribution_request(
     messages: Sequence[ProviderMessage],
     *,
@@ -1518,10 +1550,7 @@ def _validate_contribution_request(
 ) -> None:
     """Reserve the full contribution request and fixed output budget before generation."""
 
-    request_tokens = _analysis_request_tokens(messages)
-    request_tokens += _conservative_token_count(
-        json.dumps(response_schema, ensure_ascii=False, sort_keys=True)
-    )
+    request_tokens = _contribution_request_tokens(messages, response_schema)
     if (
         request_tokens + output_tokens + _CONTRIBUTION_CONTEXT_SAFETY_MARGIN_TOKENS
         > max_context_tokens

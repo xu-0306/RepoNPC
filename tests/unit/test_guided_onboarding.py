@@ -20,6 +20,7 @@ from reponpc.admin.onboarding import (
     _analysis_config,
     _analysis_messages,
     _analysis_response_schema,
+    _contribution_response_schema,
     _parse_analysis,
     _parse_contribution,
 )
@@ -42,6 +43,7 @@ from reponpc.providers.contracts import (
     ProviderMessage,
     ProviderResult,
 )
+from reponpc.providers.ollama import _validate_context
 from reponpc.providers.response_diagnostics import ProviderResponseError, ResponseIssue
 from reponpc.providers.runtime import ProviderRuntime
 from reponpc.runtime.database import RuntimeDatabase
@@ -230,6 +232,11 @@ class TinyContextFakeChat(FakeChat):
 class SmallOutputFakeChat(FakeChat):
     def capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(False, True, True, True, True, 8192, 400)
+
+
+class ShortContextFakeChat(FakeChat):
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(False, True, True, True, True, 10000, 8000)
 
 
 class InvalidContributionFakeChat(LargeCapacityFakeChat):
@@ -482,6 +489,35 @@ def test_contribution_suggestion_rejects_context_shortage_before_generation(
 
     assert error.value.code == "CONFIG_INVALID"
     assert chat.calls == 0
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "I maintained the parser with another contributor. " * 20,
+        "我協助維護解析器。" * 60,
+    ],
+    ids=["ascii", "cjk"],
+)
+def test_contribution_suggestion_fits_output_into_the_context_left_by_the_request(
+    tmp_path: Path, statement: str
+) -> None:
+    chat = ShortContextFakeChat()
+    service, _database, _resolver, _chat = _service(tmp_path, chat=chat)
+
+    service.suggest_contributions(
+        session_hash="session-a", slug="octocat/demo", owner_statement=statement
+    )
+
+    [granted] = chat.max_output_tokens
+    capabilities = chat.capabilities()
+    schema = _contribution_response_schema()
+    assert 0 < granted < capabilities.max_output_tokens
+    # The Ollama adapter accepts the grant, and the grant leaves under 512 tokens unused.
+    _validate_context(capabilities, chat.messages[0], schema, granted)
+    with pytest.raises(ProviderError) as error:
+        _validate_context(capabilities, chat.messages[0], schema, granted + 512)
+    assert error.value.code is ProviderFailureCode.CONTEXT_OVERFLOW
 
 
 def test_contribution_suggestion_rejects_legal_json_marked_as_truncated(

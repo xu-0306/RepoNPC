@@ -992,8 +992,8 @@ export function guidedErrorMessage(
     },
     PROVIDER_OUTPUT_LIMIT_REACHED: {
       "zh-TW":
-        "模型回覆達到輸出上限，因此未採用不完整提案。請精簡原始說明後重試，或改為手動填寫。",
-      en: "The model response reached its output limit, so the incomplete proposal was not used. Shorten the original description and retry, or continue manually.",
+        "模型的輸出（含思考過程）達到上限，因此未採用不完整提案。你的輸入已保留，可重試或改為手動填寫；若常發生，請改用思考較少的模型。",
+      en: "The model reached its output limit, which includes its thinking, so the incomplete proposal was not used. Your input is preserved; retry or continue manually. If this keeps happening, use a model that thinks less.",
     },
     PROVIDER_OUTPUT_SCHEMA_INVALID: {
       "zh-TW":

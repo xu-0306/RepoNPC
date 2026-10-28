@@ -1587,7 +1587,10 @@ def _contribution_chat_capabilities(settings: EnvironmentSettings) -> ProviderCa
         usage_reporting=True,
         health_check=True,
         max_context_tokens=settings.chat_max_context_tokens,
-        max_output_tokens=min(CONTRIBUTION_MAX_OUTPUT_TOKENS, settings.chat_max_context_tokens),
+        # Half the context at most, so the adapter keeps room for the request.
+        max_output_tokens=min(
+            CONTRIBUTION_MAX_OUTPUT_TOKENS, max(1, settings.chat_max_context_tokens // 2)
+        ),
     )
 
 

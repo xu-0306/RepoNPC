@@ -815,6 +815,7 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
 - **Rejected:** Sending `think: false` for this call (conflicts with the ADR-055 owner decision; not evaluated against the person-claim safety rules); changing only the error text (leaves the AI proposal unusable with the reference model of ADR-055).
 - **Consequences:**
   - A reasoning model can take about a minute for one suggestion and holds the shared generation slot for that time. The 180-second chat timeout still applies.
-  - The configured context must leave room for the request plus 16,384 tokens (default 32,768 does). With a smaller context the request fails safely before any provider call, as chat already does; manual entry stays available.
+  - With a configured context below 32,768 the allowance shrinks to half of the context at most, and to what the request leaves free. The request is counted as escaped JSON (six bytes per CJK character), as the Ollama adapter counts it, so a long Chinese statement is not rejected where 700 tokens worked. Only when nothing is left does the request fail safely before any provider call; manual entry stays available.
+  - The limit message no longer tells the owner to shorten the statement first. It says the limit includes thinking, offers retry or manual entry, and suggests a model that thinks less if it keeps happening.
   - Only the 700 value of ADR-034/037 is superseded. The other contribution rules stay.
 - **Requirements:** FR-012/027/033/038/040/041, NFR-002/003/011/012/014, AC-023/039/054/055/057/061 (value change only).
