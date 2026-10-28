@@ -366,7 +366,7 @@ const COPY: Record<Locale, Copy> = {
     editConfirmed: "編輯已確認內容",
     restorePrevious: "還原上一個已確認版本",
     reject: "拒絕並重新填寫",
-    proposalRequired: "先產生建議，或拒絕後重新填寫你的貢獻說明。",
+    proposalRequired: "請按「產生可編輯建議」，或按「手動輸入貢獻」自己填寫。",
     assertionConfirmed: "此專案的貢獻已由你確認。",
     confirmationRequired:
       "每個已選專案都需要確認貢獻後才能繼續。拒絕建議後，請重新填寫並確認。",
@@ -589,7 +589,7 @@ const COPY: Record<Locale, Copy> = {
     restorePrevious: "Restore previous confirmed version",
     reject: "Reject and rewrite",
     proposalRequired:
-      "Generate a suggestion first, or reject it and write a new contribution description.",
+      "Select Generate editable suggestion, or Enter contribution manually to write it yourself.",
     assertionConfirmed: "You confirmed this project's contribution.",
     confirmationRequired:
       "Confirm a contribution for every selected project. After rejecting a suggestion, rewrite and confirm it before continuing.",

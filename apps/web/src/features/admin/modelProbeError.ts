@@ -6,8 +6,8 @@ const ERRORS: Record<string, Message> = {
   PROVIDER_AUTHENTICATION: ["服務驗證失敗。", "Service authentication failed."],
   PROVIDER_RATE_LIMIT: ["服務限制請求。", "The service limited the request."],
   PROVIDER_TIMEOUT: [
-    "連線或模型回應逾時；請檢查服務是否可用，再重新測試。",
-    "The connection or model response timed out. Check service availability, then test again.",
+    "連線或模型回應逾時。本機模型第一次使用要先載入，可能超過測試時限；請確認服務可用，稍候再重新測試。",
+    "The connection or model response timed out. A local model must load on first use and can exceed the test time limit. Check that the service is available, wait a moment, then test again.",
   ],
   PROVIDER_UNAVAILABLE: [
     "無法連線至模型服務；請檢查服務網址、網路與服務運行狀態。",

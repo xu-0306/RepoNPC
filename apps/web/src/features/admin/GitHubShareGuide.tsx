@@ -192,7 +192,7 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     markdownLabel: "複製下方這段文字",
     markdownReady: "要貼進 README.md 的文字已準備好，可以複製。",
     markdownMissing:
-      "還沒有可複製的內容。先填入可公開連線的 HTTPS 訪客網址；卡片圖片仍可先下載。",
+      "還沒有可複製的內容。已核對的 Pages 網址要是 https://account.github.io/project/ 這種格式，結尾要有 /，才能產生文字；卡片圖片仍可先下載。",
     copyMarkdown: "複製要貼進 README 的文字",
     preserveReadmeHeading: "在 README 保留原文",
     preserveReadmeSteps: [
@@ -308,7 +308,7 @@ const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
     markdownLabel: "Copy the text below",
     markdownReady: "The text for README.md is ready to copy.",
     markdownMissing:
-      "Nothing is ready to copy yet. Enter a public HTTPS visitor URL first; you can still download the card image now.",
+      "Nothing is ready to copy yet. The verified Pages URL must look like https://account.github.io/project/ and end with /. You can still download the card image now.",
     copyMarkdown: "Copy text for README",
     preserveReadmeHeading: "Keep existing README text",
     preserveReadmeSteps: [

@@ -1,4 +1,5 @@
 import { InfoParagraphs } from "./InfoParagraphs";
+import { pagesShareErrorMessage } from "./pagesShareError";
 import "../../p4-w3.css";
 import { useEffect, useRef, useState } from "react";
 import sharingGuideUrl from "../../../../../docs/PAGES_SHARING_GUIDE.md?url&no-inline";
@@ -113,11 +114,7 @@ export function PagesSharePanel({
         mounted.current
       ) {
         publishState(null);
-        setNotice(
-          `${zh ? "操作未完成" : "Could not complete"}: ${
-            error instanceof Error ? error.message : "REQUEST_FAILED"
-          }`,
-        );
+        setNotice(pagesShareErrorMessage(locale, error));
       }
     } finally {
       if (context.isCurrent()) {

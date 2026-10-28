@@ -108,6 +108,8 @@ describe("model test diagnostics", () => {
 
   it("distinguishes transport failures without inventing HTTP status", () => {
     expect(modelProbeError("zh-TW", "PROVIDER_TIMEOUT")).toContain("逾時");
+    expect(modelProbeError("zh-TW", "PROVIDER_TIMEOUT")).toContain("先載入");
+    expect(modelProbeError("en", "PROVIDER_TIMEOUT")).toContain("must load");
     expect(modelProbeError("en", "PROVIDER_UNAVAILABLE")).toContain(
       "Could not connect",
     );

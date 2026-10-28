@@ -1235,6 +1235,10 @@ describe("GuidedOnboardingView", () => {
       />,
     );
     expect(markup).toContain("Enter contribution manually");
+    expect(markup).toContain(
+      "Select Generate editable suggestion, or Enter contribution manually",
+    );
+    expect(markup).not.toContain("or reject it and write");
     expect(markup).not.toContain(
       "Complete analysis for every selected project",
     );
