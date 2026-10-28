@@ -435,7 +435,7 @@ def test_analysis_budget_for_compatibility_and_batch_paths(
     assert chat.max_output_tokens == [budget, budget]
 
 
-def test_contribution_suggestion_keeps_700_token_cap_with_analysis_provider(
+def test_contribution_suggestion_uses_16384_token_cap_with_analysis_provider(
     tmp_path: Path,
 ) -> None:
     chat = LargeCapacityFakeChat()
@@ -447,7 +447,7 @@ def test_contribution_suggestion_keeps_700_token_cap_with_analysis_provider(
         owner_statement="I maintained the parser with another contributor.",
     )
 
-    assert chat.max_output_tokens == [700]
+    assert chat.max_output_tokens == [16384]
     system_prompt = chat.messages[0][0].content
     assert "collaborator work in context claims" in system_prompt
     assert "Create an achievement claim only when the owner states an outcome" in system_prompt

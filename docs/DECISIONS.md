@@ -801,3 +801,20 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
   - New AC-082 covers the pixel interface. AC-068 and AC-072–AC-075 are revised.
   - ADR-051's clauses on flat colours, no drawn backdrop and owner-only scheme choice are superseded. Its other clauses (registry data, closed roles, AA validation, mode script, NPC follows the character) remain in force.
 - **Requirements:** FR-047/050/051/052, NFR-001/009/011, AC-068/072–075 and new AC-082.
+
+## ADR-073: Raise the contribution-suggestion output allowance to 16,384
+
+- **Status:** Accepted 2026-10-28. Technical Specification 0.4.15.
+- **Authorization:** After a flow walk (2026-10-28) the owner reviewed three options (larger allowance, `think: false`, clearer error only) and said 「本來就應該加大額度」.
+- **Context:** ADR-034/037 fixed the contribution allowance at 700 tokens; ADR-055 later set reasoning ON and a 16,384 ceiling for chat/probe and analysis, but did not mention contribution suggestions. With a reasoning model, thinking and answer share one allowance, so 700 tokens end before any answer.
+- **Evidence:** Real walk, Ollama `qwen3.5:9b` (reasoning supported, `think: true` sent): "產生可編輯建議" returned `PROVIDER_OUTPUT_LIMIT_REACHED` twice. Direct requests with the application's real contribution prompt and schema (short and medium owner statements):
+  - reasoning ON, 700 tokens: `done_reason=length`, empty content, in 7 seconds;
+  - reasoning ON, 8,192 tokens: finished with 5,181 and 5,233 tokens in about 50 seconds;
+  - `think: false`, 700 tokens: finished with 92 and 398 tokens in 1 to 4 seconds.
+- **Decision:** Set the fixed contribution allowance to 16,384 tokens, the same ceiling as ADR-055. It stays independent of the visitor and analysis budgets and has no new setting. Reasoning stays ON (ADR-055 is unchanged). Output-limit termination still fails before parsing, with no retry, fallback or partial promotion.
+- **Rejected:** Sending `think: false` for this call (conflicts with the ADR-055 owner decision; not evaluated against the person-claim safety rules); changing only the error text (leaves the AI proposal unusable with the reference model of ADR-055).
+- **Consequences:**
+  - A reasoning model can take about a minute for one suggestion and holds the shared generation slot for that time. The 180-second chat timeout still applies.
+  - The configured context must leave room for the request plus 16,384 tokens (default 32,768 does). With a smaller context the request fails safely before any provider call, as chat already does; manual entry stays available.
+  - Only the 700 value of ADR-034/037 is superseded. The other contribution rules stay.
+- **Requirements:** FR-012/027/033/038/040/041, NFR-002/003/011/012/014, AC-023/039/054/055/057/061 (value change only).

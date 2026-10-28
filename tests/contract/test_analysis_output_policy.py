@@ -63,7 +63,7 @@ def test_analysis_and_public_budgets_reach_production_transport(
     for capabilities, output_tokens in (
         (_analysis_chat_capabilities(settings), settings.analysis_max_output_tokens),
         (None, settings.chat_max_output_tokens),
-        (_contribution_chat_capabilities(settings), 700),
+        (_contribution_chat_capabilities(settings), 16384),
     ):
         provider = _chat_provider_from_connection(
             settings,
@@ -85,10 +85,10 @@ def test_analysis_and_public_budgets_reach_production_transport(
         request["options"]["num_predict"] if provider_name == "ollama" else request["max_tokens"]
         for request in requests
     ]
-    assert limits == [16384, 16384, 700]
+    assert limits == [16384, 16384, 16384]
 
 
-def test_contribution_capability_remains_700_when_analysis_budget_is_smaller(
+def test_contribution_capability_stays_16384_when_analysis_budget_is_smaller(
     tmp_path: Path,
 ) -> None:
     settings = load_environment(
@@ -106,4 +106,4 @@ def test_contribution_capability_remains_700_when_analysis_budget_is_smaller(
     )
 
     assert _analysis_chat_capabilities(settings).max_output_tokens == 1
-    assert _contribution_chat_capabilities(settings).max_output_tokens == 700
+    assert _contribution_chat_capabilities(settings).max_output_tokens == 16384
