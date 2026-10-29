@@ -9,12 +9,18 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import math
 import secrets
+import socket
+import threading
+import time
 import zipfile
-from contextlib import nullcontext
+from contextlib import nullcontext, suppress
+from http.client import HTTPConnection, HTTPException
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
+from urllib.parse import urlsplit
 
 import uvicorn
 from argon2 import PasswordHasher
@@ -32,10 +38,17 @@ from reponpc.api.visitor_gateway import VisitorGateway
 from reponpc.chat.service import GroundedChatService
 from reponpc.config.environment import load_environment
 from reponpc.main import create_app
+from reponpc.providers.http_transport import ProviderHttpResponse
 from reponpc.providers.runtime import ProviderRuntime
 from reponpc.runtime.visitor_gateway import VisitorGatewayStore
 from reponpc.sharing.export import build_visitor_site_export
-from reponpc.sharing.manifest import parse_manifest, safe_relative_path
+from reponpc.sharing.manifest import (
+    SiteExportError,
+    pages_target,
+    parse_manifest,
+    safe_relative_path,
+)
+from reponpc.sharing.pages_transport import _MAX_RESPONSE_BYTES, _remaining
 from tests.browser.a5_transport import GATEWAY_ORIGIN, PAGES_ORIGIN, GatewayFixtureTransport
 from tests.integration.test_embedding_reindex import _profile, _system
 from tests.integration.test_index_build import FIXTURE_CONFIG
@@ -45,6 +58,25 @@ from tests.integration.test_reviewed_faq import OwnerLimits, SyntheticChat
 # Public test credentials for this disposable loopback fixture only.
 FIXTURE_USERNAME = "a5-fixture"
 FIXTURE_PASSWORD = "A5 disposable browser fixture 2026"
+
+
+def _pages_mapping_port(static_origin: str, gateway_port: int | None) -> int:
+    if gateway_port is None:
+        raise ValueError("--map-pages requires --gateway-port")
+    parsed = urlsplit(static_origin)
+    port = parsed.port
+    if (
+        any(character.isspace() or ord(character) < 32 for character in static_origin)
+        or parsed.scheme != "http"
+        or parsed.hostname != "127.0.0.1"
+        or port is None
+        or not 1 <= port <= 65535
+        or parsed.username is not None
+        or parsed.password is not None
+        or static_origin != f"http://{parsed.netloc}"
+    ):
+        raise ValueError("Pages fixture requires an HTTP loopback origin with an explicit port")
+    return port
 
 
 class A5AcceptanceApp:
@@ -59,6 +91,7 @@ class A5AcceptanceApp:
         audit_script: Path | None = None,
         gateway_port: int | None = None,
         static_origin: str = "http://127.0.0.1:8781",
+        map_pages: bool = False,
         export_directory: Path | None = None,
     ) -> None:
         self.application = application
@@ -67,6 +100,7 @@ class A5AcceptanceApp:
         self.audit_script = audit_script
         self.gateway_port = gateway_port
         self.static_origin = static_origin
+        self.pages_port = _pages_mapping_port(static_origin, gateway_port) if map_pages else None
         self.export_directory = export_directory
         self.transports: list[GatewayFixtureTransport] = []
         self.delay_scene_preview = False
@@ -74,6 +108,7 @@ class A5AcceptanceApp:
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope["type"] == "lifespan":
             from reponpc.api import visitor_gateway as gateway_module
+            from reponpc.sharing import pages as pages_module
 
             factory = gateway_module.create_visitor_gateway_app
 
@@ -93,8 +128,13 @@ class A5AcceptanceApp:
                 if self.gateway_port is not None
                 else nullcontext()
             )
+            pages_patch = (
+                patch.object(pages_module, "fetch_pages_resource", self._fetch_pages_resource)
+                if self.pages_port is not None
+                else nullcontext()
+            )
             try:
-                with transport_patch:
+                with transport_patch, pages_patch:
 
                     async def send_startup(message: Any) -> None:
                         if message["type"] == "lifespan.startup.complete" and self.export_directory:
@@ -177,6 +217,95 @@ class A5AcceptanceApp:
                 return
         await self.application(scope, receive, send)
 
+    def _fetch_pages_resource(
+        self,
+        url: str,
+        *,
+        pages_origin: str,
+        deadline: float,
+        max_response_bytes: int,
+    ) -> ProviderHttpResponse:
+        if not isinstance(url, str) or any(
+            character.isspace() or ord(character) < 32 for character in url
+        ):
+            raise SiteExportError("SHARING_CONFIGURATION_INVALID")
+        pages_target(url, pages_origin)
+        parsed = urlsplit(url)
+        if pages_origin != PAGES_ORIGIN or parsed.scheme + "://" + parsed.netloc != pages_origin:
+            raise SiteExportError("SHARING_CONFIGURATION_INVALID")
+        if (
+            isinstance(deadline, bool)
+            or not math.isfinite(deadline)
+            or not 0 < deadline - time.monotonic() <= 30
+            or isinstance(max_response_bytes, bool)
+            or not 0 < max_response_bytes <= _MAX_RESPONSE_BYTES
+        ):
+            raise SiteExportError("SHARING_VERIFICATION_UNAVAILABLE")
+
+        assert self.pages_port is not None
+        connection: HTTPConnection | None = None
+        timer: threading.Timer | None = None
+        expired = threading.Event()
+        try:
+            connection = HTTPConnection("127.0.0.1", self.pages_port)
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as network_socket:
+                network_socket.settimeout(_remaining(deadline))
+                network_socket.connect(("127.0.0.1", self.pages_port))
+                connection.sock = network_socket
+
+                def interrupt() -> None:
+                    expired.set()
+                    with suppress(OSError, ValueError):
+                        network_socket.shutdown(socket.SHUT_RDWR)
+
+                # Bound drip-fed headers and chunked bodies by the shared deadline too.
+                timer = threading.Timer(_remaining(deadline), interrupt)
+                timer.daemon = True
+                timer.start()
+                network_socket.settimeout(_remaining(deadline))
+                connection.request(
+                    "GET",
+                    parsed.path or "/",
+                    headers={"Accept-Encoding": "identity", "Connection": "close"},
+                )
+                response = connection.getresponse()
+                if response.status != 200:
+                    raise SiteExportError("SHARING_VERIFICATION_FAILED")
+                length = response.getheader("Content-Length")
+                if length is not None and (
+                    not length.isdecimal() or int(length) > max_response_bytes
+                ):
+                    raise SiteExportError("SHARING_VERIFICATION_FAILED")
+                if response.getheader("Content-Encoding", "identity").casefold() != "identity":
+                    raise SiteExportError("SHARING_VERIFICATION_FAILED")
+                payload = bytearray()
+                while True:
+                    # A fully read plain-HTTP body closes the socket; do not re-arm its timeout.
+                    _remaining(deadline)
+                    chunk = response.read1(min(64 * 1024, max_response_bytes - len(payload) + 1))
+                    if not chunk:
+                        break
+                    payload.extend(chunk)
+                    if len(payload) > max_response_bytes:
+                        raise SiteExportError("SHARING_VERIFICATION_FAILED")
+                _remaining(deadline)
+                if expired.is_set() or (length is not None and len(payload) != int(length)):
+                    raise SiteExportError("SHARING_VERIFICATION_FAILED")
+                return ProviderHttpResponse(
+                    status=200,
+                    headers={"content-type": response.getheader("Content-Type", "")},
+                    body=bytes(payload),
+                )
+        except SiteExportError:
+            raise
+        except HTTPException, OSError, ValueError:
+            raise SiteExportError("SHARING_VERIFICATION_UNAVAILABLE") from None
+        finally:
+            if timer is not None:
+                timer.cancel()
+            if connection is not None:
+                connection.close()
+
     def _export_browser_sites(self) -> None:
         """Make checked production exports for this exact disposable gateway bundle."""
         assert self.export_directory is not None
@@ -241,10 +370,13 @@ def build_application(
     audit_script: Path | None = None,
     gateway_port: int | None = None,
     static_origin: str = "http://127.0.0.1:8781",
+    map_pages: bool = False,
     export_directory: Path | None = None,
 ) -> A5AcceptanceApp:
     """Build and activate a real immutable fixture bundle in a fresh directory."""
 
+    if map_pages:
+        _pages_mapping_port(static_origin, gateway_port)
     if (runtime_root / "runtime").exists() or (runtime_root / "data").exists():
         raise ValueError("a fresh disposable runtime is required")
     runtime_root.mkdir(parents=True, exist_ok=True)
@@ -359,6 +491,7 @@ def build_application(
         audit_script=audit_script,
         gateway_port=gateway_port,
         static_origin=static_origin,
+        map_pages=map_pages,
         export_directory=export_directory,
     )
 
@@ -371,8 +504,11 @@ def main() -> None:
     parser.add_argument("--axe-script", type=Path)
     parser.add_argument("--gateway-port", type=int)
     parser.add_argument("--static-origin", default="http://127.0.0.1:8781")
+    parser.add_argument("--map-pages", action="store_true")
     parser.add_argument("--export-directory", type=Path)
     args = parser.parse_args()
+    if args.map_pages and args.gateway_port is None:
+        parser.error("--map-pages requires --gateway-port")
     origin = f"http://127.0.0.1:{args.port}"
     application = build_application(
         args.runtime.resolve(),
@@ -381,6 +517,7 @@ def main() -> None:
         audit_script=args.axe_script,
         gateway_port=args.gateway_port,
         static_origin=args.static_origin,
+        map_pages=args.map_pages,
         export_directory=args.export_directory,
     )
     print(f"BROWSER_URL={origin}/", flush=True)

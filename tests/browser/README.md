@@ -175,6 +175,33 @@ fail even when the no-CSP transport readiness probe succeeds.
 uv run python -m tests.browser.a5_transport --site <extracted-site-directory> --base-path /project/ --port 8781 --gateway-port 8782
 ```
 
+Add `--map-pages` to check a downloaded site through the real static listener.
+It maps only `https://fixture.github.io` to the `--static-origin` loopback listener
+and requires `--gateway-port`. The fixture supplies no response: stopping the
+listener fails the check. This is not evidence of real DNS, TLS, GitHub Pages or
+Funnel reachability.
+
+1. Start a fresh disposable admin fixture:
+
+   ```powershell
+   $a5Runtime = Join-Path $env:TEMP "reponpc-a5-$([guid]::NewGuid())"
+   uv run python -m tests.browser.a5_server --runtime $a5Runtime --port 8780 --gateway-port 8782 --static-origin http://127.0.0.1:8781 --map-pages
+   ```
+
+2. Sign in at `http://127.0.0.1:8780/admin`, save
+   `https://fixture.github.io/project/`, download the site ZIP and extract it.
+   Serve the extracted directory in a second terminal:
+
+   ```powershell
+   uv run python -m tests.browser.a5_transport --site <extracted-site-directory> --base-path /project/ --port 8781 --gateway-port 8782
+   ```
+
+3. Run the admin site's check. With the listener running and the same export
+   bytes, the state becomes verified. Stop the static listener and check again:
+   it reports `SHARING_VERIFICATION_UNAVAILABLE` and clears verification. Restart
+   the listener with a changed `export-manifest.json` (even one added space) and
+   check again: it reports `SHARING_VERIFICATION_FAILED` and stays unverified.
+
 An optional `--axe-script <local-axe.min.js>` on either fixture adds same-origin
 audit controls through HTML responses; saved build/export bytes and CSP remain
 unchanged. `a5-acceptance.js` exposes the audit results without DOM text or
