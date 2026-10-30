@@ -167,7 +167,7 @@ class FixtureChatController:
         self.calls: Counter[tuple[str, str]] = Counter()
         self.contribution_calls = 0
         self.contribution_requests: list[dict[str, object]] = []
-        self.contribution_context_tokens = 8192
+        self.contribution_context_tokens = 32768
         self.contribution_release = threading.Event()
         self.retry_release = threading.Event()
         self._lock = threading.Lock()
@@ -186,7 +186,7 @@ class FixtureChat:
             True,
             True,
             self.controller.contribution_context_tokens,
-            min(self.controller.contribution_context_tokens, 1000),
+            min(self.controller.contribution_context_tokens, 16384),
         )
 
     def generate(self, messages, response_schema, max_output_tokens, timeout):
@@ -318,7 +318,7 @@ class BrowserAcceptanceApp:
             await JSONResponse({"ok": True})(scope, receive, send)
             return
         if method == "POST" and path == "/__browser-test/contribution-context-normal":
-            self.chat_controller.contribution_context_tokens = 8192
+            self.chat_controller.contribution_context_tokens = 32768
             await JSONResponse({"ok": True})(scope, receive, send)
             return
         if method == "POST" and path == "/__browser-test/select-alternate":

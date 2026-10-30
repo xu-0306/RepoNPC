@@ -670,12 +670,12 @@ export async function checkAnalysisRecovery(tab, options = {}) {
     observed.contribution_calls === 5 &&
       observed.contribution_requests.every(
         (entry) =>
-          entry.max_output_tokens === Math.min(16384, 1000) &&
+          entry.max_output_tokens === 16384 &&
           entry.schema_closed === true &&
           JSON.stringify(entry.schema_required) ===
             JSON.stringify(["role", "summary", "claims"]),
       ),
-    "contribution failures and recovery used the 16,384 allowance bounded by the fixture's 1,000 max output, and the closed schema",
+    "contribution failures and recovery carried the full 16,384 allowance (the fixture declares a 32,768 context and 16,384 max output), and the closed schema",
   );
   await button("使用目前模型重新分析").click();
   await waitForText(

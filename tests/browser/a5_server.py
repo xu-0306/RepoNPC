@@ -424,7 +424,7 @@ def build_application(
         bundles=manager,
         providers=ProviderRuntime(chat=chat, embedding=provider, max_attempts=1),
         limits=OwnerLimits(),
-        max_output_tokens=1000,
+        max_output_tokens=16384,
         timeout_seconds=5,
     )
     faq = ReviewedFaq(database=database, bundles=manager, chat_supplier=lambda: service)
