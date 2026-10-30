@@ -923,7 +923,7 @@ All routes below are authenticated same-origin admin routes with `Cache-Control:
 
 #### Repository discovery and manual resolution
 
-- `POST /api/admin/onboarding/repositories/discover` accepts `{account,page}` where `account` is a GitHub username or `https://github.com/{owner}` profile URL, `page` is 1–5, and the fixed page size is 50. It returns normalized public metadata only: slug, name, description, primary language, default branch, fork/archived flags, updated time, and HTML URL, plus `{page,has_more}`.
+- `POST /api/admin/onboarding/repositories/discover` accepts `{account,page}` where `account` is a GitHub username or `https://github.com/{owner}` profile URL, `page` is 1–5, and the fixed page size is 50. It returns normalized public metadata only: slug, name, description, primary language, default branch, fork/archived flags, updated time, HTML URL, and optional `size_kb` (whole repository including history, in KB), plus `{page,has_more}`.
 - `POST /api/admin/onboarding/repositories/resolve` accepts `{repository,ref}` where `repository` is `owner/name` or an exact GitHub.com repository URL and optional `ref` is a branch, tag, or SHA. It returns the normalized public slug and safe metadata; it does not fetch the repository tree, build evidence, or call a model.
 - Discovery uses unauthenticated public GitHub REST requests and never uses a repository credential. GitHub.com/API hosts, redirects, response bytes, timeouts, and URL normalization remain server-owned allowlists. Private, missing, or inaccessible repositories return the same `404 NOT_FOUND` behavior.
 - Listing does not authorize source analysis. The browser must present checkboxes and record an explicit confirmation of the selected set before calling analysis.

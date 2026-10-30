@@ -1256,6 +1256,7 @@ def _metadata_payload(metadata: PublicRepositoryMetadata) -> dict[str, object]:
         "is_archived": metadata.is_archived,
         "updated_at": metadata.updated_at,
         "html_url": metadata.html_url,
+        "size_kb": metadata.size_kb,
     }
 
 

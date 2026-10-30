@@ -21,6 +21,7 @@ from reponpc.admin.onboarding import (
     _analysis_messages,
     _analysis_response_schema,
     _contribution_response_schema,
+    _metadata_payload,
     _parse_analysis,
     _parse_contribution,
 )
@@ -339,7 +340,9 @@ def test_discovery_and_resolution_are_metadata_only(tmp_path: Path) -> None:
     resolved = service.resolve_repository(repository="https://github.com/octocat/demo", ref="main")
 
     assert discovered["repositories"][0]["slug"] == "octocat/demo"  # type: ignore[index]
+    assert discovered["repositories"][0]["size_kb"] is None  # type: ignore[index]
     assert resolved["slug"] == "octocat/demo"
+    assert resolved["size_kb"] is None
     assert resolver.source_calls == 0
     assert chat.calls == 0
 
@@ -379,6 +382,43 @@ def test_public_discovery_uses_fixed_page_bounds_and_filters_private_rows(
     ]
     with pytest.raises(SourceResolutionError):
         resolver.discover(account="octocat", page=6)
+
+
+@pytest.mark.parametrize(
+    ("size", "expected"),
+    [
+        (0, 0),
+        (1536, 1536),
+        (None, None),
+        (True, None),
+        (-1, None),
+        ("1536", None),
+        (1.5, None),
+        (2**63, None),
+    ],
+)
+def test_public_repository_size_is_optional_and_bounded(
+    monkeypatch: pytest.MonkeyPatch, size: object, expected: int | None
+) -> None:
+    payload: dict[str, object] = {
+        "full_name": "octocat/demo",
+        "name": "demo",
+        "default_branch": "main",
+        "private": False,
+        "fork": False,
+        "archived": False,
+        "html_url": "https://github.com/octocat/demo",
+    }
+    if size is not None:
+        payload["size"] = size
+    monkeypatch.setattr(GitHubSourceResolver, "_get_json_list", lambda *_args: [payload])
+    monkeypatch.setattr(GitHubSourceResolver, "_get_json", lambda *_args: payload)
+    resolver = GitHubSourceResolver()
+
+    discovered = resolver.discover(account="octocat", page=1).repositories[0]
+    assert discovered.size_kb == expected
+    assert _metadata_payload(discovered)["size_kb"] == expected
+    assert resolver.repository_metadata(repository="octocat/demo").size_kb == expected
 
 
 def test_analysis_reuses_exclusions_returns_distinct_evidence_and_cleans_staging(

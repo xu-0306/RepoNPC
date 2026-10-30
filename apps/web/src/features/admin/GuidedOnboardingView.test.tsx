@@ -84,6 +84,48 @@ const metadata: RepositoryMetadata = {
   html_url: "https://github.com/octocat/demo",
 };
 
+it.each(["zh-TW", "en"] as const)(
+  "shows size beside the language and in details without changing checkbox text in %s",
+  (locale) => {
+    for (const size of [0, 1536, null, undefined]) {
+      const input = props({
+        locale,
+        state: state({
+          step: "repositories",
+          selectionConfirmed: false,
+          repositories: [
+            repository({ metadata: { ...metadata, size_kb: size } }),
+          ],
+        }),
+      });
+      const markup = renderToStaticMarkup(<GuidedOnboardingView {...input} />);
+      const row = markup.match(
+        /<li class="guided-onboarding__repository"[^>]*>(.*?)<\/li>/s,
+      )?.[1];
+      const label = row?.match(/<label\b[^>]*>(.*?)<\/label>/s)?.[1];
+      expect(label).toContain(
+        `<span class="visually-hidden">${metadata.slug}</span>`,
+      );
+      expect(label).not.toContain("KB");
+      expect(label).not.toContain("MB");
+      if (size != null) {
+        const formatted = size === 0 ? "0 KB" : "1.5 MB";
+        expect(row).toContain(
+          `<span class="px-badge">TypeScript</span><span class="px-badge">${formatted}</span>`,
+        );
+        expect(row).toContain(
+          `<dt>${locale === "zh-TW" ? "大小" : "Size"}</dt><dd>${formatted}</dd>`,
+        );
+      } else {
+        expect(row).not.toContain(
+          `<dt>${locale === "zh-TW" ? "大小" : "Size"}</dt>`,
+        );
+        expect(row?.match(/class="px-badge"/g)).toHaveLength(1);
+      }
+    }
+  },
+);
+
 const profile: GuidedProfile = {
   displayName: "Ada Lovelace",
   githubLogin: "octocat",

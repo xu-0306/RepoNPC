@@ -40,6 +40,15 @@ export interface RepositoryMetadata {
   is_archived: boolean;
   updated_at: string | null;
   html_url: string;
+  size_kb?: number | null;
+}
+
+export function formatRepositorySize(sizeKb: number | null | undefined) {
+  if (sizeKb == null) return null;
+  if (sizeKb < 1024) return `${sizeKb} KB`;
+  const divisor = sizeKb < 1024 * 1024 ? 1024 : 1024 * 1024;
+  const unit = divisor === 1024 ? "MB" : "GB";
+  return `${(sizeKb / divisor).toFixed(1).replace(/\.0$/, "")} ${unit}`;
 }
 
 export interface RepositoryFact {
@@ -1238,6 +1247,7 @@ function metadataFromConfig(slug: string): RepositoryMetadata {
     is_archived: false,
     updated_at: null,
     html_url: `https://github.com/${slug}`,
+    size_kb: null,
   };
 }
 
@@ -1339,7 +1349,11 @@ function parseRepositoryMetadata(value: unknown): RepositoryMetadata | null {
     (value.description !== null && typeof value.description !== "string") ||
     (value.primary_language !== null &&
       typeof value.primary_language !== "string") ||
-    (value.updated_at !== null && typeof value.updated_at !== "string")
+    (value.updated_at !== null && typeof value.updated_at !== "string") ||
+    (value.size_kb != null &&
+      (typeof value.size_kb !== "number" ||
+        !Number.isFinite(value.size_kb) ||
+        value.size_kb < 0))
   ) {
     return null;
   }
@@ -1353,5 +1367,6 @@ function parseRepositoryMetadata(value: unknown): RepositoryMetadata | null {
     is_archived: value.is_archived,
     updated_at: value.updated_at,
     html_url: value.html_url,
+    ...(value.size_kb !== undefined ? { size_kb: value.size_kb } : {}),
   };
 }

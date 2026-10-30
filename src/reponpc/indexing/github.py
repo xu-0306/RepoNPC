@@ -57,6 +57,7 @@ class PublicRepositoryMetadata:
     is_archived: bool
     updated_at: str | None
     html_url: str
+    size_kb: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -593,6 +594,7 @@ def _repository_metadata(
         is_archived=is_archived,
         updated_at=updated_at[:64] if updated_at is not None else None,
         html_url=html_url,
+        size_kb=optional_repository_count(value.get("size")),
     )
 
 

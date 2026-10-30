@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatRepositorySize,
   guidedErrorMessage,
   guidedOnboardingFromConfig,
   guidedOnboardingReducer,
@@ -12,6 +13,51 @@ import {
   type RepositoryAnalysis,
   type RepositoryMetadata,
 } from "./guidedOnboarding";
+
+describe("repository size", () => {
+  it.each([
+    [0, "0 KB"],
+    [1023, "1023 KB"],
+    [1024, "1 MB"],
+    [1229, "1.2 MB"],
+    [1536, "1.5 MB"],
+    [2048, "2 MB"],
+    [1048575, "1024 MB"],
+    [1048576, "1 GB"],
+    [1572864, "1.5 GB"],
+    [null, null],
+    [undefined, null],
+  ])("formats %s KB as %s", (size, expected) => {
+    expect(formatRepositorySize(size)).toBe(expected);
+  });
+
+  it.each([undefined, null, 0, 1536, 1.5])(
+    "resumes optional size %s without dropping it",
+    (size) => {
+      const saved = JSON.parse(serializeGuidedOnboarding(selectedState()));
+      if (size !== undefined) saved.repositories[0].metadata.size_kb = size;
+      const resumed = parseGuidedOnboarding(JSON.stringify(saved));
+      expect(resumed).not.toBeNull();
+      expect(resumed?.repositories[0].metadata.size_kb).toBe(size);
+    },
+  );
+
+  it.each(["1536", true, -1])("rejects invalid saved size %s", (size) => {
+    const saved = JSON.parse(serializeGuidedOnboarding(selectedState()));
+    saved.repositories[0].metadata.size_kb = size;
+    expect(parseGuidedOnboarding(JSON.stringify(saved))).toBeNull();
+  });
+
+  it("rejects a non-finite size parsed from a numeric JSON literal", () => {
+    const saved = JSON.parse(serializeGuidedOnboarding(selectedState()));
+    saved.repositories[0].metadata.size_kb = 1536;
+    const content = JSON.stringify(saved).replace(
+      '"size_kb":1536',
+      '"size_kb":1e400',
+    );
+    expect(parseGuidedOnboarding(content)).toBeNull();
+  });
+});
 
 describe("guided onboarding errors", () => {
   it("explains GitHub connectivity and input failures without a generic fallback", () => {

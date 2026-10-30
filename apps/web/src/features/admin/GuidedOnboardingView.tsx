@@ -9,6 +9,7 @@ import "../../p4-w2.css";
 
 import type { Locale } from "../../i18n/messages";
 import {
+  formatRepositorySize,
   guidedErrorMessage,
   type ContributionProposal,
   type GuidedOnboardingState,
@@ -90,6 +91,7 @@ type Copy = {
   fork: string;
   languageLabel: string;
   defaultBranchLabel: string;
+  sizeLabel: string;
   githubLabel: string;
   optionsLegend: string;
   includeLabel: string;
@@ -271,6 +273,7 @@ const COPY: Record<Locale, Copy> = {
     fork: "fork",
     languageLabel: "語言",
     defaultBranchLabel: "預設分支",
+    sizeLabel: "大小",
     githubLabel: "GitHub",
     optionsLegend: "專案選項",
     includeLabel: "包含路徑（逗號分隔）",
@@ -482,6 +485,7 @@ const COPY: Record<Locale, Copy> = {
     fork: "fork",
     languageLabel: "Language",
     defaultBranchLabel: "Default branch",
+    sizeLabel: "Size",
     githubLabel: "GitHub",
     optionsLegend: "Project options",
     includeLabel: "Include paths (comma separated)",
@@ -992,6 +996,7 @@ function RepositoryRow({
 }) {
   const slugId = repository.metadata.slug.replace(/[^a-zA-Z0-9_-]/g, "-");
   const selectionLocked = state.selectionConfirmed;
+  const size = formatRepositorySize(repository.metadata.size_kb);
 
   function optionChange(
     field: "ref" | "include" | "exclude",
@@ -1045,6 +1050,7 @@ function RepositoryRow({
             {repository.metadata.primary_language}
           </span>
         )}
+        {size && <span className="px-badge">{size}</span>}
       </div>
       <details className="p4-w1-repository__details px-info">
         <summary
@@ -1070,6 +1076,12 @@ function RepositoryRow({
           )}
           <dt>{copy.defaultBranchLabel}</dt>
           <dd>{repository.metadata.default_branch}</dd>
+          {size && (
+            <>
+              <dt>{copy.sizeLabel}</dt>
+              <dd>{size}</dd>
+            </>
+          )}
           <dt>{copy.githubLabel}</dt>
           <dd>
             <a
