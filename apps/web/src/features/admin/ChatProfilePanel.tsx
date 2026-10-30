@@ -51,7 +51,7 @@ const COPY = {
     guidedHeading: "新增與測試模型",
     description: "負責整理專案內容並產生回答；測試成功後才能選用。",
     guidedDescription:
-      "選擇服務、填入模型名稱，再按「測試模型」。通過後到「確認分析模型」選用。",
+      "選擇服務、填入模型名稱，再按「測試模型」。通過後，到選擇區選用，再按「確認用於分析」。",
     add: "新增模型",
     connection: "服務",
     model: "模型",
@@ -80,7 +80,7 @@ const COPY = {
     description:
       "Organizes project content and generates answers. You must test the model successfully before selecting it.",
     guidedDescription:
-      "Choose a service, enter its model name, and test the model. Then use Confirm analysis models to select it.",
+      "Choose a service, enter its model name, and test the model. When it passes, select it in the selection panel, then choose Use for analysis.",
     add: "Add model",
     connection: "Service",
     model: "Model",

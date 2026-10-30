@@ -86,7 +86,7 @@ const COPY = {
     description:
       "把作品內容整理成可查找的資料，讓回答模型找到相關依據。技術名稱是 Embedding model。私有 URL 與憑證不會顯示在此頁。",
     guidedDescription:
-      "選擇服務、填入模型名稱，再按「測試模型」。通過後到「確認分析模型」選用。",
+      "選擇服務、填入模型名稱，再按「測試模型」。通過後，到選擇區選用，再按「確認用於分析」。",
     add: "新增模型",
     cancel: "取消",
     recommended: "建議起始值：Ollama qwen3-embedding:0.6b（1024 維）。",
@@ -123,7 +123,7 @@ const COPY = {
     description:
       "Organize portfolio content so the answer model can find relevant evidence. The technical name is an embedding model. Private URLs and credentials are never shown here.",
     guidedDescription:
-      "Choose a service, enter its model name, and test the model. Then use Confirm analysis models to select it.",
+      "Choose a service, enter its model name, and test the model. When it passes, select it in the selection panel, then choose Use for analysis.",
     add: "Add model",
     cancel: "Cancel",
     recommended:

@@ -1,8 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { AnalysisSelectionPanel } from "./AnalysisSelectionPanel";
-import type { ChatProfileView } from "./ChatProfilePanel";
-import type { EmbeddingProfileView } from "./EmbeddingProfilePanel";
+import { ChatProfilePanel, type ChatProfileView } from "./ChatProfilePanel";
+import {
+  EmbeddingProfilePanel,
+  type EmbeddingProfileView,
+} from "./EmbeddingProfilePanel";
 import type { ModelConnectionView } from "./ModelConnectionPanel";
 
 const service = (
@@ -69,6 +72,55 @@ const selected = {
 };
 
 describe("AnalysisSelectionPanel", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "names the rendered analysis button in both model hints in %s",
+    (locale) => {
+      const selection = renderToStaticMarkup(
+        <AnalysisSelectionPanel
+          locale={locale}
+          chatProfiles={[]}
+          embeddingProfiles={[]}
+          value={null}
+          pending={false}
+          error=""
+          onSelect={vi.fn()}
+        />,
+      );
+      const buttonLabel = selection.match(
+        /<button\b[^>]*>([^<]+)<\/button>/,
+      )?.[1];
+      expect(buttonLabel).toBeDefined();
+      const props = {
+        locale,
+        connections: [],
+        profiles: [],
+        pending: false,
+        error: "",
+        managementActions: false,
+        onActivate: vi.fn(),
+        onCreate: vi.fn(),
+        onDelete: vi.fn(),
+        onProbe: vi.fn(),
+        onRefresh: vi.fn(),
+        onUpdate: vi.fn(),
+      };
+      for (const panel of [
+        <ChatProfilePanel {...props} />,
+        <EmbeddingProfilePanel
+          {...props}
+          catalog={[]}
+          installedModels={[]}
+          onOllamaDelete={vi.fn()}
+          onOllamaPull={vi.fn()}
+        />,
+      ]) {
+        const hint = renderToStaticMarkup(panel).match(/<p>([^<]+)<\/p>/)?.[1];
+        expect(hint).toBeDefined();
+        expect(hint).toContain(buttonLabel);
+      }
+    },
+  );
+
   it("distinguishes identical model names by safe service labels", () => {
     const html = renderToStaticMarkup(
       <AnalysisSelectionPanel
