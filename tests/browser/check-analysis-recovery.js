@@ -217,12 +217,16 @@ export async function checkAnalysisRecovery(tab, options = {}) {
     "initial partial result",
   );
   const diagnostics = tab.playwright.locator("details.p4-w1-diagnostics");
-  if (
-    (await diagnostics.count()) === 1 &&
-    !(await diagnostics.evaluate((node) => node.open))
-  ) {
-    await diagnostics.locator(":scope > summary").click();
-  }
+  // The batch panel remounts (for example after 返回) with diagnostics closed again.
+  const openDiagnostics = async () => {
+    if (
+      (await diagnostics.count()) === 1 &&
+      !(await diagnostics.evaluate((node) => node.open))
+    ) {
+      await diagnostics.locator(":scope > summary").click();
+    }
+  };
+  await openDiagnostics();
   const evidencePresentation = async () => {
     const highlights = tab.playwright.locator(
       '.guided-analysis__toggle[aria-expanded="false"]',
@@ -615,11 +619,25 @@ export async function checkAnalysisRecovery(tab, options = {}) {
   await button("確認這份貢獻").click();
   await waitForText("此專案的貢獻已由你確認", "contribution confirmed");
   await button("產生可編輯建議").nth(0).click();
-  await waitFor(
-    async () => (await button("還原上一個已確認版本").count()) === 1,
-    "previous confirmed contribution recovery",
+  // GuidedOnboardingView.tsx:1485-1507: restore lives in the closed "其他操作" details.
+  const alphaEditor = tab.playwright.locator(
+    'article[data-slug="fixture/alpha"]',
   );
-  await button("還原上一個已確認版本").click();
+  const restorePrevious = alphaEditor.getByRole("button", {
+    name: "還原上一個已確認版本",
+    exact: true,
+  });
+  await waitFor(async () => {
+    const actions = alphaEditor.locator("details.p4-w2__info");
+    if (
+      (await actions.count()) === 1 &&
+      !(await actions.evaluate((node) => node.open))
+    ) {
+      await actions.locator(":scope > summary").click();
+    }
+    return (await restorePrevious.count()) === 1;
+  }, "previous confirmed contribution recovery");
+  await restorePrevious.click();
   await button("確認這份貢獻").click();
   await waitForText(
     "此專案的貢獻已由你確認",
@@ -640,13 +658,36 @@ export async function checkAnalysisRecovery(tab, options = {}) {
     "edited contribution reconfirmed",
   );
   await button("返回").click();
-  await waitForText("使用目前模型重新分析", "returned to failed analysis");
+  await waitFor(async () => {
+    await openDiagnostics();
+    return (await button("使用目前模型重新分析").count()) === 1;
+  }, "returned to failed analysis");
 
+  // AdminPage asks through the react-aria ConfirmDialog (ConfirmDialog.tsx),
+  // so the dialog text is the confirmation message and its buttons the answer.
+  const confirmations = [];
+  const answerModelConfirmation = async (answer) => {
+    const dialog = tab.playwright.getByRole("alertdialog");
+    await waitFor(
+      async () => (await dialog.count()) === 1,
+      "model confirmation",
+    );
+    confirmations.push(
+      await dialog
+        .locator(".admin-confirm-dialog__description")
+        .evaluate((node) => node.textContent),
+    );
+    await dialog.getByRole("button", { name: answer, exact: true }).click();
+    await waitFor(
+      async () => (await dialog.count()) === 0,
+      "model confirmation closed",
+    );
+  };
   const beforeCancel = (await state()).reanalyze_requests.filter(
     (entry) => entry.operation === "reanalyze",
   ).length;
-  await button("Cancel next model confirmation").click();
   await button("使用目前模型重新分析").click();
+  await answerModelConfirmation("取消");
   const afterCancel = (await state()).reanalyze_requests.filter(
     (entry) => entry.operation === "reanalyze",
   ).length;
@@ -654,9 +695,9 @@ export async function checkAnalysisRecovery(tab, options = {}) {
     beforeCancel === afterCancel,
     "cancelled model confirmation sent zero requests",
   );
-  await button("Accept model confirmation").click();
   await button("Simulate second-tab model selection").click();
   await button("使用目前模型重新分析").click();
+  await answerModelConfirmation("重新分析");
   await waitForText(
     "模型選擇已變更；請重新檢查目前模型並再次確認",
     "stale model confirmation rejected",
@@ -678,6 +719,7 @@ export async function checkAnalysisRecovery(tab, options = {}) {
     "contribution failures and recovery carried the full 16,384 allowance (the fixture declares a 32,768 context and 16,384 max output), and the closed schema",
   );
   await button("使用目前模型重新分析").click();
+  await answerModelConfirmation("重新分析");
   await waitForText(
     "已處理 1/1；成功 1；進行中 0；失敗 0",
     "current-model successor",
@@ -793,12 +835,6 @@ export async function checkAnalysisRecovery(tab, options = {}) {
         recoveredSources,
       ).length === 0,
     "recovered cited permalinks remain pinned without uncited sources, excerpts or IDs",
-  );
-  const confirmations = await tab.playwright.evaluate(() =>
-    JSON.parse(
-      document.querySelector("[data-browser-confirm-messages]")?.textContent ||
-        "[]",
-    ),
   );
   verify(
     confirmations.some(
