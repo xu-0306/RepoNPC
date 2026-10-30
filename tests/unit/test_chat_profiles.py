@@ -52,9 +52,10 @@ def _connection_input(*, api_key: str = "chat-key-canary") -> ModelConnectionInp
 
 
 @pytest.mark.parametrize(
-    "preparation,completion", [(5.0, 5.0), (21.0, 21.0), (5.0, 20.0), (5.0, 25.0)]
+    "preparation,completion",
+    [(5.0, 5.0), (5.0, 25.0), (5.0, 59.0), (5.0, 60.0), (5.0, 65.0), (61.0, 61.0)],
 )
-def test_probe_preparation_consumes_original_twenty_second_deadline(
+def test_probe_preparation_consumes_original_sixty_second_deadline(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     preparation: float,
@@ -74,13 +75,13 @@ def test_probe_preparation_consumes_original_twenty_second_deadline(
     ticks = iter([0.0, preparation, completion])
     monkeypatch.setattr("reponpc.admin.chat_profiles.time.monotonic", lambda: next(ticks))
     result = profiles.probe(profile.profile_id)
-    if completion < 20:
+    if completion < 60:
         assert result.status == "ready"
-        assert budgets == [15.0]
+        assert budgets == [55.0]
     else:
         assert result.status == "probe_failed"
         assert result.last_error_code == "PROVIDER_TIMEOUT"
-        assert budgets == ([] if preparation >= 20 else [15.0])
+        assert budgets == ([] if preparation >= 60 else [55.0])
 
 
 def test_chat_profiles_require_probe_and_freeze_the_connection_revision(tmp_path: Path) -> None:

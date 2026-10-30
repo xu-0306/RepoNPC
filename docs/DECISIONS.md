@@ -317,10 +317,10 @@ The owner rejected the inferred Chinese HTTP 402 billing explanation and explici
 
 ## ADR-036: Give Chat probes one non-duplicating timeout grace window
 
-- **Status:** Accepted for implementation on 2026-09-14.
-- **Authorization:** A live owner-authorized coderelay check returned the model catalog in about 0.9 seconds and a valid `gpt-5.6-terra` Chat response in about 11.6 seconds, while RepoNPC's fixed 10-second probe repeatedly reported timeout. The owner concluded that the limit was too strict and explicitly requested a default 10 seconds followed by one additional 10 seconds.
-- **Decision:** Keep the 10-second probe baseline and grant one automatic 10-second grace window. Pass one 20-second deadline to the selected provider so the original in-flight request can complete; do not cancel and restart at 10 seconds. A single explicit test therefore remains exactly one potentially billable provider call. Existing response-schema checks, output budget, activation boundary, diagnostic persistence, and no-fallback rules remain unchanged.
-- **Consequences:** Technical Specification advances to 0.2.9. FR-038/040 and AC-054/057 cover a valid response during the grace window, final timeout after 20 seconds, and regression evidence that only one request is made. No environment variable, API or database migration is added.
+- **Status:** Accepted for implementation on 2026-09-14. Numbers superseded by ADR-074 (60 seconds).
+- **Authorization:** A live owner-authorized coderelay check returned the model catalog in about 0.9 seconds and a valid `gpt-5.6-terra` Chat response in about 11.6 seconds, while RepoNPC's fixed 10-second probe repeatedly reported timeout. The owner concluded that the limit was too strict and explicitly requested a default 10 seconds followed by one additional 10 seconds. (Probe deadline numbers superseded by ADR-074.)
+- **Decision:** Keep the 10-second probe baseline and grant one automatic 10-second grace window. Pass one 20-second deadline to the selected provider so the original in-flight request can complete; do not cancel and restart at 10 seconds. A single explicit test therefore remains exactly one potentially billable provider call. Existing response-schema checks, output budget, activation boundary, diagnostic persistence, and no-fallback rules remain unchanged. (Probe deadline numbers superseded by ADR-074.)
+- **Consequences:** Technical Specification advances to 0.2.9. FR-038/040 and AC-054/057 cover a valid response during the grace window, final timeout after 20 seconds, and regression evidence that only one request is made. No environment variable, API or database migration is added. (Probe deadline numbers superseded by ADR-074.)
 
 ## ADR-037: Treat analysis limits as configurable active-work budgets
 
@@ -549,7 +549,7 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
 - **Authorization:** The owner rejected default `think: false`, required reasoning ON and explicitly supported 16,384 tokens.
 - **Evidence:** ADR-034/037 were approved budget policies. Current live reasoning-model evidence showed that the legacy chat ceiling did not establish successful completion for this workload; disabling reasoning would change the owner's intended behavior. No committed question, oracle or quality threshold is changed.
 - **Decision:** Chat/probe and authenticated-analysis budgets remain independent, each with a 16,384-token default and hard maximum. Explicit lower settings remain valid. Ollama generation counts reasoning and answer within one ceiling, with a separate bounded input-plus-generation context. Supported reasoning controls remain ON; unknown support retains the backend default and is reported as unknown. No model-name heuristic establishes support. OpenAI-compatible/vLLM retain their existing provider semantics.
-- **Safety:** Reserve full input/schema/framing and output before generation; a smaller verified provider context/cap wins. Output-limit termination fails before parsing or publication, including valid partial JSON. Preserve deadlines, the one-request 20-second probe, existing transient analysis policy, no output-limit retries, no fallback and trace privacy. Analysis cache identity includes the changed budget/reasoning policy. No public schema, toggle, streaming or new provider is added.
+- **Safety:** Reserve full input/schema/framing and output before generation; a smaller verified provider context/cap wins. Output-limit termination fails before parsing or publication, including valid partial JSON. Preserve deadlines, the one-request 20-second probe, existing transient analysis policy, no output-limit retries, no fallback and trace privacy. Analysis cache identity includes the changed budget/reasoning policy. No public schema, toggle, streaming or new provider is added. (Probe deadline numbers superseded by ADR-074.)
 - **Sources (checked 2026-10-03):** [Ollama thinking controls](https://docs.ollama.com/capabilities/thinking), [chat usage fields](https://docs.ollama.com/api/chat), [generation/context parameters](https://docs.ollama.com/modelfile), [context allocation](https://docs.ollama.com/context-length), and the [official Qwen3.5-9B model card](https://huggingface.co/Qwen/Qwen3.5-9B). Qwen documents thinking enabled by default and 262,144 native context; its 128k complex-reasoning recommendation is not a measured guarantee for RepoNPC's bounded 32,768 configuration. Generated token counts and model-tokenizer context are distinct from visible characters; no fixed Chinese-character ratio is claimed.
 - **Consequences:** Approved Specification becomes 0.4.8; FR-012/027/033/038/040/041, NFR-002/003/011/012/014 and AC-023/039/054/055/057/061 gain bounded-control and privacy regressions. Earlier decisions retain their historical values; only their superseded output defaults/ceiling change. Live quality acceptance remains evidence-dependent.
 
@@ -819,3 +819,14 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
   - The limit message no longer tells the owner to shorten the statement first. It says the limit includes thinking, offers retry or manual entry, and suggests a model that thinks less if it keeps happening.
   - Only the 700 value of ADR-034/037 is superseded. The other contribution rules stay.
 - **Requirements:** FR-012/027/033/038/040/041, NFR-002/003/011/012/014, AC-023/039/054/055/057/061 (value change only).
+
+## ADR-074: Extend the Chat probe deadline to 60 seconds
+
+- **Status:** Accepted 2026-10-30. Technical Specification 0.4.16.
+- **Authorization:** For ADR-074, the owner said the 20-second model-test limit was too short and asked for at least 30 to 60 seconds (chat, 2026-10-30). The main agent chose 60 seconds, the top of that range.
+- **Context:** ADR-036 established a 10-second baseline plus one 10-second grace window, a 20-second total. ADR-074 extends that limit because a local model must load on first use and can exceed it.
+- **Decision:** Use one 60-second total deadline for the same single request. ADR-036's numbers are superseded; its rule of one non-duplicating request remains. There is no second billable request, activation, or provider/model fallback. Bounded Ollama capability preparation still consumes the same outer deadline; generation receives only the remaining time.
+- **Consequences:**
+  - Technical Specification advances to 0.4.16. FR-038/040 and AC-054/057 cover a valid response before 60 seconds, final timeout when the 60-second deadline is reached, and regression evidence that only one request is made.
+  - No environment variable, API, database migration, UI copy, or new provider call is added.
+- **Requirements:** FR-038/040, AC-054/057 (deadline change only).

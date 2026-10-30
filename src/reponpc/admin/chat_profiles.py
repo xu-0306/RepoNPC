@@ -26,9 +26,7 @@ from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 
 _PROFILE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,255}$")
-_PROBE_BASE_TIMEOUT_SECONDS = 10.0
-_PROBE_TIMEOUT_EXTENSION_SECONDS = 10.0
-_PROBE_TIMEOUT_SECONDS = _PROBE_BASE_TIMEOUT_SECONDS + _PROBE_TIMEOUT_EXTENSION_SECONDS
+_PROBE_TIMEOUT_SECONDS = 60.0
 
 
 class ChatProfileError(RuntimeError):
@@ -205,8 +203,8 @@ class ChatProfileRegistry:
                     "additionalProperties": False,
                 },
                 max_output_tokens=provider.capabilities().max_output_tokens,
-                # Preserve the 10-second baseline, then allow one 10-second
-                # grace window without issuing a second billable request.
+                # One request has one 60-second deadline; preparation consumes
+                # the same budget without issuing a second billable request.
                 timeout=remaining,
             )
             if time.monotonic() >= deadline:
