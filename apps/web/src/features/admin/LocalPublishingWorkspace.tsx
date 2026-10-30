@@ -875,6 +875,7 @@ export function LocalPublishingWorkspace({
       <PagesSharePanel
         locale={locale}
         request={request}
+        publicSharingAvailable={publicSharingAvailable}
         observedState={pagesSharingState}
         onStateChange={(updated) => {
           pagesGeneration.current += 1;

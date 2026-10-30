@@ -29,12 +29,14 @@ export function PagesSharePanel({
   observedState,
   onStateChange,
   onOperationPendingChange,
+  publicSharingAvailable = true,
 }: {
   locale: "zh-TW" | "en";
   request: Request;
   observedState: PagesSharingState | null;
   onStateChange: (state: PagesSharingState | null) => void;
   onOperationPendingChange: (pending: boolean) => void;
+  publicSharingAvailable?: boolean;
 }) {
   const zh = locale === "zh-TW";
   const [state, setState] = useState<PagesSharingState | null>(observedState);
@@ -182,6 +184,8 @@ export function PagesSharePanel({
   const copy = zh
     ? {
         title: "3. GitHub Pages",
+        localMode:
+          "目前是本機試用模式，無法儲存 Pages 網址。要用 GitHub Pages 分享，請改用正式模式啟動 RepoNPC。",
         intro:
           "輸入與訪客入口設定相符的 GitHub Pages 網址。匯出不會啟用 Funnel、呼叫模型或修改 GitHub。",
         url: "Pages 網址",
@@ -206,6 +210,8 @@ export function PagesSharePanel({
       }
     : {
         title: "3. GitHub Pages",
+        localMode:
+          "RepoNPC is running in local trial mode, so the Pages URL cannot be saved. To share with GitHub Pages, start RepoNPC in production mode.",
         intro:
           "Enter the GitHub Pages URL that matches the visitor-entry configuration. Export does not enable Funnel, call a model, or edit GitHub.",
         url: "Pages URL",
@@ -239,13 +245,22 @@ export function PagesSharePanel({
     >
       <p className="publication-kicker px-meta">Pages</p>
       <h2 id="pages-share-panel-heading">{copy.title}</h2>
+      {!publicSharingAvailable && (
+        <p role="note" id="pages-share-local-note">
+          {copy.localMode}
+        </p>
+      )}
       <label htmlFor="pages-share-url">
         {copy.url}
         <input
           className="px-field"
           autoComplete="url"
-          aria-describedby="pages-share-url-help"
-          disabled={pending}
+          aria-describedby={
+            publicSharingAvailable
+              ? "pages-share-url-help"
+              : "pages-share-url-help pages-share-local-note"
+          }
+          disabled={pending || !publicSharingAvailable}
           id="pages-share-url"
           inputMode="url"
           onChange={(event) => {
@@ -269,7 +284,12 @@ export function PagesSharePanel({
       <div className="publication-actions">
         <button
           className="px-button px-button--secondary"
-          disabled={pending || !pagesUrl.trim() || !urlChanged}
+          disabled={
+            pending ||
+            !publicSharingAvailable ||
+            !pagesUrl.trim() ||
+            !urlChanged
+          }
           onClick={() => void run(savePagesUrl)}
           type="button"
         >

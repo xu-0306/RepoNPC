@@ -96,6 +96,7 @@ describe("P4 w3 pixel publication", () => {
           onAddClaim={vi.fn()}
         />,
       );
+      expect(markup).not.toContain("pages-share-local-note");
       expect(markup).toContain('class="publication-local px-panel"');
       expect(markup).toContain('class="px-button px-button--primary"');
       expect(markup).toContain('aria-labelledby="local-publication-heading"');
@@ -121,6 +122,39 @@ describe("P4 w3 pixel publication", () => {
       expect(request).not.toHaveBeenCalled();
     },
   );
+
+  it.each([
+    [
+      "zh-TW",
+      "目前是本機試用模式，無法儲存 Pages 網址。要用 GitHub Pages 分享，請改用正式模式啟動 RepoNPC。",
+    ],
+    [
+      "en",
+      "RepoNPC is running in local trial mode, so the Pages URL cannot be saved. To share with GitHub Pages, start RepoNPC in production mode.",
+    ],
+  ] as const)("%s passes the local trial lock to Pages", (locale, note) => {
+    const markup = renderToStaticMarkup(
+      <LocalPublishingWorkspace
+        locale={locale}
+        content="synthetic draft"
+        spriteBase64={null}
+        revision={null}
+        initialAccount="synthetic"
+        selection={null}
+        request={request}
+        onStored={vi.fn()}
+        onCreateDraft={vi.fn()}
+        repositories={[]}
+        onAddClaim={vi.fn()}
+        publicSharingAvailable={false}
+      />,
+    );
+
+    expect(markup).toContain(
+      `<p role="note" id="pages-share-local-note">${note}</p>`,
+    );
+    expect(request).not.toHaveBeenCalled();
+  });
 
   it.each([true, false])(
     "keeps both switch values and a hidden, named FileTrigger when permission is %s",
