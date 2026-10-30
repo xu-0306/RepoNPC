@@ -1,13 +1,91 @@
 // Production AdminPage + FastAPI recovery acceptance. Test-only controls expose
 // secret-free server observations; every product action still travels through
 // the rendered UI and production API routes.
+// ADR-060: docs/DECISIONS.md:610-612; docs/TECHNICAL_SPEC.md:946,954.
+export function evidencePresentationFailures({ text, rows, hrefs }, expected) {
+  const failures = [];
+  // GuidedOnboardingView.tsx:783-790,854-859,934-936: matched facts and labels.
+  const location = (fact) =>
+    fact.start_line === null
+      ? fact.path
+      : `${fact.path}:${fact.start_line}${
+          fact.end_line && fact.end_line !== fact.start_line
+            ? `-${fact.end_line}`
+            : ""
+        }`;
+  for (const { slug, commit, cited, uncited } of expected) {
+    if (cited.length < 1) failures.push(`cited facts empty: ${slug}`);
+    if (uncited.length < 1) failures.push(`uncited facts empty: ${slug}`);
+    if (
+      cited.some(
+        (fact) =>
+          !fact.url.startsWith(`https://github.com/${slug}/blob/${commit}/`),
+      )
+    ) {
+      failures.push(`cited fact URL is not pinned: ${slug}`);
+    }
+    const links = hrefs.filter((link) => link.source && link.slug === slug);
+    const urls = new Set(links.map((link) => link.href));
+    const citedUrls = new Set(cited.map((fact) => fact.url));
+    if (
+      urls.size !== citedUrls.size ||
+      [...citedUrls].some((url) => !urls.has(url))
+    ) {
+      failures.push(`source URL set mismatch: ${slug}`);
+    }
+    if (
+      links.some((link) => {
+        const fact = cited.find((fact) => fact.url === link.href);
+        return fact && (!link.visible || link.label !== location(fact));
+      })
+    ) {
+      failures.push(`cited source label or visibility mismatch: ${slug}`);
+    }
+    if (
+      uncited.some(
+        (fact) =>
+          text.includes(fact.url) ||
+          hrefs.some((link) => link.href === fact.url) ||
+          // GuidedOnboardingView.tsx:934-936,969: labels belong to one repository.
+          rows.some(
+            (row) => row.slug === slug && row.text.includes(location(fact)),
+          ),
+      )
+    ) {
+      failures.push(`uncited fact rendered: ${slug}`);
+    }
+  }
+  if (
+    [
+      "return 'fixture/alpha'",
+      "return 'fixture/beta'",
+      "return 'fixture/fails-once'",
+      "production runner and validator",
+    ].some((excerpt) => text.includes(excerpt))
+  ) {
+    failures.push("excerpt rendered");
+  }
+  const labels = [
+    text,
+    ...hrefs.filter((link) => link.visible).map((link) => link.text),
+  ].join(" ");
+  if (/E_[0-9a-f]+/i.test(labels))
+    failures.push("persistent evidence ID rendered");
+  if (/\bS\d+\b/.test(labels)) failures.push("request evidence ID rendered");
+  return failures;
+}
+
 export async function checkAnalysisRecovery(tab, options = {}) {
   const reconciliationMode = options.reconciliationMode ?? "running";
   const releaseStaleSnapshot = options.releaseStaleSnapshot === true;
   const checks = [];
   let delayedStatusTransitions = [];
   const verify = (condition, name) => {
-    if (!condition) throw new Error(name);
+    if (!condition) {
+      const error = new Error(name);
+      error.checks = [...checks];
+      throw error;
+    }
     checks.push(name);
   };
   const button = (name) =>
@@ -138,17 +216,123 @@ export async function checkAnalysisRecovery(tab, options = {}) {
     "已處理 3/3；成功 2；進行中 0；失敗 1",
     "initial partial result",
   );
+  const diagnostics = tab.playwright.locator("details.p4-w1-diagnostics");
+  if (
+    (await diagnostics.count()) === 1 &&
+    !(await diagnostics.evaluate((node) => node.open))
+  ) {
+    await diagnostics.locator(":scope > summary").click();
+  }
+  const evidencePresentation = async () => {
+    const highlights = tab.playwright.locator(
+      '.guided-analysis__toggle[aria-expanded="false"]',
+    );
+    while ((await highlights.count()) > 0) {
+      await highlights.nth(0).click();
+    }
+    return tab.playwright.evaluate(() => {
+      const content = document.body.cloneNode(true);
+      // Test observations contain API evidence IDs; inspect only product text.
+      content
+        .querySelector('[aria-label="Browser acceptance controls"]')
+        ?.remove();
+      return {
+        text: content.textContent.replace(/\s+/g, " ").trim(),
+        rows: Array.from(
+          content.querySelectorAll("[data-analysis-result]"),
+          (row) => ({
+            slug: row.dataset.analysisResult,
+            text: row.textContent.replace(/\s+/g, " ").trim(),
+          }),
+        ),
+        hrefs: Array.from(document.querySelectorAll("a[href]"), (link) => {
+          // GuidedOnboardingView.tsx:854-859: exclude decoration/announcements.
+          const label = link.cloneNode(true);
+          label
+            .querySelectorAll('[aria-hidden="true"], .visually-hidden')
+            .forEach((node) => node.remove());
+          return {
+            slug: link.closest("[data-analysis-result]")?.dataset
+              .analysisResult,
+            source: Boolean(link.closest(".guided-analysis__body")),
+            href: link.getAttribute("href"),
+            text: link.textContent,
+            label: label.textContent.trim(),
+            visible: link.getClientRects().length > 0,
+          };
+        }),
+      };
+    });
+  };
+  // docs/TECHNICAL_SPEC.md:945-947; GuidedOnboardingView.tsx:934-936.
+  const sourceExpectations = (items, payloads) => {
+    const analyses = [];
+    const inspect = (value) => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value.facts)) analyses.push(value);
+      Object.values(value).forEach(inspect);
+    };
+    payloads.forEach(inspect);
+    return items.map((item) => {
+      const analysis = analyses.find(
+        (value) => value.repository.slug === item.repository_slug,
+      );
+      const citedIds = new Set(
+        analysis?.inferences.flatMap(
+          (inference) => inference.supporting_evidence_ids,
+        ) ?? [],
+      );
+      const facts = analysis?.facts ?? [];
+      return {
+        slug: item.repository_slug,
+        commit: item.resolved_commit_sha,
+        cited: facts.filter((fact) => citedIds.has(fact.evidence_id)),
+        uncited: facts.filter((fact) => !citedIds.has(fact.evidence_id)),
+      };
+    });
+  };
+  const initialPayload = await captureBatchSnapshot();
+  const initialSources = sourceExpectations(
+    (await state()).items.filter(
+      (item) => item.repository_slug !== "fixture/fails-once",
+    ),
+    [initialPayload.body],
+  );
+  const initialEvidence = evidencePresentationFailures(
+    await evidencePresentation(),
+    initialSources,
+  );
   let dom = await snapshot();
+  // docs/TECHNICAL_SPEC.md:946,954; GuidedOnboardingView.tsx:854-855,934-936.
   verify(
-    dom.includes("src/main.py:1-2") && dom.includes("src/main.py:4-5"),
-    "exact evidence paths and line ranges rendered",
+    initialSources.length === 2 &&
+      !initialEvidence.some(
+        (failure) =>
+          ![
+            "excerpt rendered",
+            "persistent evidence ID rendered",
+            "request evidence ID rendered",
+          ].includes(failure),
+      ),
+    "cited source permalinks match frozen commits and uncited sources stay absent",
   );
+  // docs/DECISIONS.md:610; docs/TECHNICAL_SPEC.md:954.
   verify(
-    dom.includes("return 'fixture/alpha'") &&
-      dom.includes("return 'fixture/beta'"),
-    "exact evidence excerpts rendered",
+    !initialEvidence.includes("excerpt rendered"),
+    "source excerpts stay absent from all product DOM text",
   );
-  verify(/E_[0-9a-f]+/.test(dom), "evidence identifiers rendered");
+  // docs/TECHNICAL_SPEC.md:954.
+  verify(
+    !initialEvidence.includes("persistent evidence ID rendered") &&
+      !initialEvidence.includes("request evidence ID rendered"),
+    "technical evidence IDs stay absent from product text and source labels",
+  );
+  // docs/DECISIONS.md:610; docs/TECHNICAL_SPEC.md:946.
+  verify(
+    initialPayload.status === 200 &&
+      !/"excerpt"\s*:/.test(JSON.stringify(initialPayload.body)),
+    "production analysis payload omits excerpt keys per ADR-060",
+  );
 
   await button("重試需要確認的項目").click();
   await waitForText(
@@ -337,7 +521,8 @@ export async function checkAnalysisRecovery(tab, options = {}) {
     "terminal stream ended without disconnect state",
   );
 
-  await button("檢視專案中可確認的資訊並填寫貢獻").click();
+  // GuidedOnboardingView.tsx:318; docs/TECHNICAL_SPEC.md:954.
+  await button("描述我的貢獻").click();
   await tab.playwright
     .getByRole("textbox", { name: "你的貢獻說明", exact: true })
     .nth(0)
@@ -579,11 +764,35 @@ export async function checkAnalysisRecovery(tab, options = {}) {
       dom.includes("fixture/fails-once"),
     "all three results remain visible",
   );
+  const recoveredPayloads = await tab.playwright.evaluate(
+    async (batchIds) =>
+      Promise.all(
+        batchIds.map(async (id) => {
+          const response = await fetch(
+            `/api/admin/onboarding/analysis-batches/${encodeURIComponent(id)}`,
+          );
+          return { status: response.status, body: await response.json() };
+        }),
+      ),
+    observed.batches.map((batch) => batch.batch_id),
+  );
+  const recoveredSources = sourceExpectations(
+    observed.items.filter((item) => item.source_item_id === null),
+    recoveredPayloads.map((payload) => payload.body),
+  );
+  // docs/TECHNICAL_SPEC.md:946,954; GuidedOnboardingView.tsx:854-855,934-936.
   verify(
-    dom.includes("src/main.py:1-2") &&
-      dom.includes("src/main.py:4-5") &&
-      dom.includes("return 'fixture/fails-once'"),
-    "recovered exact evidence remains visible",
+    recoveredSources.length === 3 &&
+      recoveredPayloads.every(
+        (payload) =>
+          payload.status === 200 &&
+          !/"excerpt"\s*:/.test(JSON.stringify(payload.body)),
+      ) &&
+      evidencePresentationFailures(
+        await evidencePresentation(),
+        recoveredSources,
+      ).length === 0,
+    "recovered cited permalinks remain pinned without uncited sources, excerpts or IDs",
   );
   const confirmations = await tab.playwright.evaluate(() =>
     JSON.parse(
@@ -603,7 +812,7 @@ export async function checkAnalysisRecovery(tab, options = {}) {
     "nested model confirmation named original commit and model pairs",
   );
 
-  await button("檢視專案中可確認的資訊並填寫貢獻").click();
+  await button("描述我的貢獻").click();
   const contributions = await snapshot();
   verify(
     contributions.includes("我建立 alpha 驗收流程") &&
@@ -614,53 +823,58 @@ export async function checkAnalysisRecovery(tab, options = {}) {
   await button("返回").click();
   await button("English").press("Enter");
   await waitForText("Batch analysis", "English batch view");
+  const englishEvidence = evidencePresentationFailures(
+    await evidencePresentation(),
+    recoveredSources,
+  );
   const english = await snapshot();
+  // docs/TECHNICAL_SPEC.md:954; GuidedOnboardingView.tsx:854-855,934-936.
   verify(
     english.includes(
       "Validated production analysis path for fixture/fails-once",
-    ) && english.includes("src/main.py:1-2"),
-    "English evidence view matches recovered result",
+    ) && englishEvidence.length === 0,
+    "English recovered view keeps cited permalinks pinned without uncited sources, excerpts or IDs",
   );
   await button("繁體中文").click();
-  await button("檢視專案中可確認的資訊並填寫貢獻").click();
+  await button("描述我的貢獻").click();
   const remainingContributions = [
-    ["fixture/beta", 1, "beta"],
-    ["fixture/fails-once", 2, "fails-once"],
+    ["fixture/beta", "beta"],
+    ["fixture/fails-once", "fails-once"],
   ];
-  for (const [_slug, index, label] of remainingContributions) {
+  // GuidedOnboardingView.tsx:1201-1218,2163-2164,2207-2233: closed editors and help details invalidate global indexes.
+  for (const [slug, label] of remainingContributions) {
+    const editor = tab.playwright.locator(`article[data-slug="${slug}"]`);
     await tab.playwright
-      .locator(
-        'section[aria-labelledby="guided-contributions-heading"] details',
-      )
-      .nth(index)
-      .locator("summary")
+      .locator(`details:has(> article[data-slug="${slug}"]) > summary`)
       .click();
-    await tab.playwright
+    await editor
       .getByRole("textbox", { name: "你的貢獻說明", exact: true })
-      .nth(index)
       .fill(`我協助維護 ${label}`);
-    await button("手動輸入貢獻").filter({ visible: true }).click();
-    await tab.playwright
+    await editor
+      .getByRole("button", { name: "手動輸入貢獻", exact: true })
+      .filter({ visible: true })
+      .click();
+    await editor
       .getByRole("textbox", { name: "角色 (繁體中文)", exact: true })
-      .nth(index)
       .fill("協作者");
-    await tab.playwright
+    await editor
       .getByRole("textbox", { name: "角色 (English)", exact: true })
-      .nth(index)
       .fill("Contributor");
-    await tab.playwright
+    await editor
       .getByRole("textbox", { name: "摘要 (繁體中文)", exact: true })
-      .nth(index)
       .fill(`協助維護 ${label}`);
-    await tab.playwright
+    await editor
       .getByRole("textbox", { name: "摘要 (English)", exact: true })
-      .nth(index)
       .fill(`Helped maintain ${label}`);
-    await button("確認這份貢獻").filter({ visible: true }).click();
+    await editor
+      .getByRole("button", { name: "確認這份貢獻", exact: true })
+      .filter({ visible: true })
+      .click();
   }
   await button("填寫基本資料").click();
+  // GuidedOnboardingView.tsx:2333-2358: the empty field's label includes required text.
   await tab.playwright
-    .getByRole("textbox", { name: "顯示名稱", exact: true })
+    .locator("#guided-profile-display-name")
     .fill("Browser Owner");
   const profileFields = [
     ["#guided-profile-headline-zh-TW", "可靠系統維護者"],
@@ -674,7 +888,8 @@ export async function checkAnalysisRecovery(tab, options = {}) {
     await tab.playwright.locator(selector).fill(value);
   }
   await button("確認基本資料並檢閱草稿").click();
-  await button("建立完整 YAML 草稿").click();
+  // GuidedOnboardingView.tsx:396,2664-2667: current label still creates the draft.
+  await button("完成內容").click();
   await waitForText(
     "草稿已準備好",
     "confirmed contribution entered YAML draft",
@@ -711,6 +926,10 @@ export async function checkAnalysisRecovery(tab, options = {}) {
     delayedOriginalRequest: releaseStaleSnapshot,
     delayedStatusTransitions,
     terminalSnapshots,
+    sourceExpectations: {
+      initial: initialSources,
+      recovered: recoveredSources,
+    },
     observations: observed,
   };
 }
