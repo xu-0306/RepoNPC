@@ -393,7 +393,7 @@ const COPY: Record<Locale, Copy> = {
       "再次確認哪些文字會進入設定草稿；尚未確認的 AI 推論不會進入草稿。",
     confirmed: "已確認",
     notConfirmed: "尚未確認",
-    createDraft: "完成內容並預覽",
+    createDraft: "完成內容",
     draftHeading: "草稿已準備好",
     draftDescription:
       "草稿保存在你的主機，套用後才會更新 NPC。GitHub 只需放上卡片。",
@@ -619,7 +619,7 @@ const COPY: Record<Locale, Copy> = {
       "Confirm which text enters the configuration draft. Unconfirmed AI inferences do not enter it.",
     confirmed: "Confirmed",
     notConfirmed: "Not confirmed",
-    createDraft: "Finish content and preview",
+    createDraft: "Finish content",
     draftHeading: "Draft ready",
     draftDescription:
       "The draft stays on your host. It updates your NPC only after you apply it. GitHub only needs the card.",

@@ -1369,12 +1369,36 @@ describe("GuidedOnboardingView", () => {
       />,
     );
     expect(reviewMarkup).toContain("Review confirmed content");
-    expect(reviewMarkup).toContain("Finish content and preview");
+    expect(reviewMarkup).toContain(">Finish content</button>");
+    expect(reviewMarkup).not.toContain("Finish content and preview");
     expect(reviewMarkup).toContain("Confirmed");
     expect(reviewMarkup).toContain("共同維護者");
     expect(reviewMarkup).toContain("Co-maintainer");
     expect(reviewMarkup).toContain("維護 parser");
     expect(reviewMarkup).toContain("Maintained the parser");
+
+    const reviewMarkupZh = renderToStaticMarkup(
+      <GuidedOnboardingView
+        {...props({
+          locale: "zh-TW",
+          state: state({
+            step: "review",
+            profile,
+            profileConfirmed: true,
+            repositories: [
+              repository({
+                confirmedContribution: {
+                  ...proposal,
+                  evidence_class: "OWNER_ASSERTION",
+                },
+              }),
+            ],
+          }),
+        })}
+      />,
+    );
+    expect(reviewMarkupZh).toContain(">完成內容</button>");
+    expect(reviewMarkupZh).not.toContain("完成內容並預覽");
 
     const draftMarkup = renderToStaticMarkup(
       <GuidedOnboardingView
