@@ -36,7 +36,7 @@ class FixtureChat:
     calls: list[float] = field(default_factory=list)
 
     def capabilities(self) -> ProviderCapabilities:
-        return ProviderCapabilities(False, True, True, True, True, 1000, 100)
+        return ProviderCapabilities(False, True, True, True, True, 32768, 16384)
 
     def health(self) -> ProviderHealth:
         return self.health_result

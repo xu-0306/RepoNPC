@@ -47,7 +47,7 @@ class LifecycleChat:
     health_calls: int = 0
 
     def capabilities(self) -> ProviderCapabilities:
-        return ProviderCapabilities(False, True, True, True, True, 1000, 100)
+        return ProviderCapabilities(False, True, True, True, True, 32768, 16384)
 
     def health(self) -> ProviderHealth:
         self.health_calls += 1

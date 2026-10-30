@@ -163,7 +163,7 @@ class FakeChat:
         self.messages: list[tuple[ProviderMessage, ...]] = []
 
     def capabilities(self) -> ProviderCapabilities:
-        return ProviderCapabilities(False, True, True, True, True, 8192, 1000)
+        return ProviderCapabilities(False, True, True, True, True, 32768, 16384)
 
     def generate(self, messages, response_schema, max_output_tokens, timeout):
         self.calls += 1

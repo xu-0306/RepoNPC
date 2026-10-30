@@ -19,6 +19,7 @@ from reponpc.providers.contracts import (
     ProviderResult,
     ProviderUsage,
     ResponseSchema,
+    request_context_cost,
 )
 from reponpc.providers.error_messages import provider_error_message
 from reponpc.providers.http_transport import (
@@ -321,15 +322,10 @@ def _validate_context(
     schema: ResponseSchema,
     output: int,
 ) -> None:
-    # UTF-8 byte accounting is intentionally conservative without a tokenizer.
+    # Byte accounting is intentionally conservative without a tokenizer.
     # Include the schema and message roles/framing, never just visible content.
-    serialized = _json_bytes(
-        {
-            "messages": [{"role": item.role, "content": item.content} for item in messages],
-            "format": schema if capabilities.structured_output else None,
-        }
-    )
-    if len(serialized) + 256 + output > capabilities.max_context_tokens:
+    cost = request_context_cost(messages, schema if capabilities.structured_output else None)
+    if cost + output > capabilities.max_context_tokens:
         raise ProviderError(ProviderFailureCode.CONTEXT_OVERFLOW)
 
 

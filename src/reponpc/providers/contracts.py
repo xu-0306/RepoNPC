@@ -7,6 +7,7 @@ policy; those remain server-owned orchestration concerns.
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from dataclasses import dataclass, field
@@ -102,6 +103,21 @@ class ProviderMessage:
             raise ValueError("provider message role is invalid")
         if not self.content:
             raise ValueError("provider message content must be non-empty")
+
+
+def request_context_cost(messages: tuple[ProviderMessage, ...], schema: Any) -> int:
+    """Return the context units a chat request costs under the adapters' accounting.
+
+    One unit per byte of the ASCII-escaped JSON the adapter sends (CJK costs six bytes
+    per character), plus fixed framing. Evidence packing and the pre-send guard share
+    this so a request the packer accepts is never rejected by the adapter.
+    """
+
+    request = {
+        "messages": [{"role": item.role, "content": item.content} for item in messages],
+        "format": schema,
+    }
+    return len(json.dumps(request, sort_keys=True, separators=(",", ":")).encode("utf-8")) + 256
 
 
 @dataclass(frozen=True, slots=True)

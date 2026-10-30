@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import threading
@@ -25,6 +26,7 @@ from reponpc.chat.limits import ChatLimits, ProviderLane
 from reponpc.indexing.public_profile import PublicProfileError, parse_public_profile_bytes
 from reponpc.observability import get_safe_logger
 from reponpc.providers import ProviderMessage, ProviderUsage
+from reponpc.providers.contracts import request_context_cost
 from reponpc.providers.response_diagnostics import ProviderResponseError, ResponseIssue
 from reponpc.providers.runtime import ProviderRuntime
 
@@ -179,8 +181,11 @@ class GroundedChatService:
                 "",
                 system_role=capabilities.system_role,
             )
-            prompt_overhead = sum(
-                _conservative_token_count(item.content) for item in fixed_messages
+            # Reserve the full request (messages, worst-case schema, framing) the adapter
+            # will count, so packed evidence cannot overflow it.
+            prompt_overhead = request_context_cost(
+                fixed_messages,
+                _answer_schema(tuple(f"S{n}" for n in range(1, len(evidence_ids) + 1))),
             )
             evidence_budget = (
                 capabilities.max_context_tokens - self._max_output_tokens - prompt_overhead
@@ -471,7 +476,8 @@ def _provider_messages(
 
 
 def _conservative_token_count(value: str) -> int:
-    return math.ceil(len(value.encode("utf-8")) / 3)
+    # Same unit as request_context_cost: one per byte of the ASCII-escaped JSON string.
+    return len(json.dumps(value)) - 2
 
 
 def _chunks(value: str, size: int) -> tuple[str, ...]:

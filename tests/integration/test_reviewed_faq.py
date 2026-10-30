@@ -40,7 +40,7 @@ class SyntheticChat:
     calls = 0
 
     def capabilities(self):
-        return ProviderCapabilities(True, True, True, True, True, 16000, 1000)
+        return ProviderCapabilities(True, True, True, True, True, 32768, 16384)
 
     def health(self):
         return ProviderHealth(True, "2026-09-28T00:00:00Z")
@@ -129,7 +129,7 @@ def faq_system(tmp_path):
         bundles=manager,
         providers=ProviderRuntime(chat=chat, embedding=provider, max_attempts=1),
         limits=limits,
-        max_output_tokens=1000,
+        max_output_tokens=16384,
         timeout_seconds=5,
     )
     faq = ReviewedFaq(database=database, bundles=manager, chat_supplier=lambda: service)

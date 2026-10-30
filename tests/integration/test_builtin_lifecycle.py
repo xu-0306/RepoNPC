@@ -55,7 +55,7 @@ def forbidden(*_args: object, **_kwargs: object) -> NoReturn:
 
 class SyntheticChat:
     def capabilities(self) -> ProviderCapabilities:
-        return ProviderCapabilities(False, True, True, True, True, 8192, 1024)
+        return ProviderCapabilities(False, True, True, True, True, 32768, 16384)
 
     def health(self) -> ProviderHealth:
         return ProviderHealth(True, "2026-10-03T00:00:00Z")

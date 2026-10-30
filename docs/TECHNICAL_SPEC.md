@@ -540,7 +540,7 @@ The lexical search channel combines ranks from the term and trigram tables. Quer
 4. Within the lexical channel, fuse term and trigram ranks. Across lexical and vector channels, use RRF score `sum(weight_c / (k + rank_c))`, with default `k=60`, lexical weight `1.0`, vector weight `1.0`.
 5. Add configured source/evidence weights after ranking as documented multipliers. Owner assertions do not receive an unconditional global relevance boost.
 6. Deduplicate identical/overlapping ranges and cap any one repository at six of the final eight records unless the question names that repository.
-7. Pack records in rank order within the smaller of the configured and provider context budget.
+7. Pack records in rank order within the smaller of the configured and provider context budget. The budget is the context minus the reserved output minus the complete fixed request (messages, worst-case answer schema and framing), counted in the same unit the provider adapters check before sending: one unit per byte of the ASCII-escaped JSON request, so Chinese text costs six per character. A request the packer accepts must never be rejected by an adapter with `CONTEXT_OVERFLOW`.
 8. Delimit each record with an assigned request-local source ID (`S1`, `S2`, ...) plus evidence class and metadata. Clearly state that record text is data, not instruction.
 
 Model-visible records carry only request-local IDs, and the output schema restricts `source_ids` to those IDs (ADR-063).
