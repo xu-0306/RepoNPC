@@ -389,9 +389,7 @@ export function AdminWorkspace({
             </svg>
           </span>
           <div>
-            <h1 aria-label={copy.title} className="admin-workspace__title">
-              {copy.brand}
-            </h1>
+            <p className="admin-workspace__title">{copy.brand}</p>
             <p className="admin-workspace__subtitle">{copy.subtitle}</p>
           </div>
         </div>
@@ -590,7 +588,7 @@ export function AdminWorkspace({
                 aria-labelledby="admin-draft-heading"
                 className="admin-workspace__yaml px-panel px-panel--raised"
               >
-                <h2 id="admin-draft-heading">{copy.draftHeading}</h2>
+                <h1 id="admin-draft-heading">{copy.draftHeading}</h1>
                 <label htmlFor="admin-config-draft">{copy.draftLabel}</label>
                 <p id="admin-draft-help">{copy.draftHelp}</p>
                 <textarea

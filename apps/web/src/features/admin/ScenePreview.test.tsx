@@ -135,6 +135,53 @@ const settings: ScenePreviewSettings = {
 };
 
 describe("owner scene preview", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "keeps one page h1 and a nonempty, unskipped outline with the preview expanded in %s",
+    (locale) => {
+      const markup = renderToStaticMarkup(
+        <>
+          <h1>{locale === "zh-TW" ? "預覽與分享" : "Preview & share"}</h1>
+          <details open>
+            <summary>
+              {locale === "zh-TW"
+                ? "選填：調整訪客外觀"
+                : "Optional: customize visitor appearance"}
+            </summary>
+            <h2>{locale === "zh-TW" ? "訪客外觀" : "Visitor appearance"}</h2>
+            <ScenePreview
+              appliedScene={scene}
+              desktopFrameLabel="Desktop crop"
+              focusCoordinatesLabel="Current focus"
+              focusLabel="Focus position"
+              focusTitle="Background focus"
+              locale={locale}
+              onFocusChange={() => undefined}
+              onSchemeChange={() => undefined}
+              phoneFrameLabel="Phone crop"
+              profile={{ ...profile, locale }}
+              proposalPending={false}
+              proposedScene={null}
+              schemes={schemes}
+              settings={settings}
+            />
+          </details>
+        </>,
+      );
+      const headings = [
+        ...markup.matchAll(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/g),
+      ];
+      expect(headings.filter((heading) => heading[1] === "1")).toHaveLength(1);
+      expect(markup.match(/data-preview="true"/g)).toHaveLength(13);
+      let previousLevel = 0;
+      for (const heading of headings) {
+        expect(heading[2].replace(/<[^>]*>/g, "").trim()).not.toBe("");
+        const level = Number(heading[1]);
+        expect(level).toBeLessThanOrEqual(previousLevel + 1);
+        previousLevel = level;
+      }
+    },
+  );
+
   it("fits the selected reference viewport without changing its logical width", () => {
     expect(previewScaleForWidth(1440, 360)).toBe(0.25);
     expect(previewScaleForWidth(375, 360)).toBe(0.96);

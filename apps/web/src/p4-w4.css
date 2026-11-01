@@ -126,7 +126,7 @@
   font-size: max(15px, 1rem);
   margin-block: 4px 24px;
 }
-.admin-workspace__content > [class*="admin-workspace__yaml"] h2 {
+.admin-workspace__content > [class*="admin-workspace__yaml"] :is(h1, h2) {
   font-size: clamp(22px, 2vw, 28px);
   line-height: 1.4;
   margin: 0 0 16px;
@@ -216,13 +216,14 @@
 .admin-maintenance.px-panel {
   font-size: max(15px, 1rem);
 }
-.admin-maintenance h2 {
+.admin-maintenance h1 {
   font-size: clamp(24px, 2.4vw, 34px);
   margin: 0 0 12px;
 }
-.admin-maintenance h3 {
+.admin-maintenance h2 {
   border-top: 1px dashed var(--px-muted);
   font-size: max(18px, 1.125rem);
+  margin-bottom: 1em;
   margin-top: 24px;
   padding-top: 16px;
 }

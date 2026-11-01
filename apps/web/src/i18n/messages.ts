@@ -6,6 +6,7 @@ export const messages = {
     profileLoading: "正在載入作品集…",
     profileUnavailable: "作品集目前無法載入，請稍後再試。",
     projectsTitle: "精選專案",
+    emptyRepositoryHint: "此專案看起來是空的，分析可能失敗。",
     tagsLabel: "技術標籤",
     demoLink: "開啟示範",
     linksTitle: "相關連結",
@@ -118,6 +119,7 @@ export const messages = {
     profileUnavailable:
       "The portfolio could not be loaded. Please try again later.",
     projectsTitle: "Featured projects",
+    emptyRepositoryHint: "This project looks empty. Analysis may fail.",
     tagsLabel: "Technology tags",
     demoLink: "Open demo",
     linksTitle: "Related links",

@@ -726,13 +726,13 @@ export function CharacterAssetConverter({
         <p className="px-display" aria-hidden="true">
           {copy.eyebrow}
         </p>
-        <h2 id="admin-character-converter-heading">{copy.heading}</h2>
+        <h1 id="admin-character-converter-heading">{copy.heading}</h1>
         <p>{copy.subtitle}</p>
       </header>
       <div className="character-converter__workbench px-panel px-panel--raised">
         <div className="character-converter__editor">
           <div className="character-converter__animation-preview">
-            <h3>{copy.animationPreview}</h3>
+            <h2>{copy.animationPreview}</h2>
             <div className="character-converter__pedestal px-panel px-panel--inset">
               <span className="character-converter__state-tab px-badge">
                 {copy.stateLabels[previewState]}
@@ -890,7 +890,7 @@ export function CharacterAssetConverter({
             )}
             {selection && (
               <section aria-labelledby="character-candidate-heading">
-                <h3 id="character-candidate-heading">{copy.candidates}</h3>
+                <h2 id="character-candidate-heading">{copy.candidates}</h2>
                 <p>
                   {selection.discovery.candidates.length} · {copy.ignored}:{" "}
                   {selection.discovery.ignored_count}
@@ -927,9 +927,9 @@ export function CharacterAssetConverter({
                     aria-labelledby="character-edge-cleanup-heading"
                     className="character-converter__cleanup"
                   >
-                    <h4 id="character-edge-cleanup-heading">
+                    <h3 id="character-edge-cleanup-heading">
                       {copy.cleanupHeading}
-                    </h4>
+                    </h3>
                     <p>{copy.cleanupHelp}</p>
                     <p>
                       {result.edge_cleanup.affected_frames.length}{" "}
@@ -989,9 +989,9 @@ export function CharacterAssetConverter({
                     aria-labelledby="character-alignment-heading"
                     className="character-converter__alignment"
                   >
-                    <h4 id="character-alignment-heading">
+                    <h3 id="character-alignment-heading">
                       {copy.alignmentHeading}
-                    </h4>
+                    </h3>
                     <p>{copy.alignmentHelp}</p>
                     <button
                       disabled={pending || disabled}
@@ -1166,7 +1166,7 @@ export function CharacterAssetConverter({
                 )}
                 <details className="character-converter__technical">
                   <summary>{copy.technicalDetails}</summary>
-                  <h3>{copy.sheetPreview}</h3>
+                  <h2>{copy.sheetPreview}</h2>
                   <Base64PngCanvas
                     failureText={copy.previewFailed}
                     frameOffsets={previewOffsets}
@@ -1176,7 +1176,7 @@ export function CharacterAssetConverter({
                     pngUrl={previewAssetUrl}
                     width={result.asset.width}
                   />
-                  <h3>{copy.report}</h3>
+                  <h2>{copy.report}</h2>
                   <dl>
                     <div>
                       <dt>{copy.sourceKind}</dt>
@@ -1195,7 +1195,7 @@ export function CharacterAssetConverter({
                       </dd>
                     </div>
                   </dl>
-                  <h4>{copy.warnings}</h4>
+                  <h3>{copy.warnings}</h3>
                   {result.conversion.warnings.length ? (
                     <ul>
                       {result.conversion.warnings.map((warning) => (

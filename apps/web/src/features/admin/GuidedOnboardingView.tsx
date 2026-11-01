@@ -7,7 +7,7 @@ import "./guidedAnalysis.css";
 import "../../p4-w1.css";
 import "../../p4-w2.css";
 
-import type { Locale } from "../../i18n/messages";
+import { messages, type Locale } from "../../i18n/messages";
 import {
   formatRepositorySize,
   guidedErrorMessage,
@@ -92,6 +92,7 @@ type Copy = {
   languageLabel: string;
   defaultBranchLabel: string;
   sizeLabel: string;
+  emptyRepositoryHint: string;
   githubLabel: string;
   optionsLegend: string;
   includeLabel: string;
@@ -274,6 +275,7 @@ const COPY: Record<Locale, Copy> = {
     languageLabel: "語言",
     defaultBranchLabel: "預設分支",
     sizeLabel: "大小",
+    emptyRepositoryHint: messages["zh-TW"].emptyRepositoryHint,
     githubLabel: "GitHub",
     optionsLegend: "專案選項",
     includeLabel: "包含路徑（逗號分隔）",
@@ -486,6 +488,7 @@ const COPY: Record<Locale, Copy> = {
     languageLabel: "Language",
     defaultBranchLabel: "Default branch",
     sizeLabel: "Size",
+    emptyRepositoryHint: messages.en.emptyRepositoryHint,
     githubLabel: "GitHub",
     optionsLegend: "Project options",
     includeLabel: "Include paths (comma separated)",
@@ -1032,6 +1035,11 @@ function RepositoryRow({
       <div className="guided-onboarding__repository-header">
         <CheckboxField
           checked={repository.selected}
+          aria-describedby={
+            repository.metadata.size_kb === 0
+              ? `guided-empty-${slugId}`
+              : undefined
+          }
           disabled={selectionLocked || busy || repository.metadata.is_archived}
           id={`guided-repository-${slugId}`}
           onChange={() => {
@@ -1052,6 +1060,11 @@ function RepositoryRow({
         )}
         {size && <span className="px-badge">{size}</span>}
       </div>
+      {repository.metadata.size_kb === 0 && (
+        <p className="px-meta" id={`guided-empty-${slugId}`}>
+          {copy.emptyRepositoryHint}
+        </p>
+      )}
       <details className="p4-w1-repository__details px-info">
         <summary
           aria-label={`${copy.optionsLegend}: ${repository.metadata.name}`}
@@ -1203,9 +1216,9 @@ function ContributionEditor({
       className="guided-onboarding__contribution p4-w2__contribution"
       data-slug={repository.metadata.slug}
     >
-      <h4 className="visually-hidden" id={`guided-contribution-${slugId}`}>
+      <h3 className="visually-hidden" id={`guided-contribution-${slugId}`}>
         {repository.metadata.name}
-      </h4>
+      </h3>
       <label htmlFor={`guided-owner-statement-${slugId}`}>
         {copy.ownerStatementLabel}
         <textarea
@@ -1221,13 +1234,13 @@ function ContributionEditor({
       <section className="p5-contribution__suggestion px-panel px-panel--inset">
         <header className="p4-w2__tools">
           {proposal && (
-            <h5 id={`guided-proposal-${slugId}`}>
+            <h4 id={`guided-proposal-${slugId}`}>
               {repository.confirmedContribution
                 ? copy.assertionConfirmed
                 : repository.proposalSource === "model"
                   ? copy.proposalHeading
                   : copy.manualProposalHeading}
-            </h5>
+            </h4>
           )}
           <button
             className="px-button px-button--secondary"
@@ -1297,14 +1310,14 @@ function ContributionEditor({
               aria-labelledby={`guided-proposed-assertions-${slugId}`}
               className="guided-onboarding__evidence guided-onboarding__evidence--proposed-assertions"
             >
-              <h6
+              <h5
                 className="visually-hidden"
                 id={`guided-proposed-assertions-${slugId}`}
               >
                 {proposalLocked
                   ? copy.confirmed
                   : copy.proposedAssertionsHeading}
-              </h6>
+              </h5>
               <div className="p4-w2__fields">
                 {(["zh-TW", "en"] as const).map((proposalLocale) => (
                   <label
@@ -2888,7 +2901,7 @@ export function GuidedOnboardingView({
       }}
     >
       <header className="guided-onboarding__header">
-        <h2
+        <h1
           className="px-display"
           id="guided-onboarding-heading"
           ref={headingRef}
@@ -2900,7 +2913,7 @@ export function GuidedOnboardingView({
         >
           <span className="visually-hidden">{copy.title} · </span>
           {copy.steps[state.step]}
-        </h2>
+        </h1>
         {state.step !== "intro" && (
           <div className="guided-onboarding__navigation-actions">
             <button

@@ -53,11 +53,18 @@ describe("P6 pixel UI contracts", () => {
       expect(guided).toContain(`id="${id}"`);
   });
 
+  it("keeps both visitor chat summary targets at least 24 CSS pixels high", () => {
+    const visitor = source("visitor.css");
+    expect(visitor).toMatch(
+      /\.visitor-page \.citations > summary,\s*\.visitor-page \.chat-process__details > summary\s*\{[^}]*min-block-size:\s*24px;/,
+    );
+  });
+
   it("styles the maintenance groups", () => {
     expect(w4).toMatch(
       /\.admin-maintenance__status,[\s\S]*\.admin-maintenance__data\s*\{/,
     );
-    // `.admin-maintenance h3` adds a dashed top border and 24px margin; the
+    // `.admin-maintenance h2` adds a dashed top border and 24px margin; the
     // group title must out-rank it or each group shows two dashed lines.
     expect(w4).toMatch(
       /\.admin-maintenance \.admin-maintenance__group-title\s*\{[^}]*border:\s*0/,

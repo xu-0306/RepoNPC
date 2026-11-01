@@ -250,3 +250,37 @@ def test_database_commit_failure_restores_previous_runtime_and_active_profile(
     monkeypatch.undo()
     assert clean_profiles.active() is None
     assert runtime_model == ["bootstrap"]
+
+
+def test_probe_wall_clock_can_exceed_budget_outside_provider_work(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    connections, profiles = _registries(tmp_path)
+    connection = connections.create(_connection_input())
+    profile = profiles.create(ChatProfileInput(connection.connection_id, "fixture-model"))
+    elapsed = 0.0
+    budgets: list[float] = []
+    original_get = profiles.get
+
+    def delayed_lookup(profile_id: str) -> ChatProfile:
+        nonlocal elapsed
+        elapsed += 7.0 if elapsed == 0.0 else 8.0
+        return original_get(profile_id)
+
+    class TimedProbe(_ProbeProvider):
+        def generate(self, *_args: object, **kwargs: object) -> ProviderResult:
+            nonlocal elapsed
+            budgets.append(float(kwargs["timeout"]))  # type: ignore[arg-type]
+            elapsed += 55.0
+            return super().generate()
+
+    monkeypatch.setattr(profiles, "get", delayed_lookup)
+    monkeypatch.setattr(profiles, "_provider_resolver", lambda _profile: TimedProbe())
+    monkeypatch.setattr("reponpc.admin.chat_profiles.time.monotonic", lambda: elapsed)
+
+    result = profiles.probe(profile.profile_id)
+
+    assert result.status == "ready"
+    assert result.last_error_code is None
+    assert budgets == [60.0]
+    assert elapsed == 70.0

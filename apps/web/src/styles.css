@@ -224,7 +224,10 @@ button[aria-pressed="true"] {
 }
 .citations a {
   color: var(--ui-primary-dark);
+  display: inline-block;
   font-weight: 700;
+  min-block-size: 24px;
+  min-inline-size: 24px;
 }
 .answer-suggestions {
   display: flex;
@@ -1390,7 +1393,7 @@ form button {
 /* Set F owner shell; P4 page interiors retain their existing styles. */
 .admin-workspace {
   --control-target-size: 2.75rem;
-  --choice-size: 1.15rem;
+  --choice-size: max(24px, 1.15rem);
   --field-gap: 0.55rem;
   --choice-gap: 0.65rem;
   background: var(--px-bg);
@@ -1914,7 +1917,7 @@ form button {
   font-size: 13px;
   margin: 0 0 8px;
 }
-.character-converter__heading h2 {
+.character-converter__heading h1 {
   font-size: clamp(24px, 2.4vw, 34px);
   line-height: 1.4;
   margin: 0 0 8px;
@@ -1943,10 +1946,18 @@ form button {
   padding-bottom: var(--character-confirm-height, 84px);
 }
 .model-setup-workspace :is(h3, button, input, select, summary),
-.character-converter :is(h3, h4, button, input, select, summary) {
+.character-converter :is(h2, h3, button, input, select, summary) {
   scroll-margin-bottom: 144px;
 }
-.character-converter__animation-preview > h3 {
+.character-converter h2 {
+  font-size: 1.17em;
+  margin-block: 1em;
+}
+.character-converter h3 {
+  font-size: 1em;
+  margin-block: 1.33em;
+}
+.character-converter__animation-preview > h2 {
   font-size: max(16px, 1rem);
   margin: 0 0 8px;
 }
@@ -2112,8 +2123,8 @@ form button {
   gap: 12px;
   padding-top: 12px;
 }
-.character-converter__cleanup h4,
-.character-converter__alignment h4 {
+.character-converter__cleanup h3,
+.character-converter__alignment h3 {
   margin: 0;
 }
 .character-converter__cleanup-comparison {

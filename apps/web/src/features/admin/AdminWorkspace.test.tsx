@@ -58,6 +58,35 @@ function props(
 }
 
 describe("AdminWorkspace", () => {
+  it.each([
+    ["zh-TW", "RepoNPC 管理工作區"],
+    ["en", "RepoNPC admin workspace"],
+  ] as const)(
+    "keeps the brand paragraph unnamed and the navigation named in %s",
+    (locale, title) => {
+      const markup = renderToStaticMarkup(
+        <AdminWorkspace
+          {...props({ locale, guidedView: <h1>Page purpose</h1> })}
+        />,
+      );
+      expect(markup).toContain('<p class="admin-workspace__title">RepoNPC</p>');
+      expect(markup).not.toMatch(/<p\b[^>]*aria-label=/);
+      expect(markup).toContain(
+        `<nav aria-label="${title}" class="admin-workspace__modes">`,
+      );
+      expect(markup.match(/<main\b/g)).toHaveLength(1);
+      expect(markup.match(/<header\b/g)).toHaveLength(1);
+      const landmarks = [...markup.matchAll(/<(main|nav|header)\b[^>]*>/g)];
+      const names = landmarks.map((landmark) => {
+        const name = landmark[0].match(/aria-label="([^"]*)"/);
+        if (!name) return landmark[1];
+        expect(name[1].trim()).not.toBe("");
+        return `${landmark[1]}:${name[1]}`;
+      });
+      expect(new Set(names).size).toBe(names.length);
+    },
+  );
+
   it("uses only the active canonical character on the static scene strip", () => {
     const markup = renderToStaticMarkup(
       <AdminWorkspace
@@ -82,9 +111,15 @@ describe("AdminWorkspace", () => {
     expect(empty).not.toContain("character-renderer");
   });
   it("renders semantic editable, validation, preview, publication, and snippet regions", () => {
-    const markup = renderToStaticMarkup(<AdminWorkspace {...props()} />);
+    const markup = renderToStaticMarkup(
+      <AdminWorkspace
+        {...props({ guidedView: <div />, workspaceMode: "advanced" })}
+      />,
+    );
 
-    expect(markup).toContain("RepoNPC admin workspace");
+    expect(markup).toContain(
+      '<nav aria-label="RepoNPC admin workspace" class="admin-workspace__modes">',
+    );
     expect(markup).toContain('class="admin-workspace__title"');
     expect(markup).toContain('aria-labelledby="admin-draft-heading"');
     expect(markup).toContain('aria-labelledby="admin-validation-heading"');
@@ -171,9 +206,17 @@ describe("AdminWorkspace", () => {
 
   it("keeps Traditional Chinese and English presentation text complete", () => {
     const zhMarkup = renderToStaticMarkup(
-      <AdminWorkspace {...props({ locale: "zh-TW" })} />,
+      <AdminWorkspace
+        {...props({
+          locale: "zh-TW",
+          guidedView: <div />,
+          workspaceMode: "advanced",
+        })}
+      />,
     );
-    expect(zhMarkup).toContain("RepoNPC 管理工作區");
+    expect(zhMarkup).toContain(
+      '<nav aria-label="RepoNPC 管理工作區" class="admin-workspace__modes">',
+    );
     expect(zhMarkup).toContain("未儲存預覽");
     expect(zhMarkup).toContain("README 複製片段");
   });

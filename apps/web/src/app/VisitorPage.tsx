@@ -118,12 +118,16 @@ export function VisitorPage(props: ExtendedProps) {
   const visibleTurns = sampleConversation ? sampleTurns(locale) : turns;
   const latestTurn = visibleTurns.at(-1);
   const hasRestingState = !chatAvailable;
+  const restingSuggestions = suggestionsList
+    .filter(canAskSuggestion)
+    .slice(0, 3);
   const titleId = `${idPrefix}-profile-title`;
   const chatId = `${idPrefix}-chat-title`;
   const inputId = `${idPrefix}-portfolio-question`;
   const dialogId = `${idPrefix}-projects-dialog`;
   const appearanceId = `${idPrefix}-appearance-panel`;
   const PageRoot = mode === "preview" ? "div" : "main";
+  const DialogueHeading = mode === "preview" ? "h2" : "h1";
   const dialogueTitle =
     pending || characterState === "think"
       ? copy.dialogueThinking
@@ -485,13 +489,15 @@ export function VisitorPage(props: ExtendedProps) {
                 {stateBadge(copy, characterState, hasRestingState)}
               </span>
             </div>
-            <h1 id={`${idPrefix}-dialogue-title`}>{dialogueTitle}</h1>
+            <DialogueHeading id={`${idPrefix}-dialogue-title`}>
+              {dialogueTitle}
+            </DialogueHeading>
             <p>{dialogueBody}</p>
-            {hasRestingState && suggestionsList.length > 0 && (
+            {hasRestingState && restingSuggestions.length > 0 && (
               <div className="visitor-resting-faq">
                 <span className="px-label">{copy.dialogueFaqLabel}</span>
                 <div>
-                  {suggestionsList.slice(0, 3).map((suggestion) => (
+                  {restingSuggestions.map((suggestion) => (
                     <button
                       className="px-chip"
                       disabled={pending || !canAskSuggestion(suggestion)}

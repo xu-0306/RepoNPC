@@ -13,6 +13,10 @@
   line-height: 1.4;
   margin: 0 0 12px;
 }
+.github-share h3 {
+  font-size: 1em;
+}
+
 .local-publication__heading nav {
   display: flex;
   flex-wrap: wrap;
@@ -56,7 +60,7 @@
     .visitor-gateway,
     .coverage-faq
   )
-  :is(h2, h3, h4) {
+  :is(h2, h3, h4):where(:not(.visitor-dialog > *)) {
   color: var(--px-ink);
   line-height: 1.45;
   margin-block: 0 12px;
@@ -347,11 +351,11 @@
 .scene-appearance input[type="radio"].px-field {
   accent-color: var(--px-accent);
   box-shadow: none;
-  flex: 0 0 22px;
-  height: 22px;
-  min-height: 22px;
+  flex: 0 0 24px;
+  height: 24px;
+  min-height: 24px;
   padding: 0;
-  width: 22px;
+  width: 24px;
 }
 .scene-appearance__form label,
 .scene-preview :is(label, legend) {
@@ -496,7 +500,7 @@
   > span:not(.visitor-brand__mark) {
   display: none;
 }
-.scene-preview__reference-layout--phone .visitor-dialog h1 {
+.scene-preview__reference-layout--phone .visitor-dialog :is(h1, h2) {
   font-size: 16px;
 }
 .scene-preview__reference-layout--phone .visitor-dialog p {

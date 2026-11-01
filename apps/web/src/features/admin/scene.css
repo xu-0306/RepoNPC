@@ -525,7 +525,7 @@
   padding: 0.5rem;
 }
 
-.scene-preview__miniature .visitor-dialog h1 {
+.scene-preview__miniature .visitor-dialog :is(h1, h2) {
   font-size: 1.3rem;
 }
 

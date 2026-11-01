@@ -306,7 +306,7 @@ function MaintenanceContent({
       aria-labelledby="admin-maintenance-heading"
       aria-busy={pending}
     >
-      <h2 id="admin-maintenance-heading">{copy.heading}</h2>
+      <h1 id="admin-maintenance-heading">{copy.heading}</h1>
       <details className="admin-maintenance__scope px-info">
         <summary>ⓘ {copy.preview}</summary>
         <p id={`${id}-scope`}>{copy.scope}</p>
@@ -323,12 +323,12 @@ function MaintenanceContent({
         aria-labelledby={`${id}-status-heading`}
         className="admin-maintenance__group"
       >
-        <h3
+        <h2
           className="admin-maintenance__group-title"
           id={`${id}-status-heading`}
         >
           {copy.statusGroup}
-        </h3>
+        </h2>
         <dl className="admin-maintenance__status">
           <dt>{copy.local}</dt>
           <dd className="px-badge">
@@ -360,12 +360,12 @@ function MaintenanceContent({
         aria-labelledby={`${id}-data-heading`}
         className="admin-maintenance__group"
       >
-        <h3
+        <h2
           className="admin-maintenance__group-title"
           id={`${id}-data-heading`}
         >
           {copy.dataGroup}
-        </h3>
+        </h2>
         <dl className="admin-maintenance__data">
           <dt>{copy.active}</dt>
           <dd>
@@ -526,7 +526,7 @@ function MaintenanceContent({
         </form>
         {restorePreview && (
           <div aria-labelledby={`${id}-preview-heading`}>
-            <h3 id={`${id}-preview-heading`}>{copy.preview}</h3>
+            <h2 id={`${id}-preview-heading`}>{copy.preview}</h2>
             <dl>
               <dt>{copy.created}</dt>
               <dd>{date(restorePreview.created_at)}</dd>
@@ -595,7 +595,7 @@ function MaintenanceContent({
           {copy.cancel}
         </button>
       </details>
-      <h3>{copy.pin}</h3>
+      <h2>{copy.pin}</h2>
       <p id={`${id}-pin-help`}>
         {previous ? copy.pinHelp : status ? copy.noPrevious : copy.unknown}
       </p>
@@ -627,7 +627,7 @@ function MaintenanceContent({
       >
         {copy.pin}
       </button>
-      <h3>{copy.stop}</h3>
+      <h2>{copy.stop}</h2>
       <p id={`${id}-stop-help`}>{copy.stopHelp}</p>
       {!status?.gateway_configured && (
         <p id={`${id}-gateway-unavailable`}>
@@ -643,9 +643,9 @@ function MaintenanceContent({
       >
         {copy.stop}
       </button>
-      <h3>{copy.updateHeading}</h3>
+      <h2>{copy.updateHeading}</h2>
       <p>{copy.update}</p>
-      <h3>{copy.funnelHeading}</h3>
+      <h2>{copy.funnelHeading}</h2>
       <p>{copy.funnel}</p>
       <a
         href="https://tailscale.com/docs/features/tailscale-funnel"

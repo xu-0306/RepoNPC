@@ -5,6 +5,7 @@ import {
   type ReactNode,
 } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { messages } from "../../i18n/messages";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -1550,3 +1551,43 @@ it.each([
   expect(markup).toContain('id="guided-onboarding-heading"');
   expect(markup).toContain("admin-status-overview");
 });
+
+it.each(["zh-TW", "en"] as const)(
+  "warns only for exactly zero KB and keeps the project selectable in %s",
+  (locale) => {
+    for (const size of [0, 1, null, undefined]) {
+      const markup = renderToStaticMarkup(
+        <GuidedOnboardingView
+          {...props({
+            locale,
+            state: state({
+              step: "repositories",
+              selectionConfirmed: false,
+              repositories: [
+                repository({ metadata: { ...metadata, size_kb: size } }),
+              ],
+            }),
+          })}
+        />,
+      );
+      const row = markup.match(
+        /<li class="guided-onboarding__repository"[^>]*>(.*?)<\/li>/s,
+      )?.[1];
+      const checkbox = row?.match(/<input\b[^>]*type="checkbox"[^>]*>/)?.[0];
+      expect(checkbox).toBeDefined();
+      expect(checkbox).not.toContain("disabled");
+      if (size === 0) {
+        expect(row?.split("<details")[0]).toContain(
+          messages[locale].emptyRepositoryHint,
+        );
+        expect(checkbox).toContain(
+          'aria-describedby="guided-empty-octocat-demo"',
+        );
+        expect(row).toContain('id="guided-empty-octocat-demo"');
+      } else {
+        expect(row).not.toContain(messages[locale].emptyRepositoryHint);
+        expect(checkbox).not.toContain("guided-empty-");
+      }
+    }
+  },
+);

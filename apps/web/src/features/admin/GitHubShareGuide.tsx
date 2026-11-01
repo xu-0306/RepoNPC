@@ -559,9 +559,9 @@ export function GitHubShareGuide({
             </div>
 
             <section aria-labelledby="github-share-repository-details-heading">
-              <h4 id="github-share-repository-details-heading">
+              <h3 id="github-share-repository-details-heading">
                 {copy.repositoryDetails}
-              </h4>
+              </h3>
               <dl>
                 <div>
                   <dt>{copy.accountLabel}</dt>
@@ -590,7 +590,7 @@ export function GitHubShareGuide({
 
             {profileStatus === "missing" && (
               <div className="publication-message">
-                <h4>{copy.createProfileHeading}</h4>
+                <h3>{copy.createProfileHeading}</h3>
                 <InfoParagraphs
                   locale={locale}
                   text={copy.createProfileIntro}
@@ -702,7 +702,7 @@ export function GitHubShareGuide({
             {imageStatus === "ready" && (
               <p className="publication-message">{copy.imageReadyNote}</p>
             )}
-            <h4>{copy.uploadStepsHeading}</h4>
+            <h3>{copy.uploadStepsHeading}</h3>
             <ol>
               {copy.uploadSteps.map((step) => (
                 <li key={step}>{step}</li>
@@ -733,7 +733,7 @@ export function GitHubShareGuide({
 
             {verifiedPagesUrl ? (
               <>
-                <h4>{copy.markdownPreviewHeading}</h4>
+                <h3>{copy.markdownPreviewHeading}</h3>
                 {markdownField(
                   verifiedPagesMarkdown(verifiedPagesUrl, locale),
                   "github-share-pages-markdown",
@@ -763,7 +763,7 @@ export function GitHubShareGuide({
             )}
 
             <div className="publication-message">
-              <h4>{copy.preserveReadmeHeading}</h4>
+              <h3>{copy.preserveReadmeHeading}</h3>
               <ol>
                 {copy.preserveReadmeSteps.map((step) => (
                   <li key={step}>{step}</li>
@@ -785,7 +785,7 @@ export function GitHubShareGuide({
             </div>
 
             <div className="publication-message">
-              <h4>{copy.testHeading}</h4>
+              <h3>{copy.testHeading}</h3>
               <InfoParagraphs locale={locale} text={copy.testInstruction} />
               <ul>
                 {copy.testChecks.map((check) => (

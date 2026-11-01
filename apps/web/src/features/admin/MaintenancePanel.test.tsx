@@ -69,6 +69,37 @@ function expectDisabledButton(markup: string, label: string) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("MaintenancePanel", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "keeps one h1 and nonempty consecutive headings with service status and restore inspection in %s",
+    (locale) => {
+      for (const status of [null, STATUS]) {
+        for (const restorePreview of [null, PREVIEW]) {
+          const markup = render({ locale, status, restorePreview });
+          const headings = [
+            ...markup.matchAll(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/g),
+          ];
+          expect(headings.filter((heading) => heading[1] === "1")).toHaveLength(
+            1,
+          );
+          let previousLevel = 0;
+          for (const heading of headings) {
+            expect(heading[2].replace(/<[^>]*>/g, "").trim()).not.toBe("");
+            const level = Number(heading[1]);
+            expect(level).toBeLessThanOrEqual(previousLevel + 1);
+            previousLevel = level;
+          }
+          expect(markup).toMatch(
+            new RegExp(
+              `<h2\\b[^>]*>${locale === "en" ? "Service status" : "服務狀態"}</h2>`,
+            ),
+          );
+          if (restorePreview) {
+            expect(markup).toMatch(/<h2 id="[^"]+-preview-heading">/);
+          }
+        }
+      }
+    },
+  );
   it.each(["en", "zh-TW"] as const)(
     "offers a native ciphertext download link in %s only while supplied",
     (locale) => {

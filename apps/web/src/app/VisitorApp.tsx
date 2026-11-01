@@ -235,6 +235,12 @@ export function VisitorApp() {
               : matched.questions.length > 0
                 ? copy.offlineFaqNoMatch
                 : copy.offlineFaqNoMatchWithoutSuggestions,
+          contentKey:
+            matched.kind === "answer"
+              ? undefined
+              : matched.questions.length > 0
+                ? "offlineFaqNoMatch"
+                : "offlineFaqNoMatchWithoutSuggestions",
           citations: matched.kind === "answer" ? matched.entry.citations : [],
           suggestedQuestions:
             matched.kind === "suggestions" ? matched.questions : undefined,
@@ -407,6 +413,7 @@ export function VisitorApp() {
             ? {
                 ...turn,
                 content: turn.content || copy.genericError,
+                contentKey: turn.content ? turn.contentKey : "genericError",
                 failed: true,
                 process: turn.process
                   ? {
@@ -441,6 +448,7 @@ export function VisitorApp() {
           ? {
               ...turn,
               content: copy.processingCancelled,
+              contentKey: "processingCancelled",
               process: {
                 ...turn.process,
                 status: "cancelled",

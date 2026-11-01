@@ -161,6 +161,18 @@ async function app(
 
 describe("visitor no-match UX", () => {
   it.each(["zh-TW", "en"] as const)(
+    "keeps exactly one page h1 on the non-preview visitor page in %s",
+    async (locale) => {
+      const view = await app(locale, ["Next?"]);
+      const markup = view.markup();
+      expect(markup.match(/<h1\b/g)).toHaveLength(1);
+      expect(markup).toMatch(/<h1 id="[^"]+-dialogue-title">Greeting<\/h1>/);
+      expect(markup.match(/<main\b/g)).toHaveLength(1);
+      expect(markup).not.toContain('data-preview="true"');
+    },
+  );
+
+  it.each(["zh-TW", "en"] as const)(
     "shows temporary copy and asks the same question again without no-match history in %s",
     async (locale) => {
       const text =
@@ -328,4 +340,126 @@ describe("visitor no-match UX", () => {
       ]);
     },
   );
+});
+
+describe("resting approved questions", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "shows an admitted FAQ question enabled in %s",
+    async (locale) => {
+      const approved =
+        locale === "zh-TW" ? "這個專案做什麼？" : "What does this project do?";
+      const view = await app(locale, [], [approved], false);
+      const block = view
+        .markup()
+        .match(/<div class="visitor-resting-faq">([\s\S]*?)<\/div>/)?.[1];
+      expect(block).toContain(messages[locale].dialogueFaqLabel);
+      expect(block).toContain(`type="button">${approved}</button>`);
+      expect(block).not.toContain("disabled");
+    },
+  );
+
+  it.each(["zh-TW", "en"] as const)(
+    "omits non-FAQ suggestions from the approved block in %s",
+    async (locale) => {
+      const approved =
+        locale === "zh-TW" ? "已核准的問題？" : "An approved question?";
+      const unapproved =
+        locale === "zh-TW" ? "未核准的問題？" : "An unapproved question?";
+      const view = await app(locale, [unapproved], [approved], false);
+      const block = view
+        .markup()
+        .match(/<div class="visitor-resting-faq">([\s\S]*?)<\/div>/)?.[1];
+      expect(block).toContain(approved);
+      expect(block).not.toContain(unapproved);
+    },
+  );
+
+  it.each(["zh-TW", "en"] as const)(
+    "hides the whole approved block when no suggestion qualifies in %s",
+    async (locale) => {
+      const view = await app(locale, ["Not an approved FAQ?"], [], false);
+      expect(view.markup()).not.toContain('class="visitor-resting-faq"');
+      expect(view.markup()).not.toContain(messages[locale].dialogueFaqLabel);
+    },
+  );
+});
+
+describe("locale changes in conversation history", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "localizes app-owned offline non-answers with suggestions in %s",
+    async (locale) => {
+      const view = await app(locale, [], ["Approved?"], false);
+      await view.submit("Unknown question");
+      const next = locale === "zh-TW" ? "en" : "zh-TW";
+      view.render().onLocaleChange(next);
+      expect(view.markup()).toContain(messages[next].offlineFaqNoMatch);
+      expect(view.markup()).not.toContain(messages[locale].offlineFaqNoMatch);
+      expect(view.render().turns[0].content).toBe("Unknown question");
+    },
+  );
+
+  it.each(["zh-TW", "en"] as const)(
+    "localizes app-owned offline non-answers without suggestions in %s",
+    async (locale) => {
+      const view = await app(locale, [], [], false);
+      await view.submit("Unknown question");
+      const next = locale === "zh-TW" ? "en" : "zh-TW";
+      view.render().onLocaleChange(next);
+      expect(view.markup()).toContain(
+        messages[next].offlineFaqNoMatchWithoutSuggestions,
+      );
+      expect(view.markup()).not.toContain(
+        messages[locale].offlineFaqNoMatchWithoutSuggestions,
+      );
+    },
+  );
+
+  it.each(["zh-TW", "en"] as const)(
+    "localizes the app-owned failure message in %s",
+    async (locale) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new Error("Fixture failure")),
+      );
+      const view = await app(locale, []);
+      await view.submit("Question before failure");
+      const next = locale === "zh-TW" ? "en" : "zh-TW";
+      view.render().onLocaleChange(next);
+      expect(view.markup()).toContain(messages[next].genericError);
+      expect(view.markup()).not.toContain(messages[locale].genericError);
+    },
+  );
+
+  it.each(["zh-TW", "en"] as const)(
+    "localizes the app-owned cancellation message in %s",
+    async (locale) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => new Promise<Response>(() => undefined)),
+      );
+      const view = await app(locale, []);
+      view.render().onQuestionChange("Question to cancel");
+      view.render().onSubmit();
+      expect(view.render().pending).toBe(true);
+      view.render().onCancel?.();
+      const next = locale === "zh-TW" ? "en" : "zh-TW";
+      view.render().onLocaleChange(next);
+      expect(view.markup()).toContain(messages[next].processingCancelled);
+      expect(view.markup()).not.toContain(messages[locale].processingCancelled);
+      expect(view.render().pending).toBe(false);
+    },
+  );
+
+  it("preserves actual NPC content even when it equals an app-owned message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(reply(messages["zh-TW"].genericError, false)),
+    );
+    const view = await app("zh-TW", []);
+    await view.submit("保留實際對話");
+    view.render().onLocaleChange("en");
+    expect(view.markup()).toContain(messages["zh-TW"].genericError);
+    expect(view.markup()).not.toContain(messages.en.genericError);
+    expect(view.render().turns[0].content).toBe("保留實際對話");
+  });
 });

@@ -455,7 +455,7 @@ html[data-visitor-mode="dark"]
   min-height: 150px;
 }
 
-.visitor-dialog h1 {
+.visitor-dialog :is(h1, h2) {
   font-size: 20px;
   margin: 0 0 6px;
 }
@@ -664,6 +664,7 @@ html[data-visitor-mode="dark"]
   color: var(--px-muted);
   cursor: pointer;
   font-size: 14px;
+  min-block-size: 24px;
 }
 
 .visitor-page .citations ul,
@@ -681,6 +682,9 @@ html[data-visitor-mode="dark"]
 
 .visitor-page .citations a {
   color: var(--px-accent);
+  display: inline-block;
+  min-block-size: 24px;
+  min-inline-size: 24px;
 }
 
 .visitor-page .citations p,
@@ -993,7 +997,7 @@ html[data-visitor-mode="dark"]
     padding: 18px 12px 14px;
   }
 
-  .visitor-dialog h1 {
+  .visitor-dialog :is(h1, h2) {
     font-size: 16px;
   }
 
@@ -1075,5 +1079,39 @@ html[data-visitor-mode="dark"]
 
   .visitor-projects-dialog__inner {
     padding: 14px;
+  }
+}
+
+@media (max-width: 760px) and (max-height: 700px) {
+  .visitor-stage {
+    flex-basis: 80px;
+    height: 80px;
+    min-height: 80px;
+  }
+
+  .visitor-adventure {
+    gap: 6px;
+  }
+
+  .visitor-dialog {
+    min-height: 0;
+    padding-block: 4px;
+  }
+
+  .visitor-layout {
+    gap: 8px;
+  }
+
+  .visitor-log__heading {
+    padding-block: 0;
+  }
+
+  .visitor-question-form {
+    padding-top: 4px;
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+  }
+
+  .visitor-question-form textarea {
+    height: 44px;
   }
 }

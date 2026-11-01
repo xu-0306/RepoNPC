@@ -24,6 +24,11 @@ export interface VisitorTurn {
   id: string;
   role: "user" | "assistant";
   content: string;
+  contentKey?:
+    | "offlineFaqNoMatch"
+    | "offlineFaqNoMatchWithoutSuggestions"
+    | "genericError"
+    | "processingCancelled";
   citations?: Citation[];
   failed?: boolean;
   noMatchKind?: "no_content" | "temporary";
@@ -110,10 +115,12 @@ export function VisitorConversation({
             <ProcessingDetails process={turn.process} locale={locale} />
           )}
           <p>
-            {turn.content ||
-              (turn.role === "assistant" && pending && !turn.process
-                ? copy.streamingAnswer
-                : "")}
+            {turn.contentKey
+              ? copy[turn.contentKey]
+              : turn.content ||
+                (turn.role === "assistant" && pending && !turn.process
+                  ? copy.streamingAnswer
+                  : "")}
           </p>
           {turn.suggestedQuestions && turn.suggestedQuestions.length > 0 && (
             <ul className="answer-suggestions">

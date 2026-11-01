@@ -48,7 +48,20 @@ describe("CharacterAssetConverter", () => {
         'class="character-converter__pedestal px-panel px-panel--inset"',
       );
       expect(markup).not.toContain("Choose File");
+      const headings = [
+        ...markup.matchAll(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/g),
+      ];
+      expect(headings.filter((heading) => heading[1] === "1")).toHaveLength(1);
+      let previousLevel = 0;
+      for (const heading of headings) {
+        expect(heading[2].replace(/<[^>]*>/g, "").trim()).not.toBe("");
+        const level = Number(heading[1]);
+        expect(level).toBeLessThanOrEqual(previousLevel + 1);
+        previousLevel = level;
+      }
     }
+    expect(zh).toContain("<h2>動畫預覽</h2>");
+    expect(en).toContain("<h2>Animation preview</h2>");
     expect(zh).toContain("製作角色動畫");
     expect(zh).toContain("選擇整個資料夾");
     expect(zh).toContain("進階轉換設定");
