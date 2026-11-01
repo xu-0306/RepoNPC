@@ -222,8 +222,11 @@ export function VisitorPage(props: ExtendedProps) {
   }, [appearanceOpen]);
 
   useEffect(() => {
+    // On short phones the page scrolls instead of the log (visitor.css), so move both.
     const scroll = conversationScrollRef.current;
-    if (scroll) scroll.scrollTop = scroll.scrollHeight;
+    for (const el of [scroll, scroll?.closest(".visitor-layout")]) {
+      if (el) el.scrollTop = el.scrollHeight;
+    }
   }, [latestTurn?.content, latestTurn?.id, visibleTurns.length, pending]);
 
   function closeProjects() {

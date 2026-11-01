@@ -60,6 +60,20 @@ describe("P6 pixel UI contracts", () => {
     );
   });
 
+  it("lets a long answer scroll with the page on short phones", () => {
+    const visitor = source("visitor.css");
+    const shortPhone = visitor.slice(
+      visitor.indexOf("@media (max-width: 760px) and (max-height: 700px)"),
+    );
+    expect(shortPhone).toMatch(/\.visitor-layout\s*\{[^}]*overflow-y:\s*auto;/);
+    expect(shortPhone).toMatch(
+      /\.visitor-log__scroll\s*\{[^}]*overflow:\s*visible;/,
+    );
+    expect(shortPhone).toMatch(
+      /\.visitor-question-form\s*\{[^}]*position:\s*sticky;/,
+    );
+  });
+
   it("styles the maintenance groups", () => {
     expect(w4).toMatch(
       /\.admin-maintenance__status,[\s\S]*\.admin-maintenance__data\s*\{/,

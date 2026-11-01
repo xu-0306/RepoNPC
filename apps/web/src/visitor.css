@@ -1114,4 +1114,28 @@ html[data-visitor-mode="dark"]
   .visitor-question-form textarea {
     height: 44px;
   }
+
+  /* One scroll for the whole page: a long answer stretches instead of hiding in a
+     small nested box, and the question form stays reachable at the bottom. */
+  .visitor-layout {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-padding-bottom: 100px;
+  }
+
+  .visitor-log {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .visitor-log__scroll {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .visitor-question-form {
+    bottom: 0;
+    position: sticky;
+    z-index: 1;
+  }
 }
