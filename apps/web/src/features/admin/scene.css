@@ -166,6 +166,12 @@
   transform-origin: top left;
 }
 
+/* Keep the scaled preview navigation targets at least 24 CSS px. */
+.scene-preview__logical-page .visitor-topbar :is(a, button) {
+  min-height: var(--scene-preview-min-target);
+  min-width: var(--scene-preview-min-target);
+}
+
 .scene-preview__focus {
   border: 1px solid var(--px-line);
   border-radius: 0;

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 
 import {
   CharacterRenderer,
@@ -494,11 +494,14 @@ export function ScenePreview({
           <div
             ref={logicalPageRef}
             className={`scene-preview__logical-page scene-preview__reference-layout scene-preview__reference-layout--${viewport === "mobile" ? "phone" : "desktop"}`}
-            style={{
-              minHeight: `${logicalViewportHeight}px`,
-              transform: `scale(${visibleScale})`,
-              width: `${referenceWidth}px`,
-            }}
+            style={
+              {
+                "--scene-preview-min-target": `${Math.ceil(24 / visibleScale)}px`,
+                minHeight: `${logicalViewportHeight}px`,
+                transform: `scale(${visibleScale})`,
+                width: `${referenceWidth}px`,
+              } as CSSProperties
+            }
           >
             <VisitorPage
               canAskSuggestion={() => false}

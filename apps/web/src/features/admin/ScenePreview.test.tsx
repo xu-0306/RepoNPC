@@ -327,6 +327,7 @@ describe("owner scene preview", () => {
       'class="scene-preview__logical-page scene-preview__reference-layout scene-preview__reference-layout--desktop"',
     );
     expect(markup).toContain("width:1440px");
+    expect(markup).toContain("--scene-preview-min-target:24px");
     expect(markup).toContain('class="scene-preview__geometry-probes"');
     expect(markup).toContain(
       'class="scene-preview__geometry-probe scene-preview__geometry-probe--phone scene-preview__reference-layout scene-preview__reference-layout--phone"',
