@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { AdminAccessLayout } from "../features/admin/AdminAccessLayout";
 import type { Locale } from "../i18n/messages";
@@ -27,6 +27,7 @@ export function App() {
 
 function AdminRouter() {
   const [locale, setLocale] = useState<Locale>("zh-TW");
+  useEffect(() => syncDocumentLanguage(locale), [locale]);
   return (
     <Suspense
       fallback={
