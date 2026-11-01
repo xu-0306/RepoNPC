@@ -1039,8 +1039,8 @@ export function guidedErrorMessage(
     },
     ONBOARDING_RAW_YAML_UNMAPPED: {
       "zh-TW":
-        "raw YAML 已被修改，無法安全地自動回填引導欄位。請留在進階模式驗證內容，或重新開始引導設定。",
-      en: "Raw YAML was edited and cannot be mapped safely back into guided fields. Validate it in advanced mode or restart guided setup.",
+        "草稿含有引導設定無法回填的內容（例如套用的外觀或編輯過的 raw YAML），內容都已保留。請在進階模式繼續編輯與驗證；若要重新開始引導設定，請先複製或下載草稿。",
+      en: "Your draft includes settings guided setup cannot fill in (such as applied appearance changes or edited raw YAML); all content is kept. Continue editing and validating in advanced mode, or copy or download the draft before restarting guided setup.",
     },
   };
   return (

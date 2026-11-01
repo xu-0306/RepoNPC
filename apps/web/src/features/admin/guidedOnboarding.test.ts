@@ -60,6 +60,24 @@ describe("repository size", () => {
 });
 
 describe("guided onboarding errors", () => {
+  it.each([
+    [
+      "zh-TW",
+      "草稿含有引導設定無法回填的內容（例如套用的外觀或編輯過的 raw YAML），內容都已保留。請在進階模式繼續編輯與驗證；若要重新開始引導設定，請先複製或下載草稿。",
+    ],
+    [
+      "en",
+      "Your draft includes settings guided setup cannot fill in (such as applied appearance changes or edited raw YAML); all content is kept. Continue editing and validating in advanced mode, or copy or download the draft before restarting guided setup.",
+    ],
+  ] as const)(
+    "explains unmapped draft settings without blaming YAML edits in %s",
+    (locale, expected) => {
+      expect(guidedErrorMessage(locale, "ONBOARDING_RAW_YAML_UNMAPPED")).toBe(
+        expected,
+      );
+    },
+  );
+
   it("explains GitHub connectivity and input failures without a generic fallback", () => {
     expect(guidedErrorMessage("zh-TW", "GITHUB_ERROR")).toContain(
       "無法連線 GitHub",
