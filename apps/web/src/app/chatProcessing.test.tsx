@@ -80,11 +80,23 @@ describe("real processing display", () => {
     expect(answer).toBe("Validated answer");
   });
 
+  it.each([300001, 600000])(
+    "delivers a complete answer with progress and summary at %i ms",
+    async (elapsed) => {
+      const answer = await collectValidatedReply(
+        stream(
+          `event: progress\ndata: {"stage":"thinking","elapsed_ms":${elapsed}}\n\nevent: reasoning_summary\ndata: {"text":"Public summary","elapsed_ms":${elapsed}}\n\nevent: token\ndata: {"delta":"Validated answer"}\n\nevent: complete\ndata: {}\n\n`,
+        ),
+      );
+      expect(answer).toBe("Validated answer");
+    },
+  );
+
   it.each([
     { stage: "fake_tool", elapsed_ms: 0 },
     { stage: "thinking", elapsed_ms: -1 },
     { stage: "thinking", elapsed_ms: 1, thinking: "SECRET" },
-    { stage: "thinking", elapsed_ms: 300001 },
+    { stage: "thinking", elapsed_ms: 600001 },
   ])("rejects invalid phases, timings or raw thinking %#", (data) => {
     expect(() => chatProgress({ name: "progress", data })).toThrow();
   });

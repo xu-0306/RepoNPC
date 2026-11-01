@@ -36,7 +36,7 @@ export function chatPublicSummary(event: SseEvent): string | null {
     Array.from(text).length > 4096 ||
     !Number.isSafeInteger(elapsed) ||
     (elapsed as number) < 0 ||
-    (elapsed as number) > 300000 ||
+    (elapsed as number) > 600000 ||
     Object.keys(event.data).some(
       (key) => key !== "text" && key !== "elapsed_ms",
     )
@@ -56,7 +56,7 @@ export function chatProgress(
     !CHAT_STAGES.includes(stage as ChatStage) ||
     !Number.isSafeInteger(elapsedMs) ||
     (elapsedMs as number) < 0 ||
-    (elapsedMs as number) > 300000 ||
+    (elapsedMs as number) > 600000 ||
     Object.keys(event.data).some(
       (key) => key !== "stage" && key !== "elapsed_ms",
     )

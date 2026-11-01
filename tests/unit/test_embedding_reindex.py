@@ -25,6 +25,7 @@ from reponpc.providers.contracts import ProviderError, ProviderFailureCode
     [
         "GITHUB_RATE_LIMITED",
         "GITHUB_ERROR",
+        "EMPTY_REPOSITORY",
         "GITHUB_TIMEOUT",
         "NOT_FOUND",
         "ARCHIVED_NOT_ALLOWED",
@@ -45,6 +46,7 @@ def test_safe_reindex_error_preserves_every_closed_source_code(error_type, code)
     [
         ("github_rate_limited", "GITHUB_RATE_LIMITED"),
         ("github_request_failed", "GITHUB_ERROR"),
+        ("github_empty_repository", "EMPTY_REPOSITORY"),
         ("github_timeout", "GITHUB_TIMEOUT"),
         ("github_not_found", "NOT_FOUND"),
     ],

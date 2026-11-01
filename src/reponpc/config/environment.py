@@ -824,7 +824,7 @@ def load_environment(
         chat_base_url=_text(source, "REPONPC_CHAT_BASE_URL", "", issues, allow_empty=True),
         chat_max_context_tokens=_integer(source, "REPONPC_CHAT_MAX_CONTEXT_TOKENS", 32768, issues),
         chat_max_output_tokens=_integer(
-            source, "REPONPC_CHAT_MAX_OUTPUT_TOKENS", 16384, issues, maximum=16384
+            source, "REPONPC_CHAT_MAX_OUTPUT_TOKENS", 16384, issues, maximum=32768
         ),
         analysis_max_output_tokens=_integer(
             source,
@@ -903,7 +903,7 @@ def load_environment(
             maximum=1024 * 1024 * 1024,
         ),
         chat_timeout_seconds=_integer(
-            source, "REPONPC_CHAT_TIMEOUT_SECONDS", 180, issues, maximum=300
+            source, "REPONPC_CHAT_TIMEOUT_SECONDS", 300, issues, maximum=600
         ),
         embedding_provider=embedding_provider,
         embedding_model=_text(source, "REPONPC_EMBEDDING_MODEL", "", issues, allow_empty=True),

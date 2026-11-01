@@ -116,3 +116,10 @@ def test_admin_error_code_fixture_covers_backend(
     assert not set(mapped) & set(generic)
     assert all(isinstance(reason, str) and reason.strip() for reason in generic.values())
     assert set(mapped) | set(generic) == emitted
+
+
+@pytest.mark.parametrize("family", ["embedding_profile", "guided_onboarding"])
+def test_empty_repository_requires_specific_frontend_copy(family: str) -> None:
+    classification = json.loads(FIXTURE.read_text(encoding="utf-8"))[family]
+    assert "EMPTY_REPOSITORY" in classification["mapped"]
+    assert "EMPTY_REPOSITORY" not in classification["generic"]

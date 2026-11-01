@@ -80,6 +80,7 @@ describe("provider public summaries", () => {
     { text: "x".repeat(4097), elapsed_ms: 1 },
     { text: "", elapsed_ms: 1 },
     { text: "x", elapsed_ms: -1 },
+    { text: "x", elapsed_ms: 600001 },
   ])("rejects malformed summary projection", (data) => {
     expect(() =>
       chatPublicSummary({ name: "reasoning_summary", data }),

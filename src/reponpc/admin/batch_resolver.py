@@ -141,6 +141,20 @@ class GitHubHttpResponse:
     headers: Mapping[str, str]
 
 
+def github_response_error_code(status: int, body: bytes) -> str:
+    """Classify GitHub's empty-project conflict without exposing its response."""
+
+    if status == 409:
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except UnicodeDecodeError, ValueError, RecursionError:
+            return "GITHUB_ERROR"
+        message = payload.get("message") if isinstance(payload, dict) else None
+        if isinstance(message, str) and "git repository is empty" in message.strip().casefold():
+            return "EMPTY_REPOSITORY"
+    return "GITHUB_ERROR"
+
+
 class _NoRedirect(HTTPRedirectHandler):
     """Return the redirect response to the caller instead of following it."""
 
@@ -235,7 +249,11 @@ class UrllibGitHubArchiveTransport:
                 headers={key: value for key, value in response.headers.items()},
             )
             if int(response.status) != 200:
-                raise BatchResolverError("GITHUB_ERROR")
+                raise BatchResolverError(
+                    github_response_error_code(
+                        int(response.status), response.read(_SECONDARY_LIMIT_RESPONSE_BYTES + 1)
+                    )
+                )
             while True:
                 chunk = response.read(self._chunk_bytes)
                 if not chunk:
@@ -283,7 +301,11 @@ class UrllibGitHubArchiveTransport:
                 "GITHUB_RATE_LIMITED",
                 retry_after_seconds=admission.retry_after_seconds,
             )
-        raise BatchResolverError("GITHUB_ERROR")
+        raise BatchResolverError(
+            github_response_error_code(
+                int(error.code), error.read(_SECONDARY_LIMIT_RESPONSE_BYTES + 1)
+            )
+        )
 
 
 class GitHubRateResource(StrEnum):
@@ -636,7 +658,7 @@ class GitHubRESTMetadataResolver:
                 if self._cache is not None:
                     self._cache.save_resolved(selection, repositories[-1])
             except BatchResolverError as exc:
-                if exc.code != "NOT_FOUND":
+                if exc.code not in {"NOT_FOUND", "EMPTY_REPOSITORY"}:
                     raise
                 blockers.append(ResolutionBlocker(selection.slug, exc.code))
             except KeyError, TypeError, ValueError:
@@ -691,7 +713,7 @@ class GitHubRESTMetadataResolver:
         if response.status == 403:
             raise BatchResolverError("NOT_FOUND")
         if response.status != 200:
-            raise BatchResolverError("GITHUB_ERROR")
+            raise BatchResolverError(github_response_error_code(response.status, response.body))
         try:
             payload = json.loads(response.body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:

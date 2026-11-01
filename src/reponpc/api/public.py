@@ -370,7 +370,7 @@ def create_public_router(
             service,
             identity=request.client.host if request.client is not None else "unknown",
             active_workers=chat_workers,
-            deadline=time.monotonic() + getattr(service, "timeout_seconds", 180.0),
+            deadline=time.monotonic() + getattr(service, "timeout_seconds", 300.0),
             keepalive_seconds=keepalive_seconds_supplier(),
             project_event=lambda _event, payload: payload,
             stream_error=_stream_error,

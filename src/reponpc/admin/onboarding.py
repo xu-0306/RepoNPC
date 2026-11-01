@@ -1592,6 +1592,8 @@ def _github_error(error: SourceResolutionError) -> GuidedOnboardingError:
         return GuidedOnboardingError("VALIDATION_ERROR")
     if error.code == "github_not_found":
         return GuidedOnboardingError("NOT_FOUND")
+    if error.code == "github_empty_repository":
+        return GuidedOnboardingError("EMPTY_REPOSITORY")
     if error.code == "github_rate_limited":
         return GuidedOnboardingError("RATE_LIMITED", retry_after_seconds=error.retry_after_seconds)
     if error.code == "github_cancelled":

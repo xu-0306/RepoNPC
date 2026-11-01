@@ -115,6 +115,68 @@ function props(
 }
 
 describe("BatchAnalysisPanel", () => {
+  describe.each([
+    [
+      "zh-TW",
+      "這個 GitHub repository 是空專案，沒有內容可以分析。請改選其他專案。",
+    ],
+    [
+      "en",
+      "This GitHub repository is an empty project, so there is nothing to analyze. Choose another project.",
+    ],
+  ] as const)("empty repository in %s", (locale, message) => {
+    it.each(["blocker", "preflight failure", "result"] as const)(
+      "renders the %s without a raw code or temporary-failure advice",
+      (surface) => {
+        const error = { scope: "preflight" as const, code: "EMPTY_REPOSITORY" };
+        const markup = renderToStaticMarkup(
+          <BatchAnalysisPanel
+            {...props({
+              locale,
+              preflight:
+                surface === "blocker"
+                  ? {
+                      status: "blocked",
+                      blockers: [
+                        { kind: "empty_repository", slug: "another/empty" },
+                      ],
+                    }
+                  : surface === "preflight failure"
+                    ? { status: "failed", error }
+                    : { status: "idle" },
+              job:
+                surface === "result"
+                  ? {
+                      id: "empty-fixture",
+                      status: "failed",
+                      items: [
+                        {
+                          id: "empty-item",
+                          slug: "another/empty",
+                          stage: "failed",
+                          state: "failed",
+                          retryable: false,
+                          reanalyzable: false,
+                          error: {
+                            scope: "repository",
+                            code: "EMPTY_REPOSITORY",
+                          },
+                        },
+                      ],
+                    }
+                  : null,
+            })}
+          />,
+        );
+        expect(markup).toContain(message);
+        expect(markup).not.toContain("EMPTY_REPOSITORY");
+        expect(markup).not.toMatch(
+          /稍後|try again later|temporarily unavailable/i,
+        );
+      },
+    );
+  });
+
   it("renders typed preflight, aggregate progress, stream status, and repository stages", () => {
     const markup = renderToStaticMarkup(<BatchAnalysisPanel {...props()} />);
 

@@ -98,6 +98,10 @@ const MESSAGES: Record<string, Message> = {
     "無法從 GitHub 取得此 repository，請稍後重試。",
     "RepoNPC could not retrieve this repository from GitHub; retry later.",
   ],
+  EMPTY_REPOSITORY: [
+    "這個 GitHub repository 是空專案，沒有內容可以分析。請改選其他專案。",
+    "This GitHub repository is an empty project, so there is nothing to analyze. Choose another project.",
+  ],
   GITHUB_TIMEOUT: [
     "GitHub 在設定的無活動期限內沒有傳回資料，請重試。",
     "GitHub returned no data within the configured inactivity timeout; retry.",

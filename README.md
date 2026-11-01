@@ -50,7 +50,7 @@ Linux／自行管理 HTTPS 的部署與備份操作，請讀 [操作手冊](docs
 
 沒有公開網址仍能完成本機內容與試聊。主機和模型關閉時，已上傳的靜態網站可顯示公開內容及匯出時核准的 FAQ；即時問答需要主機、模型和公開連線可用。RepoNPC 不會自動上傳 GitHub。
 
-聊天等待時間預設 **180 秒，最高 300 秒**，既有明確較低設定保留。畫面顯示實際處理階段並可停止；輸出仍須通過引用與內容驗證。兩種生成預算各自預設／最高 16,384 token，包含推理與答案，不等於 16k 個可見字元。
+聊天等待時間預設 **300 秒，最高 600 秒**，既有明確較低設定保留。畫面顯示實際處理階段並可停止；輸出仍須通過引用與內容驗證。聊天與分析各自預設 16,384 token；聊天最高 32,768，分析最高仍為 16,384（ADR-076）。額度包含推理與答案，不等於可見字元。Context 預設仍為 32,768；若要使用 32,768 輸出，必須明確加大 context 並保留輸入與證據空間。
 
 要把內容帶到正式主機，可下載 `reponpc.yml`、保存自訂角色 PNG，在正式管理頁的進階 YAML 編輯器貼上並驗證，再到「角色與動畫」上傳、套用 PNG。模型連線與金鑰需在新主機重新設定。維護備份只供相同版本、同一原資料目錄還原；完整資料搬移請讀 [備份說明](docs/OPERATIONS.md#11-backup-and-recovery)。
 
@@ -293,7 +293,7 @@ pnpm run web:check
 
 Repository AI 分析會同時使用兩個已選角色：Embedding 模型負責將來源與問題轉成向量並找出證據，Chat 模型再根據證據產生雙語分析。空白 include 會套用目錄、manifest 與常見程式碼副檔名的預設規則，因此只有根目錄檔案的平坦 repository 也能進入分析；秘密、二進位、產物與大小限制仍會先行排除。
 
-規格 0.3.0 / ADR-037 將大型 repository 分析改為彈性 active-work 配置：每 repository 預設 1,800 秒、provider 無活動預設 300 秒、GitHub I/O 預設 60 秒，暫時性錯誤最多使用同一凍結 provider/model 三次；archive、index 與 provider 容量等待不消耗有效執行時間。目前管理分析與訪客聊天各自預設／最高 16,384 token（ADR-055），明確較低設定保留。Archive/source 限制可由 `.env` 調整；超過單檔 materialization 門檻會安全跳過並回報，只有不安全結構或總量天花板才終止。Migration 25 保留舊批次並擴大 durable budget。完整設定與安全界線見 `.env.example`、`docs/OPERATIONS.md` 與 ADR-037。
+規格 0.3.0 / ADR-037 將大型 repository 分析改為彈性 active-work 配置：每 repository 預設 1,800 秒、provider 無活動預設 300 秒、GitHub I/O 預設 60 秒，暫時性錯誤最多使用同一凍結 provider/model 三次；archive、index 與 provider 容量等待不消耗有效執行時間。目前管理分析與訪客聊天各自預設 16,384 token；分析最高 16,384，聊天最高 32,768（ADR-055/076），明確較低設定保留。Archive/source 限制可由 `.env` 調整；超過單檔 materialization 門檻會安全跳過並回報，只有不安全結構或總量天花板才終止。Migration 25 保留舊批次並擴大 durable budget。完整設定與安全界線見 `.env.example`、`docs/OPERATIONS.md` 與 ADR-037。
 
 規格 0.3.1 / ADR-038 將「同輪重試」與「建立後繼分析輪次」分開：同輪重試只有在模型嘗試次數與有效執行時間都未用盡時可用；用盡後可由管理員明確選擇失敗項目重新分析。新輪次預設保留原 commit、include/exclude、凍結模型組合與來源結果，僅重設新輪次的計數；每個來源失敗項目只能建立一個直接後繼。若改用目前模型，確認會綁定畫面顯示的 selection generation，設定已變更時必須重新檢視。Migration 26 新增不含秘密的批次／項目 lineage、輪次與失敗階段；migration 27 讓來源使用標記與有界冪等綁定在一般清理後仍維持正確。
 
@@ -310,10 +310,13 @@ Runtime migration 23 為失敗的批次項目新增安全、封閉集合的 `err
 ### Visitor chat processing (2026-10-04)
 
 Live chat shows expandable real processing stages, elapsed waiting time and a
-stop action. The total deadline defaults to 180 seconds (max 300; explicitly
+stop action. The total deadline defaults to 300 seconds (max 600, ADR-076; explicitly
 configured lower settings remain valid). Native Ollama thinking activity is
 visible as a phase; thinking text stays private. Generic APIs show only actual
-supported activity. Answers still receive full citation/person validation.
+supported activity. Answers still receive full citation/person validation. Chat output
+defaults to 16,384 tokens with a 32,768 maximum; analysis retains its independent
+16,384 maximum. Context still defaults to 32,768; a 32,768 output requires a
+larger explicitly configured context with room for input and evidence.
 See docs/CHAT_PROCESSING_CONTRACT_2026-10-04.md for the unfinished thinking-text
 request and the separate public-summary option.
 

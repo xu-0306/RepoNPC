@@ -583,6 +583,7 @@ class BatchRuntimeStore:
                         source_input = _input_from_row(source_row)
                         if (
                             str(source_row["state"]) not in FAILED_ITEM_STATES
+                            or source_row["error_code"] == "EMPTY_REPOSITORY"
                             or retryable
                             or source_input.slug != item.slug
                             or source_input.ref != item.ref
@@ -1143,6 +1144,7 @@ class BatchRuntimeStore:
             )
             if (
                 str(row["state"]) not in FAILED_ITEM_STATES
+                or row["error_code"] == "EMPTY_REPOSITORY"
                 or retryable
                 or blocker == "SUCCESSOR_EXISTS"
             ):
@@ -1296,6 +1298,7 @@ class BatchRuntimeStore:
                         updated_at = ?
                     WHERE batch_id = ?
                       AND state IN ('needs_retry_confirmation', 'failed', 'waiting_reconnection')
+                      AND COALESCE(error_code, '') <> 'EMPTY_REPOSITORY'
                       AND generation_attempt_count < ?
                       AND execution_elapsed_seconds < COALESCE(?, execution_budget_seconds)
                       AND NOT EXISTS (
@@ -2150,6 +2153,7 @@ def _snapshot(
                 reanalyzable=(
                     batch_state in {"failed", "completed_with_errors"}
                     and str(row["state"]) in FAILED_ITEM_STATES
+                    and row["error_code"] != "EMPTY_REPOSITORY"
                     and not bool(row["has_successor"])
                     and not _retry_eligibility(
                         row,
@@ -2234,6 +2238,8 @@ def _retry_eligibility(
     execution_budget_seconds: int | None = None,
     batch_state: str | None = None,
 ) -> tuple[bool, str | None]:
+    if row["error_code"] == "EMPTY_REPOSITORY":
+        return False, None
     if batch_state is not None and batch_state not in {"failed", "completed_with_errors"}:
         return False, None
     if str(row["state"]) not in {

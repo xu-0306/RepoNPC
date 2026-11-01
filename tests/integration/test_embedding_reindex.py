@@ -730,6 +730,8 @@ def test_production_builder_uses_frozen_profile_over_public_yaml_embedding(
     [
         (BatchResolverError("GITHUB_RATE_LIMITED", retry_after_seconds=120), "GITHUB_RATE_LIMITED"),
         (SourceResolutionError("github_not_found"), "NOT_FOUND"),
+        (BatchResolverError("EMPTY_REPOSITORY"), "EMPTY_REPOSITORY"),
+        (SourceResolutionError("github_empty_repository"), "EMPTY_REPOSITORY"),
     ],
 )
 def test_default_queue_source_failure_still_writes_profile_error(tmp_path, error, expected):

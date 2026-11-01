@@ -24,6 +24,7 @@ export type BatchPreflightBlockerKind =
   | "selection_changed"
   | "no_repositories"
   | "archived"
+  | "empty_repository"
   | "not_found";
 
 export interface BatchPreflightBlocker {
@@ -316,6 +317,8 @@ const COPY: Record<Locale, Copy> = {
         selection_changed: `${slug} 的選擇已變更，請重新檢查`,
         archived: `${slug} 已封存，無法分析`,
         not_found: `${slug} 不存在或無法存取`,
+        empty_repository:
+          "這個 GitHub repository 是空專案，沒有內容可以分析。請改選其他專案。",
         no_repositories: "請至少選擇一個公開 repository。",
       })[kind],
     rateStatus: (status) =>
@@ -454,6 +457,8 @@ const COPY: Record<Locale, Copy> = {
         selection_changed: `${slug} selection changed. Run preflight again`,
         archived: `${slug} is archived and can't be analyzed`,
         not_found: `${slug} was not found or is inaccessible`,
+        empty_repository:
+          "This GitHub repository is an empty project, so there is nothing to analyze. Choose another project.",
         no_repositories: "Select at least one public repository.",
       })[kind],
     rateStatus: (status) =>
@@ -1137,24 +1142,28 @@ function RepositoryList({
                       ? ` ${copy.retryAfter(item.error.retryAfterSeconds)}`
                       : ""}
                   </p>
-                  <dl className="guided-onboarding__repository-meta">
-                    <dt>{copy.repositoryErrorCode}</dt>
-                    <dd>{safeRepositoryErrorCode(item.error.code)}</dd>
-                    {safeRepositoryErrorReason(item.error.reason) && (
-                      <>
-                        <dt>{copy.repositoryErrorReason}</dt>
-                        <dd>{safeRepositoryErrorReason(item.error.reason)}</dd>
-                      </>
-                    )}
-                    {item.failureStage && (
-                      <>
-                        <dt>{copy.failureStage}</dt>
-                        <dd>
-                          {repositoryStageLabel(item.failureStage, locale)}
-                        </dd>
-                      </>
-                    )}
-                  </dl>
+                  {item.error.code !== "EMPTY_REPOSITORY" && (
+                    <dl className="guided-onboarding__repository-meta">
+                      <dt>{copy.repositoryErrorCode}</dt>
+                      <dd>{safeRepositoryErrorCode(item.error.code)}</dd>
+                      {safeRepositoryErrorReason(item.error.reason) && (
+                        <>
+                          <dt>{copy.repositoryErrorReason}</dt>
+                          <dd>
+                            {safeRepositoryErrorReason(item.error.reason)}
+                          </dd>
+                        </>
+                      )}
+                      {item.failureStage && (
+                        <>
+                          <dt>{copy.failureStage}</dt>
+                          <dd>
+                            {repositoryStageLabel(item.failureStage, locale)}
+                          </dd>
+                        </>
+                      )}
+                    </dl>
+                  )}
                 </div>
               )}
               {item.reanalyzable && (
@@ -1208,6 +1217,7 @@ const REPOSITORY_ERROR_CODES = new Set([
   "CONFIG_INVALID",
   "GENERATION_DISPATCHED_INTERRUPTED",
   "GITHUB_ERROR",
+  "EMPTY_REPOSITORY",
   "GITHUB_TIMEOUT",
   "GITHUB_RATE_LIMITED",
   "MODEL_UNAVAILABLE",
@@ -1283,6 +1293,8 @@ function repositoryErrorMessage(
       ARCHIVE_UNSAFE: "Repository 封存檔包含不安全的路徑或項目類型。",
       MODEL_UNAVAILABLE: "分析所需的模型目前無法使用。",
       GITHUB_ERROR: "無法從 GitHub 取得此 repository。",
+      EMPTY_REPOSITORY:
+        "這個 GitHub repository 是空專案，沒有內容可以分析。請改選其他專案。",
       GITHUB_TIMEOUT: "GitHub 在設定的無活動期限內沒有傳回資料。",
       GITHUB_RATE_LIMITED: "GitHub 目前限制新的請求。",
       RATE_LIMITED: "模型服務目前限制新的請求。",
@@ -1315,6 +1327,8 @@ function repositoryErrorMessage(
       MODEL_UNAVAILABLE:
         "A model required for analysis is currently unavailable.",
       GITHUB_ERROR: "RepoNPC could not retrieve this repository from GitHub.",
+      EMPTY_REPOSITORY:
+        "This GitHub repository is an empty project, so there is nothing to analyze. Choose another project.",
       GITHUB_TIMEOUT:
         "GitHub returned no data within the configured inactivity timeout.",
       GITHUB_RATE_LIMITED: "GitHub is currently limiting new requests.",
@@ -1346,6 +1360,12 @@ function operationErrorMessage(error: BatchOperationError, copy: Copy): string {
     requestId ? `${message} (${requestId})` : message;
   if (error.code === "ANALYSIS_RESULT_UNKNOWN") {
     return copy.resultUnknown;
+  }
+  if (error.code === "EMPTY_REPOSITORY") {
+    return copy.blocker({
+      kind: "empty_repository",
+      slug: error.slug ?? "github",
+    });
   }
   if (error.code === "RATE_LIMITED" || error.code === "GITHUB_RATE_LIMITED") {
     return withRequestId(

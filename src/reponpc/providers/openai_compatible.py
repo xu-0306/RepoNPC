@@ -249,6 +249,7 @@ def _validate_request(
     if (
         isinstance(max_output_tokens, bool)
         or not 0 < max_output_tokens <= capabilities.max_output_tokens
+        or max_output_tokens >= capabilities.max_context_tokens
     ):
         raise ProviderError(ProviderFailureCode.CONTEXT_OVERFLOW)
     if not capabilities.system_role and any(message.role == "system" for message in messages):

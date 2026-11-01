@@ -25,7 +25,7 @@ from reponpc.chat.answers import (
 from reponpc.chat.limits import ChatLimits, ProviderLane
 from reponpc.indexing.public_profile import PublicProfileError, parse_public_profile_bytes
 from reponpc.observability import get_safe_logger
-from reponpc.providers import ProviderMessage, ProviderUsage
+from reponpc.providers import ProviderError, ProviderFailureCode, ProviderMessage, ProviderUsage
 from reponpc.providers.contracts import request_context_cost
 from reponpc.providers.response_diagnostics import ProviderResponseError, ResponseIssue
 from reponpc.providers.runtime import ProviderRuntime
@@ -143,11 +143,12 @@ class GroundedChatService:
     ) -> ChatDelivery:
         duration = self._timeout_seconds if timeout_seconds is None else timeout_seconds
         if isinstance(duration, bool) or not math.isfinite(duration) or duration <= 0:
-            from reponpc.providers import ProviderError, ProviderFailureCode
-
             raise ProviderError(ProviderFailureCode.TIMEOUT)
         deadline = self._monotonic() + min(duration, self._timeout_seconds)
         _raise_if_cancelled(cancel_requested)
+        capabilities = self._providers.chat.capabilities()
+        if self._max_output_tokens >= capabilities.max_context_tokens:
+            raise ProviderError(ProviderFailureCode.CONTEXT_OVERFLOW)
         admission = getattr(self._limits, "admit_public_chat", None)
         admission_context: Any
         if lane != ProviderLane.PUBLIC_CHAT:
@@ -173,7 +174,6 @@ class GroundedChatService:
                 )[0]
             _raise_if_cancelled(cancel_requested)
             evidence_ids = index.hybrid_candidates(message, query_vector=query_vector)
-            capabilities = self._providers.chat.capabilities()
             fixed_messages = _provider_messages(
                 message,
                 locale,

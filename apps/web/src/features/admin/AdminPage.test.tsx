@@ -21,6 +21,7 @@ describe("batch preflight mapping", () => {
   it.each([
     ["ARCHIVED_NOT_ALLOWED", "archived"],
     ["NOT_FOUND", "not_found"],
+    ["EMPTY_REPOSITORY", "empty_repository"],
     ["CONFIRMATION_REQUIRED", "selection_changed"],
     ["FUTURE_UNKNOWN_CODE", "selection_changed"],
     ["MODEL_UNAVAILABLE", "provider_unavailable"],

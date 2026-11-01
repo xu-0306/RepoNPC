@@ -979,6 +979,11 @@ export function guidedErrorMessage(
         "目前無法連線 GitHub。請檢查網路後重試，或改用手動加入 repository。",
       en: "GitHub could not be reached. Check the network and retry, or add a repository manually.",
     },
+    EMPTY_REPOSITORY: {
+      "zh-TW":
+        "這個 GitHub repository 是空專案，沒有內容可以分析。請改選其他專案。",
+      en: "This GitHub repository is an empty project, so there is nothing to analyze. Choose another project.",
+    },
     VALIDATION_ERROR: {
       "zh-TW":
         "GitHub 使用者名稱或個人檔案 URL 格式無效。請輸入 username 或 https://github.com/username。",

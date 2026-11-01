@@ -82,7 +82,9 @@ describe.each(["zh-TW", "en"] as const)("owner FAQ reasons in %s", (locale) => {
     expect(html).toContain(`<span> · ${label}</span>`);
     expect(html.match(/<span>/g)).toHaveLength(1);
     expect(html).not.toContain(reason);
-    expect(html).toContain('<article class="coverage-faq__entry" aria-label="Fixture question?">');
+    expect(html).toContain(
+      '<article class="coverage-faq__entry" aria-label="Fixture question?">',
+    );
   });
   it("renders no diagnostic label for an answered entry with a null reason", () => {
     const html = render(locale, null);

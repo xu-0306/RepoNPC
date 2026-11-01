@@ -3278,6 +3278,7 @@ def _onboarding_error(request: Request, error: GuidedOnboardingError) -> JSONRes
         "AUTHENTICATION_REQUIRED": 401,
         "NOT_FOUND": 404,
         "CONFIG_INVALID": 422,
+        "EMPTY_REPOSITORY": 422,
         "RATE_LIMITED": 429,
         "CONCURRENCY_LIMIT": 429,
         "GITHUB_ERROR": 502,
@@ -3402,6 +3403,7 @@ def _analysis_selection_error(request: Request, error: AnalysisSelectionError) -
 def _embedding_profile_error(request: Request, error: EmbeddingProfileError) -> JSONResponse:
     status_code = {
         "NOT_FOUND": 404,
+        "EMPTY_REPOSITORY": 422,
         "SERVICE_NOT_READY": 503,
         "EMBEDDING_CONNECTION_REQUIRED": 409,
         "EMBEDDING_PROFILE_ACTIVE_IMMUTABLE": 409,
@@ -3432,6 +3434,7 @@ def _batch_error(request: Request, error: Exception) -> JSONResponse:
     statuses = {
         "VALIDATION_ERROR": 400,
         "NOT_FOUND": 404,
+        "EMPTY_REPOSITORY": 422,
         "ANALYSIS_BATCH_ACTIVE": 409,
         "ANALYSIS_PLAN_STALE": 409,
         "ANALYSIS_RETRY_NOT_AVAILABLE": 409,

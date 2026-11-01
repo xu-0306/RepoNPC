@@ -545,7 +545,7 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
 
 ## ADR-055: Preserve reasoning and bound combined generation at 16k
 
-- **Status:** Accepted 2026-10-03 (OR-029); implementation and verification are separate from release acceptance.
+- **Status:** Accepted 2026-10-03 (OR-029); implementation and verification are separate from release acceptance. Chat/probe output ceiling and the subsequent chat default/maximum timeout are superseded by ADR-076; the 16,384 default output, analysis budget and reasoning policy remain unchanged.
 - **Authorization:** The owner rejected default `think: false`, required reasoning ON and explicitly supported 16,384 tokens.
 - **Evidence:** ADR-034/037 were approved budget policies. Current live reasoning-model evidence showed that the legacy chat ceiling did not establish successful completion for this workload; disabling reasoning would change the owner's intended behavior. No committed question, oracle or quality threshold is changed.
 - **Decision:** Chat/probe and authenticated-analysis budgets remain independent, each with a 16,384-token default and hard maximum. Explicit lower settings remain valid. Ollama generation counts reasoning and answer within one ceiling, with a separate bounded input-plus-generation context. Supported reasoning controls remain ON; unknown support retains the backend default and is reported as unknown. No model-name heuristic establishes support. OpenAI-compatible/vLLM retain their existing provider semantics.
@@ -563,7 +563,7 @@ Chat probe diagnostic follow-up (2026-09-12): the owner reported `PROVIDER_INVAL
 
 ## ADR-057: Real visitor chat progress and a longer bounded wait
 
-- Status: Accepted 2026-10-04 for waiting UX (OR-031); thinking-text display remains pending.
+- Status: Accepted 2026-10-04 for waiting UX (OR-031); thinking-text display remains pending. Timeout numbers superseded by ADR-076 (300-default / 600-maximum).
 - Decision: Reuse existing chat SSE and provider transport for real service
   phases, native Ollama thinking activity (never its text), elapsed duration,
   native disclosure and cancellation. Default total timeout becomes 180 seconds,
@@ -814,7 +814,7 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
 - **Decision:** Set the fixed contribution allowance to 16,384 tokens, the same ceiling as ADR-055. It stays independent of the visitor and analysis budgets and has no new setting. Reasoning stays ON (ADR-055 is unchanged). Output-limit termination still fails before parsing, with no retry, fallback or partial promotion.
 - **Rejected:** Sending `think: false` for this call (conflicts with the ADR-055 owner decision; not evaluated against the person-claim safety rules); changing only the error text (leaves the AI proposal unusable with the reference model of ADR-055).
 - **Consequences:**
-  - A reasoning model can take about a minute for one suggestion and holds the shared generation slot for that time. The 180-second chat timeout still applies.
+  - A reasoning model can take about a minute for one suggestion and holds the shared generation slot for that time. The 180-second chat timeout applied at this decision; its numbers are superseded by ADR-076 (300-default / 600-maximum).
   - With a configured context below 32,768 the allowance shrinks to half of the context at most, and to what the request leaves free. The request is counted as escaped JSON (six bytes per CJK character), as the Ollama adapter counts it, so a long Chinese statement is not rejected where 700 tokens worked. Only when nothing is left does the request fail safely before any provider call; manual entry stays available.
   - The limit message no longer tells the owner to shorten the statement first. It says the limit includes thinking, offers retry or manual entry, and suggests a model that thinks less if it keeps happening.
   - Only the 700 value of ADR-034/037 is superseded. The other contribution rules stay.
@@ -830,3 +830,33 @@ Status: Accepted 2026-10-04 (OR-032). Reuse the protected connection form and en
   - Technical Specification advances to 0.4.16. FR-038/040 and AC-054/057 cover a valid response before 60 seconds, final timeout when the 60-second deadline is reached, and regression evidence that only one request is made.
   - No environment variable, API, database migration, UI copy, or new provider call is added.
 - **Requirements:** FR-038/040, AC-054/057 (deadline change only).
+
+## ADR-075: Explain empty GitHub projects as a permanent source failure
+
+- **Status:** Accepted 2026-11-01. Technical Specification 0.4.17.
+- **Authorization:** On 2026-11-01 the owner said "just directly showing a prompt like 'GitHub repository is an empty project' should be enough" and approved `EMPTY_REPOSITORY` and the bilingual text in the wrap-up brief.
+- **Context:** GitHub commit lookup returns `409` with JSON `message: "Git Repository is empty."`. Treating it as `GITHUB_ERROR` describes an outage and invites retries that cannot add repository content.
+- **Evidence:** Two anonymous public reads on 2026-11-01 confirmed `/repos/xu-0306/xu-0306/commits/main` returns that 409 JSON; `/tarball/main` returns a codeload redirect. Classification is shared by metadata/commit/source and archive HTTP errors, without any repository-specific branch.
+- **Decision:** A 409 whose JSON string message, stripped and case-insensitive, contains `git repository is empty` maps to permanent `EMPTY_REPOSITORY`. Malformed/non-JSON bodies, other conflicts and other statuses retain their existing safe codes. Preflight consumes partial hints, reports the selected repository blocker and does not retry; source errors remain typed through onboarding, batch, NPC preparation and embedding reindex. Error envelopes use 422; preflight/job status keeps its existing payload and HTTP status. No retry timestamp is added; same-round retry and successor reanalysis are unavailable for the confirmed empty source.
+- **Copy:** zh-TW: 「這個 GitHub repository 是空專案，沒有內容可以分析。請改選其他專案。」 en: "This GitHub repository is an empty project, so there is nothing to analyze. Choose another project." Every affected surface shows this plain text without a raw code or temporary-retry advice.
+- **Consequences:** Keep the existing zero-size discovery hint and allow selection. No source/model call follows an empty-project blocker, no fallback or automatic retry is introduced, and last-known-good data remains active. Regression tests cover normalized messages, wrong status/shape, malformed bytes, propagation, permanent failure and both locales.
+- **Requirements:** FR-002/026/027/032/033, NFR-001/002/011/012/014, AC-023/039/040/044/045/052.
+
+## ADR-076: Raise chat deadline and optional output ceiling without increasing default context
+
+- **Status:** Accepted 2026-11-01. Technical Specification 0.4.18.
+- **Authorization:** On 2026-11-01 the owner said "The chat limit can be raised." The wrap-up brief explicitly approved the numbers below; no other contract changes are authorized.
+- **Context:** A reasoning model spends most of its generation budget on hidden thinking. Measured 6,784 generated tokens took about 69 seconds on GPU; 16,384 tokens at about 98 tok/s take about 167 seconds before other request work. The old 180-second total deadline cannot reliably cover a full-budget answer; CPU-only hosts need far more time.
+- **Decision:**
+
+  | Setting | Default | Maximum |
+  | --- | ---: | ---: |
+  | `REPONPC_CHAT_TIMEOUT_SECONDS` | 300 seconds | 600 seconds |
+  | `REPONPC_CHAT_MAX_OUTPUT_TOKENS` | 16384 (unchanged) | 32768 |
+  | `REPONPC_CHAT_MAX_CONTEXT_TOKENS` | 32768 (unchanged) | provider capacity (unchanged) |
+  | `REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS` | 16384 (unchanged) | 16384 (unchanged) |
+
+  `ANALYSIS_MAX_OUTPUT_TOKENS_HARD_LIMIT` and `CONTRIBUTION_MAX_OUTPUT_TOKENS` remain 16384. The ADR-074 single chat probe still has one 60-second deadline; embedding probes and analysis deadlines remain unchanged. Reasoning stays ON; `think` handling is unchanged. Existing explicit lower settings are retained.
+- **Rejected:** Raising default context, because Ollama's `num_ctx` drives VRAM use on every install; raising default output, because the unchanged default context must leave room for input and evidence. Disabling reasoning is not approved.
+- **Consequences:** Configured profiles, probes and all chat transports admit up to 32768 output only with sufficient explicitly configured context. Output at or above context fails with the existing configuration/capability error before any provider call; manual/non-AI startup remains available. Public ingress and generation share the configured total deadline; SSE keepalive/progress never renew it. Client progress and public-summary elapsed validation accepts through 600,000 ms so the maximum-budget stream can complete. Longer requests hold bounded worker capacity longer; unchanged concurrency, daily and input limits still apply. Operators must allow the total deadline plus margin through their actual Funnel/proxy path and restart matching frontend/backend. No new setting, endpoint, schema, service, migration or fallback is added. Historical ADR-055/057 chat ceiling/timeout numbers are superseded; their other controls and ADR-073 contribution budget remain in force.
+- **Requirements:** FR-012/013/038/040/043/044/047, NFR-002/003/005/009/011/012/014, AC-015/017/018/019/023/039/054/055/057/061/068/071.

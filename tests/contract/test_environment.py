@@ -92,7 +92,7 @@ def test_flexible_analysis_limits_have_large_project_defaults(tmp_path: Path) ->
     assert settings.analysis_max_file_bytes == 2 * 1024 * 1024
 
 
-@pytest.mark.parametrize("value", ["8192", "16384"])
+@pytest.mark.parametrize("value", ["8192", "16384", "32768"])
 def test_public_chat_output_budget_accepts_hard_boundary(tmp_path: Path, value: str) -> None:
     settings = load_environment(
         deployment_environment(REPONPC_CHAT_MAX_OUTPUT_TOKENS=value),
@@ -102,7 +102,7 @@ def test_public_chat_output_budget_accepts_hard_boundary(tmp_path: Path, value: 
     assert settings.chat_max_output_tokens == int(value)
 
 
-@pytest.mark.parametrize("value", ["16385", "0", "not-an-integer"])
+@pytest.mark.parametrize("value", ["32769", "0", "not-an-integer"])
 def test_public_chat_output_budget_rejects_values_outside_contract(
     tmp_path: Path, value: str
 ) -> None:

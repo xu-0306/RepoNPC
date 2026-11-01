@@ -115,6 +115,8 @@ No PostgreSQL, Redis, vector database, or indexer process is required in the pub
 
 ## 3. Prepare public configuration
 
+An empty GitHub project reports permanent `EMPTY_REPOSITORY` (ADR-075): 「這個 GitHub repository 是空專案，沒有內容可以分析。請改選其他專案。」 / "This GitHub repository is an empty project, so there is nothing to analyze. Choose another project." Choose another project; waiting or automatic retries will not populate it. The zero-size discovery warning and selection remain available.
+
 1. Copy `reponpc.example.yml` to `reponpc.yml` in the configured repository.
 2. Replace placeholder profile, including the required confirmed `github_login` and optional `aliases`, repository slugs, owner claims, links, and character/card values.
 3. Keep only public information. Never add tokens, password hashes, API keys, internal URLs, or private-repository names.
@@ -381,7 +383,7 @@ curl --fail https://portfolio.example.com/api/public/status
 
 - Forward the original HTTPS host/proto and client address only from a trusted proxy included in `REPONPC_TRUSTED_PROXY_CIDRS`.
 - Reject unknown hosts; redirect HTTP to HTTPS.
-- Do not buffer `text/event-stream`; allow request duration beyond `REPONPC_CHAT_TIMEOUT_SECONDS` plus a small margin.
+- Do not buffer `text/event-stream`; allow request duration beyond `REPONPC_CHAT_TIMEOUT_SECONDS` plus a small margin: at least 330 seconds for the 300-second default, or 630 seconds when configured to the 600-second maximum (ADR-076). Set proxy read/response/absolute request limits accordingly; forward the 15-second SSE keepalive without buffering. Uvicorn keep-alive applies between requests, not to the active stream. The gateway and service use the same configured total deadline; no in-repository Caddy/nginx timeout override exists. Verify the actual Funnel/proxy path externally at the selected limit; RepoNPC does not configure Tailscale.
 - Preserve application CSP, `nosniff`, referrer, and cookie headers.
 - Set HSTS only after confirming the domain/subdomains are permanently HTTPS.
 - Do not add wildcard CORS or expose admin through a different unapproved origin.
@@ -515,9 +517,18 @@ If the application fails before a migration commits, restore the old image. Runt
 
 RepoNPC's own sanitized JSON event lines go to stderr: the source launcher saves them in `logs/server-<stamp>.err.log` under its data directory (default `runtime-data/local/`), and Docker exposes them through `docker logs`. The Windows installer also writes `logs/reponpc.log` under its data directory, rotating at 1 MB (1,048,576 bytes) with three backups (one active file plus three rotated files). `REPONPC_LOG_LEVEL` controls these RepoNPC events; the installer uses INFO. Uvicorn logging is separate and installer access logs remain disabled.
 
-Start with `.env.example` public-chat defaults: 10 requests/minute/IP, two concurrent generations, 200 accepted chats/UTC day, 2,000-character questions, six history messages, and a 16,384-token generation ceiling (maximum 16,384, ADR-055). Lower them for expensive providers or small hardware.
+Start with `.env.example` public-chat defaults: 10 requests/minute/IP, two concurrent generations, 200 accepted chats/UTC day, 2,000-character questions, six history messages, and a 16,384-token generation ceiling (maximum 32,768 for chat/probes, ADR-076). Lower them for expensive providers or small hardware.
 
-Admin repository analysis separately uses `REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS=16384`; accepted values are positive integers up to `16384` (16k). `REPONPC_ANALYSIS_REPOSITORY_TIMEOUT_SECONDS=1800`, `REPONPC_ANALYSIS_PROVIDER_TIMEOUT_SECONDS=300`, `REPONPC_ANALYSIS_GENERATION_ATTEMPTS=3` and `REPONPC_ANALYSIS_GITHUB_TIMEOUT_SECONDS=60` control execution without inheriting the public 180-second request deadline (ADR-057). Archive/source byte and entry settings are listed in `.env.example`; invalid relationships fail startup. The Windows launcher loads these `REPONPC_*` values from `.env`, and Compose passes them to the app. Full prompt/evidence/schema plus output must fit `REPONPC_CHAT_MAX_CONTEXT_TOKENS` and the selected provider's capability. A smaller provider cap wins; insufficient input room rejects analysis rather than overfilling context. The cap is a ceiling, not a requirement to generate/bill all tokens. Explicit lower values remain valid. For Ollama it bounds reasoning and final answer together, not two separate allowances or 16k visible answer tokens. Context estimates are not actual usage. `prompt_eval_count` and `eval_count` are provider-reported token counts, not visible character counts. The configured total context defaults to 32,768 and is distinct from output; reserve complete UTF-8 messages/schema plus 256 framing tokens and output before generation. The official Qwen3.5-9B card documents thinking enabled by default, 262,144 native context and recommends 128k for complex reasoning; these are model facts, not guarantees for this bounded local setting. See [the official card](https://huggingface.co/Qwen/Qwen3.5-9B). No fixed Chinese-character ratio is assumed. Complete buffered provider adapters use socket inactivity as an approximation and cannot emit first-token/token-idle progress.
+Admin repository analysis separately uses `REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS=16384`; accepted values are positive integers up to `16384` (16k). `REPONPC_ANALYSIS_REPOSITORY_TIMEOUT_SECONDS=1800`, `REPONPC_ANALYSIS_PROVIDER_TIMEOUT_SECONDS=300`, `REPONPC_ANALYSIS_GENERATION_ATTEMPTS=3` and `REPONPC_ANALYSIS_GITHUB_TIMEOUT_SECONDS=60` control execution without inheriting the public 300-second request deadline (maximum 600, ADR-076). Archive/source byte and entry settings are listed in `.env.example`; invalid relationships fail startup. The Windows launcher loads these `REPONPC_*` values from `.env`, and Compose passes them to the app. Full prompt/evidence/schema plus output must fit `REPONPC_CHAT_MAX_CONTEXT_TOKENS` and the selected provider's capability. A smaller provider cap wins; insufficient input room rejects analysis rather than overfilling context. The cap is a ceiling, not a requirement to generate/bill all tokens. Explicit lower values remain valid. For Ollama it bounds reasoning and final answer together, not two separate allowances or 16k visible answer tokens. Context estimates are not actual usage. `prompt_eval_count` and `eval_count` are provider-reported token counts, not visible character counts. The configured total context defaults to 32,768 and is distinct from output; reserve complete UTF-8 messages/schema plus 256 framing tokens and output before generation. The official Qwen3.5-9B card documents thinking enabled by default, 262,144 native context and recommends 128k for complex reasoning; these are model facts, not guarantees for this bounded local setting. See [the official card](https://huggingface.co/Qwen/Qwen3.5-9B). No fixed Chinese-character ratio is assumed. Complete buffered provider adapters use socket inactivity as an approximation and cannot emit first-token/token-idle progress.
+
+| Environment setting | Default | Maximum |
+| --- | ---: | ---: |
+| `REPONPC_CHAT_TIMEOUT_SECONDS` | 300 seconds | 600 seconds |
+| `REPONPC_CHAT_MAX_OUTPUT_TOKENS` | 16384 | 32768 |
+| `REPONPC_CHAT_MAX_CONTEXT_TOKENS` | 32768 | provider capacity |
+| `REPONPC_ANALYSIS_MAX_OUTPUT_TOKENS` | 16384 | 16384 |
+
+Output at or above context leaves no space for input: the existing capability/configuration error rejects it before any provider request, including probes. For a 32768 output, explicitly configure a larger context with evidence/input room. The default context is unchanged because Ollama sends it as `num_ctx`, which affects VRAM on every install. Reasoning remains ON. Contribution output stays fixed at 16384 (ADR-073); probe total deadline stays 60 seconds (ADR-074); embedding probes and analysis timeouts are unchanged.
 
 After changing the deployment value, load the new backend through the normal restart procedure; it is not a hot setting or a public YAML field. The existing stage-specific deadlines remain, so slower reasoning models may still time out even with a larger generation ceiling. `PROVIDER_OUTPUT_LIMIT_REACHED` identifies an observed output-limit stop and is distinct from malformed/schema-invalid output. Incomplete content is discarded and no automatic repair/retry/model fallback occurs. Review the setting/model and explicitly retry or continue manually. Changed analysis budget/policy misses incompatible result caches without deleting confirmed contribution text.
 
@@ -584,7 +595,7 @@ Compatibility: embedding create/update may omit dimension; old clients supplying
 
 Independent novice-setup fault evaluation additionally repaired model-key rotation error recovery: rollback runs while the database connection is live; failed BEGIN/UPDATE/COMMIT restores the old master key and preserves decryptable historical revisions. Tests use only synthetic keys in temporary stores. Process-kill atomicity across the key file and database remains outside this fault-path verification.
 
-Chat probe parser follow-up (2026-09-12, amended 2026-09-14): load the matching rebuilt frontend/backend and explicitly retest old failures to obtain parser evidence. Tests use the configured chat output cap (current default and configuration maximum 16,384 under ADR-055) rather than 32; actual billed generation depends on the provider. A probe uses one 60-second total deadline for the same bounded request (ADR-074). Capability preparation consumes the same 60-second outer deadline; generation receives only its remaining time. No second generation request, activation or fallback occurs. Runtime migration 25 belongs to the separate ADR-037 analysis-budget amendment, not probe behavior.
+Chat probe parser follow-up (2026-09-12, amended 2026-09-14): load the matching rebuilt frontend/backend and explicitly retest old failures to obtain parser evidence. Tests use the configured chat output cap (current default 16,384 and configuration maximum 32,768 under ADR-076) rather than 32; actual billed generation depends on the provider. A probe uses one 60-second total deadline for the same bounded request (ADR-074). Capability preparation consumes the same 60-second outer deadline; generation receives only its remaining time. No second generation request, activation or fallback occurs. Runtime migration 25 belongs to the separate ADR-037 analysis-budget amendment, not probe behavior.
 
 ## Local portfolio operation (ADR-046)
 
@@ -598,9 +609,9 @@ Stop the service before a full data-directory backup, which includes runtime dat
 
 Both Windows launchers bind only loopback; Windows visitor access goes through the gateway and Funnel ([Windows production mode](#windows-production-mode)). On 2026-09-23 the owner had no public HTTPS destination; retain the sharing setup and complete local tests first. Public deployment later requires the existing visitor-only HTTPS reverse-proxy recipe; the admin API and direct model ports remain private. Creating or updating Profile README files is a separate explicit GitHub action by the owner.
 
-## Visitor waiting experience — ADR-057 (2026-10-04)
+## Visitor waiting experience — ADR-057 (2026-10-04), limits amended by ADR-076
 
-REPONPC_CHAT_TIMEOUT_SECONDS now defaults to 180 seconds, accepts 1–300; existing
+REPONPC_CHAT_TIMEOUT_SECONDS now defaults to 300 seconds, accepts 1–600 (ADR-076); existing
 explicit settings (including 45) remain valid. Restart/re-export normal artifacts
 to load updated code; no real owner runtime was changed by local verification.
 Do not buffer SSE; proxy timeouts must exceed configured total plus margin.

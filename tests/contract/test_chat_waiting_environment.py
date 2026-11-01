@@ -8,7 +8,7 @@ from reponpc.config.environment import EnvironmentValidationError, load_environm
 from tests.contract.test_environment import deployment_environment
 
 
-@pytest.mark.parametrize("setting,expected", [(None, 180), ("45", 45), ("300", 300)])
+@pytest.mark.parametrize("setting,expected", [(None, 300), ("45", 45), ("300", 300), ("600", 600)])
 def test_chat_deadline_default_and_existing_explicit_values(
     setting: str | None, expected: int, tmp_path: Path
 ) -> None:
@@ -18,7 +18,7 @@ def test_chat_deadline_default_and_existing_explicit_values(
     assert load_environment(values, secret_roots=(tmp_path,)).chat_timeout_seconds == expected
 
 
-@pytest.mark.parametrize("setting", ["0", "301"])
+@pytest.mark.parametrize("setting", ["0", "601"])
 def test_chat_deadline_bounds_remain_closed(setting: str, tmp_path: Path) -> None:
     with pytest.raises(EnvironmentValidationError):
         load_environment(

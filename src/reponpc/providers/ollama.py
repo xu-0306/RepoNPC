@@ -74,6 +74,11 @@ class OllamaChatProvider(ChatProvider):
             return
         self._prepared = True
         try:
+            if (
+                self.capabilities_config.max_output_tokens
+                >= self.capabilities_config.max_context_tokens
+            ):
+                raise ProviderError(ProviderFailureCode.CONTEXT_OVERFLOW)
             response = self.transport.request(
                 "POST",
                 self._origin.endpoint("api/show"),

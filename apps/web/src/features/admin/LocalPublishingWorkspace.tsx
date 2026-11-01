@@ -67,6 +67,7 @@ function publicationErrorMessage(
     case "SERVICE_NOT_READY":
     case "REQUEST_FAILED":
     case "RATE_LIMITED":
+    case "EMPTY_REPOSITORY":
       return guidedErrorMessage(locale, code);
     case "GITHUB_RATE_LIMITED":
       return githubRateLimitMessage(

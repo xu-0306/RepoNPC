@@ -15,7 +15,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from reponpc.admin.batch_resolver import GitHubRateLimiter, GitHubRateResource
+from reponpc.admin.batch_resolver import (
+    GitHubRateLimiter,
+    GitHubRateResource,
+    github_response_error_code,
+)
 from reponpc.domain.evidence import COMMIT_RE
 from reponpc.indexing.exclusions import SourceEntryKind
 from reponpc.indexing.sources import (
@@ -442,6 +446,11 @@ class GitHubSourceResolver:
                     )
                 payload = response.read(self.max_response_bytes + 1)
                 if response.status != 200:
+                    if (
+                        github_response_error_code(int(response.status), payload)
+                        == "EMPTY_REPOSITORY"
+                    ):
+                        raise SourceResolutionError("github_empty_repository")
                     raise SourceResolutionError("github_response_invalid")
                 if len(payload) > self.max_response_bytes:
                     raise SourceResolutionError("github_response_too_large")
@@ -484,6 +493,8 @@ class GitHubSourceResolver:
                         else _retry_after_seconds(exc.headers)
                     ),
                 ) from exc
+            if github_response_error_code(int(exc.code), payload) == "EMPTY_REPOSITORY":
+                raise SourceResolutionError("github_empty_repository") from exc
             raise SourceResolutionError("github_request_failed") from exc
         except (URLError, OSError) as exc:
             raise SourceResolutionError("github_request_failed") from exc

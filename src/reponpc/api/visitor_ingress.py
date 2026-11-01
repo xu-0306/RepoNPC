@@ -686,7 +686,7 @@ def create_visitor_gateway_app(
     @app.post(_CHAT_PATH)
     async def chat(request: Request) -> Response:
         service = chat_service_supplier()
-        deadline = request.state.gateway_started_at + getattr(service, "timeout_seconds", 180.0)
+        deadline = request.state.gateway_started_at + getattr(service, "timeout_seconds", 300.0)
         try:
             identity = public_identity(request)
         except ChatLimitError:

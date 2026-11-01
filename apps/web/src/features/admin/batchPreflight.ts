@@ -72,6 +72,7 @@ export function batchDuration(
 function preflightBlockerKind(code: string): BatchPreflightBlockerKind {
   if (code === "ARCHIVED_NOT_ALLOWED") return "archived";
   if (code === "NOT_FOUND") return "not_found";
+  if (code === "EMPTY_REPOSITORY") return "empty_repository";
   if (code === "MODEL_UNAVAILABLE") return "provider_unavailable";
   if (code === "GITHUB_RATE_LIMITED" || code === "RATE_LIMITED") {
     return "rate_limited";

@@ -5,6 +5,7 @@ import type { Locale } from "../../i18n/messages";
 import { ModelBrandIcon } from "./ModelBrandIcon";
 import { ModelEditor } from "./ModelEditor";
 import { modelProbeError } from "./modelProbeError";
+import { embeddingProfileErrorMessage } from "./embeddingProfileError";
 import { DeleteSettingButton } from "./DeleteSettingButton";
 import { ConfirmButton } from "./ConfirmDialog";
 import type { ModelConnectionView } from "./ModelConnectionPanel";
@@ -426,11 +427,16 @@ export function EmbeddingProfilePanel({
                   role="alert"
                   style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
                 >
-                  {modelProbeError(
-                    locale,
-                    profile.last_error_code,
-                    profile.last_error_message,
-                  )}
+                  {profile.last_error_code === "EMPTY_REPOSITORY"
+                    ? embeddingProfileErrorMessage(
+                        locale,
+                        new Error(profile.last_error_code),
+                      )
+                    : modelProbeError(
+                        locale,
+                        profile.last_error_code,
+                        profile.last_error_message,
+                      )}
                 </p>
               )}
               {onUpdate &&
@@ -558,12 +564,13 @@ export function EmbeddingProfilePanel({
                   </dd>
                   <dt>{copy.status}</dt>
                   <dd>{profile.status}</dd>
-                  {profile.last_error_code && (
-                    <>
-                      <dt>{copy.errorCode}</dt>
-                      <dd>{profile.last_error_code}</dd>
-                    </>
-                  )}
+                  {profile.last_error_code &&
+                    profile.last_error_code !== "EMPTY_REPOSITORY" && (
+                      <>
+                        <dt>{copy.errorCode}</dt>
+                        <dd>{profile.last_error_code}</dd>
+                      </>
+                    )}
                 </dl>
               </details>
             </li>

@@ -46,6 +46,7 @@ from reponpc.providers.contracts import ProviderError
 class SourceFailureCode(StrEnum):
     GITHUB_RATE_LIMITED = "GITHUB_RATE_LIMITED"
     GITHUB_ERROR = "GITHUB_ERROR"
+    EMPTY_REPOSITORY = "EMPTY_REPOSITORY"
     GITHUB_TIMEOUT = "GITHUB_TIMEOUT"
     NOT_FOUND = "NOT_FOUND"
     ARCHIVED_NOT_ALLOWED = "ARCHIVED_NOT_ALLOWED"
@@ -57,6 +58,7 @@ class SourceFailureCode(StrEnum):
 _SOURCE_RESOLUTION_CODES = {
     "github_rate_limited": SourceFailureCode.GITHUB_RATE_LIMITED,
     "github_request_failed": SourceFailureCode.GITHUB_ERROR,
+    "github_empty_repository": SourceFailureCode.EMPTY_REPOSITORY,
     "github_timeout": SourceFailureCode.GITHUB_TIMEOUT,
     "github_not_found": SourceFailureCode.NOT_FOUND,
 }

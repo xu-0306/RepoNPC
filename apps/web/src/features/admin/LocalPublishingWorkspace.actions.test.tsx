@@ -406,6 +406,7 @@ it.each(["zh-TW", "en"] as const)(
 const sourceFailureCodes = new Set([
   "GITHUB_RATE_LIMITED",
   "GITHUB_ERROR",
+  "EMPTY_REPOSITORY",
   "GITHUB_TIMEOUT",
   "NOT_FOUND",
   "ARCHIVED_NOT_ALLOWED",
@@ -417,6 +418,11 @@ const sourceFailureCodes = new Set([
 const publicationErrors = [
   ["GITHUB_RATE_LIMITED", "GitHub 目前限制", "GitHub is limiting"],
   ["GITHUB_ERROR", "GitHub 暫時無法使用", "GitHub is temporarily unavailable"],
+  [
+    "EMPTY_REPOSITORY",
+    "這個 GitHub repository 是空專案，沒有內容可以分析。請改選其他專案。",
+    "This GitHub repository is an empty project, so there is nothing to analyze. Choose another project.",
+  ],
   [
     "GITHUB_TIMEOUT",
     "GitHub 暫時無法使用",
@@ -495,6 +501,11 @@ describe.each(["zh-TW", "en"] as const)(
             .join("");
           expect(text).toContain(locale === "zh-TW" ? zh : en);
           expect(text).not.toContain(code);
+          if (code === "EMPTY_REPOSITORY") {
+            expect(text).not.toMatch(
+              /稍後|try again later|temporarily unavailable/i,
+            );
+          }
           if (sourceFailureCodes.has(code)) {
             expect(text).not.toMatch(/維護|Maintenance/);
             expect(text).not.toMatch(/重新測試|retest/);
