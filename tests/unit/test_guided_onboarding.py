@@ -499,6 +499,7 @@ def test_contribution_suggestion_uses_16384_token_cap_with_analysis_provider(
     assert "collaborator work in context claims" in system_prompt
     assert "Create an achievement claim only when the owner states an outcome" in system_prompt
     assert "do not write workflow labels" in system_prompt
+    assert "never the same id twice" in system_prompt
 
 
 def test_contribution_suggestion_respects_smaller_provider_output_cap(tmp_path: Path) -> None:

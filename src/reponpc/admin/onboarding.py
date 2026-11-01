@@ -1339,7 +1339,10 @@ def _contribution_messages(slug: str, statement: str) -> tuple[ProviderMessage, 
             "qualifiers such as assisted, participated, or co-maintained. Do not invent or "
             "strengthen authorship, leadership, architecture ownership, interface design, "
             "testing, deployment, seniority, achievement, or impact. Do not repeat claims merely "
-            "to fill the array. Every localized value has exactly non-empty zh-TW and en strings; "
+            "to fill the array. Give every claim its own distinct id: a short lowercase slug of "
+            "letters, digits, hyphens, or underscores that names that claim, never a generic "
+            "placeholder, and never the same id twice. Every localized value has exactly "
+            "non-empty zh-TW and en strings; "
             "claim kinds are role, responsibility, achievement, or context. The output remains "
             "an unconfirmed proposal; do not write workflow labels into its content.",
         ),
