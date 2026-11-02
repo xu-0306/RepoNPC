@@ -25,8 +25,8 @@ export async function checkR11Recovery(tab) {
     "intro",
   );
   await button("設定 AI 並開始").click();
-  await waitForText("完成模型設定並選擇專案", "model setup");
-  await button("完成模型設定並選擇專案").click();
+  await waitForText("確認並前往選擇專案", "model setup");
+  await button("確認並前往選擇專案").click();
 
   const account = tab.playwright.getByRole("textbox", {
     name: "GitHub 使用者名稱或個人檔案 URL",

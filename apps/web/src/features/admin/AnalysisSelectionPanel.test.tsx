@@ -164,7 +164,7 @@ describe("AnalysisSelectionPanel", () => {
     expect(html).not.toContain('option value="chat-a"');
     expect(html).not.toContain('option value="finder"');
     expect(html).toContain("請編輯對應模型並儲存，再測試");
-    expect(html).toMatch(/<button disabled=""[^>]*>確認用於分析/);
+    expect(html).toMatch(/<button[^>]* disabled=""[^>]*>確認並前往選擇專案/);
   });
   it("does not claim readiness for a saved pair missing from current lists", () => {
     const html = renderToStaticMarkup(
@@ -180,7 +180,9 @@ describe("AnalysisSelectionPanel", () => {
       />,
     );
     expect(html).not.toContain("Both models are selected and ready");
-    expect(html).toMatch(/<button disabled=""[^>]*>Use for analysis/);
+    expect(html).toMatch(
+      /<button[^>]* disabled=""[^>]*>Confirm and choose projects/,
+    );
   });
 });
 
@@ -218,10 +220,14 @@ it.each(["zh-TW", "en"] as const)(
       );
       expect(html.match(/role="(?:status|alert)"/g)).toHaveLength(1);
       if (error) {
-        expect(html).toContain('<p role="alert">&lt;unsafe-error&gt;</p>');
+        expect(html).toContain(
+          '<p id="analysis-selection-status" role="alert">&lt;unsafe-error&gt;</p>',
+        );
         expect(html).not.toContain('role="status"');
       } else {
-        expect(html).toContain('<p role="status">');
+        expect(html).toContain(
+          '<p id="analysis-selection-status" role="status">',
+        );
         expect(html).toContain(
           locale === "en"
             ? "Add and test both types of model, then select and confirm them."

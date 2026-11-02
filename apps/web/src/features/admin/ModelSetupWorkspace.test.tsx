@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { ADMIN_MODEL_STATES } from "./AdminStatusCards";
+import { ADMIN_MODEL_STATES, type AdminModelSummary } from "./AdminStatusCards";
 import { AnalysisSelectionPanel } from "./AnalysisSelectionPanel";
 import { ModelSetupWorkspace } from "./ModelSetupWorkspace";
 
@@ -20,8 +20,11 @@ describe("ModelSetupWorkspace", () => {
     );
 
     expect(markup).toContain("使用這組模型分析");
-    expect(markup.indexOf("DEVICE CHECK AND MODEL GUIDANCE")).toBeGreaterThan(
+    expect(markup.indexOf("DEVICE CHECK AND MODEL GUIDANCE")).toBeLessThan(
       markup.indexOf("MODEL SELECTION"),
+    );
+    expect(markup.lastIndexOf("<footer")).toBeGreaterThan(
+      markup.indexOf("</details></div>"),
     );
     expect(markup).toContain(
       '<details class="model-setup-workspace__guidance px-panel px-panel--inset">',
@@ -107,9 +110,12 @@ it.each(["zh-TW", "en"] as const)(
         'aria-labelledby="analysis-model-selection-heading"',
       );
       expect(footer).toContain(
-        locale === "en" ? "Use for analysis" : "確認用於分析",
+        locale === "en" ? "Confirm and choose projects" : "確認並前往選擇專案",
       );
-      expect(markup.match(/<button/g)).toHaveLength(3);
+      // Two role tabs, two inner test buttons and the pinned confirmation.
+      expect(markup.match(/<button/g)).toHaveLength(5);
+      expect(markup.match(/role="tab"/g)).toHaveLength(2);
+      expect(markup.match(/role="tabpanel"/g)).toHaveLength(2);
       expect(markup).toContain(
         `${state === "tested" || state === "selected" ? 2 : 0}/2`,
       );
@@ -117,67 +123,72 @@ it.each(["zh-TW", "en"] as const)(
   },
 );
 
-it("reserves the measured confirmation height as it changes and disconnects on unmount", () => {
-  for (const supported of [true, false]) {
-    const slots = { style: { paddingBottom: "" } };
-    let height = 198.3;
-    const confirm = {
-      previousElementSibling: slots,
-      getBoundingClientRect: () => ({ height }),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    };
-    let resized: (() => void) | undefined;
-    const observe = vi.fn();
-    const disconnect = vi.fn();
-    vi.stubGlobal(
-      "ResizeObserver",
-      supported
-        ? class {
-            constructor(callback: () => void) {
-              resized = callback;
-            }
-            observe = observe;
-            disconnect = disconnect;
-          }
-        : undefined,
+it("shows one role panel at a time and starts on the role that still needs setup", () => {
+  const summary = (state: AdminModelSummary["state"]): AdminModelSummary => ({
+    model: null,
+    connection: null,
+    provider: null,
+    state,
+  });
+  const usable = summary("tested");
+  const none = summary("unconfigured");
+  const render = (chat: AdminModelSummary, embedding: AdminModelSummary) =>
+    renderToStaticMarkup(
+      <ModelSetupWorkspace
+        locale="en"
+        status={{ chat, embedding }}
+        chatConnectionView={null}
+        chatView={<p>CHAT FORM</p>}
+        embeddingConnectionView={null}
+        embeddingView={<p>FINDER FORM</p>}
+        selectionView={null}
+      />,
     );
-    try {
-      const tree = ModelSetupWorkspace({
-        locale: "en",
-        selectionView: null,
-        chatConnectionView: null,
-        embeddingConnectionView: null,
-        chatView: null,
-        embeddingView: null,
-      });
-      const footer = tree.props.children[0].props.children.at(-1);
-      expect(footer.type).toBe("footer");
-      expect(footer.props.ref(null)).toBeUndefined();
-      const cleanup = footer.props.ref(confirm);
-      expect(slots.style.paddingBottom).toBe("198.3px");
-      if (supported) {
-        expect(observe).toHaveBeenCalledWith(confirm);
-        height = 121.375;
-        resized?.();
-        expect(slots.style.paddingBottom).toBe("121.375px");
-      }
-      if (typeof cleanup === "function") cleanup();
-      expect(disconnect).toHaveBeenCalledTimes(supported ? 1 : 0);
-      expect(confirm.addEventListener).toHaveBeenCalledWith(
-        "toggle",
-        expect.any(Function),
-        true,
-      );
-      expect(confirm.removeEventListener).toHaveBeenCalledWith(
-        "toggle",
-        expect.any(Function),
-        true,
-      );
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  }
+  const selected = (markup: string) =>
+    markup.match(
+      /<button[^>]*aria-selected="true"[^>]*id="([a-z]+)-role-tab"/,
+    )?.[1];
+  expect(selected(render(none, none))).toBe("chat");
+  expect(selected(render(usable, usable))).toBe("chat");
+  expect(selected(render(usable, none))).toBe("embedding");
+  const markup = render(usable, none);
+  // Both flows stay mounted so typed values survive a tab switch.
+  expect(markup).toContain("CHAT FORM");
+  expect(markup).toContain("FINDER FORM");
+  expect(markup).toMatch(/<div[^>]*hidden=""[^>]*id="chat-role-panel"/);
+  expect(markup).not.toMatch(
+    /<div[^>]*hidden=""[^>]*id="embedding-role-panel"/,
+  );
+  expect(markup).toContain('aria-controls="chat-role-panel"');
+  expect(markup).toContain('aria-labelledby="embedding-role-tab"');
+  expect(markup).toContain('tabindex="-1"');
+});
+
+it("only watches the pinned bar and leaves the slots untouched", () => {
+  const tree = ModelSetupWorkspace({
+    locale: "en",
+    selectionView: null,
+    chatConnectionView: null,
+    embeddingConnectionView: null,
+    chatView: null,
+    embeddingView: null,
+  });
+  const footer = tree.props.children.at(-1);
+  expect(footer.type).toBe("footer");
+  expect(footer.props.ref(null)).toBeUndefined();
+  const confirm = { addEventListener: vi.fn(), removeEventListener: vi.fn() };
+  const cleanup = footer.props.ref(confirm);
+  expect(confirm.addEventListener).toHaveBeenCalledWith(
+    "toggle",
+    expect.any(Function),
+    true,
+  );
+  cleanup();
+  expect(confirm.removeEventListener).toHaveBeenCalledWith(
+    "toggle",
+    expect.any(Function),
+    true,
+  );
 });
 
 it("reveals a covered slot heading only when inline confirmation help opens", () => {
@@ -192,7 +203,7 @@ it("reveals a covered slot heading only when inline confirmation help opens", ()
       chatView: null,
       embeddingView: null,
     });
-    const footer = tree.props.children[0].props.children.at(-1);
+    const footer = tree.props.children.at(-1);
     let bottom = 640;
     const target = {
       open: true,
@@ -202,7 +213,6 @@ it("reveals a covered slot heading only when inline confirmation help opens", ()
     };
     let toggle: (event: unknown) => void = () => {};
     const currentTarget = {
-      previousElementSibling: { style: { paddingBottom: "" } },
       addEventListener: (_name: string, callback: (event: unknown) => void) => {
         toggle = callback;
       },

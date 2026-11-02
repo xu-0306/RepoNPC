@@ -150,7 +150,7 @@ async (page) => {
       });
       if (size.width === 1440) {
         const confirm = await button(
-          zh ? "確認用於分析" : "Use for analysis",
+          zh ? "確認並前往選擇專案" : "Confirm and choose projects",
         ).boundingBox();
         verify(
           confirm &&

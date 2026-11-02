@@ -388,7 +388,11 @@ describe("equipment disclosure state", () => {
       chatView: null,
       embeddingView: null,
     });
-    const slot = elements(tree).find((node) => node.props.number === "01")!;
+    const tabs = elements(tree).find((node) => "chatFlow" in node.props)!;
+    const slot = render(() =>
+      (tabs.type as (props: unknown) => ReactNode)(tabs.props),
+    ).find((node) => node.props.number === "01")!;
+    hooks.values.length = 0; // the tabs consumed the first hook slots
     const view = () =>
       render(() => (slot.type as (props: unknown) => ReactNode)(slot.props));
     let details = view().find((node) => node.type === "details")!;

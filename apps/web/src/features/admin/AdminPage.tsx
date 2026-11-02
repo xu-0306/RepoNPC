@@ -1229,6 +1229,17 @@ export function AdminPage({
   const [guidedState, setGuidedState] = useState(() =>
     initialGuidedOnboardingState(),
   );
+  // Set once the server accepts a model pair so the next render, which holds the
+  // updated onboarding state, leaves the models step in the same click.
+  const [advanceFromModels, setAdvanceFromModels] = useState(false);
+  useEffect(() => {
+    if (!advanceFromModels) return;
+    setAdvanceFromModels(false);
+    if (guidedState.step === "models" && guidedState.modelsConfigured)
+      applyGuidedAction({ type: "COMPLETE_MODEL_SETUP" });
+    // Runs only when the flag is raised; that render already holds the updated state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advanceFromModels]);
   const [characterWorkspaceOpen, setCharacterWorkspaceOpen] = useState(false);
   const [guidedResumeReady, setGuidedResumeReady] = useState(false);
   const guidedResumeFound = useRef(false);
@@ -1739,6 +1750,7 @@ export function AdminPage({
               value: value.eligible,
             }),
           );
+          if (value.eligible) setAdvanceFromModels(true);
         },
       );
     } catch (error) {
@@ -3604,6 +3616,10 @@ export function AdminPage({
           onSelect={(chatId, embeddingId, generation) =>
             void selectAnalysisModels(chatId, embeddingId, generation)
           }
+          onContinue={() => {
+            if (!busy) applyGuidedAction({ type: "COMPLETE_MODEL_SETUP" });
+          }}
+          returning={Boolean(guidedState.modelSetupReturn)}
           pending={analysisSelectionPending}
           value={analysisSelection}
         />

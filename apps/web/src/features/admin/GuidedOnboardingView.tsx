@@ -60,11 +60,8 @@ type Copy = {
   startManualHelp: string;
   modelsHeading: string;
   modelsDescription: string;
-  confirmModels: string;
-  returnToPreparation: string;
   returnWithoutSetup: string;
   modelReturnHelp: string;
-  modelsRequired: string;
   advanced: string;
   advancedDescription: string;
   progress: string;
@@ -232,12 +229,8 @@ const COPY: Record<Locale, Copy> = {
       "不需模型即可手動填寫、確認、預覽、儲存及備份草稿。準備 NPC 與即時聊天仍需模型；建立草稿不等於公開分享。",
     modelsHeading: "設定 AI 模型",
     modelsDescription: "設定並測試兩種模型，或先手動填寫、預覽及儲存內容。",
-    confirmModels: "完成模型設定並選擇專案",
-    returnToPreparation: "完成設定並返回準備 NPC",
     returnWithoutSetup: "返回準備 NPC",
     modelReturnHelp: "內容草稿已保留。完成模型設定後可返回準備 NPC。",
-    modelsRequired:
-      "請先測試回答模型與資料查找模型，再於選擇區按「確認用於分析」。",
     advanced: "編輯 raw YAML",
     advancedDescription: "熟悉設定格式時，可直接編輯 reponpc.yml。",
     progress: "引導設定進度",
@@ -440,13 +433,9 @@ const COPY: Record<Locale, Copy> = {
     modelsHeading: "Set up AI models",
     modelsDescription:
       "Set up and test both model roles, or write, preview and save your content manually.",
-    confirmModels: "Finish model setup and choose projects",
-    returnToPreparation: "Finish setup and return to prepare NPC",
     returnWithoutSetup: "Return to prepare NPC",
     modelReturnHelp:
       "Your content draft is kept. Return to prepare the NPC after model setup.",
-    modelsRequired:
-      "Test both models, then select them and choose Use for analysis in the selection panel.",
     advanced: "Use advanced raw YAML",
     advancedDescription: "Experienced owners can edit reponpc.yml directly.",
     progress: "Guided setup progress",
@@ -1611,25 +1600,18 @@ function IntroStep({
 }
 
 function ModelsStep({
-  state,
   copy,
   busy,
   modelSetupView,
   modelSetupReturn,
   onAction,
 }: {
-  state: GuidedOnboardingState;
   copy: Copy;
   busy: boolean;
   modelSetupView?: ReactNode;
   modelSetupReturn?: boolean;
   onAction: GuidedOnboardingViewProps["onAction"];
 }) {
-  const reason = busy
-    ? copy.disabledBusy
-    : !state.modelsConfigured
-      ? copy.modelsRequired
-      : null;
   return (
     <section
       aria-labelledby="guided-models-heading"
@@ -1638,25 +1620,20 @@ function ModelsStep({
       <h2 className="visually-hidden" id="guided-models-heading">
         {copy.modelsHeading}
       </h2>
-      <p>{modelSetupReturn ? copy.modelReturnHelp : copy.modelsDescription}</p>
+      <div className="guided-onboarding__models-intro">
+        <p>
+          {modelSetupReturn ? copy.modelReturnHelp : copy.modelsDescription}
+        </p>
+        <button
+          className="px-button px-button--quiet"
+          disabled={busy}
+          onClick={() => onAction({ type: "START_MANUAL" })}
+          type="button"
+        >
+          {modelSetupReturn ? copy.returnWithoutSetup : copy.startManual}
+        </button>
+      </div>
       {modelSetupView ?? <p>{copy.providerUnknown}</p>}
-      <button
-        aria-describedby={reason ? "guided-models-reason" : undefined}
-        disabled={Boolean(reason) || busy}
-        onClick={() => onAction({ type: "COMPLETE_MODEL_SETUP" })}
-        className="px-button px-button--secondary"
-        type="button"
-      >
-        {modelSetupReturn ? copy.returnToPreparation : copy.confirmModels}
-      </button>
-      {disabledReason(reason, "guided-models-reason")}
-      <button
-        disabled={busy}
-        onClick={() => onAction({ type: "START_MANUAL" })}
-        type="button"
-      >
-        {modelSetupReturn ? copy.returnWithoutSetup : copy.startManual}
-      </button>
     </section>
   );
 }
@@ -3011,7 +2988,6 @@ export function GuidedOnboardingView({
               modelSetupView={modelSetupView}
               modelSetupReturn={modelSetupReturn}
               onAction={onAction}
-              state={state}
             />
           )}
           {state.step === "repositories" && (

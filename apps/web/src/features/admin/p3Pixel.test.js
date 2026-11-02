@@ -116,8 +116,12 @@ it("lets the equipment and converter content scroll with the page around sticky 
     for (const [, declarations] of blocks)
       expect(declarations).not.toMatch(/position\s*:\s*static/);
   }
+  // The dock is the last child of a flex column, so it needs no reserved space.
   expect(css).toMatch(
-    /\.model-setup-workspace__slots\s*\{[^}]*padding-bottom: 128px/s,
+    /\.model-setup-workspace\s*\{[^}]*container: model-equipment \/ inline-size;[^}]*display: flex;[^}]*flex-direction: column/s,
+  );
+  expect(css).not.toMatch(
+    /\.model-setup-workspace__slots\s*\{[^}]*padding-bottom/s,
   );
   expect(css).toMatch(
     /:has\(> \.character-converter__confirm\)[^{]*\{[^}]*padding-bottom: var\(--character-confirm-height, 84px\)/s,
@@ -153,31 +157,43 @@ it("composes a compact phone header and two-row navigation without squeezing des
   expect(phone).toMatch(
     /\.character-converter__confirm\s*\{[^}]*grid-template-columns: repeat\(2,/s,
   );
-  expect(phone).toMatch(
-    /\.model-setup-workspace__confirm \.model-selection\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\) 96px/s,
+  // The dock follows its container, never the viewport.
+  expect(phone).not.toContain(
+    ".model-setup-workspace__confirm .model-selection",
+  );
+  expect(css).toMatch(
+    /@container model-equipment \(max-width: 639px\)\s*\{[^@]*\.model-setup-workspace__confirm \.model-selection\s*\{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/s,
   );
 });
 
-it("stacks full-width phone selections above the action and wraps confirmation feedback", () => {
+it("stacks the pinned selections and wraps confirmation feedback by container width", () => {
   const css = readFileSync(
     new URL("../../styles.css", import.meta.url),
     "utf8",
   );
-  const phone = css.slice(css.lastIndexOf("@media (max-width: 760px)"));
-  const grid = phone.match(
-    /\.model-setup-workspace__confirm \.model-selection\s*\{([^}]+)\}/s,
-  )?.[1];
-  expect(grid).toBeDefined();
-  expect(grid).toContain("grid-template-columns: minmax(0, 1fr) 96px");
-  expect(grid).not.toMatch(/repeat\(2,.*96px/s);
-  expect(phone).toMatch(
-    /\.model-setup-workspace__confirm \.model-selection label\s*\{[^}]*grid-column: 1 \/ -1/s,
+  const container = (query) => {
+    const at = css.indexOf(`@container model-equipment (${query})`);
+    expect(at).toBeGreaterThan(-1);
+    return css.slice(at, css.indexOf("\n}\n", at));
+  };
+  const medium = container("max-width: 639px");
+  expect(medium).toMatch(
+    /\.model-selection\s*\{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/s,
   );
-  expect(phone).toMatch(
-    /\.model-setup-workspace__confirm \.model-selection label \+ label\s*\{[^}]*grid-row: 2/s,
+  expect(medium).toMatch(
+    /\.model-selection button\s*\{[^}]*grid-column: 1 \/ -1;[^}]*grid-row: 2/s,
   );
-  expect(phone).toMatch(
-    /\.model-setup-workspace__confirm \.model-selection button\s*\{[^}]*grid-column: 2;[^}]*grid-row: 3/s,
+  expect(medium).toMatch(
+    /\.model-selection > p,\s*\.model-setup-workspace__confirm \.model-selection__info\s*\{[^}]*grid-row: 3/s,
+  );
+  const narrow = container("max-width: 419px");
+  expect(narrow).toMatch(
+    /\.model-selection\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\)/s,
+  );
+  expect(narrow).toMatch(/label \+ label\s*\{[^}]*grid-row: 2/s);
+  expect(narrow).toMatch(/\.model-selection button\s*\{[^}]*grid-row: 3/s);
+  expect(narrow).toMatch(
+    /\.model-selection > p,\s*\.model-setup-workspace__confirm \.model-selection__info\s*\{[^}]*grid-row: 4/s,
   );
   const confirmation = css.slice(
     css.indexOf(".model-setup-workspace__confirm {"),
@@ -187,6 +203,30 @@ it("stacks full-width phone selections above the action and wraps confirmation f
     /ellipsis|line-clamp|overflow:\s*hidden|white-space:\s*nowrap/,
   );
   expect(confirmation).toContain("overflow-wrap: anywhere");
+});
+
+it("keeps legacy indigo off the model step: legacy button rules skip pixel buttons and tokens map to the pixel palette", () => {
+  const css = readFileSync(
+    new URL("../../styles.css", import.meta.url),
+    "utf8",
+  );
+  expect(css).toContain(
+    '.admin-workspace form button[type="submit"]:not(.px-button)',
+  );
+  expect(css).toContain(
+    ".admin-workspace button:not(.px-button):hover:not(:disabled)",
+  );
+  const remap = css.match(
+    /\.model-setup-workspace\s*\{([^}]*--ui-primary:[^}]*)\}/s,
+  )?.[1];
+  expect(remap).toBeDefined();
+  for (const token of [
+    "--ui-primary",
+    "--ui-border",
+    "--admin-primary",
+    "--admin-border",
+  ])
+    expect(remap).toContain(`${token}: var(--px-`);
 });
 
 it("keeps phone utility and progress names readable to assistive technology without wrapping chrome", () => {
@@ -238,8 +278,11 @@ it("makes phone room above model equipment by tightening gaps and paragraph marg
   expect(phone).toMatch(
     /\.guided-onboarding\[data-step="models"\][^{]*,[^{]*\.guided-onboarding__header,[^{]*\.guided-onboarding__step--models\s*\{\s*gap: 8px/s,
   );
+  expect(css).toMatch(
+    /\.guided-onboarding__models-intro > p\s*\{[^}]*margin: 0/s,
+  );
   expect(phone).toMatch(
-    /\.guided-onboarding__step--models > p:first-of-type\s*\{\s*margin: 0/s,
+    /\.guided-onboarding__models-intro\s*\{[^}]*display: grid/s,
   );
   const block = phone.match(
     /\.guided-onboarding__navigation-actions\s*>\s*button\s*\{([^}]+)\}/s,

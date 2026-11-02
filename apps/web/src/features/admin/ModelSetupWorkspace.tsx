@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import type { Locale } from "../../i18n/messages";
 import {
@@ -46,6 +46,7 @@ const COPY = {
     embedding: "資料查找模型",
     embeddingDescription: "從專案中找出相關資料。",
     details: "設定細節",
+    roles: "模型角色",
     confirm: "使用這組模型分析",
     guidance: "選模型有困難？查看裝置、推薦清單與手動路線",
   },
@@ -57,6 +58,7 @@ const COPY = {
     embedding: "Content finder model",
     embeddingDescription: "Finds relevant information in your projects.",
     details: "Setup details",
+    roles: "Model roles",
     confirm: "Use this pair for analysis",
     guidance: "Need help choosing? Device checks, catalog and manual route",
   },
@@ -74,9 +76,7 @@ export function ModelSetupWorkspace({
   guidanceView,
 }: Props) {
   const copy = COPY[locale];
-  const usable = [status?.chat, status?.embedding].filter(
-    (summary) => summary?.state === "tested" || summary?.state === "selected",
-  ).length;
+  const usable = [status?.chat, status?.embedding].filter(isUsable).length;
   return (
     <div className="model-setup-workspace" lang={locale}>
       <section
@@ -89,7 +89,134 @@ export function ModelSetupWorkspace({
             <span className="px-display">{usable}/2</span> {copy.usable}
           </span>
         </header>
-        <div className="model-setup-workspace__slots">
+        <ModelRoleTabs
+          locale={locale}
+          status={status}
+          chatFlow={
+            <>
+              {chatConnectionView}
+              {chatView}
+            </>
+          }
+          embeddingFlow={
+            <>
+              {localModelView}
+              <div id="embedding-external-setup">{embeddingConnectionView}</div>
+              {embeddingView}
+            </>
+          }
+        />
+      </section>
+      {guidanceView && (
+        <details className="model-setup-workspace__guidance px-panel px-panel--inset">
+          <summary>{copy.guidance}</summary>
+          {guidanceView}
+        </details>
+      )}
+      {/* Last child of a flex column: it stays pinned for the whole step and
+          follows the width of the step instead of the viewport. */}
+      <footer
+        aria-labelledby="model-setup-role-heading"
+        className="model-setup-workspace__confirm"
+        ref={watchConfirmation}
+      >
+        <h3 className="visually-hidden" id="model-setup-role-heading">
+          {copy.confirm}
+        </h3>
+        {selectionView}
+      </footer>
+    </div>
+  );
+}
+
+type Role = "chat" | "embedding";
+
+function isUsable(summary?: AdminModelSummary) {
+  return summary?.state === "tested" || summary?.state === "selected";
+}
+
+// Both flows stay mounted; the inactive one is hidden so typed values survive a tab switch.
+function ModelRoleTabs({
+  locale,
+  status,
+  chatFlow,
+  embeddingFlow,
+}: {
+  locale: Locale;
+  status?: Props["status"];
+  chatFlow: ReactNode;
+  embeddingFlow: ReactNode;
+}) {
+  const copy = COPY[locale];
+  const [active, setActive] = useState<Role>(
+    isUsable(status?.chat) && !isUsable(status?.embedding)
+      ? "embedding"
+      : "chat",
+  );
+  const tabs = useRef<Partial<Record<Role, HTMLButtonElement | null>>>({});
+  const roles: Role[] = ["chat", "embedding"];
+  function onKeyDown(event: KeyboardEvent, from: Role) {
+    const next =
+      event.key === "Home"
+        ? "chat"
+        : event.key === "End"
+          ? "embedding"
+          : ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(
+                event.key,
+              )
+            ? roles[(roles.indexOf(from) + 1) % roles.length]
+            : null;
+    if (!next) return;
+    event.preventDefault();
+    setActive(next);
+    tabs.current[next]?.focus();
+  }
+  return (
+    <>
+      <div
+        aria-label={copy.roles}
+        className="model-setup-workspace__tabs"
+        role="tablist"
+      >
+        {roles.map((role) => {
+          const summary = status?.[role];
+          const state = summary?.state ?? "unconfigured";
+          return (
+            <button
+              aria-controls={`${role}-role-panel`}
+              aria-selected={active === role}
+              id={`${role}-role-tab`}
+              key={role}
+              onClick={() => setActive(role)}
+              onKeyDown={(event) => onKeyDown(event, role)}
+              ref={(node) => {
+                tabs.current[role] = node;
+              }}
+              role="tab"
+              tabIndex={active === role ? 0 : -1}
+              type="button"
+            >
+              <span>
+                {isUsable(summary) && <span aria-hidden="true">✓ </span>}
+                {copy[role]}
+              </span>
+              <span
+                className="model-role-setup__status px-badge"
+                data-state={state}
+              >
+                {ADMIN_MODEL_STATES[locale][state]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="model-setup-workspace__slots">
+        <div
+          aria-labelledby="chat-role-tab"
+          hidden={active !== "chat"}
+          id="chat-role-panel"
+          role="tabpanel"
+        >
           <ModelSlot
             locale={locale}
             role="chat"
@@ -98,9 +225,15 @@ export function ModelSetupWorkspace({
             description={copy.chatDescription}
             summary={status?.chat}
           >
-            {chatConnectionView}
-            {chatView}
+            {chatFlow}
           </ModelSlot>
+        </div>
+        <div
+          aria-labelledby="embedding-role-tab"
+          hidden={active !== "embedding"}
+          id="embedding-role-panel"
+          role="tabpanel"
+        >
           <ModelSlot
             locale={locale}
             role="embedding"
@@ -109,29 +242,11 @@ export function ModelSetupWorkspace({
             description={copy.embeddingDescription}
             summary={status?.embedding}
           >
-            {localModelView}
-            <div id="embedding-external-setup">{embeddingConnectionView}</div>
-            {embeddingView}
+            {embeddingFlow}
           </ModelSlot>
         </div>
-        <footer
-          aria-labelledby="model-setup-role-heading"
-          className="model-setup-workspace__confirm"
-          ref={reserveConfirmationSpace}
-        >
-          <h3 className="visually-hidden" id="model-setup-role-heading">
-            {copy.confirm}
-          </h3>
-          {selectionView}
-        </footer>
-      </section>
-      {guidanceView && (
-        <details className="model-setup-workspace__guidance px-panel px-panel--inset">
-          <summary>{copy.guidance}</summary>
-          {guidanceView}
-        </details>
-      )}
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -141,7 +256,7 @@ function revealSlotHeading(event: Event) {
     return;
   const footer = event.currentTarget as HTMLElement;
   const heading = footer.parentElement?.querySelector(
-    "#chat-role-setup-heading",
+    '[role="tabpanel"]:not([hidden]) .model-role-setup__heading',
   );
   if (!heading) return;
   const slot = heading.getBoundingClientRect();
@@ -154,21 +269,10 @@ function revealSlotHeading(event: Event) {
     });
 }
 
-function reserveConfirmationSpace(confirm: HTMLElement | null) {
+function watchConfirmation(confirm: HTMLElement | null) {
   if (!confirm) return;
-  const slots = confirm.previousElementSibling as HTMLElement;
-  const reserve = () => {
-    slots.style.paddingBottom = `${confirm.getBoundingClientRect().height}px`;
-  };
-  reserve();
-  const observer =
-    typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reserve);
-  observer?.observe(confirm);
   confirm.addEventListener("toggle", revealSlotHeading, true);
-  return () => {
-    observer?.disconnect();
-    confirm.removeEventListener("toggle", revealSlotHeading, true);
-  };
+  return () => confirm.removeEventListener("toggle", revealSlotHeading, true);
 }
 
 function ModelSlot({
@@ -189,7 +293,6 @@ function ModelSlot({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(true);
-  const state = summary?.state ?? "unconfigured";
   const id = `${role}-role-setup-heading`;
   return (
     <section aria-labelledby={id} className="model-setup-workspace__role">
@@ -203,12 +306,6 @@ function ModelSlot({
             <h3 id={id}>{heading}</h3>
             <p>{description}</p>
           </div>
-          <span
-            className="model-role-setup__status px-badge"
-            data-state={state}
-          >
-            {ADMIN_MODEL_STATES[locale][state]}
-          </span>
         </header>
         {(summary?.connection || summary?.provider || summary?.model) && (
           <p className="model-role-setup__summary">

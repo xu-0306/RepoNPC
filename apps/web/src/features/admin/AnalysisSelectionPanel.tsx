@@ -26,6 +26,16 @@ export type AnalysisSelectionView = {
   embedding: AnalysisSelectionRoleView;
 };
 
+function analysisConfirmLabel(locale: Locale, returning = false) {
+  return locale === "zh-TW"
+    ? returning
+      ? "完成設定並返回準備 NPC"
+      : "確認並前往選擇專案"
+    : returning
+      ? "Finish setup and return to prepare NPC"
+      : "Confirm and choose projects";
+}
+
 export function AnalysisSelectionPanel({
   locale,
   chatProfiles,
@@ -34,6 +44,8 @@ export function AnalysisSelectionPanel({
   pending,
   error,
   onSelect,
+  onContinue,
+  returning = false,
   connections,
 }: {
   locale: Locale;
@@ -43,11 +55,15 @@ export function AnalysisSelectionPanel({
   pending: boolean;
   error: string;
   connections?: ModelConnectionView[];
+  /** Saves a new pair; the caller moves on once the server accepts it. */
   onSelect: (
     chatProfileId: string,
     embeddingProfileId: string,
     generation: number,
   ) => void;
+  /** The pair is already confirmed and unchanged: move on without a save. */
+  onContinue?: () => void;
+  returning?: boolean;
 }) {
   const readyChat = useMemo(
     () =>
@@ -119,11 +135,13 @@ export function AnalysisSelectionPanel({
   const changed =
     chatProfileId !== (value?.selection.chat_profile_id ?? "") ||
     embeddingProfileId !== (value?.selection.embedding_profile_id ?? "");
-  const canSelect =
+  const confirmLabel = analysisConfirmLabel(locale, returning);
+  const canSubmit =
     readyChat.some((p) => p.profile_id === chatProfileId) &&
     readyEmbedding.some((p) => p.profile_id === embeddingProfileId) &&
-    !pending &&
-    (changed || !value?.eligible);
+    !pending;
+  // A pair the server already accepted needs no second save to move on.
+  const alreadyConfirmed = Boolean(value?.eligible) && !changed;
   function optionLabel(profile: ChatProfileView | EmbeddingProfileView) {
     const connectionId =
       "connection_id" in profile
@@ -154,8 +172,8 @@ export function AnalysisSelectionPanel({
           : "A model's service is unavailable. Check its settings, or add the service and model again."
         : readyChat.length > 0 && readyEmbedding.length > 0
           ? chinese
-            ? "兩種模型都已可用，請分別選擇並按「確認用於分析」。"
-            : "Both model types are available. Select one of each, then use them for analysis."
+            ? `兩種模型都已可用，請分別選擇並按「${confirmLabel}」。`
+            : `Both model types are available. Select one of each, then choose “${confirmLabel}”.`
           : chinese
             ? "請先新增並測試兩種模型，再分別選擇並確認。"
             : "Add and test both types of model, then select and confirm them.";
@@ -227,25 +245,28 @@ export function AnalysisSelectionPanel({
         </select>
       </label>
       <button
-        disabled={!canSelect}
+        aria-describedby="analysis-selection-status"
+        disabled={!canSubmit}
         className="px-button px-button--primary"
         onClick={() =>
-          onSelect(
-            chatProfileId,
-            embeddingProfileId,
-            value?.selection.generation ?? 0,
-          )
+          alreadyConfirmed && onContinue
+            ? onContinue()
+            : onSelect(
+                chatProfileId,
+                embeddingProfileId,
+                value?.selection.generation ?? 0,
+              )
         }
         type="button"
       >
-        {chinese ? "確認用於分析" : "Use for analysis"}
+        {confirmLabel}
       </button>
-      <p role={error ? "alert" : "status"}>
+      <p id="analysis-selection-status" role={error ? "alert" : "status"}>
         {error ||
           (changed && (chatProfileId || embeddingProfileId)
             ? chinese
-              ? "選擇尚未確認。按「確認用於分析」後才會套用。"
-              : "Your selection is not confirmed. Changes apply only after you select Use for analysis."
+              ? `選擇尚未確認。按「${confirmLabel}」後才會套用。`
+              : `Your selection is not confirmed. Changes apply only after you choose “${confirmLabel}”.`
             : value?.eligible && !changed && chatProfileId && embeddingProfileId
               ? chinese
                 ? "兩個模型已選用，可開始分析。"

@@ -175,7 +175,7 @@ export async function checkAnalysisRecovery(tab, options = {}) {
   );
   await button("設定 AI 並開始").click();
   await waitFor(
-    async () => (await button("完成模型設定並選擇專案").count()) === 1,
+    async () => (await button("確認並前往選擇專案").count()) === 1,
     "model selection",
   );
   const selectedModels = await snapshot();
@@ -187,7 +187,7 @@ export async function checkAnalysisRecovery(tab, options = {}) {
     selectedModels.includes("browser-embedding"),
     "embedding model selected",
   );
-  await button("完成模型設定並選擇專案").click();
+  await button("確認並前往選擇專案").click();
 
   const account = tab.playwright.getByRole("textbox", {
     name: "GitHub 使用者名稱或個人檔案 URL",
