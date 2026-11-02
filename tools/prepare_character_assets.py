@@ -1,7 +1,7 @@
 """Host-only, reproducible private character drafts; never publishes or changes sources.
 
 Example (the destination must not exist):
-  uv run --locked python tools/prepare_character_assets.py --source PixelNPC/Man \
+  uv run --locked python tools/prepare_character_assets.py --source path/to/character-folder \
     --draft-dir release-evidence/a9/drafts/man --strategy pixelize
 
 Discovery, normalization, cleanup suggestions and validation use the existing
