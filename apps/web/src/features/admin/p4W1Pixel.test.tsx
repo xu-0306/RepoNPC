@@ -162,6 +162,10 @@ it("keeps 17 repository choices compact while retaining their options, safety an
     );
     expect(header).toContain('<span class="px-badge">TypeScript</span>');
     expect(header).not.toContain(`Details ${index}`);
+    // One contained body: slug and status share a row instead of running together.
+    expect(details).toContain(
+      `<div class="p4-w1-repository__body"><div class="p4-w1-repository__id"><code>owner/project-${index}</code><span class="px-meta">`,
+    );
     expect(details).toContain(`Details ${index}`);
     expect(details).toContain(
       `href="https://github.com/owner/project-${index}"`,

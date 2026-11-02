@@ -165,14 +165,44 @@
   display: contents;
 }
 .p4-w1-repository__details > summary {
+  align-self: start;
   grid-column: 2;
   grid-row: 1;
-  text-align: center;
+  justify-content: center;
+  padding-inline: 0;
   width: 44px;
+}
+/* Open state is a pressed outline, not a solid block with an unreadable glyph. */
+.p4-w1-repositories .p4-w1-repository__details[open] > summary {
+  background: var(--px-surface-alt);
+  border: 2px solid var(--px-line);
+  color: var(--px-accent);
 }
 .p4-w1-repository__details > :not(summary) {
   grid-column: 1 / -1;
   min-width: 0;
+}
+/* Chromium wraps the non-summary content in this box; it is the grid item there. */
+.p4-w1-repository__details::details-content {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.p4-w1-repository__body {
+  border-left: 2px solid var(--px-line);
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 8px;
+  padding-left: 12px;
+}
+.p4-w1-repository__id {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.p4-w1-repository__id > code {
+  font-size: 14px;
+  overflow-wrap: anywhere;
 }
 .p4-w1-repositories .guided-onboarding__repository-meta,
 .batch-analysis-panel .guided-onboarding__repository-meta {

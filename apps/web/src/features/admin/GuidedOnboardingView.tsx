@@ -1057,74 +1057,78 @@ function RepositoryRow({
         >
           ⓘ
         </summary>
-        <code>{repository.metadata.slug}</code>
-        <span className="px-meta">
-          {repository.selected ? copy.selected : ""}
-          {repository.metadata.is_archived ? ` · ${copy.archived}` : ""}
-          {repository.metadata.is_fork ? ` · ${copy.fork}` : ""}
-        </span>
-        {repository.metadata.description && (
-          <p>{repository.metadata.description}</p>
-        )}
-        <dl className="guided-onboarding__repository-meta">
-          {repository.metadata.primary_language && (
-            <>
-              <dt>{copy.languageLabel}</dt>
-              <dd>{repository.metadata.primary_language}</dd>
-            </>
+        <div className="p4-w1-repository__body">
+          <div className="p4-w1-repository__id">
+            <code>{repository.metadata.slug}</code>
+            <span className="px-meta">
+              {repository.selected ? copy.selected : ""}
+              {repository.metadata.is_archived ? ` · ${copy.archived}` : ""}
+              {repository.metadata.is_fork ? ` · ${copy.fork}` : ""}
+            </span>
+          </div>
+          {repository.metadata.description && (
+            <p>{repository.metadata.description}</p>
           )}
-          <dt>{copy.defaultBranchLabel}</dt>
-          <dd>{repository.metadata.default_branch}</dd>
-          {size && (
-            <>
-              <dt>{copy.sizeLabel}</dt>
-              <dd>{size}</dd>
-            </>
+          <dl className="guided-onboarding__repository-meta">
+            {repository.metadata.primary_language && (
+              <>
+                <dt>{copy.languageLabel}</dt>
+                <dd>{repository.metadata.primary_language}</dd>
+              </>
+            )}
+            <dt>{copy.defaultBranchLabel}</dt>
+            <dd>{repository.metadata.default_branch}</dd>
+            {size && (
+              <>
+                <dt>{copy.sizeLabel}</dt>
+                <dd>{size}</dd>
+              </>
+            )}
+            <dt>{copy.githubLabel}</dt>
+            <dd>
+              <a
+                href={repository.metadata.html_url}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                {repository.metadata.html_url}
+              </a>
+            </dd>
+          </dl>
+          {!selectionLocked && (
+            <details>
+              <summary>{copy.optionsLegend}</summary>
+              <fieldset disabled={busy}>
+                <legend>{copy.optionsLegend}</legend>
+                <label htmlFor={`guided-ref-${slugId}`}>
+                  {copy.refLabel} ({copy.refOptional})
+                  <input
+                    id={`guided-ref-${slugId}`}
+                    onChange={(event) => optionChange("ref", event)}
+                    value={repository.ref ?? ""}
+                  />
+                </label>
+                <label htmlFor={`guided-include-${slugId}`}>
+                  {copy.includeLabel}
+                  <input
+                    id={`guided-include-${slugId}`}
+                    onChange={(event) => optionChange("include", event)}
+                    value={repository.include.join(", ")}
+                  />
+                </label>
+                <label htmlFor={`guided-exclude-${slugId}`}>
+                  {copy.excludeLabel}
+                  <input
+                    id={`guided-exclude-${slugId}`}
+                    onChange={(event) => optionChange("exclude", event)}
+                    value={repository.exclude.join(", ")}
+                  />
+                </label>
+              </fieldset>
+            </details>
           )}
-          <dt>{copy.githubLabel}</dt>
-          <dd>
-            <a
-              href={repository.metadata.html_url}
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              {repository.metadata.html_url}
-            </a>
-          </dd>
-        </dl>
-        {!selectionLocked && (
-          <details>
-            <summary>{copy.optionsLegend}</summary>
-            <fieldset disabled={busy}>
-              <legend>{copy.optionsLegend}</legend>
-              <label htmlFor={`guided-ref-${slugId}`}>
-                {copy.refLabel} ({copy.refOptional})
-                <input
-                  id={`guided-ref-${slugId}`}
-                  onChange={(event) => optionChange("ref", event)}
-                  value={repository.ref ?? ""}
-                />
-              </label>
-              <label htmlFor={`guided-include-${slugId}`}>
-                {copy.includeLabel}
-                <input
-                  id={`guided-include-${slugId}`}
-                  onChange={(event) => optionChange("include", event)}
-                  value={repository.include.join(", ")}
-                />
-              </label>
-              <label htmlFor={`guided-exclude-${slugId}`}>
-                {copy.excludeLabel}
-                <input
-                  id={`guided-exclude-${slugId}`}
-                  onChange={(event) => optionChange("exclude", event)}
-                  value={repository.exclude.join(", ")}
-                />
-              </label>
-            </fieldset>
-          </details>
-        )}
-        {selectionLocked && <p>{copy.selectionLocked}</p>}
+          {selectionLocked && <p>{copy.selectionLocked}</p>}
+        </div>
       </details>
     </li>
   );
