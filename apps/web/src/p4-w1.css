@@ -198,6 +198,20 @@
   font-size: 13px;
   margin: 0;
 }
+/* Equal-width action cells that wrap as a unit; the dock never mixes a
+   per-project label into its own row. */
+.guided-analysis > .guided-analysis__actions {
+  align-items: start;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+}
+.guided-analysis__actions > p {
+  grid-column: 1 / -1;
+}
+.guided-analysis__actions > .px-button,
+.guided-analysis__actions > .guided-onboarding__analysis-action > .px-button {
+  width: 100%;
+}
 .guided-analysis__results,
 .guided-analysis__repositories {
   padding-bottom: 100px;

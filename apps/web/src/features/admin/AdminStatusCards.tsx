@@ -188,11 +188,11 @@ function ModelStatusCard({
 }) {
   return (
     <div className="admin-status-card">
-      {summary.provider ? (
-        <ModelBrandIcon modelId={summary.model} provider={summary.provider} />
-      ) : (
-        <StatusIcon kind={icon} />
-      )}
+      <ModelBrandIcon
+        fallback={<StatusIcon kind={icon} />}
+        modelId={summary.model}
+        provider={summary.provider}
+      />
       <StatusCopy
         detail={summary.connection ? copy.connection(summary.connection) : ""}
         label={label}

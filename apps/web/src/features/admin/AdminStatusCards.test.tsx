@@ -90,6 +90,39 @@ describe("admin workspace navigation and status", () => {
     expect(markup).not.toContain("connection_id");
   });
 
+  it("keeps an icon on the model card when the built-in local model has no brand", () => {
+    const markup = renderToStaticMarkup(
+      <AdminStatusCards
+        locale="en"
+        state={{ ...initialGuidedOnboardingState(), step: "analysis" as const }}
+        status={{
+          chat: {
+            model: null,
+            connection: null,
+            provider: null,
+            state: "unconfigured",
+          },
+          embedding: {
+            model: "BAAI/bge-m3:5617a9f61b028005a4858fdac845db406aefb181",
+            connection: "This computer (CPU)",
+            provider: "builtin_onnx",
+            state: "selected",
+          },
+          publicBundleId: null,
+        }}
+      />,
+    );
+    // Without a leading icon the copy lands in the auto column and squeezes the badge.
+    const card = markup
+      .split('<div class="admin-status-card"')
+      .find((chunk) => chunk.includes("Content finder"))!;
+    expect(card.indexOf('class="admin-status-card__icon"')).toBeGreaterThan(-1);
+    expect(card.indexOf('class="admin-status-card__icon"')).toBeLessThan(
+      card.indexOf('class="admin-status-card__copy"'),
+    );
+    expect(markup).not.toContain('class="model-brand-icon"');
+  });
+
   it("uses only the four applicable steps for the manual route", () => {
     const state = {
       ...initialGuidedOnboardingState(),

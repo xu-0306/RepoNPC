@@ -1927,42 +1927,41 @@ function AnalysisStep({
     : hasActiveBatch || hasRunning
       ? copy.disabledAnalysisRunning
       : null;
-  const analysisActions =
-    !hasBatchAnalysis &&
-    repositories.map((repository) => {
-      const slugId = repository.metadata.slug.replace(/[^a-zA-Z0-9_-]/g, "-");
-      const reason = analysisButtonReason(repository, state, copy, busy);
-      const disabled = reason !== null || !repository.selected;
-      const disabledMessage = !repository.selected
-        ? copy.disabledNoSelection
-        : reason;
+  // One action per project, shown on that project's own row so the pinned
+  // bar keeps a fixed height however many projects were selected.
+  const analyzeAction = (repository: GuidedRepository) => {
+    const slugId = repository.metadata.slug.replace(/[^a-zA-Z0-9_-]/g, "-");
+    const reason = analysisButtonReason(repository, state, copy, busy);
+    const disabled = reason !== null || !repository.selected;
+    const disabledMessage = !repository.selected
+      ? copy.disabledNoSelection
+      : reason;
 
-      return (
-        <div className="guided-analysis__retry" key={repository.metadata.slug}>
-          {repositories.length > 1 && <span>{repository.metadata.slug}</span>}
-          <button
-            aria-describedby={
-              disabledMessage ? `guided-analysis-reason-${slugId}` : undefined
-            }
-            disabled={disabled}
-            onClick={() => onAnalyze(repository.metadata.slug)}
-            type="button"
-          >
-            {repository.analysisStatus === "running"
-              ? copy.analyzing
-              : repository.analysisStatus === "complete"
-                ? copy.retryAnalysis
-                : repository.analysisStatus === "unavailable"
-                  ? copy.retryAnalysis
-                  : copy.analyze}
-          </button>
-          {disabledReason(
-            disabledMessage ?? null,
-            `guided-analysis-reason-${slugId}`,
-          )}
-        </div>
-      );
-    });
+    return {
+      button: (
+        <button
+          aria-describedby={
+            disabledMessage ? `guided-analysis-reason-${slugId}` : undefined
+          }
+          className="px-button px-button--secondary"
+          disabled={disabled}
+          onClick={() => onAnalyze(repository.metadata.slug)}
+          type="button"
+        >
+          {repository.analysisStatus === "running"
+            ? copy.analyzing
+            : repository.analysisStatus === "complete" ||
+                repository.analysisStatus === "unavailable"
+              ? copy.retryAnalysis
+              : copy.analyze}
+        </button>
+      ),
+      reason: disabledReason(
+        disabledMessage ?? null,
+        `guided-analysis-reason-${slugId}`,
+      ),
+    };
+  };
   const startBatchAction = onCreateBatch && (
     <div className="guided-onboarding__analysis-action">
       <button
@@ -2044,44 +2043,48 @@ function AnalysisStep({
           />
           {repositories.length > 0 ? (
             <ul className="guided-analysis__repositories">
-              {repositories.map((repository) => (
-                <li
-                  className="guided-analysis__repository"
-                  data-analysis-result={repository.metadata.slug}
-                  key={repository.metadata.slug}
-                >
-                  {analysisReady(repository) ? (
-                    <EvidenceGroups
-                      copy={copy}
-                      locale={locale}
-                      repository={repository}
-                    />
-                  ) : (
-                    <h3>{repository.metadata.slug}</h3>
-                  )}
-                  {repository.analysisStatus === "complete" && (
+              {repositories.map((repository) => {
+                const action = analyzeAction(repository);
+                const status =
+                  repository.analysisStatus === "complete" ? (
                     <p role="status">{copy.analyzed}</p>
-                  )}
-                  {repository.analysisStatus === "unavailable" && (
+                  ) : repository.analysisStatus === "unavailable" ? (
                     <p role="alert">{copy.unavailable}</p>
-                  )}
-                </li>
-              ))}
+                  ) : null;
+                return (
+                  <li
+                    className="guided-analysis__repository"
+                    data-analysis-result={repository.metadata.slug}
+                    key={repository.metadata.slug}
+                  >
+                    {analysisReady(repository) ? (
+                      <>
+                        <EvidenceGroups
+                          copy={copy}
+                          locale={locale}
+                          repository={repository}
+                        />
+                        <div className="guided-analysis__repository-row">
+                          {status}
+                          {action.button}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="guided-analysis__repository-row">
+                          <h3>{repository.metadata.slug}</h3>
+                          {action.button}
+                        </div>
+                        {status}
+                      </>
+                    )}
+                    {action.reason}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p>{copy.analysisRequired}</p>
-          )}
-          {onCreateBatch && repositories.length > 0 && (
-            <button
-              aria-busy={batchCreatePending || undefined}
-              disabled={busy || batchCreatePending || hasActiveBatch}
-              onClick={onCreateBatch}
-              type="button"
-            >
-              {batchCreatePending
-                ? copy.batchCreationPending
-                : copy.createBatch}
-            </button>
           )}
         </>
       )}
@@ -2090,6 +2093,21 @@ function AnalysisStep({
           !batchAnalysisTerminal &&
           !hasActiveBatch &&
           startBatchAction}
+        {!hasBatchAnalysis && onCreateBatch && repositories.length > 0 && (
+          <button
+            aria-busy={batchCreatePending || undefined}
+            className={
+              allTerminal
+                ? "px-button px-button--secondary"
+                : "px-button px-button--primary"
+            }
+            disabled={busy || batchCreatePending || hasActiveBatch}
+            onClick={onCreateBatch}
+            type="button"
+          >
+            {batchCreatePending ? copy.batchCreationPending : copy.createBatch}
+          </button>
+        )}
         <button
           aria-describedby={
             continueReason ? "guided-analysis-continue-reason" : undefined
@@ -2107,7 +2125,6 @@ function AnalysisStep({
             ? copy.continueContributions
             : copy.continueManually}
         </button>
-        {analysisActions}
         {disabledReason(continueReason, "guided-analysis-continue-reason")}
       </footer>
     </section>

@@ -844,8 +844,13 @@ describe("GuidedOnboardingView", () => {
         locale === "en" ? "Describe my contribution" : "描述我的貢獻";
       const retry = locale === "en" ? "Analyze again" : "重新分析";
       expect(actions).toContain(`>${next}</button>`);
-      expect(actions).toContain(`>${retry}</button>`);
-      expect(actions.indexOf(next)).toBeLessThan(actions.indexOf(retry));
+      // Re-analysis belongs to its project's row, never to the pinned bar.
+      expect(actions).not.toContain(retry);
+      const row = markup.slice(
+        markup.indexOf("data-analysis-result"),
+        markup.indexOf('class="guided-analysis__actions"'),
+      );
+      expect(row).toContain(`>${retry}</button>`);
       expect(markup.split(`>${retry}</button>`)).toHaveLength(2);
       expect(input.onAction).not.toHaveBeenCalled();
       expect(input.onAnalyze).not.toHaveBeenCalled();
@@ -1055,14 +1060,23 @@ describe("GuidedOnboardingView", () => {
         const buttons = elements(footer).filter(
           (node) => node.type === "button",
         );
-        expect(buttons).toHaveLength(2);
+        // The pinned bar keeps only step-level actions; each project's own
+        // analyze button sits on that project's row.
+        expect(buttons).toHaveLength(1);
+        const project = elements(stepTree).find(
+          (node) => node.props["data-analysis-result"] === metadata.slug,
+        )!;
+        const analyze = elements(project).filter(
+          (node) => node.type === "button",
+        );
+        expect(analyze).toHaveLength(1);
         expect(input.onAnalyze).not.toHaveBeenCalled();
         expect(input.onAction).not.toHaveBeenCalled();
         (buttons[0].props.onClick as () => void)();
         expect(input.onAction).toHaveBeenCalledExactlyOnceWith({
           type: "CONTINUE_TO_CONTRIBUTIONS",
         });
-        (buttons[1].props.onClick as () => void)();
+        (analyze[0].props.onClick as () => void)();
         expect(input.onAnalyze).toHaveBeenCalledExactlyOnceWith(metadata.slug);
       } finally {
         directHooks.values = null;

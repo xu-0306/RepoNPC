@@ -61,8 +61,7 @@
 }
 
 .guided-analysis .guided-analysis__info,
-.guided-analysis .guided-analysis__toggle,
-.guided-analysis .guided-analysis__retry button {
+.guided-analysis .guided-analysis__toggle {
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -183,8 +182,7 @@
 
 .guided-analysis a,
 .guided-analysis .guided-analysis__info:hover:not(:disabled),
-.guided-analysis .guided-analysis__toggle:hover:not(:disabled),
-.guided-analysis .guided-analysis__retry button:hover:not(:disabled) {
+.guided-analysis .guided-analysis__toggle:hover:not(:disabled) {
   color: var(--px-accent);
 }
 
@@ -195,15 +193,11 @@
   outline-offset: 2px;
 }
 
-.guided-analysis__actions,
-.guided-analysis__retry {
+.guided-analysis__actions {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1.25rem;
-}
-
-.guided-analysis__actions {
   margin-top: 1rem;
 }
 
@@ -211,8 +205,25 @@
   border-radius: 0;
 }
 
-.guided-analysis .guided-analysis__retry button {
-  color: var(--px-muted);
+/* A project's name (or status) on the left, its one action on the right. */
+.guided-analysis__repository-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: space-between;
+}
+
+.guided-analysis__repository-row > :is(h3, p) {
+  flex: 1 1 8rem;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.guided-analysis__repository-row > .px-button {
+  flex: 0 0 auto;
+  min-width: 8rem;
 }
 
 @media (max-width: 40rem) {

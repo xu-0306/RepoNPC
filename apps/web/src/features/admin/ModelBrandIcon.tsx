@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import ollamaIcon from "@lobehub/icons-static-svg/icons/ollama.svg?no-inline";
 import openAiIcon from "@lobehub/icons-static-svg/icons/openai.svg?no-inline";
 import qwenIcon from "@lobehub/icons-static-svg/icons/qwen.svg?no-inline";
@@ -14,9 +15,12 @@ const PROVIDER_ICONS: Record<ModelProvider, string> = {
 export function ModelBrandIcon({
   provider,
   modelId,
+  fallback = null,
 }: {
   provider: ModelProvider | "builtin_onnx" | null | undefined;
   modelId?: string | null;
+  // Shown when no brand applies (for example the built-in local model).
+  fallback?: ReactNode;
 }) {
   const normalizedModel = modelId?.toLowerCase() ?? "";
   const icon = normalizedModel.includes("qwen")
@@ -27,7 +31,7 @@ export function ModelBrandIcon({
         ? PROVIDER_ICONS[provider]
         : null;
 
-  if (!icon) return null;
+  if (!icon) return fallback;
   return (
     <span aria-hidden="true" className="model-brand-icon">
       <img alt="" src={icon} />
