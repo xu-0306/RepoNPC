@@ -583,21 +583,8 @@ input {
 .guided-onboarding__navigation-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px 12px;
-}
-.guided-onboarding__navigation-actions > details > summary {
-  box-sizing: border-box;
-  color: var(--px-accent);
-  cursor: pointer;
-  font-family: var(--px-font-body);
-  font-size: 14px;
-  font-weight: 400;
-  min-height: 44px;
-  padding-block: 10px;
-}
-.guided-onboarding__navigation-actions > details > .px-button {
-  margin: 8px 12px 4px 0;
 }
 .guided-onboarding__step > h2 {
   font-family: var(--px-font-body);
@@ -2395,11 +2382,6 @@ form button {
   .guided-onboarding__navigation-actions > button {
     min-height: 44px;
     padding: 6px 12px;
-    white-space: nowrap;
-  }
-  .guided-onboarding__navigation-actions > details > summary {
-    min-height: 44px;
-    padding-block: 6px;
     white-space: nowrap;
   }
   .guided-onboarding__step--models > p:first-of-type {

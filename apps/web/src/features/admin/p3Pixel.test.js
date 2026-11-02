@@ -241,28 +241,10 @@ it("makes phone room above model equipment by tightening gaps and paragraph marg
   expect(phone).toMatch(
     /\.guided-onboarding__step--models > p:first-of-type\s*\{\s*margin: 0/s,
   );
-  for (const selector of ["button", "details\\s*>\\s*summary"]) {
-    const block = phone.match(
-      new RegExp(
-        `\\.guided-onboarding__navigation-actions\\s*>\\s*${selector}\\s*\\{([^}]+)\\}`,
-        "s",
-      ),
-    )?.[1];
-    expect(block).toBeDefined();
-    expect(block).toContain("min-height: 44px");
-    expect(block).toContain("white-space: nowrap");
-  }
-});
-
-it("keeps the back button level with the disclosure summary when edit-or-restart opens", () => {
-  const css = readFileSync(
-    new URL("../../styles.css", import.meta.url),
-    "utf8",
-  );
-  const rule = /\.guided-onboarding__navigation-actions\s*\{([^}]*)\}/g;
-  const blocks = [...css.matchAll(rule)].map((match) => match[1]);
-  expect(blocks.length).toBeGreaterThan(0);
-  for (const block of blocks)
-    expect(block).not.toMatch(/align-items:\s*center/);
-  expect(blocks[0]).toContain("align-items: flex-start");
+  const block = phone.match(
+    /\.guided-onboarding__navigation-actions\s*>\s*button\s*\{([^}]+)\}/s,
+  )?.[1];
+  expect(block).toBeDefined();
+  expect(block).toContain("min-height: 44px");
+  expect(block).toContain("white-space: nowrap");
 });

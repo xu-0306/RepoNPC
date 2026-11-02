@@ -104,13 +104,13 @@ it.each(["zh-TW", "en"] as const)(
       expect(header).toMatch(
         /<button class="px-button px-button--secondary"[^>]*>/,
       );
-      expect(header).toContain(
-        'class="guided-onboarding__navigation-disclosure"',
+      expect(header).not.toContain("<details");
+      expect(header).toMatch(
+        locale === "en"
+          ? /<button class="px-button px-button--danger"[^>]*>Start over<\/button>/
+          : /<button class="px-button px-button--danger"[^>]*>重新開始<\/button>/,
       );
-      expect(header).toContain('class="px-button px-button--danger"');
-      expect(header).toContain(
-        locale === "en" ? "Edit or start over" : "編輯或重新開始",
-      );
+      expect(header).not.toMatch(/Edit project selection|編輯專案選擇/);
       expect(header).not.toMatch(/style=/);
     }
   },

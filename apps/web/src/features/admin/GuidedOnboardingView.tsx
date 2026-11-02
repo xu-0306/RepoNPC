@@ -128,7 +128,6 @@ type Copy = {
   continueContributions: string;
   continueManually: string;
   back: string;
-  editSelection: string;
   startOver: string;
   startOverTitle: string;
   startOverDescription: string;
@@ -320,7 +319,6 @@ const COPY: Record<Locale, Copy> = {
     continueContributions: "描述我的貢獻",
     continueManually: "略過分析，手動填寫貢獻",
     back: "返回",
-    editSelection: "編輯專案選擇",
     startOver: "重新開始",
     startOverTitle: "重新開始？",
     startOverDescription: "這會清除目前尚未儲存的引導內容。",
@@ -539,7 +537,6 @@ const COPY: Record<Locale, Copy> = {
     continueContributions: "Describe my contribution",
     continueManually: "Skip analysis and enter contribution manually",
     back: "Back",
-    editSelection: "Edit project selection",
     startOver: "Start over",
     startOverTitle: "Start over?",
     startOverDescription: "This clears the unsaved guided setup.",
@@ -2929,46 +2926,26 @@ export function GuidedOnboardingView({
             >
               {copy.back}
             </button>
-            <details className="guided-onboarding__navigation-disclosure">
-              <summary>
-                {locale === "zh-TW" ? "編輯或重新開始" : "Edit or start over"}
-              </summary>
-              {state.step !== "repositories" && state.step !== "analysis" && (
-                <button
-                  className="px-button px-button--secondary"
-                  aria-describedby={
-                    navigationBatchActive
-                      ? "guided-navigation-batch-reason"
-                      : undefined
-                  }
-                  disabled={busy || navigationBatchActive}
-                  onClick={() => onAction({ type: "EDIT_SELECTION" })}
-                  type="button"
-                >
-                  {copy.editSelection}
-                </button>
-              )}
-              <ConfirmButton
-                className="px-button px-button--danger"
-                aria-describedby={
-                  navigationBatchActive
-                    ? "guided-navigation-batch-reason"
-                    : undefined
-                }
-                disabled={busy || navigationBatchActive}
-                locale={locale}
-                title={copy.startOverTitle}
-                description={copy.startOverDescription}
-                confirmLabel={copy.startOver}
-                destructive
-                onConfirm={() => {
-                  if (!busy && !navigationBatchActive)
-                    onAction({ type: "RESET" });
-                }}
-              >
-                {copy.startOver}
-              </ConfirmButton>
-            </details>
+            <ConfirmButton
+              className="px-button px-button--danger"
+              aria-describedby={
+                navigationBatchActive
+                  ? "guided-navigation-batch-reason"
+                  : undefined
+              }
+              disabled={busy || navigationBatchActive}
+              locale={locale}
+              title={copy.startOverTitle}
+              description={copy.startOverDescription}
+              confirmLabel={copy.startOver}
+              destructive
+              onConfirm={() => {
+                if (!busy && !navigationBatchActive)
+                  onAction({ type: "RESET" });
+              }}
+            >
+              {copy.startOver}
+            </ConfirmButton>
             {navigationBatchActive && (
               <p
                 className="guided-onboarding__disabled-reason"
