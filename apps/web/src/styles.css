@@ -583,7 +583,7 @@ input {
 .guided-onboarding__navigation-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px 12px;
 }
 .guided-onboarding__navigation-actions > details > summary {
@@ -2390,9 +2390,6 @@ form button {
     font-size: 20px;
     min-height: 56px;
     display: flex;
-    align-items: center;
-  }
-  .guided-onboarding__navigation-actions {
     align-items: center;
   }
   .guided-onboarding__navigation-actions > button {
