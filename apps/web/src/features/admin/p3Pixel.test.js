@@ -205,28 +205,22 @@ it("stacks the pinned selections and wraps confirmation feedback by container wi
   expect(confirmation).toContain("overflow-wrap: anywhere");
 });
 
-it("keeps legacy indigo off the model step: legacy button rules skip pixel buttons and tokens map to the pixel palette", () => {
+it("uses pixel base rules without legacy tokens or a model-step remap", () => {
   const css = readFileSync(
     new URL("../../styles.css", import.meta.url),
     "utf8",
   );
-  expect(css).toContain(
-    '.admin-workspace form button[type="submit"]:not(.px-button)',
+  expect(css).toMatch(
+    /\.admin-workspace form button\[type="submit"\]:not\(\.px-button\)\s*\{[^}]*background: var\(--px-accent\);[^}]*border-color: var\(--px-line\);[^}]*color: var\(--px-accent-ink\)/s,
   );
-  expect(css).toContain(
-    ".admin-workspace button:not(.px-button):hover:not(:disabled)",
+  expect(css).toMatch(
+    /(?:^|\n)button\s*\{[^}]*border: 2px solid var\(--px-line\);[^}]*border-radius: 0;[^}]*background: var\(--px-surface-alt\);[^}]*box-shadow: 3px 3px 0 var\(--px-shadow\);[^}]*color: var\(--px-ink\)/s,
   );
-  const remap = css.match(
-    /\.model-setup-workspace\s*\{([^}]*--ui-primary:[^}]*)\}/s,
-  )?.[1];
-  expect(remap).toBeDefined();
-  for (const token of [
-    "--ui-primary",
-    "--ui-border",
-    "--admin-primary",
-    "--admin-border",
-  ])
-    expect(remap).toContain(`${token}: var(--px-`);
+  expect(css).toMatch(
+    /(?:^|\n)button:hover:not\(:disabled\)\s*\{\s*box-shadow: 4px 4px 0 var\(--px-shadow\);\s*\}/s,
+  );
+  expect(css).not.toMatch(/--(?:ui|admin)-(?!progress\b)[a-z-]+/);
+  expect(css).not.toMatch(/\.model-setup-workspace\s*\{[^}]*--/s);
 });
 
 it("keeps phone utility and progress names readable to assistive technology without wrapping chrome", () => {

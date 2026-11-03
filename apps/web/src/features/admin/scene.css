@@ -196,7 +196,7 @@
 }
 
 .scene-preview__focus-map:focus-visible {
-  outline: 3px solid var(--px-accent);
+  outline: 3px solid var(--px-focus);
   outline-offset: 3px;
 }
 
@@ -210,7 +210,7 @@
 
 .scene-preview__focus-empty {
   aspect-ratio: 16 / 9;
-  background: linear-gradient(135deg, var(--px-surface), var(--px-surface-alt));
+  background: var(--px-surface-alt);
   width: min(32rem, calc(100vw - 3rem));
 }
 
