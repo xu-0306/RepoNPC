@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
 import { AdminAccessLayout } from "../features/admin/AdminAccessLayout";
+import { resolveInitialLocale, storeLocale } from "../i18n/initialLocale";
 import type { Locale } from "../i18n/messages";
 import { VisitorApp } from "./VisitorApp";
 
@@ -26,7 +27,7 @@ export function App() {
 }
 
 function AdminRouter() {
-  const [locale, setLocale] = useState<Locale>("zh-TW");
+  const [locale, setLocale] = useState<Locale>(resolveInitialLocale);
   useEffect(() => syncDocumentLanguage(locale), [locale]);
   return (
     <Suspense
@@ -43,7 +44,13 @@ function AdminRouter() {
         </AdminAccessLayout>
       }
     >
-      <AdminPage locale={locale} onLocaleChange={setLocale} />
+      <AdminPage
+        locale={locale}
+        onLocaleChange={(next) => {
+          setLocale(next);
+          storeLocale(next);
+        }}
+      />
     </Suspense>
   );
 }

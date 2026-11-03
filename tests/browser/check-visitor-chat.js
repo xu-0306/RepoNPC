@@ -72,6 +72,13 @@ export async function checkVisitorChat(tab, options = {}) {
     }, "visitor observations");
   };
   const navigate = async (name) => {
+    await tab.playwright.evaluate(() => {
+      try {
+        window.localStorage.removeItem("reponpc.locale");
+      } catch {
+        // A fresh blank tab has no locale storage to reset.
+      }
+    });
     const query = new URLSearchParams({ run: name });
     if (reducedMotion) query.set("reduced", "1");
     await tab.goto(`${baseUrl}?${query}`);

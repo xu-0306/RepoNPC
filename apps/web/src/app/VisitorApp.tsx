@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type CharacterState } from "../features/character/CharacterRenderer";
+import { resolveInitialLocale, storeLocale } from "../i18n/initialLocale";
 import { messages, type Locale } from "../i18n/messages";
 import {
   collectValidatedReply,
@@ -33,7 +34,7 @@ import "../visitor.css";
 import "./scene-fallback.generated.css";
 
 export function VisitorApp() {
-  const [locale, setLocale] = useState<Locale>("zh-TW");
+  const [locale, setLocale] = useState<Locale>(resolveInitialLocale);
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<VisitorTurn[]>([]);
   const [exchanges, setExchanges] = useState<SuccessfulExchange[]>([]);
@@ -535,7 +536,10 @@ export function VisitorApp() {
       chatStatusRef={chatStatus}
       characterState={characterState}
       locale={locale}
-      onLocaleChange={setLocale}
+      onLocaleChange={(next) => {
+        setLocale(next);
+        storeLocale(next);
+      }}
       onQuestionChange={(value) => {
         setQuestion(value);
         if (chatAvailable && !pending) {

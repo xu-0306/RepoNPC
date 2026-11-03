@@ -307,6 +307,7 @@ def _isolated_web_dist(runtime_root: Path, web_dist: Path) -> Path:
     )
     (isolated / "visitor-acceptance.js").write_text(
         r"""
+Object.defineProperty(navigator, 'languages', {configurable: true, value: ['zh-TW']});
 if (new URLSearchParams(location.search).get('reduced') === '1') {
   const original = window.matchMedia.bind(window);
   window.matchMedia = (query) => query === '(prefers-reduced-motion: reduce)'

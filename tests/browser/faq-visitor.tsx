@@ -5,6 +5,9 @@ import { createRoot } from "react-dom/client";
 import { App } from "./src/app/App";
 import "./src/styles.css";
 
+Object.defineProperty(navigator, "languages", { configurable: true, value: ["zh-TW"] });
+window.localStorage.removeItem("reponpc.locale");
+
 let approved = true;
 let bundle = "visitor-one";
 let delay = false;

@@ -1,0 +1,213 @@
+import type { ReactElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { App } from "../app/App";
+import { VisitorApp } from "../app/VisitorApp";
+import { resolveInitialLocale, storeLocale } from "./initialLocale";
+import { LANGUAGES, type LanguageTag } from "./languages";
+
+// Exercise the real state owners with the existing Node hook-harness pattern.
+const hooks = vi.hoisted(() => ({
+  values: [] as unknown[],
+  cursor: 0,
+  effects: [] as (() => unknown)[],
+}));
+vi.mock("react", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react")>()),
+  useState: (initial: unknown) => {
+    const index = hooks.cursor++;
+    if (!(index in hooks.values))
+      hooks.values[index] = typeof initial === "function" ? initial() : initial;
+    return [
+      hooks.values[index],
+      (next: unknown) => {
+        hooks.values[index] =
+          typeof next === "function" ? next(hooks.values[index]) : next;
+      },
+    ];
+  },
+  useRef: (initial: unknown) => {
+    const index = hooks.cursor++;
+    if (!(index in hooks.values)) hooks.values[index] = { current: initial };
+    return hooks.values[index];
+  },
+  useCallback: (callback: unknown) => callback,
+  useEffect: (effect: () => unknown) => hooks.effects.push(effect),
+}));
+vi.mock("../app/visitorData", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../app/visitorData")>()),
+  fetchPublicProfile: () => new Promise(() => undefined),
+  fetchPublicFaq: () => new Promise(() => undefined),
+  fetchPublicStatus: () => new Promise(() => undefined),
+}));
+
+const stored = new Map<string, string>();
+const storage = {
+  getItem: vi.fn((key: string) => stored.get(key) ?? null),
+  setItem: vi.fn((key: string, value: string) => stored.set(key, value)),
+};
+const cleanups: (() => void)[] = [];
+
+beforeEach(() => {
+  hooks.values = [];
+  stored.clear();
+  storage.getItem
+    .mockReset()
+    .mockImplementation((key) => stored.get(key) ?? null);
+  storage.setItem
+    .mockReset()
+    .mockImplementation((key, value) => stored.set(key, value));
+  vi.stubGlobal("navigator", { languages: ["en-US"], language: "en-US" });
+  vi.stubGlobal("document", { documentElement: { lang: "", dataset: {} } });
+  vi.stubGlobal("window", {
+    location: { pathname: "/admin" },
+    localStorage: storage,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    setTimeout: vi.fn(() => 1),
+    clearTimeout: vi.fn(),
+    matchMedia: () => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }),
+  });
+});
+afterEach(() => {
+  for (const cleanup of cleanups.splice(0)) cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe("initial locale", () => {
+  it.each(LANGUAGES)("prefers the stored $tag to the browser", ({ tag }) => {
+    stored.set("reponpc.locale", tag);
+    vi.stubGlobal("navigator", {
+      languages: LANGUAGES.filter((entry) => entry.tag !== tag).map(
+        (entry) => entry.tag,
+      ),
+    });
+    expect(resolveInitialLocale()).toBe(tag);
+  });
+
+  it.each(
+    [
+      "",
+      "null",
+      "__proto__",
+      ...LANGUAGES.flatMap(({ tag }) => [tag.toUpperCase(), `${tag}-x-stored`]),
+    ].flatMap((value) => LANGUAGES.map(({ tag }) => ({ value, tag }))),
+  )("ignores invalid stored $value with browser $tag", ({ value, tag }) => {
+    stored.set("reponpc.locale", value);
+    vi.stubGlobal("navigator", { languages: [tag] });
+    expect(resolveInitialLocale()).toBe(tag);
+  });
+
+  it.each([
+    { languages: ["fr", "en-GB"], expected: "en" },
+    { languages: ["zh-HK", "en"], expected: "zh-TW" },
+    { languages: ["en-US", "zh-TW"], expected: "en" },
+    { languages: ["de-DE", "fr-FR"], expected: "zh-TW" },
+  ])("matches $languages in order", ({ languages, expected }) => {
+    vi.stubGlobal("navigator", { languages });
+    expect(resolveInitialLocale()).toBe(expected);
+  });
+
+  it.each(
+    LANGUAGES.flatMap(({ tag, match }) =>
+      match.map((prefix) => ({ tag, prefix })),
+    ),
+  )("matches registry prefix $prefix to $tag", ({ tag, prefix }) => {
+    for (const browserTag of [prefix, `${prefix.toUpperCase()}-x-browser`]) {
+      vi.stubGlobal("navigator", { languages: [browserTag] });
+      expect(resolveInitialLocale()).toBe(tag);
+    }
+  });
+
+  it.each(LANGUAGES)(
+    "uses navigator.language for $tag when languages is empty",
+    ({ tag }) => {
+      vi.stubGlobal("navigator", { languages: [], language: tag });
+      expect(resolveInitialLocale()).toBe(tag);
+    },
+  );
+
+  it("keeps zh-TW when navigator is unavailable", () => {
+    vi.stubGlobal("navigator", undefined);
+    expect(resolveInitialLocale()).toBe("zh-TW");
+  });
+
+  it("falls back to the browser when accessing storage throws", () => {
+    Object.defineProperty(window, "localStorage", {
+      get() {
+        throw new Error("Storage disabled");
+      },
+    });
+    expect(resolveInitialLocale()).toBe("en");
+    expect(() => storeLocale("zh-TW")).not.toThrow();
+  });
+
+  it.each(LANGUAGES)("stores the exact registry tag $tag", ({ tag }) => {
+    storeLocale(tag);
+    expect(storage.setItem).toHaveBeenCalledWith("reponpc.locale", tag);
+    expect(stored.get("reponpc.locale")).toBe(tag);
+  });
+});
+
+interface LocaleProps {
+  locale: LanguageTag;
+  onLocaleChange: (locale: LanguageTag) => void;
+}
+
+function render(app: "admin" | "visitor"): LocaleProps {
+  hooks.cursor = 0;
+  hooks.effects = [];
+  let props: LocaleProps;
+  if (app === "admin") {
+    const Router = App().type as () => ReactElement<{
+      children: ReactElement<LocaleProps>;
+    }>;
+    props = Router().props.children.props;
+  } else {
+    props = VisitorApp().props as LocaleProps;
+  }
+  for (const effect of hooks.effects) {
+    const cleanup = effect();
+    if (typeof cleanup === "function") cleanups.push(cleanup as () => void);
+  }
+  return props;
+}
+
+describe.each(["admin", "visitor"] as const)("%s locale owner", (app) => {
+  it.each(LANGUAGES)(
+    "persists a manual switch to $tag across remounts and syncs html lang",
+    ({ tag }) => {
+      const other = LANGUAGES.find((entry) => entry.tag !== tag)!;
+      vi.stubGlobal("navigator", { languages: [other.tag] });
+      expect(render(app).locale).toBe(other.tag);
+      expect(document.documentElement.lang).toBe(other.tag);
+      expect(storage.setItem).not.toHaveBeenCalled();
+      render(app).onLocaleChange(tag);
+      expect(render(app).locale).toBe(tag);
+      expect(document.documentElement.lang).toBe(tag);
+      expect(stored.get("reponpc.locale")).toBe(tag);
+
+      hooks.values = [];
+      expect(render(app).locale).toBe(tag);
+      expect(document.documentElement.lang).toBe(tag);
+    },
+  );
+
+  it.each(["getItem", "setItem"] as const)(
+    "renders and switches when storage %s throws",
+    (method) => {
+      storage[method].mockImplementation(() => {
+        throw new Error("Storage disabled");
+      });
+      expect(render(app).locale).toBe("en");
+      expect(document.documentElement.lang).toBe("en");
+      render(app).onLocaleChange("zh-TW");
+      expect(render(app).locale).toBe("zh-TW");
+      expect(document.documentElement.lang).toBe("zh-TW");
+    },
+  );
+});

@@ -457,6 +457,7 @@ def build_application(runtime_root: Path, web_dist: Path, origin: str):
     )
     (isolated_web_dist / "browser-acceptance.js").write_text(
         r"""
+Object.defineProperty(navigator, 'languages', {configurable: true, value: ['zh-TW']});
 navigator.serviceWorker.register('/browser-fault-sw.js').then(async () => {
   await navigator.serviceWorker.ready;
   if (!navigator.serviceWorker.controller) {

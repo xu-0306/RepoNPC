@@ -70,6 +70,8 @@ export async function checkR11Recovery(tab) {
     "English retry control",
   );
 
+  await button("繁體中文").click();
+  await waitForText("可恢復的最近批次", "Chinese recovery before reload");
   await tab.reload();
   await waitForText("可恢復的最近批次", "recovery after second reload");
   verify(

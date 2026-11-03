@@ -7,6 +7,13 @@ async (page) => {
     checks.push(message);
   };
   const button = (name) => page.getByRole("button", { name, exact: true });
+  await page.context().addInitScript(() => {
+    Object.defineProperty(navigator, "languages", {
+      configurable: true,
+      value: ["zh-TW"],
+    });
+  });
+  await button("繁體中文").click();
   const marker = "UX locale regression draft";
   await page
     .getByRole("textbox", { name: "顯示名稱", exact: true })

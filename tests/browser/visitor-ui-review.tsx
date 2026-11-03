@@ -2,6 +2,9 @@ import { createRoot } from "react-dom/client";
 import { App } from "./src/app/App";
 import "./src/styles.css";
 
+Object.defineProperty(navigator, "languages", { configurable: true, value: ["zh-TW"] });
+window.localStorage.removeItem("reponpc.locale");
+
 // In-memory public API fixture: no request reaches a server or model.
 window.fetch = async (input) => {
   const path = String(input);
