@@ -13,8 +13,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from reponpc.admin.faq import FaqError, ReviewedFaq
-from reponpc.admin.scene import AdminSceneService
 from reponpc.chat.service import ChatDelivery
+from reponpc.config.models import LocalesConfig
 from reponpc.i18n.plan import ANALYSIS_LOCALES
 from reponpc.runtime.database import RuntimeDatabase
 from tests.security.test_admin_assets import ORIGIN, _login, local_admin_application
@@ -26,7 +26,13 @@ class SyntheticBundles:
 
     @contextmanager
     def acquire_snapshot(self):
-        yield None, "bundle-current", Path("unused-synthetic-public")
+        yield (
+            SimpleNamespace(
+                locales=LocalesConfig(default=ANALYSIS_LOCALES[0], supported=ANALYSIS_LOCALES)
+            ),
+            "bundle-current",
+            Path("unused-synthetic-public"),
+        )
 
 
 def _seed(
@@ -68,14 +74,13 @@ def test_faq_routes_protect_mutations_and_share_only_approved_current_rows(
 ):
     snapshots = []
 
-    @contextmanager
-    def published_profile(_self):
-        snapshots.append(True)
-        yield SimpleNamespace(
-            document=SimpleNamespace(schema_version=1, locales=dict.fromkeys(ANALYSIS_LOCALES))
-        )
+    original = ReviewedFaq._require_locale
 
-    monkeypatch.setattr(AdminSceneService, "published_profile", published_profile)
+    def require_locale(self, tag):
+        original(self, tag)
+        snapshots.append(tag)
+
+    monkeypatch.setattr(ReviewedFaq, "_require_locale", require_locale)
     app = local_admin_application(tmp_path)
     database = app.state.admin_operations.database
     app.state.runtime_database = database
@@ -128,7 +133,7 @@ def test_faq_routes_protect_mutations_and_share_only_approved_current_rows(
         served = client.get(f"/api/public/faq?locale={locale}")
         exported = client.get(f"/api/admin/portfolio/faq/export?locale={locale}", headers=headers)
         assert served.status_code == exported.status_code == 200
-        assert snapshots == [True]
+        assert snapshots == [locale, locale]
         assert served.json() == exported.json()
         assert served.headers["cache-control"] == exported.headers["cache-control"] == "no-store"
         assert "attachment" in exported.headers["content-disposition"]

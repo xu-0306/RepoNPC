@@ -528,7 +528,7 @@ def test_faq_reason_backup_normalization_preserves_current_and_upgrades_old(tmp_
     with closing(sqlite3.connect(result.path)) as connection:
         assert (
             connection.execute("SELECT max(version) FROM runtime_schema_migrations").fetchone()[0]
-            == 37
+            == MIGRATIONS[-1].version
         )
         assert connection.execute(
             "SELECT answer_markdown,review_state,no_match_reason FROM faq_entries"

@@ -178,10 +178,13 @@ def test_invalid_chat_body_uses_common_validation_error_before_service_call() ->
     assert service.calls == 0
 
 
-def test_invalid_chat_body_localizes_safely_without_reflecting_input() -> None:
+def test_invalid_chat_body_localizes_safely_without_reflecting_input(tmp_path) -> None:
+    from tests.integration.test_mvp_api import _active_public_directory
+
+    directory, _profiles = _active_public_directory(tmp_path)
     service = FixtureChatService()
     application = create_app(
-        setup_state=ready_state(),
+        setup_state=replace(ready_state(), public_directory=directory),
         chat_service=service,  # type: ignore[arg-type]
     )
     canary = "VALIDATION_SECRET_CANARY_8d129f"

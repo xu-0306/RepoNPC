@@ -22,6 +22,7 @@ from reponpc.admin.local_portfolio import LocalPortfolioStore
 from reponpc.admin.local_publication import LocalPortfolioBuilder
 from reponpc.chat.limits import ProviderLane
 from reponpc.chat.service import GroundedChatService, delivery_events
+from reponpc.i18n.languages import language_tags
 from reponpc.providers import ProviderCapabilities, ProviderHealth, ProviderResult
 from reponpc.providers.runtime import ProviderRuntime
 from reponpc.runtime.database import MIGRATIONS, Migration, RuntimeDatabase, RuntimeDatabaseError
@@ -241,11 +242,11 @@ def test_registry_has_unique_bounded_equivalent_locale_topics():
     assert len({key for key, _, _ in STANDARD_QUESTIONS}) == 6
     for _, kind, texts in STANDARD_QUESTIONS:
         assert kind in {"role", "responsibility", "achievement", "context"}
-        assert set(texts) == {"zh-TW", "en"}
+        assert set(texts) == set(language_tags())
         assert all(1 <= len(question) <= 2000 for question in texts.values())
     assert all(
         len({texts[locale] for _, _, texts in STANDARD_QUESTIONS}) == 6
-        for locale in ("zh-TW", "en")
+        for locale in language_tags()
     )
 
 

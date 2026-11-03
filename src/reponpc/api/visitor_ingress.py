@@ -28,17 +28,21 @@ from reponpc.api.public import (
     PublicChatRequest,
     SetupState,
     _DisconnectedResponse,
+    _locale_validation_error,
     _public_chat_message,
     _public_index_version,
     create_public_router,
     error_response,
     request_id,
+    validated_locale,
 )
-from reponpc.bundles.manager import BundleActivationError
+from reponpc.bundles.manager import BundleActivationError, BundleManager
 from reponpc.chat.limits import ChatLimitError
 from reponpc.chat.service import ChatCancelledError, ChatHistoryMessage, delivery_events
 from reponpc.domain.evidence import COMMIT_RE, EVIDENCE_ID_RE
+from reponpc.i18n.languages import chrome_locale
 from reponpc.providers import ProviderError, ProviderFailureCode
+from reponpc.runtime.locales import bundle_locales
 
 _BODY_BYTES = 65536
 _CHAT_PATH = "/api/public/chat/stream"
@@ -210,7 +214,7 @@ def _message(locale: str, code: str) -> str:
             "The request source could not be verified.",
         ),
     }
-    return copy[code][0 if locale == "zh-TW" else 1]
+    return copy[code][0 if chrome_locale(locale) == "zh-TW" else 1]
 
 
 class _VisitorBoundary:
@@ -697,6 +701,14 @@ def create_visitor_gateway_app(
                 message=_message("en", "GATEWAY_IDENTITY_INVALID"),
             )
         try:
+            manager = bundle_manager_supplier()
+            locales = bundle_locales(
+                manager if isinstance(manager, BundleManager) else None,
+                getattr(state_supplier(), "public_directory", None),
+            )
+        except BundleActivationError:
+            locales = None
+        try:
             payload = bytearray()
             async with asyncio.timeout_at(deadline):
                 async for chunk in request.stream():
@@ -718,13 +730,38 @@ def create_visitor_gateway_app(
             )
         except ClientDisconnect:
             return _DisconnectedResponse()
-        except ValidationError, ValueError:
+        except (ValidationError, ValueError) as exc:
+            if isinstance(exc, ValidationError) and any(
+                error["loc"] == ("locale",) for error in exc.errors()
+            ):
+                return _locale_validation_error(request, locales, field="body.locale")
+            try:
+                raw = json.loads(payload)
+            except ValueError, RecursionError:
+                raw = None
+            locale = validated_locale(
+                request,
+                locales,
+                locale=raw.get("locale") if isinstance(raw, dict) else None,
+                field="body.locale",
+            )
+            if isinstance(locale, Response):
+                return locale
             return error_response(
                 request,
                 status_code=400,
                 code="VALIDATION_ERROR",
-                message=_message("en", "VALIDATION_ERROR"),
+                message=_message(locale if locales else "en", "VALIDATION_ERROR"),
             )
+        locale = validated_locale(
+            request,
+            locales,
+            locale=body.locale if "locale" in body.model_fields_set else None,
+            field="body.locale",
+        )
+        if isinstance(locale, Response):
+            return locale
+        body = body.model_copy(update={"locale": locale})
         if (
             len(body.message) > max_message_characters
             or len(body.history) > max_history_messages
@@ -734,14 +771,14 @@ def create_visitor_gateway_app(
                 request,
                 status_code=413,
                 code="PAYLOAD_TOO_LARGE",
-                message=_message(body.locale, "PAYLOAD_TOO_LARGE"),
+                message=_message(body.locale if locales else "en", "PAYLOAD_TOO_LARGE"),
             )
         if not listener_ready_supplier() or not state_supplier().ready or service is None:
             return error_response(
                 request,
                 status_code=503,
                 code="SERVICE_NOT_READY",
-                message=_message(body.locale, "SERVICE_NOT_READY"),
+                message=_message(body.locale if locales else "en", "SERVICE_NOT_READY"),
             )
         return await _chat_response(
             request,

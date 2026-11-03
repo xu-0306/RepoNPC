@@ -23,7 +23,8 @@ from reponpc.chat.answers import (
     validate_v2_answer,
 )
 from reponpc.chat.limits import ChatLimits, ProviderLane
-from reponpc.i18n.languages import Locale
+from reponpc.i18n.languages import Locale, english_name, language_tags
+from reponpc.i18n.plan import require_enabled
 from reponpc.indexing.public_profile import PublicProfileError, parse_public_profile_bytes
 from reponpc.observability import get_safe_logger
 from reponpc.providers import ProviderError, ProviderFailureCode, ProviderMessage, ProviderUsage
@@ -161,6 +162,8 @@ class GroundedChatService:
             admission_context = self._limits.acquire(client_ip)
         with admission_context, _bundle_snapshot(self._bundles) as (index, bundle_id, directory):
             _raise_if_cancelled(cancel_requested)
+            site_locales = getattr(getattr(index, "locales", None), "supported", language_tags())
+            require_enabled(locale, site_locales)
             if on_progress:
                 on_progress("searching")
             owner_name, suggested_questions, contact_link = self._answer_profile(
@@ -283,6 +286,7 @@ class GroundedChatService:
                 owner_name=owner_name,
                 owner_aliases=getattr(index, "owner_aliases", ()),
                 suggested_questions=suggested_questions,
+                site_locales=site_locales,
             )
             _log_discarded_segments(validated)
             _log_no_match(validated)
@@ -319,6 +323,7 @@ class GroundedChatService:
             return None, (), None
         try:
             profile = parse_public_profile_bytes((directory / "profile.json").read_bytes())
+            require_enabled(locale, profile.locales)
             localized = profile.locales[locale]
             first_link = localized.profile.links[0] if localized.profile.links else None
             return (
@@ -463,7 +468,7 @@ def _provider_messages(
         "what the project does and how it is built using project and participation "
         "evidence, without mentioning a gap. Use insufficient_evidence=true only when "
         "nothing relevant is retrieved; then return an empty segments array. "
-        f"Respond in {locale}. Return the required JSON answer envelope.\n\n{context}"
+        f"Respond in {english_name(locale)}. Return the required JSON answer envelope.\n\n{context}"
     )
     messages: list[ProviderMessage] = []
     if system_role:

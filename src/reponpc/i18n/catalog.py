@@ -9,8 +9,6 @@ from typing import Final
 
 from reponpc.i18n.languages import chrome_locale, is_language_tag
 
-SUPPORTED_LOCALES: Final[tuple[str, str]] = ("zh-TW", "en")
-
 _MESSAGE_CATALOG: Final[dict[str, dict[str, str]]] = {
     "zh-TW": {
         "index_unavailable": "索引目前無法使用。",

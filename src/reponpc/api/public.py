@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
+import sqlite3
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -13,7 +14,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from reponpc.admin.faq import FaqError, ReviewedFaq
@@ -26,7 +29,10 @@ from reponpc.chat.service import (
     GroundedChatService,
     delivery_events,
 )
-from reponpc.i18n.catalog import SUPPORTED_LOCALES, translate
+from reponpc.config.models import LocalesConfig
+from reponpc.i18n.catalog import translate
+from reponpc.i18n.languages import Locale, chrome_locale, is_language_tag
+from reponpc.i18n.plan import LocaleNotEnabledError, require_enabled
 from reponpc.indexing.public_profile import (
     BilingualPublicProfile,
     PublicProfileError,
@@ -36,15 +42,13 @@ from reponpc.indexing.public_profile import (
     validate_public_profile_metadata,
 )
 from reponpc.observability import get_safe_logger
+from reponpc.runtime.locales import bundle_locales
 from reponpc.scene.images import SceneImageError, validate_scene_image
 from reponpc.scene.resolve import SceneResolutionError
 
 if TYPE_CHECKING:
     from reponpc.api.visitor_ingress import VisitorChatWorkers
 
-DEFAULT_LOCALE = "zh-TW"
-# Keep phase-A API acceptance until the public API worker updates its boundary.
-_ApiLocale = Literal["zh-TW", "en"]
 _PUBLIC_INDEX_VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
 _PUBLIC_MODEL_PROVIDERS = frozenset({"ollama", "openai_compatible"})
 SVG_ASSET_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
@@ -124,7 +128,7 @@ class PublicChatHistory(StrictResponseModel):
 
 class PublicChatRequest(StrictResponseModel):
     message: str = Field(min_length=1, max_length=4000)
-    locale: _ApiLocale
+    locale: Locale = "en"
     history: tuple[PublicChatHistory, ...] = Field(default=(), max_length=10)
 
     @model_validator(mode="after")
@@ -208,42 +212,69 @@ def error_response(
     return JSONResponse(status_code=status_code, content=body.model_dump(mode="json"))
 
 
-def validated_locale(request: Request) -> str | JSONResponse:
-    """Validate the public locale query before any bundle-dependent work."""
+def validated_locale(
+    request: Request,
+    locales: LocalesConfig | None,
+    *,
+    locale: str | None = None,
+    field: str = "query.locale",
+) -> str | JSONResponse:
+    """Resolve an omitted locale and enforce the active site's language set."""
 
-    locale = request.query_params.get("locale", DEFAULT_LOCALE)
-    if locale in SUPPORTED_LOCALES:
-        return locale
+    selected = locale if locale is not None else (locales.default if locales else "en")
+    if is_language_tag(selected):
+        try:
+            if locales is not None:
+                require_enabled(selected, locales.supported)
+            return selected
+        except LocaleNotEnabledError:
+            pass
+    return _locale_validation_error(request, locales, field=field)
+
+
+def _locale_validation_error(
+    request: Request, locales: LocalesConfig | None, *, field: str
+) -> JSONResponse:
+    error_locale = locales.default if locales else "en"
     return error_response(
         request,
         status_code=400,
         code="VALIDATION_ERROR",
         message=translate(
-            DEFAULT_LOCALE,
+            error_locale,
             "validation_error",
             field="locale",
-            reason="不支援的語系",
+            reason="invalid",
         ),
-        details={"fields": [{"path": "locale", "code": "unsupported_locale"}]},
+        details={"fields": [{"path": field, "code": "invalid"}]},
     )
 
 
-def _validated_query(request: Request, allowed: set[str]) -> dict[str, str] | JSONResponse:
+def _validated_query(
+    request: Request, allowed: set[str], locales: LocalesConfig | None
+) -> dict[str, str] | JSONResponse:
     items = list(request.query_params.multi_items())
-    supplied_locale = next((value for key, value in items if key == "locale"), DEFAULT_LOCALE)
-    error_locale = supplied_locale if supplied_locale in SUPPORTED_LOCALES else DEFAULT_LOCALE
+    supplied_locale = next((value for key, value in items if key == "locale"), None)
+    error_locale = locales.default if locales else "en"
+    if (
+        supplied_locale is not None
+        and is_language_tag(supplied_locale)
+        and (locales is None or supplied_locale in locales.supported)
+    ):
+        error_locale = supplied_locale
     if any(key not in allowed for key, _ in items) or len({key for key, _ in items}) != len(items):
         return _validation_error(request, error_locale)
     values = dict(items)
-    locale = validated_locale(request)
+    locale = validated_locale(request, locales, locale=supplied_locale)
     if isinstance(locale, JSONResponse):
         return locale
     if "rev" in values and (not re.fullmatch(r"(?:0|[1-9][0-9]{0,8})", values["rev"])):
         return _validation_error(request, error_locale)
+    values["locale"] = locale
     return values
 
 
-def _validation_error(request: Request, locale: str = DEFAULT_LOCALE) -> JSONResponse:
+def _validation_error(request: Request, locale: str = "en") -> JSONResponse:
     return error_response(
         request,
         status_code=400,
@@ -271,7 +302,54 @@ def create_public_router(
 ) -> APIRouter:
     """Create routes bound to one immutable setup/readiness snapshot."""
 
-    router = APIRouter()
+    class PublicLocaleRoute(APIRoute):
+        def get_route_handler(self):
+            handler = super().get_route_handler()
+
+            async def localized(request: Request) -> Response:
+                try:
+                    return await handler(request)
+                except RequestValidationError as exc:
+                    locales = current_locales()
+                    for error in exc.errors():
+                        if error["loc"] in {("body", "locale"), ("query", "locale")}:
+                            return _locale_validation_error(
+                                request, locales, field=".".join(error["loc"])
+                            )
+                    supplied = (
+                        exc.body.get("locale")
+                        if isinstance(exc.body, dict)
+                        else request.query_params.get("locale")
+                    )
+                    locale = validated_locale(
+                        request,
+                        locales,
+                        locale=supplied,
+                        field="body.locale" if isinstance(exc.body, dict) else "query.locale",
+                    )
+                    if isinstance(locale, JSONResponse):
+                        return locale
+                    return error_response(
+                        request,
+                        status_code=400,
+                        code="VALIDATION_ERROR",
+                        message=translate(
+                            locale if locales else "en",
+                            "validation_error",
+                            field="request",
+                            reason="invalid",
+                        ),
+                        details={
+                            "fields": [
+                                {"path": ".".join(map(str, error["loc"])), "code": "invalid"}
+                                for error in exc.errors()
+                            ]
+                        },
+                    )
+
+            return localized
+
+    router = APIRouter(route_class=PublicLocaleRoute)
     current_state = state_supplier or (lambda: state)
     current_chat_service = chat_service_supplier or (lambda: chat_service)
 
@@ -282,6 +360,12 @@ def create_public_router(
     def public_directory() -> Path | None:
         directory = current_state().public_directory
         return directory if directory is not None and directory.is_dir() else None
+
+    def current_locales() -> LocalesConfig | None:
+        try:
+            return bundle_locales(current_bundle_manager(), public_directory())
+        except OSError, ValueError, sqlite3.Error, BundleActivationError:
+            return None
 
     def unavailable(request: Request, locale: str) -> JSONResponse:
         return error_response(
@@ -299,7 +383,11 @@ def create_public_router(
         return {"status": "alive"}
 
     @router.get("/api/public/faq")
-    async def approved_faq(request: Request, locale: _ApiLocale = "zh-TW") -> Response:
+    async def approved_faq(request: Request, locale: Locale | None = None) -> Response:
+        selected = validated_locale(request, current_locales(), locale=locale)
+        if isinstance(selected, JSONResponse):
+            return selected
+        locale = selected
         faq = faq_supplier()
         if faq is None:
             return unavailable(request, locale)
@@ -308,6 +396,8 @@ def create_public_router(
                 await asyncio.to_thread(faq.public_payload, locale),
                 headers={"Cache-Control": "no-store"},
             )
+        except LocaleNotEnabledError:
+            return _locale_validation_error(request, current_locales(), field="query.locale")
         except BundleActivationError, FaqError:
             return unavailable(request, locale)
 
@@ -328,6 +418,16 @@ def create_public_router(
 
     @router.post("/api/public/chat/stream")
     async def chat_stream(request: Request, body: PublicChatRequest) -> Response:
+        locales = current_locales()
+        locale = validated_locale(
+            request,
+            locales,
+            locale=body.locale if "locale" in body.model_fields_set else None,
+            field="body.locale",
+        )
+        if isinstance(locale, JSONResponse):
+            return locale
+        body = body.model_copy(update={"locale": locale})
         message_limit, history_count_limit, history_character_limit = (
             chat_request_limits_supplier()
             if chat_request_limits_supplier is not None
@@ -343,7 +443,7 @@ def create_public_router(
                 status_code=413,
                 code="PAYLOAD_TOO_LARGE",
                 message=translate(
-                    body.locale,
+                    locale if locales else "en",
                     "validation_error",
                     field="request",
                     reason="too large",
@@ -364,7 +464,7 @@ def create_public_router(
                 request,
                 status_code=503,
                 code="SERVICE_NOT_READY",
-                message=_message(body.locale, "SERVICE_NOT_READY"),
+                message=_message(locale if locales else "en", "SERVICE_NOT_READY"),
             )
         return await _chat_response(
             request,
@@ -413,10 +513,10 @@ def create_public_router(
 
     @router.get("/api/public/profile")
     async def profile(request: Request) -> Response:
-        query = _validated_query(request, {"locale"})
+        query = _validated_query(request, {"locale"}, current_locales())
         if isinstance(query, JSONResponse):
             return query
-        locale = query.get("locale", DEFAULT_LOCALE)
+        locale = query["locale"]
         scene_service = scene_supplier()
         if scene_service is not None:
             try:
@@ -470,7 +570,7 @@ def create_public_router(
 
     @router.get("/api/public/character.png")
     async def character(request: Request) -> Response:
-        query = _validated_query(request, {"rev"})
+        query = _validated_query(request, {"rev"}, current_locales())
         if isinstance(query, JSONResponse):
             return query
         requested_revision = int(query["rev"]) if "rev" in query else None
@@ -486,7 +586,7 @@ def create_public_router(
                     payload = snapshot.sprite_content
                     selected_version = snapshot.bundle_id
             except SceneServiceError, BundleActivationError:
-                return unavailable(request, DEFAULT_LOCALE)
+                return unavailable(request, query["locale"])
             return Response(
                 payload,
                 media_type="image/png",
@@ -516,7 +616,7 @@ def create_public_router(
                 SceneResolutionError,
                 ValueError,
             ):
-                return unavailable(request, DEFAULT_LOCALE)
+                return unavailable(request, query["locale"])
             return Response(
                 payload,
                 media_type="image/png",
@@ -524,7 +624,7 @@ def create_public_router(
             )
         directory = public_directory()
         if directory is None:
-            return unavailable(request, DEFAULT_LOCALE)
+            return unavailable(request, query["locale"])
         try:
             profile = _public_profile_from_directory(
                 directory, index_version=version(), built_at=None, repository_count=None
@@ -542,13 +642,13 @@ def create_public_router(
                 headers={"ETag": _etag(version(), f"character:{revision}", payload)},
             )
         except OSError, PublicProfileError, SpriteValidationError, SceneResolutionError:
-            return unavailable(request, DEFAULT_LOCALE)
+            return unavailable(request, query["locale"])
 
     @router.api_route("/api/public/scene-background", methods=["GET", "HEAD", "OPTIONS"])
     async def scene_background(request: Request) -> Response:
         if request.method == "OPTIONS":
             return Response(status_code=204, headers={"Allow": "GET, HEAD, OPTIONS"})
-        query = _validated_query(request, {"rev"})
+        query = _validated_query(request, {"rev"}, current_locales())
         if isinstance(query, JSONResponse) or "rev" not in query:
             return query if isinstance(query, JSONResponse) else Response(status_code=404)
         revision = int(query["rev"])
@@ -585,10 +685,10 @@ def create_public_router(
 
     @router.get("/api/public/card.{extension}")
     async def card(request: Request, extension: str) -> Response:
-        query = _validated_query(request, {"locale", "theme", "rev"})
+        query = _validated_query(request, {"locale", "theme", "rev"}, current_locales())
         if isinstance(query, JSONResponse):
             return query
-        locale = query.get("locale", DEFAULT_LOCALE)
+        locale = query["locale"]
         theme = query.get("theme", "light")
         content_type = {"svg": "image/svg+xml", "gif": "image/gif", "png": "image/png"}.get(
             extension
@@ -715,7 +815,7 @@ def _public_chat_message(locale: str, code: str) -> str:
             "concurrency_limit": "Chat capacity is currently full. Please try again later.",
         },
     }
-    locale_messages = messages.get(locale, messages["en"])
+    locale_messages = messages[chrome_locale(locale)]
     return locale_messages.get(code, locale_messages["provider_error"])
 
 

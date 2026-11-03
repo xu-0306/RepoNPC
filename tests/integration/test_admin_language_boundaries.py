@@ -15,6 +15,7 @@ from reponpc.admin.faq import ReviewedFaq
 from reponpc.admin.local_portfolio import LocalPortfolioStore
 from reponpc.admin.scene import AdminSceneService
 from reponpc.api.admin import OnboardingDraftRequest, create_admin_router
+from reponpc.config.models import LocalesConfig
 from reponpc.i18n.languages import language_tags
 from reponpc.i18n.plan import ANALYSIS_LOCALES, LocaleNotEnabledError
 from tests.integration.test_admin_onboarding import ORIGIN, _application, _login
@@ -79,7 +80,23 @@ def _locale_application(tmp_path: Path, site, monkeypatch: pytest.MonkeyPatch):
     faq = RecordingFaq()
     scene = PreparedScene()
     prepared = SimpleNamespace(active_bundle_id=None)
-    application.state.bundle_manager = SimpleNamespace(status=lambda: prepared)
+
+    @contextmanager
+    def snapshot():
+        yield (
+            SimpleNamespace(
+                locales=LocalesConfig(
+                    default=scene.locales[0] if scene.schema_version == 1 else scene.locales[-1],
+                    supported=scene.locales,
+                )
+            ),
+            prepared.active_bundle_id,
+            tmp_path,
+        )
+
+    application.state.bundle_manager = SimpleNamespace(
+        status=lambda: prepared, acquire_snapshot=snapshot
+    )
     calls: list[str] = []
 
     class Sharing:

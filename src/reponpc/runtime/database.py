@@ -1460,6 +1460,53 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             "'ALL_SEGMENTS_DROPPED', 'VALIDATION_UNEXPECTED', 'NO_EVIDENCE_SELECTED'))",
         ),
     ),
+    Migration(
+        version=38,
+        name="faq_site_languages",
+        statements=(
+            """
+            CREATE TABLE faq_entries_v38 (
+                entry_id TEXT PRIMARY KEY,
+                question_key TEXT NOT NULL,
+                bundle_id TEXT NOT NULL,
+                locale TEXT NOT NULL,
+                question TEXT NOT NULL,
+                topic TEXT,
+                claim_kind TEXT NOT NULL CHECK(claim_kind IN
+                    ('role', 'responsibility', 'achievement', 'context')),
+                answer_markdown TEXT,
+                citations_json TEXT NOT NULL DEFAULT '[]',
+                diagnostics_json TEXT NOT NULL DEFAULT '[]',
+                coverage_status TEXT NOT NULL DEFAULT 'unchecked' CHECK(coverage_status IN
+                    ('unchecked', 'answered', 'partially_answered', 'no_relevant_content')),
+                review_state TEXT NOT NULL DEFAULT 'pending' CHECK(review_state IN
+                    ('pending', 'approved', 'rejected')),
+                rewrite_json TEXT,
+                error_code TEXT,
+                revision INTEGER NOT NULL DEFAULT 1 CHECK(revision > 0),
+                variants_json TEXT NOT NULL DEFAULT '[]' CHECK (
+                    length(variants_json) BETWEEN 2 AND 8192
+                    AND json_valid(variants_json)
+                    AND json_type(variants_json) = 'array'
+                    AND json_array_length(variants_json) <= 8
+                ),
+                no_match_reason TEXT CHECK (
+                    no_match_reason IS NULL OR no_match_reason IN (
+                        'MODEL_INSUFFICIENT_EVIDENCE', 'ENVELOPE_SCHEMA_INVALID',
+                        'SOURCE_ID_UNKNOWN', 'MODEL_AUTHORED_MARKUP', 'INFERENCE_CYCLE',
+                        'SELECTED_MAP_INVALID', 'ALL_SEGMENTS_DROPPED',
+                        'VALIDATION_UNEXPECTED', 'NO_EVIDENCE_SELECTED')),
+                UNIQUE(locale, question_key)
+            )
+            """,
+            "INSERT INTO faq_entries_v38(rowid, entry_id, question_key, bundle_id, locale, "
+            "question, topic, claim_kind, answer_markdown, citations_json, diagnostics_json, "
+            "coverage_status, review_state, rewrite_json, error_code, revision, variants_json, "
+            "no_match_reason) SELECT rowid, * FROM faq_entries ORDER BY rowid",
+            "DROP TABLE faq_entries",
+            "ALTER TABLE faq_entries_v38 RENAME TO faq_entries",
+        ),
+    ),
 )
 
 

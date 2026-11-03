@@ -11,7 +11,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from reponpc.config.models import Locale
 from reponpc.i18n import languages
-from reponpc.i18n.catalog import SUPPORTED_LOCALES
+from reponpc.i18n.catalog import MESSAGES
 
 ENTRY: dict[str, Any] = languages.get_language("es").model_dump(
     mode="json", by_alias=True, exclude_none=True
@@ -122,7 +122,7 @@ def test_registry_helpers_follow_every_entry() -> None:
         assert languages.english_name(language.tag) == language.english_name
         assert languages.title_max(language.tag) == language.title_max > 0
         assert languages.chrome_locale(language.tag) == language.chrome
-        assert language.chrome in SUPPORTED_LOCALES
+        assert language.chrome in MESSAGES
         for source in languages.LANGUAGES:
             expected = (
                 language.derive.converter
@@ -174,9 +174,9 @@ def test_api_models_keep_their_phase_a_language_boundary() -> None:
 
     for language in languages.LANGUAGES:
         assert FaqQueueRequest(locale=language.tag).locale == language.tag
-        if language.tag not in SUPPORTED_LOCALES:
-            with pytest.raises(ValidationError):
-                PublicChatRequest(message="Project?", locale=language.tag)
+        assert PublicChatRequest(message="Project?", locale=language.tag).locale == language.tag
     for unknown in ("unknown", " " + languages.LANGUAGES[0].tag):
         with pytest.raises(ValidationError):
             FaqQueueRequest(locale=unknown)
+        with pytest.raises(ValidationError):
+            PublicChatRequest(message="Project?", locale=unknown)

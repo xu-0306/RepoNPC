@@ -4,7 +4,7 @@ from string import Formatter
 
 import pytest
 
-from reponpc.i18n.catalog import MESSAGES, SUPPORTED_LOCALES, translate
+from reponpc.i18n.catalog import MESSAGES, translate
 from reponpc.i18n.languages import LANGUAGES
 
 
@@ -15,8 +15,8 @@ def _placeholders(template: str) -> set[str]:
 
 
 def test_catalog_has_exactly_the_supported_bilingual_locales() -> None:
-    assert SUPPORTED_LOCALES == ("zh-TW", "en")
-    assert set(MESSAGES) == set(SUPPORTED_LOCALES)
+    assert set(MESSAGES) == {language.chrome for language in LANGUAGES}
+    assert all(language.chrome in MESSAGES for language in LANGUAGES)
 
 
 def test_catalog_keys_and_placeholders_are_identical_between_locales() -> None:

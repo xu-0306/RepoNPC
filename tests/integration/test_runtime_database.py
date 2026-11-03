@@ -1220,7 +1220,7 @@ def test_migration_37_preserves_faq_and_checks_the_closed_reason_set(tmp_path, b
             }
     database.initialize()
     database.initialize()
-    assert database.schema_version() == 37
+    assert database.schema_version() == MIGRATIONS[-1].version
     with database.connection() as connection:
         row = connection.execute("SELECT * FROM faq_entries").fetchone()
         assert row["no_match_reason"] is None

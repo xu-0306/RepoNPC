@@ -189,7 +189,7 @@ def test_unsupported_locale_uses_safe_field_error_without_echoing_value() -> Non
     assert response.status_code == 400
     error = response.json()["error"]
     assert error["code"] == "VALIDATION_ERROR"
-    assert error["details"] == {"fields": [{"path": "locale", "code": "unsupported_locale"}]}
+    assert error["details"] == {"fields": [{"path": "query.locale", "code": "invalid"}]}
     assert canary not in response.text
     assert_public_headers(response)
 

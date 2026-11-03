@@ -16,7 +16,9 @@ from reponpc.admin.faq_registry import STANDARD_QUESTIONS
 from reponpc.bundles.manager import BundleManager
 from reponpc.chat.answers import NoMatchReason
 from reponpc.chat.service import GroundedChatService
+from reponpc.i18n.convert import convert
 from reponpc.i18n.languages import Locale
+from reponpc.i18n.plan import plan_languages, require_enabled
 from reponpc.indexing.public_profile import parse_public_profile_bytes
 from reponpc.runtime.database import RuntimeDatabase
 
@@ -75,13 +77,16 @@ class ReviewedFaq:
         self.chat_supplier = chat_supplier
 
     def initialize_queue(self, locale: Locale) -> dict[str, Any]:
-        with self.bundles.acquire_snapshot() as (_index, bundle_id, directory):
+        with self.bundles.acquire_snapshot() as (index, bundle_id, directory):
+            require_enabled(locale, index.locales.supported)
             profile = parse_public_profile_bytes((directory / "profile.json").read_bytes())
+            source = dict(plan_languages(index.locales.supported).derived).get(locale)
+            written = source or locale
             questions: list[tuple[str, ClaimKind, str, str | None]] = [
-                (key, kind, texts[locale], key) for key, kind, texts in STANDARD_QUESTIONS
+                (key, kind, texts[written], key) for key, kind, texts in STANDARD_QUESTIONS
             ]
             known = {item[2] for item in questions}
-            for question in profile.locales[locale].suggested_questions:
+            for question in profile.locales[written].suggested_questions:
                 if question in known:
                     continue
                 known.add(question)
@@ -94,12 +99,37 @@ class ReviewedFaq:
                         "INSERT OR IGNORE INTO faq_entries "
                         "(entry_id, question_key, bundle_id, locale, question, topic, claim_kind) "
                         "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (uuid.uuid4().hex, key, bundle_id, locale, question, topic, kind),
+                        (uuid.uuid4().hex, key, bundle_id, written, question, topic, kind),
                     )
+                if source is not None:
+                    rows = connection.execute(
+                        "SELECT * FROM faq_entries WHERE locale = ? AND bundle_id = ? "
+                        "ORDER BY topic IS NULL, rowid",
+                        (source, bundle_id),
+                    ).fetchall()
+                    for row in rows:
+                        values = _converted_values(row, locale)
+                        values = {
+                            "entry_id": uuid.uuid4().hex,
+                            "question_key": row["question_key"],
+                            "locale": locale,
+                            "topic": row["topic"],
+                            "claim_kind": row["claim_kind"],
+                            **values,
+                        }
+                        connection.execute(
+                            "INSERT OR IGNORE INTO faq_entries ("
+                            + ", ".join(values)
+                            + ") VALUES ("
+                            + ", ".join("?" for _ in values)
+                            + ")",
+                            tuple(values.values()),
+                        )
                 connection.commit()
         return self.view(locale)
 
     def view(self, locale: Locale) -> dict[str, Any]:
+        self._require_locale(locale)
         active = self.bundles.status().active_bundle_id
         with self.database.connection() as connection:
             rows = connection.execute(
@@ -116,6 +146,27 @@ class ReviewedFaq:
         row = self._entry(entry_id)
         if row["revision"] != revision:
             raise FaqError("FAQ_CONFLICT")
+        with self.bundles.acquire_snapshot() as (index, _bundle_id, _directory):
+            source = dict(plan_languages(index.locales.supported).derived).get(row["locale"])
+        if source is not None:
+            with self.database.connection() as connection:
+                original = connection.execute(
+                    "SELECT * FROM faq_entries WHERE locale = ? AND question_key = ? "
+                    "AND bundle_id = ?",
+                    (source, row["question_key"], self.bundles.status().active_bundle_id),
+                ).fetchone()
+            if original is None or original["answer_markdown"] is None or original["error_code"]:
+                raise FaqError("FAQ_NOT_READY")
+            self._update(
+                entry_id,
+                revision,
+                {
+                    key: value
+                    for key, value in _converted_values(original, row["locale"]).items()
+                    if key not in {"question", "variants_json"}
+                },
+            )
+            return self._owner_entry(self._entry(entry_id), self.bundles.status().active_bundle_id)
         chat = self.chat_supplier()
         if chat is None:
             raise FaqError("SERVICE_NOT_READY")
@@ -202,7 +253,7 @@ class ReviewedFaq:
     ) -> OwnerFaqEntry:
         with (
             self.bundles.acquire_snapshot() as (
-                _index,
+                index,
                 active_bundle_id,
                 _directory,
             ),
@@ -214,6 +265,7 @@ class ReviewedFaq:
             ).fetchone()
             if row is None:
                 raise FaqError("FAQ_NOT_FOUND")
+            require_enabled(row["locale"], index.locales.supported)
             validated = validate_question_variants(row["question"], variants)
             cursor = connection.execute(
                 "UPDATE faq_entries SET variants_json = ?, review_state = 'pending', "
@@ -260,6 +312,7 @@ class ReviewedFaq:
         self, locale: Locale, bundle_id: str, connection: sqlite3.Connection
     ) -> dict[str, Any]:
         """Project approved rows against a caller's already-captured bundle identity."""
+        self._require_locale(locale)
         if self.bundles.status().active_bundle_id != bundle_id:
             raise FaqError("FAQ_STALE")
         rows = connection.execute(
@@ -297,7 +350,12 @@ class ReviewedFaq:
             ).fetchone()
         if row is None:
             raise FaqError("FAQ_NOT_FOUND")
+        self._require_locale(row["locale"])
         return row
+
+    def _require_locale(self, locale: str) -> None:
+        with self.bundles.acquire_snapshot() as (index, _bundle_id, _directory):
+            require_enabled(locale, index.locales.supported)
 
     def _update(self, entry_id: str, revision: int, values: dict[str, Any]) -> None:
         values = {"rewrite_json": None, **values}
@@ -334,6 +392,30 @@ class ReviewedFaq:
             "error_code": row["error_code"],
             "revision": row["revision"],
         }
+
+
+def _converted_values(row: sqlite3.Row, target: str) -> dict[str, Any]:
+    source = row["locale"]
+    return {
+        "bundle_id": row["bundle_id"],
+        "question": convert(row["question"], source, target),
+        "answer_markdown": (
+            convert(row["answer_markdown"], source, target)
+            if row["answer_markdown"] is not None
+            else None
+        ),
+        "variants_json": json.dumps(
+            [convert(text, source, target) for text in json.loads(row["variants_json"])],
+            ensure_ascii=False,
+        ),
+        "citations_json": row["citations_json"],
+        "diagnostics_json": row["diagnostics_json"],
+        "coverage_status": row["coverage_status"],
+        "no_match_reason": row["no_match_reason"],
+        "error_code": row["error_code"],
+        "review_state": "pending",
+        "rewrite_json": None,
+    }
 
 
 def normalize_question(value: str) -> str:

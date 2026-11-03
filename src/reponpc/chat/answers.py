@@ -18,7 +18,7 @@ from reponpc.chat.policy_data import (
     person_policy,
     visitor_message,
 )
-from reponpc.i18n.languages import LANGUAGES, Locale
+from reponpc.i18n.languages import LANGUAGES, Locale, language_tags
 
 _SOURCE_MARKER_RE = re.compile(r"\[(S[1-9][0-9]*)\]")
 _SOURCE_ID_RE = re.compile(r"S[1-9][0-9]*")
@@ -143,11 +143,14 @@ def validate_v2_answer(
     owner_name: str | None = None,
     owner_aliases: Sequence[str] = (),
     suggested_questions: Sequence[str] = (),
+    site_locales: Sequence[str] = language_tags(),
 ) -> ValidatedAnswer:
     """Validate the complete v2 provider output before public delivery."""
 
     suggestions = _safe_suggestions(suggested_questions)
     try:
+        for tag in _policy_locales(locale, site_locales):
+            _load_locale_policy(tag)
         envelope = (
             AnswerEnvelope.model_validate_json(raw)
             if isinstance(raw, str)
@@ -160,6 +163,7 @@ def validate_v2_answer(
             owner_name=owner_name,
             owner_aliases=owner_aliases,
             suggested_questions=suggestions,
+            site_locales=site_locales,
         )
     except ValidationError, JSONDecodeError:
         return no_match_answer(locale, suggestions, reason="ENVELOPE_SCHEMA_INVALID")
@@ -177,6 +181,7 @@ def _validate_v2_envelope(
     owner_name: str | None,
     owner_aliases: Sequence[str],
     suggested_questions: tuple[str, ...],
+    site_locales: Sequence[str],
 ) -> ValidatedAnswer:
     """Apply envelope integrity checks, then salvage valid typed segments."""
 
@@ -214,7 +219,9 @@ def _validate_v2_envelope(
     for segment_index, segment in enumerate(envelope.segments):
         source_ids = segment.source_ids
         evidence = tuple(selected[source_id] for source_id in source_ids)
-        person_reference = _contains_person_reference(segment.text, locale, identity_terms)
+        person_reference = _contains_person_reference(
+            segment.text, locale, identity_terms, site_locales
+        )
         kind: str = segment.kind
         if segment.kind in {"project", "inference"} and person_reference:
             kind = "person"
@@ -424,10 +431,11 @@ def _contains_person_reference(
     text: str,
     locale: Locale,
     identities: tuple[str, ...],
+    site_locales: Sequence[str] = language_tags(),
 ) -> bool:
     if _OWNER_PLACEHOLDER in text:
         return True
-    policies = tuple(_load_locale_policy(item) for item in _policy_locales(locale))
+    policies = tuple(_load_locale_policy(item) for item in _policy_locales(locale, site_locales))
     exclusions = tuple(exclusion for policy in policies for exclusion in policy.exclusions)
     searchable = _without_exclusions(text, exclusions)
     return any(_term_present(searchable, identity) for identity in identities) or any(
@@ -437,9 +445,8 @@ def _contains_person_reference(
     )
 
 
-def _policy_locales(locale: Locale) -> tuple[Locale, ...]:
-    alternate: Locale = "en" if locale == "zh-TW" else "zh-TW"
-    return (locale, alternate)
+def _policy_locales(locale: Locale, site_locales: Sequence[str]) -> tuple[Locale, ...]:
+    return tuple(dict.fromkeys((locale, "en", *site_locales)))
 
 
 def _without_exclusions(text: str, exclusions: Iterable[str]) -> str:
