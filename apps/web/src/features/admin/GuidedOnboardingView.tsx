@@ -6,11 +6,14 @@ import { Button, Dialog, DialogTrigger, Popover } from "react-aria-components";
 import "./guidedAnalysis.css";
 import "../../p4-w1.css";
 import "../../p4-w2.css";
+import "./profileTranslation.css";
 
 import { messages, type Locale } from "../../i18n/messages";
+import { endonym } from "../../i18n/languages";
 import {
   formatRepositorySize,
   guidedErrorMessage,
+  profileIsComplete,
   type ContributionProposal,
   type GuidedOnboardingState,
   type GuidedProfile,
@@ -29,6 +32,13 @@ import { ConfirmButton } from "./ConfirmDialog";
 import { CheckboxField } from "./CheckboxField";
 import type { ClaimKind } from "./ClaimEditor";
 import { DraftValidation } from "./AdminWorkspace";
+import { ProfileTranslationFields } from "./ProfileTranslationFields";
+import {
+  emptyProfileTranslationItems,
+  profileLanguages,
+  PROFILE_FIELDS,
+  useProfileTranslation,
+} from "./profileTranslation";
 
 const EMPTY_WORKSPACE_STATUS: AdminWorkspaceStatus = {
   chat: {
@@ -176,8 +186,21 @@ type Copy = {
   headlineLabel: string;
   bioLabel: string;
   greetingLabel: string;
-  profileLocale: (locale: Locale) => string;
   profileRequired: string;
+  translateEmpty: string;
+  translatingProfile: string;
+  translateRequired: string;
+  nothingToTranslate: string;
+  translationSourceRequired: string;
+  retranslate: string;
+  retranslateDescription: string;
+  translationUnreviewed: string;
+  markTranslationReviewed: string;
+  restoreTranslation: string;
+  translationReviewed: string;
+  translationRestored: string;
+  translationComplete: (applied: number, discarded: number) => string;
+  unreviewedTranslations: (count: number) => string;
   confirmProfile: string;
   continueReview: string;
   reviewHeading: string;
@@ -368,7 +391,7 @@ const COPY: Record<Locale, Copy> = {
       "每個已選專案都需要確認貢獻後才能繼續。拒絕建議後，請重新填寫並確認。",
     profileHeading: "填寫基本資料",
     profileDescription:
-      "這些公開文字會成為完整設定草稿的一部分。請提供中英文內容。不要讓模型替你猜測個人資料。",
+      "這些公開文字會成為完整設定草稿的一部分。可以先填寫任一語言，再用 AI 翻譯並檢視另一欄；請勿讓模型猜測個人資料。確認前仍需填妥所有欄位。",
     displayNameLabel: "顯示名稱",
     githubLoginLabel: "你的 GitHub 帳號",
     githubLoginHelp:
@@ -377,8 +400,23 @@ const COPY: Record<Locale, Copy> = {
     headlineLabel: "一句話介紹自己",
     bioLabel: "簡介",
     greetingLabel: "問候語",
-    profileLocale: (locale) => (locale === "zh-TW" ? "繁體中文" : "English"),
     profileRequired: "完成所有中英文基本資料欄位後才能繼續。",
+    translateEmpty: "AI 補齊空白欄位",
+    translatingProfile: "正在翻譯；你仍可編輯欄位。",
+    translateRequired: "另一欄已有內容時，可按「AI 補齊空白欄位」翻譯。",
+    nothingToTranslate: "沒有可補齊的欄位；同一項目需有一欄已填、另一欄空白。",
+    translationSourceRequired: "另一欄需有內容才能翻譯。",
+    retranslate: "用另一欄重新翻譯",
+    retranslateDescription:
+      "重新翻譯會取代這一欄的文字；完成後仍可編輯或還原翻譯前的內容。",
+    translationUnreviewed: "自動翻譯，尚未檢視",
+    markTranslationReviewed: "標示為已檢視",
+    restoreTranslation: "還原翻譯前",
+    translationReviewed: "已標示為已檢視。",
+    translationRestored: "已還原翻譯前的文字。",
+    translationComplete: (applied, discarded) =>
+      `已翻譯 ${applied} 個欄位；因內容已變更而略過 ${discarded} 個欄位。請檢視翻譯。`,
+    unreviewedTranslations: (count) => `尚未檢視的自動翻譯：${count} 個欄位。`,
     confirmProfile: "確認基本資料並檢閱草稿",
     continueReview: "繼續檢閱草稿",
     reviewHeading: "檢閱已確認內容",
@@ -588,7 +626,7 @@ const COPY: Record<Locale, Copy> = {
       "Confirm a contribution for every selected project. After rejecting a suggestion, rewrite and confirm it before continuing.",
     profileHeading: "Add your basic profile",
     profileDescription:
-      "These public fields become part of the complete YAML draft. Supply both languages. Please do not ask a model to guess personal profile details.",
+      "These public fields become part of the complete YAML draft. Start in either language, then use AI to translate and review the other column. Do not ask the model to guess personal details. Complete every field before confirming.",
     displayNameLabel: "Display name",
     githubLoginLabel: "Your GitHub login",
     githubLoginHelp:
@@ -597,10 +635,27 @@ const COPY: Record<Locale, Copy> = {
     headlineLabel: "One-line introduction",
     bioLabel: "Bio",
     greetingLabel: "Greeting",
-    profileLocale: (locale) =>
-      locale === "zh-TW" ? "Traditional Chinese" : "English",
     profileRequired:
       "Complete every bilingual profile field before continuing.",
+    translateEmpty: "Fill empty fields with AI",
+    translatingProfile: "Translating; you can still edit the fields.",
+    translateRequired:
+      "When the other column has text, use Fill empty fields with AI to translate it.",
+    nothingToTranslate:
+      "No empty fields to fill. A field needs text in one column and an empty other column.",
+    translationSourceRequired: "The other column needs text to translate from.",
+    retranslate: "Retranslate from the other column",
+    retranslateDescription:
+      "Retranslating replaces this column's text. You can edit the result or restore the previous text afterwards.",
+    translationUnreviewed: "Machine translated, not reviewed yet",
+    markTranslationReviewed: "Mark as reviewed",
+    restoreTranslation: "Restore previous text",
+    translationReviewed: "Marked as reviewed.",
+    translationRestored: "Restored the previous text.",
+    translationComplete: (applied, discarded) =>
+      `Translated ${applied} fields; skipped ${discarded} fields whose text changed. Review the translations.`,
+    unreviewedTranslations: (count) =>
+      `Machine translations not reviewed yet: ${count} fields.`,
     confirmProfile: "Confirm profile and review draft",
     continueReview: "Continue to draft review",
     reviewHeading: "Review confirmed content",
@@ -714,38 +769,6 @@ function proposalWithField(
   return updateProposal(proposal, {
     [field]: { ...proposal[field], [locale]: value },
   });
-}
-
-function profileWithField(
-  profile: GuidedProfile,
-  field: "headline" | "bio" | "greeting",
-  locale: Locale,
-  value: string,
-): GuidedProfile {
-  return {
-    ...profile,
-    [field]: { ...profile[field], [locale]: value },
-  };
-}
-
-function profileWithDisplayName(
-  profile: GuidedProfile,
-  value: string,
-): GuidedProfile {
-  return { ...profile, displayName: value };
-}
-
-function profileIsComplete(profile: GuidedProfile): boolean {
-  return [
-    profile.displayName,
-    profile.githubLogin,
-    profile.headline["zh-TW"],
-    profile.headline.en,
-    profile.bio["zh-TW"],
-    profile.bio.en,
-    profile.greeting["zh-TW"],
-    profile.greeting.en,
-  ].every((value) => value.trim().length > 0);
 }
 
 function dispatchProposal(
@@ -1314,7 +1337,7 @@ function ContributionEditor({
                     htmlFor={`guided-role-${slugId}-${proposalLocale}`}
                     key={`role-${proposalLocale}`}
                   >
-                    {copy.roleLabel} ({copy.profileLocale(proposalLocale)})
+                    {copy.roleLabel} ({endonym(proposalLocale)})
                     <input
                       className="px-field"
                       disabled={busy || proposalLocked}
@@ -1338,7 +1361,7 @@ function ContributionEditor({
                     htmlFor={`guided-summary-${slugId}-${proposalLocale}`}
                     key={`summary-${proposalLocale}`}
                   >
-                    {copy.summaryLabel} ({copy.profileLocale(proposalLocale)})
+                    {copy.summaryLabel} ({endonym(proposalLocale)})
                     <textarea
                       className="px-field"
                       disabled={busy || proposalLocked}
@@ -1441,7 +1464,7 @@ function ContributionEditor({
                           key={`${claim.id}-${proposalLocale}`}
                         >
                           {copy.claimLabel(claim.kind)} (
-                          {copy.profileLocale(proposalLocale)})
+                          {endonym(proposalLocale)})
                           <textarea
                             className="px-field"
                             id={`guided-claim-${slugId}-${index}-${proposalLocale}`}
@@ -2261,15 +2284,21 @@ function ContributionsStep({
 }
 
 function ProfileStep({
+  locale,
   state,
   copy,
   busy,
   onAction,
+  translation,
+  modelReason,
 }: {
+  locale: Locale;
   state: GuidedOnboardingState;
   copy: Copy;
   busy: boolean;
   onAction: GuidedOnboardingViewProps["onAction"];
+  translation: ReturnType<typeof useProfileTranslation>;
+  modelReason: string | null;
 }) {
   const profile = state.profile;
   const complete = profileIsComplete(profile);
@@ -2284,18 +2313,25 @@ function ProfileStep({
       label: copy.githubLoginLabel,
       value: profile.githubLogin,
     },
-    ...(["headline", "bio", "greeting"] as const).flatMap((field) =>
-      (["zh-TW", "en"] as const).map((language) => ({
-        id: `guided-profile-${field}-${language}`,
-        label: `${copy[`${field}Label`]} (${copy.profileLocale(language)})`,
-        value: localized(profile[field], language),
+    ...PROFILE_FIELDS.flatMap((field) =>
+      profileLanguages(locale).map(({ tag }) => ({
+        id: `guided-profile-${field}-${tag}`,
+        label: `${copy[`${field}Label`]} (${endonym(tag)})`,
+        value: localized(profile[field], tag),
       })),
     ),
   ].filter((field) => !field.value.trim());
+  const translationItems = emptyProfileTranslationItems(profile);
+  const translateReason = busy
+    ? copy.disabledBusy
+    : translation.pending
+      ? copy.translatingProfile
+      : (modelReason ??
+        (translationItems.length ? null : copy.nothingToTranslate));
   const confirmationReason = busy
     ? copy.disabledBusy
     : !complete
-      ? copy.profileRequired
+      ? `${copy.profileRequired}${translationItems.length ? ` ${copy.translateRequired}` : ""}`
       : null;
 
   function setProfile(next: GuidedProfile) {
@@ -2337,6 +2373,46 @@ function ProfileStep({
           </aside>
         </details>
       )}
+      <div
+        className="profile-translation__tools"
+        aria-busy={translation.pending}
+      >
+        <button
+          className="px-button px-button--secondary"
+          aria-disabled={Boolean(translateReason)}
+          aria-describedby={
+            translateReason ? "guided-profile-translate-reason" : undefined
+          }
+          type="button"
+          onClick={() => {
+            if (!translateReason) void translation.run(translationItems);
+          }}
+        >
+          {copy.translateEmpty}
+        </button>
+        {disabledReason(translateReason, "guided-profile-translate-reason")}
+        <p
+          className="px-meta"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {translation.errorCode
+            ? guidedErrorMessage(locale, translation.errorCode, "profile")
+            : translation.pending
+              ? copy.translatingProfile
+              : translation.status?.kind === "translated"
+                ? copy.translationComplete(
+                    translation.status.applied,
+                    translation.status.discarded,
+                  )
+                : translation.status?.kind === "reviewed"
+                  ? copy.translationReviewed
+                  : translation.status?.kind === "restored"
+                    ? copy.translationRestored
+                    : ""}
+        </p>
+      </div>
       <div className="p4-w2__profile-fields p4-w2__fields">
         <label htmlFor="guided-profile-display-name">
           {copy.displayNameLabel}
@@ -2352,7 +2428,7 @@ function ProfileStep({
             }
             required
             onChange={(event) =>
-              setProfile(profileWithDisplayName(profile, event.target.value))
+              setProfile({ ...profile, displayName: event.target.value })
             }
             value={profile.displayName}
           />
@@ -2410,139 +2486,14 @@ function ProfileStep({
             value={profile.aliasesText}
           />
         </label>
-        <fieldset className="p4-w2__fields p4-w2__wide" disabled={busy}>
-          <legend>{copy.headlineLabel}</legend>
-          {(["zh-TW", "en"] as const).map((profileLocale) => (
-            <label
-              htmlFor={`guided-profile-headline-${profileLocale}`}
-              key={profileLocale}
-            >
-              {copy.profileLocale(profileLocale)}
-              <input
-                className="px-field"
-                id={`guided-profile-headline-${profileLocale}`}
-                aria-invalid={
-                  !localized(profile.headline, profileLocale).trim() ||
-                  undefined
-                }
-                aria-describedby={
-                  !localized(profile.headline, profileLocale).trim()
-                    ? `guided-profile-headline-${profileLocale}-required`
-                    : undefined
-                }
-                required
-                onChange={(event) =>
-                  setProfile(
-                    profileWithField(
-                      profile,
-                      "headline",
-                      profileLocale,
-                      event.target.value,
-                    ),
-                  )
-                }
-                value={localized(profile.headline, profileLocale)}
-              />
-              {!localized(profile.headline, profileLocale).trim() && (
-                <span
-                  className="p4-w2__required"
-                  id={`guided-profile-headline-${profileLocale}-required`}
-                >
-                  {copy.p4Required}
-                </span>
-              )}
-            </label>
-          ))}
-        </fieldset>
-        <fieldset className="p4-w2__fields p4-w2__wide" disabled={busy}>
-          <legend>{copy.bioLabel}</legend>
-          {(["zh-TW", "en"] as const).map((profileLocale) => (
-            <label
-              htmlFor={`guided-profile-bio-${profileLocale}`}
-              key={profileLocale}
-            >
-              {copy.profileLocale(profileLocale)}
-              <textarea
-                className="px-field"
-                id={`guided-profile-bio-${profileLocale}`}
-                aria-invalid={
-                  !localized(profile.bio, profileLocale).trim() || undefined
-                }
-                aria-describedby={
-                  !localized(profile.bio, profileLocale).trim()
-                    ? `guided-profile-bio-${profileLocale}-required`
-                    : undefined
-                }
-                required
-                onChange={(event) =>
-                  setProfile(
-                    profileWithField(
-                      profile,
-                      "bio",
-                      profileLocale,
-                      event.target.value,
-                    ),
-                  )
-                }
-                rows={4}
-                value={localized(profile.bio, profileLocale)}
-              />
-              {!localized(profile.bio, profileLocale).trim() && (
-                <span
-                  className="p4-w2__required"
-                  id={`guided-profile-bio-${profileLocale}-required`}
-                >
-                  {copy.p4Required}
-                </span>
-              )}
-            </label>
-          ))}
-        </fieldset>
-        <fieldset className="p4-w2__fields p4-w2__wide" disabled={busy}>
-          <legend>{copy.greetingLabel}</legend>
-          {(["zh-TW", "en"] as const).map((profileLocale) => (
-            <label
-              htmlFor={`guided-profile-greeting-${profileLocale}`}
-              key={profileLocale}
-            >
-              {copy.profileLocale(profileLocale)}
-              <textarea
-                className="px-field"
-                id={`guided-profile-greeting-${profileLocale}`}
-                aria-invalid={
-                  !localized(profile.greeting, profileLocale).trim() ||
-                  undefined
-                }
-                aria-describedby={
-                  !localized(profile.greeting, profileLocale).trim()
-                    ? `guided-profile-greeting-${profileLocale}-required`
-                    : undefined
-                }
-                required
-                onChange={(event) =>
-                  setProfile(
-                    profileWithField(
-                      profile,
-                      "greeting",
-                      profileLocale,
-                      event.target.value,
-                    ),
-                  )
-                }
-                rows={3}
-                value={localized(profile.greeting, profileLocale)}
-              />
-              {!localized(profile.greeting, profileLocale).trim() && (
-                <span
-                  className="p4-w2__required"
-                  id={`guided-profile-greeting-${profileLocale}-required`}
-                >
-                  {copy.p4Required}
-                </span>
-              )}
-            </label>
-          ))}
-        </fieldset>
+        <ProfileTranslationFields
+          locale={locale}
+          profile={profile}
+          busy={busy}
+          modelReason={modelReason}
+          translation={translation}
+          copy={copy}
+        />
       </div>
       <footer className="p4-w2__confirm">
         <button
@@ -2568,12 +2519,14 @@ function ReviewStep({
   busy,
   onCreateDraft,
   onAction,
+  unreviewedCount,
 }: {
   state: GuidedOnboardingState;
   copy: Copy;
   busy: boolean;
   onCreateDraft: GuidedOnboardingViewProps["onCreateDraft"];
   onAction: GuidedOnboardingViewProps["onAction"];
+  unreviewedCount: number;
 }) {
   const repositories = selectedRepositories(state);
   return (
@@ -2583,6 +2536,9 @@ function ReviewStep({
     >
       <h2 id="guided-review-heading">{copy.reviewHeading}</h2>
       <p>{copy.reviewDescription}</p>
+      <p className="px-meta" role="status" aria-live="polite">
+        {copy.unreviewedTranslations(unreviewedCount)}
+      </p>
       <section
         className="p4-w2__review-profile"
         aria-labelledby="guided-review-profile-heading"
@@ -2596,15 +2552,15 @@ function ReviewStep({
           {(["zh-TW", "en"] as const).map((profileLocale) => (
             <div key={profileLocale}>
               <dt>
-                {copy.headlineLabel} ({copy.profileLocale(profileLocale)})
+                {copy.headlineLabel} ({endonym(profileLocale)})
               </dt>
               <dd>{localized(state.profile.headline, profileLocale)}</dd>
               <dt>
-                {copy.bioLabel} ({copy.profileLocale(profileLocale)})
+                {copy.bioLabel} ({endonym(profileLocale)})
               </dt>
               <dd>{localized(state.profile.bio, profileLocale)}</dd>
               <dt>
-                {copy.greetingLabel} ({copy.profileLocale(profileLocale)})
+                {copy.greetingLabel} ({endonym(profileLocale)})
               </dt>
               <dd>{localized(state.profile.greeting, profileLocale)}</dd>
             </div>
@@ -2624,7 +2580,7 @@ function ReviewStep({
                     lang={language}
                     key={language}
                   >
-                    <h4>{copy.profileLocale(language)}</h4>
+                    <h4>{endonym(language)}</h4>
                     <dl>
                       <dt>{copy.roleLabel}</dt>
                       <dd>
@@ -2848,6 +2804,7 @@ export function GuidedOnboardingView({
   onCreateBatch,
   onRefreshAnalysisSelection,
   onSuggestContribution,
+  onTranslateProfile,
   onCreateDraft,
   onCopyDraft,
   onDownloadDraft,
@@ -2873,6 +2830,26 @@ export function GuidedOnboardingView({
     if (errorCode) errorRef.current?.focus();
   }, [errorCode]);
   const copy = COPY[locale];
+  const translationModelReason = analysisSelectionPending
+    ? copy.checkingProvider
+    : !analysisSelection?.selection.chat_profile_id || !onTranslateProfile
+      ? copy.modelReasons.CHAT_MODEL_NOT_SELECTED
+      : analysisSelection.chat.profile_id !==
+            analysisSelection.selection.chat_profile_id ||
+          !analysisSelection.chat.tested ||
+          analysisSelection.chat.status !== "ready"
+        ? (copy.modelReasons[analysisSelection.reason] ??
+          copy.modelReasons.CHAT_MODEL_NOT_READY)
+        : null;
+  const translation = useProfileTranslation({
+    profile: state.profile,
+    active: state.step === "profile" && state.mode === "guided",
+    reset: state.step === "intro",
+    modelGeneration: analysisSelection?.selection.generation,
+    enabled: !busy && !translationModelReason,
+    translate: onTranslateProfile,
+    onChange: (profile) => onAction({ type: "SET_PROFILE", profile }),
+  });
   const error = errorCode
     ? guidedErrorMessage(locale, errorCode, state.step)
     : "";
@@ -3052,10 +3029,13 @@ export function GuidedOnboardingView({
           )}
           {state.step === "profile" && (
             <ProfileStep
+              locale={locale}
               busy={busy}
               copy={copy}
               onAction={onAction}
               state={state}
+              translation={translation}
+              modelReason={translationModelReason}
             />
           )}
           {state.step === "review" && (
@@ -3065,6 +3045,7 @@ export function GuidedOnboardingView({
               onAction={onAction}
               onCreateDraft={onCreateDraft}
               state={state}
+              unreviewedCount={translation.unreviewedCount}
             />
           )}
           {state.step === "draft" && (

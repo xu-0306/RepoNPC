@@ -116,6 +116,10 @@ import {
   type RepositoryFact,
   type RepositoryMetadata,
 } from "./guidedOnboarding";
+import {
+  requestProfileTranslation,
+  type TranslateProfile,
+} from "./profileTranslation";
 import type { Locale } from "../../i18n/messages";
 import type { PublicProfile } from "../../app/publicTypes";
 import type { SceneAppearanceState } from "./AppearancePanel";
@@ -3101,6 +3105,9 @@ export function AdminPage({
     }
   }
 
+  const translateProfile: TranslateProfile = (items, signal) =>
+    requestProfileTranslation(request, items, signal);
+
   async function createGuidedDraft() {
     if (guidedState.rawYamlHasUnmappedChanges) {
       dispatchAdminError({ type: "SET_GUIDED_ERROR", code: "CONFIG_INVALID" });
@@ -3868,6 +3875,7 @@ export function AdminPage({
             }
             onRefreshAnalysisSelection={() => void refreshAnalysisSelection()}
             onSuggestContribution={(slug) => void suggestContribution(slug)}
+            onTranslateProfile={translateProfile}
             state={guidedState}
           />
         }

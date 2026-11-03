@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { LANGUAGES } from "../../i18n/languages";
+import { PROFILE_FIELDS } from "./profileTranslation";
 
 import {
   formatRepositorySize,
@@ -7,6 +9,7 @@ import {
   guidedOnboardingReducer,
   initialGuidedOnboardingState,
   parseGuidedOnboarding,
+  profileIsComplete,
   serializeGuidedOnboarding,
   type ContributionProposal,
   type GuidedOnboardingState,
@@ -276,6 +279,62 @@ const profile = {
     en: "Hi, I am your RepoNPC.",
   },
 };
+
+describe("profile editing and confirmation", () => {
+  it.each(LANGUAGES)(
+    "uses profile-specific validation guidance in $tag",
+    ({ tag }) => {
+      const error = guidedErrorMessage(tag, "VALIDATION_ERROR", "profile");
+      expect(error).toContain("1–2,000");
+      expect(error).not.toContain("GitHub");
+      expect(error).toBe(
+        tag === "en"
+          ? "Check the fields to translate. Source text must contain 1–2,000 characters. Your existing text is kept."
+          : "請檢查要翻譯的欄位；來源文字需為 1–2,000 個字元。原有內容仍保留。",
+      );
+      expect(
+        guidedErrorMessage(tag, "VALIDATION_ERROR", "repositories"),
+      ).toContain("GitHub");
+    },
+  );
+  it.each(LANGUAGES)(
+    "allows a blank $tag while editing and requires every localized value before confirmation",
+    ({ tag }) => {
+      expect(profileIsComplete(profile)).toBe(true);
+      for (const field of PROFILE_FIELDS) {
+        for (const blank of ["", " \n "]) {
+          const partial = {
+            ...profile,
+            [field]: { ...profile[field], [tag]: blank },
+          };
+          const editing = guidedOnboardingReducer(
+            {
+              ...initialGuidedOnboardingState(),
+              step: "profile",
+              profile,
+              profileConfirmed: true,
+            },
+            { type: "SET_PROFILE", profile: partial },
+          );
+          expect(editing.profile[field][tag]).toBe(blank);
+          expect(editing.profileConfirmed).toBe(false);
+          expect(profileIsComplete(editing.profile)).toBe(false);
+          expect(() =>
+            guidedOnboardingReducer(editing, { type: "CONFIRM_PROFILE" }),
+          ).toThrow("ONBOARDING_PROFILE_REQUIRED");
+        }
+      }
+      const confirmed = guidedOnboardingReducer(
+        { ...initialGuidedOnboardingState(), step: "profile", profile },
+        { type: "CONFIRM_PROFILE" },
+      );
+      expect(confirmed.step).toBe("review");
+      expect(confirmed.profileConfirmed).toBe(true);
+      for (const field of ["displayName", "githubLogin"] as const)
+        expect(profileIsComplete({ ...profile, [field]: "" })).toBe(false);
+    },
+  );
+});
 
 function selectedState() {
   let state = guidedOnboardingReducer(initialGuidedOnboardingState(), {

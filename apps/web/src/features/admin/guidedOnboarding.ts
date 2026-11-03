@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { Locale } from "../../i18n/messages";
 import type { AnalysisSelectionView } from "./AnalysisSelectionPanel";
 import type { AdminValidation } from "./AdminWorkspace";
+import type { TranslateProfile } from "./profileTranslation";
 
 export type LocalizedText = Record<Locale, string>;
 
@@ -232,6 +233,7 @@ export interface GuidedOnboardingViewProps {
   onCreateBatch?: () => void;
   onRefreshAnalysisSelection: () => void;
   onSuggestContribution: (slug: string) => void;
+  onTranslateProfile?: TranslateProfile;
   onCreateDraft: () => void;
   onCopyDraft: () => void;
   onDownloadDraft: () => void;
@@ -986,8 +988,13 @@ export function guidedErrorMessage(
     },
     VALIDATION_ERROR: {
       "zh-TW":
-        "GitHub 使用者名稱或個人檔案 URL 格式無效。請輸入 username 或 https://github.com/username。",
-      en: "The GitHub username or profile URL is invalid. Enter a username or https://github.com/username.",
+        step === "profile"
+          ? "請檢查要翻譯的欄位；來源文字需為 1–2,000 個字元。原有內容仍保留。"
+          : "GitHub 使用者名稱或個人檔案 URL 格式無效。請輸入 username 或 https://github.com/username。",
+      en:
+        step === "profile"
+          ? "Check the fields to translate. Source text must contain 1–2,000 characters. Your existing text is kept."
+          : "The GitHub username or profile URL is invalid. Enter a username or https://github.com/username.",
     },
     MODEL_UNAVAILABLE: {
       "zh-TW":
@@ -1177,7 +1184,7 @@ function cloneProfile(profile: GuidedProfile): GuidedProfile {
   };
 }
 
-function profileIsComplete(profile: GuidedProfile): boolean {
+export function profileIsComplete(profile: GuidedProfile): boolean {
   return [
     profile.displayName,
     profile.githubLogin,

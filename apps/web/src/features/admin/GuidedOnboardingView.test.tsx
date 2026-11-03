@@ -6,6 +6,7 @@ import {
 } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { messages } from "../../i18n/messages";
+import { LANGUAGES, endonym } from "../../i18n/languages";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -24,6 +25,12 @@ import {
   GuidedOnboardingView,
 } from "./GuidedOnboardingView";
 import { ConfirmButton } from "./ConfirmDialog";
+import { ProfileTranslationFields } from "./ProfileTranslationFields";
+import {
+  PROFILE_FIELDS,
+  type ProfileTranslationItem,
+  type useProfileTranslation,
+} from "./profileTranslation";
 import type { AnalysisSelectionView } from "./AnalysisSelectionPanel";
 import { Dialog, DialogTrigger, Popover } from "react-aria-components";
 
@@ -58,7 +65,10 @@ vi.mock("react", async (importOriginal) => {
       return [
         directHooks.values[index],
         (next: unknown) => {
-          directHooks.values![index] = next;
+          directHooks.values![index] =
+            typeof next === "function"
+              ? next(directHooks.values![index])
+              : next;
         },
       ];
     },
@@ -84,6 +94,482 @@ const metadata: RepositoryMetadata = {
   updated_at: "2026-08-14T00:00:00Z",
   html_url: "https://github.com/octocat/demo",
 };
+
+function translationResponse(items: ProfileTranslationItem[]) {
+  return {
+    items: items.map((item) => ({
+      field: item.field,
+      target_locale: item.target_locale,
+      text: `Translated ${item.field}`,
+      method: "model",
+      confirmed: false,
+    })),
+  };
+}
+
+function profileView(input: GuidedOnboardingViewProps) {
+  directHooks.cursor = directHooks.refCursor = 0;
+  directHooks.effects = [];
+  const tree = GuidedOnboardingView(input);
+  const step = elements(tree).find(
+    (node) =>
+      typeof node.type === "function" &&
+      ["ProfileStep", "ReviewStep"].includes(node.type.name),
+  )!;
+  const body = (step.type as (props: unknown) => ReactNode)(step.props);
+  const fields = elements(body).find(
+    (node) => node.type === ProfileTranslationFields,
+  );
+  const fieldTree = fields
+    ? ProfileTranslationFields(
+        fields.props as Parameters<typeof ProfileTranslationFields>[0],
+      )
+    : null;
+  return {
+    body,
+    nodes: [...elements(body), ...elements(fieldTree)],
+    translation: step.props.translation as ReturnType<
+      typeof useProfileTranslation
+    >,
+    copy: step.props.copy as Record<
+      string,
+      string | ((...args: number[]) => string)
+    >,
+  };
+}
+
+describe("ADR-078 profile UI", () => {
+  it.each(LANGUAGES)(
+    "localizes source guidance and pending status in $tag",
+    async ({ tag }) => {
+      directHooks.values = [];
+      directHooks.refs = [];
+      let resolve!: (result: unknown) => void;
+      const pending = new Promise<unknown>((done) => {
+        resolve = done;
+      });
+      try {
+        const input = props({
+          locale: tag,
+          analysisSelection: confirmedModels,
+          onTranslateProfile: vi.fn(() => pending),
+          state: state({
+            step: "profile",
+            profile: {
+              ...profile,
+              headline: { ...profile.headline, [tag]: "" },
+              bio: { "zh-TW": "", en: "" },
+            },
+          }),
+        });
+        let view = profileView(input);
+        expect(renderToStaticMarkup(view.body)).toContain(
+          view.copy.translationSourceRequired,
+        );
+        const items: ProfileTranslationItem[] = [
+          {
+            field: "headline",
+            source_locale: LANGUAGES.find((language) => language.tag !== tag)!
+              .tag,
+            target_locale: tag,
+            text: profile.headline[
+              LANGUAGES.find((language) => language.tag !== tag)!.tag
+            ],
+          },
+        ];
+        const request = view.translation.run(items);
+        view = profileView(input);
+        expect(view.translation.pending).toBe(true);
+        const status = view.nodes.find(
+          (node) => node.props["aria-live"] === "polite",
+        )!;
+        expect(status.props.children).toBe(view.copy.translatingProfile);
+        expect(renderToStaticMarkup(view.body)).toContain(
+          view.copy.translatingProfile,
+        );
+        const sectionAction = view.nodes.find(
+          (node) =>
+            node.type === "button" &&
+            node.props.children === view.copy.translateEmpty,
+        )!;
+        expect(sectionAction.props["aria-disabled"]).toBe(true);
+        (sectionAction.props.onClick as () => void)();
+        expect(input.onTranslateProfile).toHaveBeenCalledTimes(1);
+        resolve(translationResponse(items));
+        await request;
+      } finally {
+        directHooks.values = null;
+        directHooks.refs = null;
+        directHooks.effects = null;
+      }
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "uses endonyms and orders the $tag profile column first",
+    ({ tag }) => {
+      const markup = renderToStaticMarkup(
+        <GuidedOnboardingView
+          {...props({
+            locale: tag,
+            state: state({ step: "profile", profile }),
+          })}
+        />,
+      );
+      const expected = [
+        tag,
+        ...LANGUAGES.filter((language) => language.tag !== tag).map(
+          (language) => language.tag,
+        ),
+      ];
+      for (const field of PROFILE_FIELDS) {
+        const ids = [
+          ...markup.matchAll(
+            new RegExp(
+              `<textarea[^>]*id="guided-profile-${field}-([^"]+)"`,
+              "g",
+            ),
+          ),
+        ].map((match) => match[1]);
+        expect(ids).toEqual(expected);
+        for (const language of LANGUAGES) {
+          expect(markup).toContain(
+            `<label for="guided-profile-${field}-${language.tag}">${endonym(language.tag)}</label>`,
+          );
+          expect(markup).toMatch(
+            new RegExp(
+              `id="guided-profile-${field}-${language.tag}"[^>]*lang="${language.tag}"`,
+            ),
+          );
+        }
+      }
+      const contributions = renderToStaticMarkup(
+        <GuidedOnboardingView
+          {...props({
+            locale: tag,
+            state: state({
+              step: "contributions",
+              repositories: [repository()],
+            }),
+          })}
+        />,
+      );
+      for (const language of LANGUAGES)
+        expect(contributions).toContain(`(${endonym(language.tag)})`);
+      expect(contributions).not.toContain("Traditional Chinese)");
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "shows translate guidance and blocks incomplete confirmation in $tag",
+    ({ tag }) => {
+      const partial = { ...profile, bio: { ...profile.bio, [tag]: "" } };
+      const markup = renderToStaticMarkup(
+        <GuidedOnboardingView
+          {...props({
+            locale: tag,
+            state: state({ step: "profile", profile: partial }),
+            analysisSelection: confirmedModels,
+            onTranslateProfile: vi.fn(),
+          })}
+        />,
+      );
+      const action =
+        tag === "en" ? "Fill empty fields with AI" : "AI 補齊空白欄位";
+      expect(markup).toContain(action);
+      expect(markup).toMatch(
+        /disabled=""[^>]*>[^<]*(?:Confirm profile|確認基本資料)/,
+      );
+      expect(
+        markup.match(
+          new RegExp(`id="guided-profile-bio-${tag}-required"[^>]*>([^<]+)`),
+        )?.[1],
+      ).toContain(action);
+      expect(
+        markup.match(/id="guided-profile-confirm-reason"[^>]*>([^<]+)/)?.[1],
+      ).toContain(action);
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "has visible model and no-work reasons and sends no blocked requests in $tag",
+    ({ tag }) => {
+      directHooks.values = [];
+      directHooks.refs = [];
+      try {
+        const onTranslateProfile = vi.fn(
+          async (items: ProfileTranslationItem[]) => translationResponse(items),
+        );
+        const input = props({
+          locale: tag,
+          onTranslateProfile,
+          state: state({ step: "profile", profile }),
+        });
+        for (const analysisSelection of [null, confirmedModels]) {
+          input.analysisSelection = analysisSelection;
+          const view = profileView(input);
+          const button = view.nodes.find(
+            (node) =>
+              node.type === "button" &&
+              node.props.children === view.copy.translateEmpty,
+          )!;
+          expect(button.props["aria-disabled"]).toBe(true);
+          (button.props.onClick as () => void)();
+          const reason = view.nodes.find(
+            (node) => node.props.id === "guided-profile-translate-reason",
+          )!;
+          expect(reason.props.children).toBe(
+            analysisSelection
+              ? view.copy.nothingToTranslate
+              : tag === "en"
+                ? "Chat model not selected"
+                : "尚未選擇回答模型",
+          );
+          expect(button.props["aria-describedby"]).toBe(
+            "guided-profile-translate-reason",
+          );
+        }
+        expect(onTranslateProfile).not.toHaveBeenCalled();
+      } finally {
+        directHooks.values = null;
+        directHooks.refs = null;
+        directHooks.effects = null;
+      }
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "keeps every translation action, marker, status and review count localized in $tag",
+    async ({ tag }) => {
+      directHooks.values = [];
+      directHooks.refs = [];
+      try {
+        const input = props({
+          locale: tag,
+          analysisSelection: confirmedModels,
+          onTranslateProfile: async (items) => translationResponse(items),
+          state: state({
+            step: "profile",
+            profile: { ...profile, bio: { ...profile.bio, [tag]: "" } },
+          }),
+        });
+        input.onAction = vi.fn((action) => {
+          input.state = guidedOnboardingReducer(input.state, action);
+        });
+        let view = profileView(input);
+        const fill = view.nodes.find(
+          (node) =>
+            node.type === "button" &&
+            node.props.children === view.copy.translateEmpty,
+        )!;
+        (fill.props.onClick as () => void)();
+        // The fake provider resolves before the next render, as a real request would.
+        await Promise.resolve();
+        await Promise.resolve();
+        view = profileView(input);
+        expect(input.state.profile.bio[tag]).toBe("Translated bio");
+        const markup = renderToStaticMarkup(view.body);
+        for (const key of [
+          "retranslate",
+          "translationUnreviewed",
+          "markTranslationReviewed",
+          "restoreTranslation",
+        ])
+          expect(markup).toContain(view.copy[key]);
+        expect(markup).toContain('aria-live="polite"');
+        expect(markup).toContain(
+          (
+            view.copy.translationComplete as (
+              applied: number,
+              skipped: number,
+            ) => string
+          )(1, 0),
+        );
+        const review = view.translation.review("bio", tag)!;
+        expect(review.previousText).toBe("");
+        expect(view.translation.unreviewedCount).toBe(1);
+        const sent = (input.onAction as ReturnType<typeof vi.fn>).mock
+          .calls[0][0];
+        expect(Object.keys(sent.profile).sort()).toEqual(
+          Object.keys(profile).sort(),
+        );
+        for (const field of PROFILE_FIELDS)
+          expect(Object.keys(sent.profile[field]).sort()).toEqual(
+            LANGUAGES.map((language) => language.tag).sort(),
+          );
+
+        (
+          view.nodes.find(
+            (node) =>
+              node.type === "button" &&
+              node.props.children === view.copy.markTranslationReviewed,
+          )!.props.onClick as () => void
+        )();
+        view = profileView(input);
+        expect(renderToStaticMarkup(view.body)).not.toContain(
+          view.copy.translationUnreviewed,
+        );
+        expect(renderToStaticMarkup(view.body)).toContain(
+          view.copy.translationReviewed,
+        );
+        (
+          view.nodes.find(
+            (node) =>
+              node.type === "button" &&
+              node.props.children === view.copy.restoreTranslation,
+          )!.props.onClick as () => void
+        )();
+        view = profileView(input);
+        expect(input.state.profile.bio[tag]).toBe("");
+        expect(renderToStaticMarkup(view.body)).toContain(
+          view.copy.translationRestored,
+        );
+
+        const items = [
+          {
+            field: "bio",
+            source_locale: LANGUAGES.find((language) => language.tag !== tag)!
+              .tag,
+            target_locale: tag,
+            text: profile.bio[
+              LANGUAGES.find((language) => language.tag !== tag)!.tag
+            ],
+          },
+        ] as ProfileTranslationItem[];
+        await view.translation.run(items);
+        view = profileView(input);
+        view.translation.edit("bio", tag, "Owner edit");
+        view = profileView(input);
+        expect(renderToStaticMarkup(view.body)).not.toContain(
+          view.copy.translationUnreviewed,
+        );
+        await view.translation.run([
+          {
+            ...items[0],
+            field: "greeting",
+            text: profile.greeting[items[0].source_locale],
+          },
+        ]);
+        view = profileView(input);
+        expect(view.translation.unreviewedCount).toBe(1);
+        input.onAction({ type: "CONFIRM_PROFILE" });
+        view = profileView(input);
+        expect(input.state.step).toBe("review");
+        expect(renderToStaticMarkup(view.body)).toContain(
+          (view.copy.unreviewedTranslations as (count: number) => string)(1),
+        );
+        const createDraft = view.nodes.find(
+          (node) =>
+            node.type === "button" &&
+            node.props.children === view.copy.createDraft,
+        )!;
+        expect(createDraft.props.disabled).toBe(false);
+        (createDraft.props.onClick as () => void)();
+        expect(input.onCreateDraft).toHaveBeenCalledOnce();
+      } finally {
+        directHooks.values = null;
+        directHooks.refs = null;
+        directHooks.effects = null;
+      }
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "asks the existing confirm dialog before replacing text and cancel keeps it in $tag",
+    ({ tag }) => {
+      directHooks.values = [];
+      directHooks.refs = [];
+      try {
+        const input = props({
+          locale: tag,
+          analysisSelection: confirmedModels,
+          onTranslateProfile: vi.fn(),
+          state: state({ step: "profile", profile }),
+        });
+        const view = profileView(input);
+        const action = view.nodes.find(
+          (node) =>
+            node.type === ConfirmButton &&
+            node.props.children === view.copy.retranslate,
+        )!;
+        const confirmProps = action.props as unknown as Parameters<
+          typeof ConfirmButton
+        >[0];
+        const confirmCursor = directHooks.cursor;
+        const renderConfirm = () => {
+          directHooks.cursor = confirmCursor;
+          return ConfirmButton(confirmProps);
+        };
+        let confirmation = renderConfirm();
+        (
+          elements(confirmation).find((node) => node.type === "button")!.props
+            .onClick as () => void
+        )();
+        confirmation = renderConfirm();
+        const dialog = elements(confirmation).find(
+          (node) =>
+            typeof node.type === "function" &&
+            node.type.name === "ConfirmDialogView",
+        )!;
+        expect(dialog).toBeDefined();
+        expect(dialog.props.locale).toBe(tag);
+        expect(dialog.props.description).toBe(view.copy.retranslateDescription);
+        (dialog.props.onClose as (accepted: boolean) => void)(false);
+        expect(input.onTranslateProfile).not.toHaveBeenCalled();
+        expect(input.state.profile).toEqual(profile);
+      } finally {
+        directHooks.values = null;
+        directHooks.refs = null;
+        directHooks.effects = null;
+      }
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "uses the existing error copy in a polite region without moving focus in $tag",
+    async ({ tag }) => {
+      directHooks.values = [];
+      directHooks.refs = [];
+      try {
+        const input = props({
+          locale: tag,
+          analysisSelection: confirmedModels,
+          onTranslateProfile: async () => {
+            throw new Error("PROVIDER_TIMEOUT");
+          },
+          state: state({ step: "profile", profile }),
+        });
+        let view = profileView(input);
+        await view.translation.run([
+          {
+            field: "headline",
+            source_locale: LANGUAGES.find((language) => language.tag !== tag)!
+              .tag,
+            target_locale: tag,
+            text: profile.headline[
+              LANGUAGES.find((language) => language.tag !== tag)!.tag
+            ],
+          },
+        ]);
+        view = profileView(input);
+        const status = view.nodes.find(
+          (node) => node.props["aria-live"] === "polite",
+        )!;
+        expect(status.props.children).toBe(
+          tag === "en"
+            ? "The model operation timed out and no partial result was saved. Your input is preserved; retry explicitly or continue manually."
+            : "模型操作逾時且未儲存部分結果。你的輸入已保留，可明確重試或改為手動填寫。",
+        );
+        expect(input.onAction).not.toHaveBeenCalled();
+        expect(input.state.profile).toEqual(profile);
+      } finally {
+        directHooks.values = null;
+        directHooks.refs = null;
+        directHooks.effects = null;
+      }
+    },
+  );
+});
 
 it.each(["zh-TW", "en"] as const)(
   "shows size beside the language and in details without changing checkbox text in %s",
