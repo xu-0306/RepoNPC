@@ -11,6 +11,7 @@ import shutil
 import stat
 import tarfile
 import tempfile
+from collections.abc import Iterable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -41,15 +42,27 @@ from reponpc.scene.resolve import _average_edge_color, validate_npc_separation
 APPLICATION_VERSION: Final = "0.1.0"
 ARCHIVE_FILE_LIMIT: Final = 64
 _SCENE_PATH_RE: Final = re.compile(r"^public/scene/([0-9a-f]{64})\.(png|webp)$")
-_CARD_VARIANTS: Final = tuple(
-    f"public/card-{theme}-{locale}.{extension}"
-    for theme in ("light", "dark")
-    for locale in ("zh-TW", "en")
-    for extension in ("svg", "gif", "png")
-)
-REQUIRED_PAYLOAD_PATHS: Final = frozenset(
-    {"index.sqlite", "public/profile.json", "public/character.png", *_CARD_VARIANTS}
-)
+
+
+def card_variant_paths(locales: Iterable[str]) -> tuple[str, ...]:
+    tags = tuple(locales)
+    return tuple(
+        f"public/card-{theme}-{locale}.{extension}"
+        for theme in ("light", "dark")
+        for locale in tags
+        for extension in ("svg", "gif", "png")
+    )
+
+
+def required_payload_paths(locales: Iterable[str]) -> frozenset[str]:
+    return frozenset(
+        {
+            "index.sqlite",
+            "public/profile.json",
+            "public/character.png",
+            *card_variant_paths(locales),
+        }
+    )
 
 
 class BundleError(RuntimeError):
@@ -222,6 +235,11 @@ def verify_bundle_archive(
             )
         except IndexReadError as exc:
             raise BundleError("bundle_index_invalid") from exc
+        try:
+            _verify_index_profile(index, staging_directory, manifest)
+        except BundleError, IndexReadError:
+            index.close()
+            raise
         if not index.lexical_smoke_test():
             index.close()
             raise BundleError("bundle_smoke_query_failed")
@@ -263,6 +281,11 @@ def verify_retained_bundle_directory(
             )
         except IndexReadError as exc:
             raise BundleError("bundle_index_invalid") from exc
+        try:
+            _verify_index_profile(index, directory, manifest)
+        except BundleError, IndexReadError:
+            index.close()
+            raise
         if not index.lexical_smoke_test():
             index.close()
             raise BundleError("bundle_smoke_query_failed")
@@ -273,6 +296,27 @@ def verify_retained_bundle_directory(
         raise BundleError("bundle_validation_failed") from exc
 
 
+def _verify_index_profile(index: ReadOnlyIndex, directory: Path, manifest: BundleManifest) -> None:
+    document = parse_public_profile_bytes((directory / "public/profile.json").read_bytes())
+    if index.index_schema_version != manifest.index_schema_version or (
+        tuple(document.locales) != index.locales.supported
+        if document.schema_version == 2
+        else set(document.locales) != set(index.locales.supported)
+    ):
+        raise BundleError("bundle_profile_invalid")
+    try:
+        index.validate_repository_summaries(
+            {
+                locale: {
+                    repository.slug: repository.summary for repository in localized.repositories
+                }
+                for locale, localized in document.locales.items()
+            }
+        )
+    except IndexReadError as exc:
+        raise BundleError("bundle_index_invalid") from exc
+
+
 def _validate_build_inputs(index_path: Path, public_files: dict[str, bytes]) -> int:
     try:
         index_stat = index_path.stat()
@@ -280,7 +324,11 @@ def _validate_build_inputs(index_path: Path, public_files: dict[str, bytes]) -> 
         raise BundleError("bundle_payload_invalid") from exc
     if not stat.S_ISREG(index_stat.st_mode) or index_stat.st_size <= 0:
         raise BundleError("bundle_payload_invalid")
-    base_paths = REQUIRED_PAYLOAD_PATHS - {"index.sqlite"}
+    try:
+        document = parse_public_profile_bytes(public_files["public/profile.json"])
+    except (KeyError, PublicProfileError) as exc:
+        raise BundleError("bundle_profile_invalid") from exc
+    base_paths = required_payload_paths(document.locales) - {"index.sqlite"}
     if (
         not base_paths.issubset(public_files)
         or not _scene_file_matches_profile(public_files["public/profile.json"], public_files)
@@ -328,7 +376,7 @@ def _verify_layout_and_checksums(staging: Path, manifest: BundleManifest) -> Non
     actual_paths = {
         path.relative_to(staging).as_posix() for path in staging.rglob("*") if path.is_file()
     }
-    if actual_paths != expected_paths or not _manifest_paths_match_profile(staging, manifest):
+    if actual_paths != expected_paths:
         raise BundleError("bundle_layout_invalid")
     checksums = _parse_checksums((staging / "checksums.sha256").read_bytes())
     expected_checksums = {
@@ -341,6 +389,8 @@ def _verify_layout_and_checksums(staging: Path, manifest: BundleManifest) -> Non
         payload_path = staging / item.path
         if payload_path.stat().st_size != item.size or _file_sha256(payload_path) != item.sha256:
             raise BundleError("bundle_payload_checksum_invalid")
+    if not _manifest_paths_match_profile(staging, manifest):
+        raise BundleError("bundle_layout_invalid")
 
 
 def _verify_public_assets(staging: Path, manifest: BundleManifest) -> None:
@@ -393,7 +443,7 @@ def _verify_public_assets(staging: Path, manifest: BundleManifest) -> None:
                 raise BundleError("bundle_scene_stage_invalid") from None
     except (OSError, ValueError) as exc:
         raise BundleError("bundle_character_invalid") from exc
-    for path in _CARD_VARIANTS:
+    for path in card_variant_paths(document.locales):
         payload = (staging / path).read_bytes()
         if not payload:
             raise BundleError("bundle_card_invalid")
@@ -443,18 +493,17 @@ def _scene_file_matches_profile(payload: bytes, public_files: dict[str, bytes]) 
 
 def _manifest_paths_match_profile(staging: Path, manifest: BundleManifest) -> bool:
     paths = {item.path for item in manifest.files}
-    base = set(REQUIRED_PAYLOAD_PATHS)
+    try:
+        document = parse_public_profile_bytes((staging / "public/profile.json").read_bytes())
+    except OSError, PublicProfileError:
+        return False
+    base = required_payload_paths(document.locales)
     if not base.issubset(paths):
         return False
     scene_paths = paths - base
     if len(scene_paths) > 1 or any(_SCENE_PATH_RE.fullmatch(path) is None for path in scene_paths):
         return False
-    try:
-        scene = parse_public_profile_bytes(
-            (staging / "public/profile.json").read_bytes()
-        ).character.scene
-    except OSError, PublicProfileError:
-        return False
+    scene = document.character.scene
     return bool(scene is not None and scene.background_url is not None) == bool(scene_paths)
 
 

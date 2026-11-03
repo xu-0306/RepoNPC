@@ -141,7 +141,7 @@ def test_export_root_policy_matches_a_nondefault_scheme_snapshot(choice: bool) -
     ).public
     snapshot = SimpleNamespace(document=SimpleNamespace(character=SimpleNamespace(scene=scene)))
     files = {"index.html": VISITOR_HTML}
-    _rewrite_entry_html(files, snapshot, "https://fixture.ts.net")
+    _rewrite_entry_html(files, snapshot, "https://fixture.ts.net", "zh-TW")
     document = files["index.html"]
     assert f'data-default-scheme="{scheme_id}"'.encode() in document
     assert f'data-visitor-scheme-choice="{str(choice).lower()}"'.encode() in document

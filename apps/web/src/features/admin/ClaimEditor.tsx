@@ -1,6 +1,11 @@
 import "../../p4-w2.css";
 
-import type { SuggestedClaim } from "./guidedOnboarding";
+import { chromeLocale, endonym, type LanguageTag } from "../../i18n/languages";
+import {
+  localizedTags,
+  type SuggestedClaim,
+  type LocalizedText,
+} from "./guidedOnboarding";
 
 export type ClaimKind = SuggestedClaim["kind"];
 export function ClaimEditor({
@@ -8,20 +13,19 @@ export function ClaimEditor({
   id,
   kind,
   statement,
+  supported = localizedTags(statement),
   disabled,
   onChange,
 }: {
-  locale: "zh-TW" | "en";
+  locale: LanguageTag;
   id: string;
   kind: ClaimKind;
-  statement: { "zh-TW": string; en: string };
+  statement: LocalizedText;
+  supported?: LanguageTag[];
   disabled?: boolean;
-  onChange: (
-    kind: ClaimKind,
-    statement: { "zh-TW": string; en: string },
-  ) => void;
+  onChange: (kind: ClaimKind, statement: LocalizedText) => void;
 }) {
-  const zh = locale === "zh-TW";
+  const zh = chromeLocale(locale) === "zh-TW";
   const kinds: Record<ClaimKind, string> = {
     role: zh ? "角色" : "Role",
     responsibility: zh ? "負責事項" : "Responsibility",
@@ -46,12 +50,14 @@ export function ClaimEditor({
           </option>
         ))}
       </select>
-      {(["zh-TW", "en"] as const).map((language) => (
+      {supported.map((language) => (
         <label key={language} htmlFor={`${id}-${language}`}>
-          {zh ? "作者陳述" : "Owner statement"} ({language})
+          {zh ? "作者陳述" : "Owner statement"} ({endonym(language)})
           <textarea
             className="px-field"
             id={`${id}-${language}`}
+            lang={language}
+            required
             maxLength={4000}
             rows={3}
             value={statement[language]}

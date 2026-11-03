@@ -111,9 +111,11 @@ describe("VisitorConversation", () => {
       expect(lists).toHaveLength(2);
       for (const list of lists!) {
         expect(list.match(/<button/g)).toHaveLength(2);
-        expect(list).toContain('<button type="button">Approved?</button>');
         expect(list).toContain(
-          '<button disabled="" type="button">Stale?</button>',
+          `<button lang="${locale}" type="button">Approved?</button>`,
+        );
+        expect(list).toContain(
+          `<button disabled="" lang="${locale}" type="button">Stale?</button>`,
         );
       }
     },
@@ -190,7 +192,7 @@ describe("VisitorConversation", () => {
     expect(markup).toContain('href="https://example.com/contact"');
     expect(markup).toContain("Portfolio contact");
     expect(markup).toMatch(
-      /<ul class="answer-suggestions"><li><button type="button">Which project uses retrieval\?<\/button>/,
+      /<ul class="answer-suggestions"><li><button lang="en" type="button">Which project uses retrieval\?<\/button>/,
     );
   });
 
@@ -214,7 +216,9 @@ describe("VisitorConversation", () => {
       );
 
       expect(markup).toMatch(
-        /<ul class="answer-suggestions"><li><button type="button">Approved FAQ<\/button>/,
+        new RegExp(
+          `<ul class="answer-suggestions"><li><button lang="${locale}" type="button">Approved FAQ<\\/button>`,
+        ),
       );
       expect(markup).toMatch(
         /<button disabled="" type="button">(?:Retry this question|重試這個問題)<\/button>/,
@@ -240,7 +244,7 @@ describe("VisitorConversation", () => {
     );
 
     expect(markup).toMatch(
-      /<ul class="answer-suggestions"><li><button disabled="" type="button">Stale FAQ<\/button>/,
+      /<ul class="answer-suggestions"><li><button disabled="" lang="en" type="button">Stale FAQ<\/button>/,
     );
   });
 });

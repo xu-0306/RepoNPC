@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from reponpc.domain.evidence import COMMIT_RE
+from reponpc.indexing.index_database import INDEX_SCHEMA_VERSION
 from reponpc.indexing.sources import EmbeddingIdentity
 
 MANIFEST_SCHEMA_VERSION = 1
@@ -59,8 +60,11 @@ class BundleManifest:
     embedding: EmbeddingIdentity
     statistics: tuple[tuple[str, int], ...]
     files: tuple[FileDigest, ...]
+    index_schema_version: int = INDEX_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
+        if type(self.index_schema_version) is not int or self.index_schema_version not in {1, 2}:
+            raise ManifestError("index schema is incompatible")
         if not _BUNDLE_ID_RE.fullmatch(self.bundle_id):
             raise ManifestError("bundle ID is invalid")
         _parse_timestamp(self.built_at)
@@ -95,7 +99,7 @@ class BundleManifest:
     def as_dict(self) -> dict[str, object]:
         return {
             "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
-            "index_schema_version": 1,
+            "index_schema_version": self.index_schema_version,
             "bundle_id": self.bundle_id,
             "built_at": self.built_at,
             "application_compatibility": {
@@ -169,6 +173,7 @@ def bundle_id_for(
     instant = _as_utc(built_at)
     identity = {
         "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
+        "index_schema_version": INDEX_SCHEMA_VERSION,
         "configuration_sha256": hashlib.sha256(configuration_bytes).hexdigest(),
         "repositories": [{"slug": slug, "commit_sha": sha} for slug, sha in repositories],
         "embedding": embedding_as_dict(embedding),
@@ -204,7 +209,7 @@ def parse_bundle_manifest(value: bytes) -> BundleManifest:
     }
     if set(raw) != expected_keys or raw["manifest_schema_version"] != MANIFEST_SCHEMA_VERSION:
         raise ManifestError("manifest schema is incompatible")
-    if raw["index_schema_version"] != 1:
+    if type(raw["index_schema_version"]) is not int or raw["index_schema_version"] not in {1, 2}:
         raise ManifestError("index schema is incompatible")
     compatibility = _object(raw["application_compatibility"], "application compatibility")
     config = _object(raw["config"], "configuration")
@@ -256,6 +261,7 @@ def parse_bundle_manifest(value: bytes) -> BundleManifest:
         embedding=embedding,
         statistics=tuple(sorted((str(key), _integer(item)) for key, item in statistics.items())),
         files=tuple(parsed_files),
+        index_schema_version=raw["index_schema_version"],
     )
 
 

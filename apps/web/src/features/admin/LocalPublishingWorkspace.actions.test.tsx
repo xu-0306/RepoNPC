@@ -6,6 +6,9 @@ import {
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LocalPublishingWorkspace } from "./LocalPublishingWorkspace";
+import { CoverageFaqPanel } from "./CoverageFaqPanel";
+import { chromeLocale, endonym, type LanguageTag } from "../../i18n/languages";
+import { ADMIN_CHROMES, SITE_SETS } from "./__fixtures__/siteLanguages";
 
 // The suite uses Node; retain hook state while exercising the real component's
 // event handlers and element tree, without mounting unrelated polling panels.
@@ -47,6 +50,89 @@ beforeEach(() => {
   hooks.cursor = 0;
 });
 afterEach(() => vi.unstubAllGlobals());
+
+it.each(
+  ADMIN_CHROMES.flatMap((locale) =>
+    SITE_SETS.map((supported) => ({ locale, supported })),
+  ),
+)(
+  "uses selected site languages for card, FAQ and README with $locale chrome over $supported",
+  async ({ locale, supported }) => {
+    const initialLocale = supported[supported.length - 1];
+    const request = vi.fn().mockResolvedValue({});
+    const input = {
+      locale,
+      locales: { default: initialLocale, supported },
+      content: "Public draft",
+      spriteBase64: null,
+      revision: null,
+      initialAccount: "another-owner",
+      selection: null,
+      request,
+      onStored: vi.fn(),
+      onCreateDraft: vi.fn(),
+      repositories: [],
+      onAddClaim: vi.fn(),
+    };
+    const render = () => {
+      hooks.cursor = 0;
+      return elements(LocalPublishingWorkspace(input));
+    };
+    const select = () =>
+      render().find(
+        (node) => node.props.id === "publication-content-language",
+      )!;
+    const guide = () =>
+      render().find((node) => "onPreviewReadme" in node.props)!;
+    const sharing = () =>
+      render().find((node) => "observedState" in node.props)!;
+    expect(select().props.value).toBe(initialLocale);
+    const options = elements(select()).filter((node) => node.type === "option");
+    expect(options.map((node) => node.props.value)).toEqual(supported);
+    expect(options.map((node) => node.props.children)).toEqual(
+      supported.map(endonym),
+    );
+    const chosen = supported[0];
+    (select().props.onChange as (event: unknown) => void)({
+      target: { value: chosen as LanguageTag },
+    });
+    const preview = render().find(
+      (node) =>
+        node.type === "button" &&
+        node.props.children ===
+          (chromeLocale(locale) === "en"
+            ? "Preview portfolio and card"
+            : "預覽作品集與卡片"),
+    )!;
+    (preview.props.onClick as () => void)();
+    await vi.waitFor(() => expect(guide().props.busy).toBe(false));
+    expect(request).toHaveBeenCalledWith(
+      `/api/admin/portfolio/preview?locale=${chosen}`,
+      expect.objectContaining({ method: "POST" }),
+    );
+    const faq = render().find((node) => node.type === CoverageFaqPanel)!;
+    expect(faq.props.contentLocale).toBe(chosen);
+    expect(faq.props.locale).toBe(locale);
+    (sharing().props.onStateChange as (value: unknown) => void)({
+      pages_url: "https://another-owner.github.io/site/",
+      configured: true,
+      verified: true,
+      verified_at: "2026-11-03T00:00:00Z",
+      verified_content_sha256: "a".repeat(64),
+    });
+    const fetchReadme = vi
+      .fn()
+      .mockResolvedValue(new Response("# Public owner"));
+    vi.stubGlobal("fetch", fetchReadme);
+    vi.stubGlobal("document", { getElementById: () => ({ focus: vi.fn() }) });
+    (guide().props.onPreviewReadme as () => void)();
+    await vi.waitFor(() => expect(guide().props.busy).toBe(false));
+    expect(fetchReadme).toHaveBeenCalledExactlyOnceWith(
+      `/api/admin/sharing/readme?locale=${chosen}`,
+      { credentials: "same-origin", cache: "no-store" },
+    );
+  },
+);
 
 describe("local publication operation feedback", () => {
   it.each(["zh-TW", "en"] as const)(
@@ -292,7 +378,7 @@ describe("local publication operation feedback", () => {
       );
       expect(onStored).toHaveBeenCalledTimes(2);
 
-      failure = "/api/admin/portfolio/preview";
+      failure = `/api/admin/portfolio/preview?locale=${locale}`;
       click(zh ? "預覽作品集與卡片" : "Preview portfolio and card");
       await expectLocal(zh ? "操作未完成" : "Could not complete");
 
@@ -320,7 +406,7 @@ describe("local publication operation feedback", () => {
 });
 
 function workspace(
-  locale: "zh-TW" | "en",
+  locale: LanguageTag,
   request: <T>(path: string, options?: RequestInit) => Promise<T>,
 ) {
   const input = {

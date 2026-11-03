@@ -1,5 +1,6 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useEffect, useId, useRef, useState } from "react";
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 
 export interface ModelDeviceHardware {
   host_ram_bytes: number | null;
@@ -161,7 +162,10 @@ const COPY = {
   },
 };
 
-const REASONS: Record<string, Record<Locale, string>> = {
+const REASONS: Record<
+  string,
+  Record<ReturnType<typeof chromeLocale>, string>
+> = {
   TOTAL_MEMORY_INSUFFICIENT: {
     "zh-TW": "裝置總記憶體不足。",
     en: "Total device memory is insufficient.",
@@ -221,7 +225,7 @@ export function ModelGuidancePanel({
   models,
   onChoose,
 }: ModelGuidancePanelProps) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const id = useId();
   const formatMemory = (bytes: number | null | undefined) =>
     bytes != null && Number.isSafeInteger(bytes) && bytes >= 0
@@ -313,13 +317,15 @@ export function ModelGuidancePanel({
                   <ul>
                     {estimate.reason_codes.map((reason) => (
                       <li key={reason}>
-                        {REASONS[reason]?.[locale] ?? copy.unknownGrade}
+                        {REASONS[reason]?.[chromeLocale(locale)] ??
+                          copy.unknownGrade}
                       </li>
                     ))}
                   </ul>
                   <p>
                     {copy.tested}: {model.envelope_evidence.cases_passed}/
-                    {model.envelope_evidence.cases_total} · zh-TW / en ·{" "}
+                    {model.envelope_evidence.cases_total} ·{" "}
+                    {model.envelope_evidence.tested_locales.join(" / ")} ·{" "}
                     {model.envelope_evidence.tested_on}
                   </p>
                   <p>

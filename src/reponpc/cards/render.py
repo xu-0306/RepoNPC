@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import io
+import json
 from dataclasses import asdict, dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -86,6 +87,7 @@ class CardCopy:
     headline: str
     call_to_action: str
     repository_count: int | None
+    locale: Locale = "en"
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,6 +167,7 @@ def _bounded_copy(copy: CardCopy) -> CardCopy:
         headline=_clean_text(copy.headline, 160),
         call_to_action=_clean_text(copy.call_to_action, 80),
         repository_count=copy.repository_count,
+        locale=copy.locale,
     )
 
 
@@ -305,7 +308,7 @@ def _scene_card(copy: CardCopy, palette: CardPalette, frame: Image.Image, t: int
     card.text(216, 56, copy.display_name, "shade", "display", 350)
     card.text(214, 54, copy.display_name, "text", "display", 350)
     card.text(214, 88, copy.headline, "text", "body", 360)
-    repos = None if copy.repository_count is None else f"{copy.repository_count} repos"
+    repos = repository_count_text(copy.repository_count, copy.locale)
     repo_width = 0 if repos is None else card.measure(repos, "body", 110)
     label_max = 570 - repo_width - 20 - 242 - 24
     label_width = card.measure(copy.call_to_action, "body", label_max)
@@ -316,6 +319,21 @@ def _scene_card(copy: CardCopy, palette: CardPalette, frame: Image.Image, t: int
     if repos is not None:
         card.text(570, 128, repos, "text", "body", 110, right=True)
     return card.im
+
+
+@lru_cache
+def _repository_count_copy() -> dict[str, dict[str, str]]:
+    return cast(
+        dict[str, dict[str, str]],
+        json.loads(Path(__file__).with_name("copy.json").read_text(encoding="utf-8")),
+    )
+
+
+def repository_count_text(count: int | None, locale: Locale) -> str | None:
+    if count is None:
+        return None
+    template = _repository_count_copy()[locale]["one" if count == 1 else "many"]
+    return template.format(count=count)
 
 
 def _png_bytes(image: Image.Image) -> bytes:

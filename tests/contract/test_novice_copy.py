@@ -59,12 +59,12 @@ def test_copy_preserves_manual_route_confirmation_and_bilingual_warnings() -> No
     assert "略過分析\uff0c手動填寫貢獻" in chinese
     assert "專案內容無法證明你的身分或角色" in chinese
     assert "請勿讓模型猜測個人資料" in chinese
-    assert "再用 AI 翻譯並檢視另一欄" in chinese
+    assert "再翻譯或轉換並檢視其他欄位" in chinese
     assert "確認前仍需填妥所有欄位" in chinese
     assert "Skip analysis and enter contribution manually" in english
     assert "project content cannot establish your identity or role" in english
     assert "Do not ask the model to guess personal details" in english
-    assert "use AI to translate and review the other column" in english
+    assert "translate or convert and review the other columns" in english
     assert "Complete every field before confirming" in english
 
 

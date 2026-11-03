@@ -1,3 +1,4 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import {
@@ -8,7 +9,7 @@ import {
   ModalOverlay,
 } from "react-aria-components";
 
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import "../../p4-w4.css";
 
 interface ConfirmRequest {
@@ -57,7 +58,7 @@ export function ConfirmDialogView({
               autoFocus
               onPress={() => onClose(false)}
             >
-              {locale === "zh-TW" ? "取消" : "Cancel"}
+              {chromeLocale(locale) === "zh-TW" ? "取消" : "Cancel"}
             </Button>
             <Button
               className={

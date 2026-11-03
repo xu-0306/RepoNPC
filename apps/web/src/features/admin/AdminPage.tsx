@@ -1,4 +1,10 @@
 import {
+  requestContributionSuggestion,
+  requestOnboardingDraft,
+} from "./authoringRequests";
+import { chromeLocale } from "../../i18n/languages";
+import { ANALYSIS_LOCALES } from "../../i18n/plan";
+import {
   LocalPublishingWorkspace,
   type LocalDraftBody,
 } from "./LocalPublishingWorkspace";
@@ -120,7 +126,7 @@ import {
   requestProfileTranslation,
   type TranslateProfile,
 } from "./profileTranslation";
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import type { PublicProfile } from "../../app/publicTypes";
 import type { SceneAppearanceState } from "./AppearancePanel";
 
@@ -313,14 +319,16 @@ function hasOnlyKeys(value: Record<string, unknown>, keys: string[]): boolean {
   );
 }
 
-function isLocalizedContribution(value: unknown): boolean {
-  if (!isRecord(value) || !hasOnlyKeys(value, ["zh-TW", "en"])) return false;
-  return [value["zh-TW"], value.en].every(
-    (text) =>
-      typeof text === "string" &&
-      text.trim().length > 0 &&
-      Array.from(text).length <= 2000,
-  );
+function isLocalizedContribution(value: unknown, supported: Locale[]): boolean {
+  if (!isRecord(value) || !hasOnlyKeys(value, supported)) return false;
+  return supported
+    .map((tag) => value[tag])
+    .every(
+      (text) =>
+        typeof text === "string" &&
+        text.trim().length > 0 &&
+        Array.from(text).length <= 2000,
+    );
 }
 
 export function shouldApplyContributionResponse(
@@ -334,6 +342,7 @@ export function contributionSuggestionBody(
   value: unknown,
   expectedSlug: string,
   expectedStatement: string,
+  supported = initialGuidedOnboardingState().locales.supported,
 ): ContributionSuggestionBody | null {
   if (
     !isRecord(value) ||
@@ -348,8 +357,8 @@ export function contributionSuggestionBody(
     value.confirmed !== false ||
     !isRecord(value.proposal) ||
     !hasOnlyKeys(value.proposal, ["role", "summary", "claims"]) ||
-    !isLocalizedContribution(value.proposal.role) ||
-    !isLocalizedContribution(value.proposal.summary) ||
+    !isLocalizedContribution(value.proposal.role, supported) ||
+    !isLocalizedContribution(value.proposal.summary, supported) ||
     !Array.isArray(value.proposal.claims) ||
     value.proposal.claims.length > 8
   ) {
@@ -367,7 +376,7 @@ export function contributionSuggestionBody(
       !["role", "responsibility", "achievement", "context"].includes(
         claim.kind,
       ) ||
-      !isLocalizedContribution(claim.statement)
+      !isLocalizedContribution(claim.statement, supported)
     ) {
       return null;
     }
@@ -377,7 +386,7 @@ export function contributionSuggestionBody(
 }
 
 function copyFor(locale: Locale, chinese: string, english: string): string {
-  return locale === "zh-TW" ? chinese : english;
+  return chromeLocale(locale) === "zh-TW" ? chinese : english;
 }
 
 export function takeLocalLaunchGrant(
@@ -623,7 +632,10 @@ function repositoryFact(value: unknown): RepositoryFact | null {
 function isLocalizedText(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   const text = value as Record<string, unknown>;
-  return typeof text["zh-TW"] === "string" && typeof text.en === "string";
+  return (
+    hasOnlyKeys(text, [...ANALYSIS_LOCALES]) &&
+    ANALYSIS_LOCALES.every((tag) => typeof text[tag] === "string")
+  );
 }
 
 function modelInference(value: unknown): ModelInference | null {
@@ -1385,10 +1397,9 @@ export function AdminPage({
       setActiveCharacter(null);
       return;
     }
-    void request<PublicProfile>(
-      `/api/public/profile?locale=${encodeURIComponent(locale)}`,
-      { signal: controller.signal },
-    )
+    void request<PublicProfile>("/api/public/profile", {
+      signal: controller.signal,
+    })
       .then((profile) => {
         if (
           !controller.signal.aborted &&
@@ -2828,7 +2839,7 @@ export function AdminPage({
       const frozen = source.analysis_model_pair;
       const confirmed = await confirm({
         title:
-          locale === "zh-TW"
+          chromeLocale(locale) === "zh-TW"
             ? "以目前模型重新分析？"
             : "Reanalyze with the current models?",
         description: analysisModelConfirmationMessage(
@@ -2837,7 +2848,8 @@ export function AdminPage({
           frozen,
           analysisSelection.selection,
         ),
-        confirmLabel: locale === "zh-TW" ? "重新分析" : "Reanalyze",
+        confirmLabel:
+          chromeLocale(locale) === "zh-TW" ? "重新分析" : "Reanalyze",
       });
       if (!confirmed) {
         batchMutationPending.current = false;
@@ -3039,16 +3051,12 @@ export function AdminPage({
     setBusy(true);
     dispatchAdminError({ type: "CLEAR_GUIDED_ERROR" });
     try {
-      const response = await request<unknown>(
-        "/api/admin/onboarding/contributions/suggest",
-        {
-          method: "POST",
-          signal: abortController.signal,
-          body: JSON.stringify({
-            slug,
-            owner_statement: originalStatement,
-          }),
-        },
+      const response = await requestContributionSuggestion(
+        request,
+        slug,
+        originalStatement,
+        guidedState.locales.supported,
+        abortController.signal,
       );
       if (
         !shouldApplyContributionResponse(
@@ -3061,6 +3069,7 @@ export function AdminPage({
         response,
         slug,
         originalStatement,
+        guidedState.locales.supported,
       );
       if (result === null) throw new Error("PROVIDER_OUTPUT_SCHEMA_INVALID");
       setGuidedState((current) =>
@@ -3113,37 +3122,11 @@ export function AdminPage({
       dispatchAdminError({ type: "SET_GUIDED_ERROR", code: "CONFIG_INVALID" });
       return;
     }
-    const repositories = selectedRepositories(guidedState);
     await performGuided(async () => {
-      let result = await request<OnboardingDraftBody>(
-        "/api/admin/onboarding/draft",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            profile: {
-              display_name: guidedState.profile.displayName,
-              github_login: guidedState.profile.githubLogin.trim(),
-              aliases: guidedState.profile.aliasesText
-                .split(/\r?\n/)
-                .map((alias) => alias.trim())
-                .filter(Boolean),
-              headline: guidedState.profile.headline,
-              bio: guidedState.profile.bio,
-              greeting: guidedState.profile.greeting,
-            },
-            repositories: repositories.map((repository) => ({
-              slug: repository.metadata.slug,
-              ref: repository.ref,
-              include: repository.include,
-              exclude: repository.exclude,
-              role: repository.confirmedContribution?.role,
-              summary: repository.confirmedContribution?.summary,
-              claims: repository.confirmedContribution?.claims ?? [],
-            })),
-            base_config: baseConfig,
-            confirmed_assertions: true,
-          }),
-        },
+      let result = await requestOnboardingDraft<OnboardingDraftBody>(
+        request,
+        guidedState,
+        baseConfig,
       );
       if (characterSprite) {
         const applied = await request<LocalDraftBody>(
@@ -3577,7 +3560,7 @@ export function AdminPage({
       model: displayedEmbedding?.model_id ?? null,
       connection:
         displayedEmbedding?.provider === "builtin_onnx"
-          ? locale === "zh-TW"
+          ? chromeLocale(locale) === "zh-TW"
             ? "這台主機（CPU）"
             : "This host (CPU)"
           : connectionName(displayedEmbedding?.connection_reference),
@@ -3645,11 +3628,12 @@ export function AdminPage({
   return (
     <>
       <AdminWorkspace
+        contentLocale={guidedState.locales.default}
         authenticated
         activeCharacter={activeCharacter}
         questRail={
           <OnboardingStepper
-            copy={GUIDED_PROGRESS_COPY[locale]}
+            copy={GUIDED_PROGRESS_COPY[chromeLocale(locale)]}
             locale={locale}
             state={guidedState}
           />
@@ -3661,6 +3645,7 @@ export function AdminPage({
         publicationView={
           <LocalPublishingWorkspace
             locale={locale}
+            locales={guidedState.locales}
             content={draft}
             spriteBase64={characterSprite}
             revision={localRevision}

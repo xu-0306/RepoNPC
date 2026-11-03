@@ -1,0 +1,36 @@
+# Authoring defaults only; content is committed and never converted while serving.
+zh-TW:
+  headline: 引導設定
+  bio: 暫存分析設定
+  greeting: 你好
+  unconfirmed: 尚未確認
+  suggested_questions:
+    - 這個專案做什麼?
+  call_to_action: 詢問 RepoNPC
+# Generated once from the zh-TW entry via reponpc.i18n.convert.convert(value, source, target)
+# for every scalar (including list elements); test_profile_defaults_conversion_drift repeats it.
+zh-CN:
+  headline: 引导设置
+  bio: 暂存分析设置
+  greeting: 你好
+  unconfirmed: 尚未确认
+  suggested_questions:
+    - 这个项目做什么?
+  call_to_action: 询问 RepoNPC
+en:
+  headline: Guided setup
+  bio: Ephemeral analysis configuration
+  greeting: Hello
+  unconfirmed: Unconfirmed
+  suggested_questions:
+    - What does this project do?
+  call_to_action: Ask my RepoNPC
+# DRAFT: Spanish defaults need review by a Spanish speaker.
+es:
+  headline: Configuración guiada
+  bio: Configuración temporal para el análisis
+  greeting: Hola
+  unconfirmed: Sin confirmar
+  suggested_questions:
+    - ¿Qué hace este proyecto?
+  call_to_action: Pregunta a mi RepoNPC

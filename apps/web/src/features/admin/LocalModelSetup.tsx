@@ -1,6 +1,7 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import { BuiltinModelPanel } from "./BuiltinModelPanel";
 
 type Info = NonNullable<Parameters<typeof BuiltinModelPanel>[0]["info"]>;
@@ -29,7 +30,7 @@ export function LocalModelSetup({
   const active =
     operation?.status === "queued" || operation?.status === "running";
   const failure =
-    locale === "zh-TW"
+    chromeLocale(locale) === "zh-TW"
       ? "模型設定暫時無法完成。請重新整理或重試；手動編輯仍可使用。"
       : "Model setup could not finish. Refresh or retry; manual editing remains available.";
 

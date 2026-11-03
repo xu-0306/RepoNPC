@@ -1,23 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 
-import { LEGACY_LANGUAGES, type PairTag } from "../../i18n/languages";
-import type { GuidedProfile } from "./guidedOnboarding";
+import {
+  deriveConverter,
+  languageByTag,
+  type LanguageTag,
+} from "../../i18n/languages";
+import { planLanguages } from "../../i18n/plan";
+import { localizedTags, type GuidedProfile } from "./guidedOnboarding";
 
 export const PROFILE_FIELDS = ["headline", "bio", "greeting"] as const;
 export type ProfileField = (typeof PROFILE_FIELDS)[number];
 
 export interface ProfileTranslationItem {
   field: ProfileField;
-  source_locale: PairTag;
-  target_locale: PairTag;
+  source_locale: LanguageTag;
+  target_locale: LanguageTag;
   text: string;
 }
 
 export interface ProfileTranslationResult {
   field: ProfileField;
-  target_locale: PairTag;
+  target_locale: LanguageTag;
   text: string;
-  method: "model";
+  method: "model" | "converted";
   confirmed: false;
 }
 
@@ -49,35 +54,50 @@ export function fitHeight(element: HTMLTextAreaElement | null) {
   element.style.height = `${element.scrollHeight + element.offsetHeight - element.clientHeight}px`;
 }
 
-export function profileLanguages(locale: string) {
-  return [...LEGACY_LANGUAGES].sort(
-    (left, right) => Number(right.tag === locale) - Number(left.tag === locale),
-  );
+export function profileLanguages(supported: readonly LanguageTag[]) {
+  return supported.map((tag) => ({ ...languageByTag(tag)!, tag }));
 }
 
 export function profileTranslationSource(
   profile: GuidedProfile,
   field: ProfileField,
-  target: PairTag,
+  target: LanguageTag,
+  supported = localizedTags(profile.headline),
 ): ProfileTranslationItem | undefined {
-  const source = LEGACY_LANGUAGES.find(
-    ({ tag }) => tag !== target && profile[field][tag].trim(),
+  const plan = planLanguages(supported);
+  const derived = plan.derived.find((pair) => pair.target === target)?.source;
+  const candidates = [
+    ...new Set([
+      ...(derived ? [derived] : []),
+      ...supported.filter((tag) => deriveConverter(tag, target)),
+      ...plan.written,
+      ...supported,
+    ]),
+  ];
+  const source = candidates.find(
+    (tag) => tag !== target && profile[field][tag]?.trim(),
   );
   return (
     source && {
       field,
-      source_locale: source.tag,
+      source_locale: source,
       target_locale: target,
-      text: profile[field][source.tag],
+      text: profile[field][source],
     }
   );
 }
 
-export function emptyProfileTranslationItems(profile: GuidedProfile) {
+export function emptyProfileTranslationItems(
+  profile: GuidedProfile,
+  supported = localizedTags(profile.headline),
+) {
+  const plan = planLanguages(supported);
   return PROFILE_FIELDS.flatMap((field) =>
-    LEGACY_LANGUAGES.flatMap(({ tag }) => {
+    supported.flatMap((tag) => {
       if (profile[field][tag].trim()) return [];
-      const item = profileTranslationSource(profile, field, tag);
+      const derived = plan.derived.find((pair) => pair.target === tag);
+      if (derived && !profile[field][derived.source]?.trim()) return [];
+      const item = profileTranslationSource(profile, field, tag, supported);
       return item ? [item] : [];
     }),
   );
@@ -102,7 +122,10 @@ export function profileTranslationBody(
       typeof item.text !== "string" ||
       !item.text.trim() ||
       Array.from(item.text).length > 2000 ||
-      item.method !== "model" ||
+      item.method !==
+        (deriveConverter(expected.source_locale, expected.target_locale)
+          ? "converted"
+          : "model") ||
       item.confirmed !== false
     )
       return null;
@@ -110,18 +133,19 @@ export function profileTranslationBody(
       field: item.field,
       target_locale: item.target_locale,
       text: item.text,
-      method: "model",
+      method: item.method,
       confirmed: false,
     });
   }
   return items;
 }
 
-type FieldKey = `${ProfileField}:${PairTag}`;
+type FieldKey = `${ProfileField}:${LanguageTag}`;
 interface TranslationReview {
   previousText: string;
   translatedText: string;
   reviewed: boolean;
+  method: ProfileTranslationResult["method"];
 }
 type TranslationStatus =
   | { kind: "translated"; applied: number; discarded: number }
@@ -134,6 +158,8 @@ export function useProfileTranslation({
   reset,
   modelGeneration,
   enabled,
+  modelEnabled = true,
+  supported = localizedTags(profile.headline),
   translate,
   onChange,
 }: {
@@ -142,6 +168,8 @@ export function useProfileTranslation({
   reset: boolean;
   modelGeneration: number | undefined;
   enabled: boolean;
+  modelEnabled?: boolean;
+  supported?: LanguageTag[];
   translate: TranslateProfile | undefined;
   onChange: (profile: GuidedProfile) => void;
 }) {
@@ -156,6 +184,7 @@ export function useProfileTranslation({
   >({});
   const [status, setStatus] = useState<TranslationStatus>(null);
   const [errorCode, setErrorCode] = useState("");
+  const siteKey = supported.join(",");
 
   useEffect(() => {
     setPending(false);
@@ -163,22 +192,30 @@ export function useProfileTranslation({
       setReviews({});
       setStatus(null);
       setErrorCode("");
+    } else {
+      setReviews((current) =>
+        Object.fromEntries(
+          Object.entries(current).filter(([key]) =>
+            siteKey.split(",").includes(key.split(":")[1]),
+          ),
+        ),
+      );
     }
     return () => {
       generation.current += 1;
       requestAbort.current?.abort();
       requestAbort.current = null;
     };
-  }, [active, modelGeneration, reset]);
+  }, [active, modelGeneration, reset, siteKey]);
 
-  function setField(field: ProfileField, locale: PairTag, text: string) {
+  function setField(field: ProfileField, locale: LanguageTag, text: string) {
     const current = latestProfile.current;
     const next = { ...current, [field]: { ...current[field], [locale]: text } };
     latestProfile.current = next;
     onChange(next);
   }
 
-  function markReviewed(field: ProfileField, locale: PairTag) {
+  function markReviewed(field: ProfileField, locale: LanguageTag) {
     const key: FieldKey = `${field}:${locale}`;
     setReviews((current) => {
       const review = current[key];
@@ -194,6 +231,13 @@ export function useProfileTranslation({
       !enabled ||
       !translate ||
       !items.length ||
+      items.some(
+        (item) =>
+          !supported.includes(item.source_locale) ||
+          !supported.includes(item.target_locale) ||
+          (!modelEnabled &&
+            !deriveConverter(item.source_locale, item.target_locale)),
+      ) ||
       requestAbort.current
     )
       return;
@@ -211,10 +255,15 @@ export function useProfileTranslation({
     setStatus(null);
     setErrorCode("");
     try {
-      const response = await translate(items, controller.signal);
-      if (generation.current !== currentGeneration) return;
-      const results = profileTranslationBody(response, items);
-      if (!results) throw new Error("PROVIDER_OUTPUT_SCHEMA_INVALID");
+      const results: ProfileTranslationResult[] = [];
+      for (let offset = 0; offset < items.length; offset += 6) {
+        const batch = items.slice(offset, offset + 6);
+        const response = await translate(batch, controller.signal);
+        if (generation.current !== currentGeneration) return;
+        const validated = profileTranslationBody(response, batch);
+        if (!validated) throw new Error("PROVIDER_OUTPUT_SCHEMA_INVALID");
+        results.push(...validated);
+      }
       let next = latestProfile.current;
       const nextReviews: Partial<Record<FieldKey, TranslationReview>> = {};
       let applied = 0;
@@ -241,6 +290,7 @@ export function useProfileTranslation({
           previousText: snapshot.targetText,
           translatedText: result.text,
           reviewed: false,
+          method: result.method,
         };
         applied += 1;
       });
@@ -254,6 +304,11 @@ export function useProfileTranslation({
         applied,
         discarded: items.length - applied,
       });
+      return {
+        applied,
+        discarded: items.length - applied,
+        generation: currentGeneration,
+      };
     } catch (error) {
       if (generation.current === currentGeneration)
         setErrorCode(error instanceof Error ? error.message : "REQUEST_FAILED");
@@ -270,12 +325,45 @@ export function useProfileTranslation({
     status,
     errorCode,
     run,
-    review: (field: ProfileField, locale: PairTag) =>
+    async fillEmpty() {
+      const items = emptyProfileTranslationItems(
+        latestProfile.current,
+        supported,
+      ).filter(
+        (item) =>
+          modelEnabled ||
+          deriveConverter(item.source_locale, item.target_locale),
+      );
+      const first = await run(items);
+      if (!first || generation.current !== first.generation) return;
+      const derived = emptyProfileTranslationItems(
+        latestProfile.current,
+        supported,
+      ).filter(
+        (item) =>
+          deriveConverter(item.source_locale, item.target_locale) &&
+          !items.some(
+            (previous) =>
+              previous.field === item.field &&
+              previous.target_locale === item.target_locale,
+          ),
+      );
+      if (derived.length) {
+        const second = await run(derived);
+        if (second && generation.current === second.generation)
+          setStatus({
+            kind: "translated",
+            applied: first.applied + second.applied,
+            discarded: first.discarded + second.discarded,
+          });
+      }
+    },
+    review: (field: ProfileField, locale: LanguageTag) =>
       reviews[`${field}:${locale}`],
     unreviewedCount: PROFILE_FIELDS.reduce(
       (count, field) =>
         count +
-        LEGACY_LANGUAGES.filter(({ tag }) => {
+        supported.filter((tag) => {
           const review = reviews[`${field}:${tag}`];
           return (
             review &&
@@ -285,17 +373,17 @@ export function useProfileTranslation({
         }).length,
       0,
     ),
-    edit(field: ProfileField, locale: PairTag, text: string) {
+    edit(field: ProfileField, locale: LanguageTag, text: string) {
       const key: FieldKey = `${field}:${locale}`;
       editVersions.current[key] = (editVersions.current[key] ?? 0) + 1;
       markReviewed(field, locale);
       setField(field, locale, text);
     },
-    markReviewed(field: ProfileField, locale: PairTag) {
+    markReviewed(field: ProfileField, locale: LanguageTag) {
       markReviewed(field, locale);
       setStatus({ kind: "reviewed" });
     },
-    restore(field: ProfileField, locale: PairTag) {
+    restore(field: ProfileField, locale: LanguageTag) {
       const review = reviews[`${field}:${locale}`];
       if (!review) return;
       const key: FieldKey = `${field}:${locale}`;

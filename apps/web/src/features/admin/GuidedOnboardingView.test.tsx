@@ -1,3 +1,4 @@
+import type { LocalizedText } from "./guidedOnboarding";
 import {
   Children,
   isValidElement,
@@ -6,7 +7,11 @@ import {
 } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { messages } from "../../i18n/messages";
-import { LEGACY_LANGUAGES, endonym } from "../../i18n/languages";
+import { LANGUAGES, deriveConverter, endonym } from "../../i18n/languages";
+import { ADMIN_CHROMES, siteState } from "./__fixtures__/siteLanguages";
+const initialLanguages = LANGUAGES.filter(({ tag }) =>
+  initialGuidedOnboardingState(false, "zh-TW").locales.supported.includes(tag),
+);
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -101,7 +106,9 @@ function translationResponse(items: ProfileTranslationItem[]) {
       field: item.field,
       target_locale: item.target_locale,
       text: `Translated ${item.field}`,
-      method: "model",
+      method: deriveConverter(item.source_locale, item.target_locale)
+        ? "converted"
+        : "model",
       confirmed: false,
     })),
   };
@@ -139,7 +146,74 @@ function profileView(input: GuidedOnboardingViewProps) {
 }
 
 describe("ADR-078 profile UI", () => {
-  it.each(LEGACY_LANGUAGES)(
+  it.each(
+    ADMIN_CHROMES.flatMap((locale) =>
+      LANGUAGES.filter((language) => "derive" in language).map((language) => ({
+        locale,
+        target: language.tag,
+        source: LANGUAGES.find(
+          ({ tag }) =>
+            tag === ("derive" in language ? language.derive.from : ""),
+        )!.tag,
+      })),
+    ),
+  )(
+    "converts $source to $target with $locale chrome while no model is accepted",
+    async ({ locale, source, target }) => {
+      directHooks.values = [];
+      directHooks.refs = [];
+      try {
+        const current = siteState([source, target]);
+        for (const field of PROFILE_FIELDS) current.profile[field][target] = "";
+        const input = props({
+          locale,
+          state: current,
+          analysisSelection: null,
+          onTranslateProfile: vi.fn(async (items) =>
+            translationResponse(items),
+          ),
+        });
+        input.onAction = vi.fn((action) => {
+          input.state = guidedOnboardingReducer(input.state, action);
+        });
+        let view = profileView(input);
+        const fill = view.nodes.find(
+          (node) =>
+            node.type === "button" &&
+            node.props.children === view.copy.translateEmpty,
+        )!;
+        expect(fill.props["aria-disabled"]).toBe(false);
+        (fill.props.onClick as () => void)();
+        await Promise.resolve();
+        await Promise.resolve();
+        view = profileView(input);
+        expect(input.onTranslateProfile).toHaveBeenCalledTimes(1);
+        expect(view.translation.unreviewedCount).toBe(PROFILE_FIELDS.length);
+        const html = renderToStaticMarkup(view.body);
+        expect(html).toContain(view.copy.conversionUnreviewed);
+        expect(html).not.toContain(view.copy.translationUnreviewed);
+        input.onAction({ type: "CONFIRM_PROFILE" });
+        const review = profileView(input);
+        expect(renderToStaticMarkup(review.body)).toContain(
+          (view.copy.unreviewedTranslations as (count: number) => string)(
+            PROFILE_FIELDS.length,
+          ),
+        );
+        const create = review.nodes.find(
+          (node) =>
+            node.type === "button" &&
+            node.props.children === review.copy.createDraft,
+        )!;
+        expect(create.props.disabled).toBe(false);
+      } finally {
+        directHooks.values = null;
+        directHooks.refs = null;
+        directHooks.effects = null;
+      }
+    },
+  );
+
+  it.each(initialLanguages)(
     "localizes source guidance and pending status in $tag",
     async ({ tag }) => {
       directHooks.values = [];
@@ -158,7 +232,7 @@ describe("ADR-078 profile UI", () => {
             profile: {
               ...profile,
               headline: { ...profile.headline, [tag]: "" },
-              bio: { "zh-TW": "", en: "" },
+              bio: { "zh-TW": "", en: "" } as LocalizedText,
             },
           }),
         });
@@ -169,12 +243,12 @@ describe("ADR-078 profile UI", () => {
         const items: ProfileTranslationItem[] = [
           {
             field: "headline",
-            source_locale: LEGACY_LANGUAGES.find(
+            source_locale: initialLanguages.find(
               (language) => language.tag !== tag,
             )!.tag,
             target_locale: tag,
             text: profile.headline[
-              LEGACY_LANGUAGES.find((language) => language.tag !== tag)!.tag
+              initialLanguages.find((language) => language.tag !== tag)!.tag
             ],
           },
         ];
@@ -212,8 +286,8 @@ describe("ADR-078 profile UI", () => {
     },
   );
 
-  it.each(LEGACY_LANGUAGES)(
-    "lists the $tag profile first in the review step",
+  it.each(initialLanguages)(
+    "keeps site order in the review step with admin $tag",
     ({ tag }) => {
       const markup = renderToStaticMarkup(
         <GuidedOnboardingView
@@ -227,12 +301,12 @@ describe("ADR-078 profile UI", () => {
         (match) => match[1],
       );
       const perLanguage = PROFILE_FIELDS.length;
-      expect(labels).toHaveLength(perLanguage * LEGACY_LANGUAGES.length);
+      expect(labels).toHaveLength(perLanguage * initialLanguages.length);
       expect(labels.slice(0, perLanguage)).toEqual(
-        Array(perLanguage).fill(endonym(tag)),
+        Array(perLanguage).fill(endonym(initialLanguages[0].tag)),
       );
       expect(new Set(labels)).toEqual(
-        new Set(LEGACY_LANGUAGES.map((language) => endonym(language.tag))),
+        new Set(initialLanguages.map((language) => endonym(language.tag))),
       );
     },
   );
@@ -263,8 +337,8 @@ describe("ADR-078 profile UI", () => {
     }
   });
 
-  it.each(LEGACY_LANGUAGES)(
-    "uses endonyms and orders the $tag profile column first",
+  it.each(initialLanguages)(
+    "uses endonyms and site order with admin $tag",
     ({ tag }) => {
       const markup = renderToStaticMarkup(
         <GuidedOnboardingView
@@ -274,12 +348,7 @@ describe("ADR-078 profile UI", () => {
           })}
         />,
       );
-      const expected = [
-        tag,
-        ...LEGACY_LANGUAGES.filter((language) => language.tag !== tag).map(
-          (language) => language.tag,
-        ),
-      ];
+      const expected = initialLanguages.map((language) => language.tag);
       for (const field of PROFILE_FIELDS) {
         const ids = [
           ...markup.matchAll(
@@ -290,7 +359,7 @@ describe("ADR-078 profile UI", () => {
           ),
         ].map((match) => match[1]);
         expect(ids).toEqual(expected);
-        for (const language of LEGACY_LANGUAGES) {
+        for (const language of initialLanguages) {
           expect(markup).toContain(
             `<label for="guided-profile-${field}-${language.tag}">${endonym(language.tag)}</label>`,
           );
@@ -312,13 +381,13 @@ describe("ADR-078 profile UI", () => {
           })}
         />,
       );
-      for (const language of LEGACY_LANGUAGES)
+      for (const language of initialLanguages)
         expect(contributions).toContain(`(${endonym(language.tag)})`);
       expect(contributions).not.toContain("Traditional Chinese)");
     },
   );
 
-  it.each(LEGACY_LANGUAGES)(
+  it.each(initialLanguages)(
     "shows translate guidance and blocks incomplete confirmation in $tag",
     ({ tag }) => {
       const partial = { ...profile, bio: { ...profile.bio, [tag]: "" } };
@@ -332,8 +401,7 @@ describe("ADR-078 profile UI", () => {
           })}
         />,
       );
-      const action =
-        tag === "en" ? "Fill empty fields with AI" : "AI 補齊空白欄位";
+      const action = tag === "en" ? "Fill empty fields" : "補齊空白欄位";
       expect(markup).toContain(action);
       expect(markup).toMatch(
         /disabled=""[^>]*>[^<]*(?:Confirm profile|確認基本資料)/,
@@ -349,7 +417,7 @@ describe("ADR-078 profile UI", () => {
     },
   );
 
-  it.each(LEGACY_LANGUAGES)(
+  it.each(initialLanguages)(
     "has visible model and no-work reasons and sends no blocked requests in $tag",
     ({ tag }) => {
       directHooks.values = [];
@@ -396,7 +464,7 @@ describe("ADR-078 profile UI", () => {
     },
   );
 
-  it.each(LEGACY_LANGUAGES)(
+  it.each(initialLanguages)(
     "keeps every translation action, marker, status and review count localized in $tag",
     async ({ tag }) => {
       directHooks.values = [];
@@ -409,6 +477,14 @@ describe("ADR-078 profile UI", () => {
           state: state({
             step: "profile",
             profile: { ...profile, bio: { ...profile.bio, [tag]: "" } },
+            repositories: [
+              repository({
+                confirmedContribution: {
+                  ...proposal,
+                  evidence_class: "OWNER_ASSERTION",
+                },
+              }),
+            ],
           }),
         });
         input.onAction = vi.fn((action) => {
@@ -453,7 +529,7 @@ describe("ADR-078 profile UI", () => {
         );
         for (const field of PROFILE_FIELDS)
           expect(Object.keys(sent.profile[field]).sort()).toEqual(
-            LEGACY_LANGUAGES.map((language) => language.tag).sort(),
+            initialLanguages.map((language) => language.tag).sort(),
           );
 
         (
@@ -486,12 +562,12 @@ describe("ADR-078 profile UI", () => {
         const items = [
           {
             field: "bio",
-            source_locale: LEGACY_LANGUAGES.find(
+            source_locale: initialLanguages.find(
               (language) => language.tag !== tag,
             )!.tag,
             target_locale: tag,
             text: profile.bio[
-              LEGACY_LANGUAGES.find((language) => language.tag !== tag)!.tag
+              initialLanguages.find((language) => language.tag !== tag)!.tag
             ],
           },
         ] as ProfileTranslationItem[];
@@ -533,7 +609,7 @@ describe("ADR-078 profile UI", () => {
     },
   );
 
-  it.each(LEGACY_LANGUAGES)(
+  it.each(initialLanguages)(
     "asks the existing confirm dialog before replacing text and cancel keeps it in $tag",
     ({ tag }) => {
       directHooks.values = [];
@@ -584,7 +660,7 @@ describe("ADR-078 profile UI", () => {
     },
   );
 
-  it.each(LEGACY_LANGUAGES)(
+  it.each(initialLanguages)(
     "uses the existing error copy in a polite region without moving focus in $tag",
     async ({ tag }) => {
       directHooks.values = [];
@@ -602,12 +678,12 @@ describe("ADR-078 profile UI", () => {
         await view.translation.run([
           {
             field: "headline",
-            source_locale: LEGACY_LANGUAGES.find(
+            source_locale: initialLanguages.find(
               (language) => language.tag !== tag,
             )!.tag,
             target_locale: tag,
             text: profile.headline[
-              LEGACY_LANGUAGES.find((language) => language.tag !== tag)!.tag
+              initialLanguages.find((language) => language.tag !== tag)!.tag
             ],
           },
         ]);
@@ -677,22 +753,34 @@ const profile: GuidedProfile = {
   displayName: "Ada Lovelace",
   githubLogin: "octocat",
   aliasesText: "",
-  headline: { "zh-TW": "證據導向的建造者", en: "Evidence-led builder" },
+  headline: {
+    "zh-TW": "證據導向的建造者",
+    en: "Evidence-led builder",
+  } as LocalizedText,
   bio: {
     "zh-TW": "用清楚的證據分享作品。",
     en: "Sharing work with clear evidence.",
-  },
-  greeting: { "zh-TW": "歡迎探索我的作品。", en: "Welcome to my projects." },
+  } as LocalizedText,
+  greeting: {
+    "zh-TW": "歡迎探索我的作品。",
+    en: "Welcome to my projects.",
+  } as LocalizedText,
 };
 
 const proposal: ContributionProposal = {
-  role: { "zh-TW": "共同維護者", en: "Co-maintainer" },
-  summary: { "zh-TW": "維護公開 parser", en: "Maintained the public parser" },
+  role: { "zh-TW": "共同維護者", en: "Co-maintainer" } as LocalizedText,
+  summary: {
+    "zh-TW": "維護公開 parser",
+    en: "Maintained the public parser",
+  } as LocalizedText,
   claims: [
     {
       id: "parser-work",
       kind: "responsibility",
-      statement: { "zh-TW": "維護 parser", en: "Maintained the parser" },
+      statement: {
+        "zh-TW": "維護 parser",
+        en: "Maintained the parser",
+      } as LocalizedText,
     },
   ],
 };
@@ -717,11 +805,14 @@ const analysis: RepositoryAnalysis = {
   inferences: [
     {
       evidence_class: "MODEL_INFERENCE",
-      title: { "zh-TW": "可重用的解析器", en: "Reusable parser" },
+      title: {
+        "zh-TW": "可重用的解析器",
+        en: "Reusable parser",
+      } as LocalizedText,
       statement: {
         "zh-TW": "這個 repository 可能提供可重用的 parser。",
         en: "The repository may provide a reusable parser.",
-      },
+      } as LocalizedText,
       supporting_evidence_ids: ["E_fact_1"],
     },
   ],
@@ -1281,7 +1372,10 @@ describe("GuidedOnboardingView", () => {
       };
       const secondInference = {
         ...analysis.inferences[0],
-        title: { en: "Second highlight", "zh-TW": "另一個重點" },
+        title: {
+          en: "Second highlight",
+          "zh-TW": "另一個重點",
+        } as LocalizedText,
         statement: {
           en:
             "Second interpretation. ".repeat(30) +
@@ -1289,7 +1383,7 @@ describe("GuidedOnboardingView", () => {
           "zh-TW":
             "另一段完整的解讀內容。".repeat(40) +
             "<script>untrusted()</script>",
-        },
+        } as LocalizedText,
         supporting_evidence_ids: ["missing"],
       };
       const input = props({
@@ -1856,8 +1950,8 @@ describe("GuidedOnboardingView", () => {
                 analysisStatus: "unavailable",
                 analysis: null,
                 proposal: {
-                  role: { "zh-TW": "", en: "" },
-                  summary: { "zh-TW": "", en: "" },
+                  role: { "zh-TW": "", en: "" } as LocalizedText,
+                  summary: { "zh-TW": "", en: "" } as LocalizedText,
                   claims: [],
                 },
               }),
@@ -1867,7 +1961,7 @@ describe("GuidedOnboardingView", () => {
       />,
     );
     expect(incompleteMarkup).toContain(
-      "Complete both Traditional Chinese and English role and summary fields before accepting.",
+      "Complete the role, summary, and contribution descriptions in every site language before accepting.",
     );
   });
 
@@ -1894,7 +1988,7 @@ describe("GuidedOnboardingView", () => {
     expect(empty).toContain('href="#guided-profile-headline-en"');
     expect(empty).toContain('class="ux-missing-fields"');
     expect(empty).toContain(
-      "Complete every bilingual profile field before continuing.",
+      "Complete every profile field in every site language before continuing.",
     );
 
     const complete = renderToStaticMarkup(

@@ -1,6 +1,7 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useEffect, useState } from "react";
 
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import { batchMutationResultUnknown } from "./batchMutationRecovery";
 import {
   formatDuration,
@@ -285,7 +286,7 @@ type Copy = {
   batchStatus: (status: BatchJobStatus) => string;
 };
 
-const COPY: Record<Locale, Copy> = {
+const COPY: Record<ReturnType<typeof chromeLocale>, Copy> = {
   "zh-TW": {
     eyebrow: "受控批次作業",
     title: "批次分析",
@@ -627,7 +628,7 @@ export function BatchAnalysisPanel({
   onReconcile,
   onRetryPreflight,
 }: BatchAnalysisPanelProps) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const availability = batchActionAvailability(job, actions);
   const activeJob = job !== null && !isTerminalJob(job.status);
 
@@ -645,7 +646,7 @@ export function BatchAnalysisPanel({
         </h2>
         <details className="p4-w1-batch-info">
           <summary>
-            {locale === "zh-TW"
+            {chromeLocale(locale) === "zh-TW"
               ? "分析與隱私說明"
               : "Analysis and privacy details"}
           </summary>
@@ -1250,7 +1251,10 @@ function repositoryErrorMessage(
   locale: Locale,
 ): string {
   const reason = safeRepositoryErrorReason(error.reason);
-  const reasonMessages: Record<Locale, Record<string, string>> = {
+  const reasonMessages: Record<
+    ReturnType<typeof chromeLocale>,
+    Record<string, string>
+  > = {
     "zh-TW": {
       NO_ELIGIBLE_CONTENT:
         "找不到符合收錄規則的可分析來源檔案；請調整 include/exclude 後重新分析。",
@@ -1276,10 +1280,13 @@ function repositoryErrorMessage(
         "The chat model returned an unconfirmed personal attribution, so the safety policy rejected the result.",
     },
   };
-  if (reason) return reasonMessages[locale][reason];
+  if (reason) return reasonMessages[chromeLocale(locale)][reason];
 
   const code = safeRepositoryErrorCode(error.code);
-  const codeMessages: Record<Locale, Record<string, string>> = {
+  const codeMessages: Record<
+    ReturnType<typeof chromeLocale>,
+    Record<string, string>
+  > = {
     "zh-TW": {
       CONFIG_INVALID: "來源、索引或模型 context 設定無法支援此次分析。",
       PROVIDER_ERROR: "聊天模型呼叫或回傳內容驗證失敗。",
@@ -1344,7 +1351,10 @@ function repositoryErrorMessage(
         "Analysis did not complete. Check the error code and settings, then try again.",
     },
   };
-  return codeMessages[locale][code] ?? codeMessages[locale].ANALYSIS_FAILED;
+  return (
+    codeMessages[chromeLocale(locale)][code] ??
+    codeMessages[chromeLocale(locale)].ANALYSIS_FAILED
+  );
 }
 
 function operationErrorMessage(error: BatchOperationError, copy: Copy): string {
@@ -1386,7 +1396,10 @@ function operationErrorMessage(error: BatchOperationError, copy: Copy): string {
 }
 
 function batchStatusLabel(status: BatchJobStatus, locale: Locale): string {
-  const labels: Record<Locale, Record<BatchJobStatus, string>> = {
+  const labels: Record<
+    ReturnType<typeof chromeLocale>,
+    Record<BatchJobStatus, string>
+  > = {
     "zh-TW": {
       queued: "等待處理",
       running: "執行中",
@@ -1408,14 +1421,17 @@ function batchStatusLabel(status: BatchJobStatus, locale: Locale): string {
       failed: "Failed",
     },
   };
-  return labels[locale][status];
+  return labels[chromeLocale(locale)][status];
 }
 
 function repositoryStageLabel(
   stage: BatchRepositoryStage,
   locale: Locale,
 ): string {
-  const labels: Record<Locale, Record<BatchRepositoryStage, string>> = {
+  const labels: Record<
+    ReturnType<typeof chromeLocale>,
+    Record<BatchRepositoryStage, string>
+  > = {
     "zh-TW": {
       queued: "等待處理",
       resolving_commit: "解析固定 commit",
@@ -1443,7 +1459,7 @@ function repositoryStageLabel(
       complete: "Complete",
     },
   };
-  return labels[locale][stage];
+  return labels[chromeLocale(locale)][stage];
 }
 
 function repositoryStateLabel(
@@ -1454,7 +1470,7 @@ function repositoryStateLabel(
     return repositoryStageLabel(item.stage, locale);
   }
   const labels: Record<
-    Locale,
+    ReturnType<typeof chromeLocale>,
     Record<Exclude<BatchRepositoryState, "active">, string>
   > = {
     "zh-TW": {
@@ -1474,7 +1490,7 @@ function repositoryStateLabel(
       complete: "Complete",
     },
   };
-  return labels[locale][item.state];
+  return labels[chromeLocale(locale)][item.state];
 }
 
 function formatDurationRange(

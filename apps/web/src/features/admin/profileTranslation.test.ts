@@ -1,6 +1,12 @@
+import type { LocalizedText } from "./guidedOnboarding";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LEGACY_LANGUAGES } from "../../i18n/languages";
+import { LANGUAGES, deriveConverter } from "../../i18n/languages";
+import { planLanguages } from "../../i18n/plan";
+import { blankSiteState } from "./__fixtures__/siteLanguages";
+const initialLanguages = LANGUAGES.filter(({ tag }) =>
+  initialGuidedOnboardingState(false, "zh-TW").locales.supported.includes(tag),
+);
 import {
   initialGuidedOnboardingState,
   serializeGuidedOnboarding,
@@ -75,9 +81,9 @@ function profile(): GuidedProfile {
     ...initialGuidedOnboardingState().profile,
     displayName: "Owner",
     githubLogin: "another-owner",
-    headline: { "zh-TW": "", en: "" },
-    bio: { "zh-TW": "", en: "" },
-    greeting: { "zh-TW": "", en: "" },
+    headline: { "zh-TW": "", en: "" } as LocalizedText,
+    bio: { "zh-TW": "", en: "" } as LocalizedText,
+    greeting: { "zh-TW": "", en: "" } as LocalizedText,
   };
 }
 
@@ -87,7 +93,9 @@ function translated(items: ProfileTranslationItem[]) {
       field: item.field,
       target_locale: item.target_locale,
       text: `Translated ${item.field} ${index}`,
-      method: "model",
+      method: deriveConverter(item.source_locale, item.target_locale)
+        ? "converted"
+        : "model",
       confirmed: false,
     })),
   };
@@ -110,6 +118,7 @@ function harness(initial: GuidedProfile, translate: TranslateProfile) {
     reset: false,
     modelGeneration: 1,
     enabled: true,
+    modelEnabled: true,
     translate,
     onChange: vi.fn((next: GuidedProfile) => {
       options.profile = next;
@@ -125,19 +134,22 @@ function harness(initial: GuidedProfile, translate: TranslateProfile) {
 }
 
 describe("profile translation contract", () => {
-  it.each(LEGACY_LANGUAGES)(
-    "orders $tag first and keeps registry order for the rest",
+  it.each(LANGUAGES)(
+    "keeps a site order starting with $tag, independent of the admin locale",
     ({ tag }) => {
-      expect(profileLanguages(tag).map((language) => language.tag)).toEqual([
+      const supported = [
         tag,
-        ...LEGACY_LANGUAGES.filter((language) => language.tag !== tag).map(
+        ...LANGUAGES.filter((language) => language.tag !== tag).map(
           (language) => language.tag,
         ),
-      ]);
+      ];
+      expect(
+        profileLanguages(supported).map((language) => language.tag),
+      ).toEqual(supported);
     },
   );
 
-  it.each(LEGACY_LANGUAGES)(
+  it.each(initialLanguages)(
     "sends column $tag as the source regardless of its writing system",
     async ({ tag }) => {
       for (const text of [
@@ -149,14 +161,14 @@ describe("profile translation contract", () => {
         const items = emptyProfileTranslationItems(current);
         expect(items).toEqual(
           PROFILE_FIELDS.flatMap((field) =>
-            LEGACY_LANGUAGES.filter((language) => language.tag !== tag).map(
-              (target) => ({
+            initialLanguages
+              .filter((language) => language.tag !== tag)
+              .map((target) => ({
                 field,
                 source_locale: tag,
                 target_locale: target.tag,
                 text,
-              }),
-            ),
+              })),
           ),
         );
         const request = vi.fn().mockResolvedValue(translated(items));
@@ -178,13 +190,13 @@ describe("profile translation contract", () => {
     const current = profile();
     expect(emptyProfileTranslationItems(current)).toEqual([]);
     PROFILE_FIELDS.forEach((field, index) => {
-      current[field][LEGACY_LANGUAGES[index % LEGACY_LANGUAGES.length].tag] =
+      current[field][initialLanguages[index % initialLanguages.length].tag] =
         `Source ${field}`;
     });
     current.greeting = {
       "zh-TW": "Already filled",
       en: "Keep this exact text",
-    };
+    } as LocalizedText;
     const items = emptyProfileTranslationItems(current);
     expect(items).toHaveLength(2);
     for (const item of items) {
@@ -193,7 +205,7 @@ describe("profile translation contract", () => {
       expect(item.source_locale).not.toBe(item.target_locale);
     }
     expect(items.map((item) => item.source_locale)).toEqual(
-      LEGACY_LANGUAGES.map(({ tag }) => tag),
+      initialLanguages.map(({ tag }) => tag),
     );
   });
 
@@ -210,7 +222,7 @@ describe("profile translation contract", () => {
   ])("rejects a %s response before applying any field", (mutation) => {
     const current = profile();
     for (const field of PROFILE_FIELDS)
-      current[field][LEGACY_LANGUAGES[0].tag] = field;
+      current[field][initialLanguages[0].tag] = field;
     const items = emptyProfileTranslationItems(current);
     const response = translated(items);
     switch (mutation) {
@@ -258,6 +270,121 @@ describe("profile translation contract", () => {
 });
 
 describe("profile translation lifecycle", () => {
+  it.each(
+    LANGUAGES.filter((language) => "derive" in language).map((language) => ({
+      target: language.tag,
+      source: LANGUAGES.find(
+        ({ tag }) =>
+          tag === ("derive" in language ? language.derive.from : undefined),
+      )!.tag,
+    })),
+  )(
+    "converts $source to $target without an accepted model, counts proposals, reviews and restores them",
+    async ({ source, target }) => {
+      const current = blankSiteState([source, target]).profile;
+      for (const field of PROFILE_FIELDS)
+        current[field][source] = `Different source ${field}`;
+      const translate = vi.fn(async (items: ProfileTranslationItem[]) =>
+        translated(items),
+      );
+      const view = harness(current, translate);
+      view.options.modelEnabled = false;
+      await view.render().run(emptyProfileTranslationItems(current));
+      expect(translate).toHaveBeenCalledTimes(1);
+      expect(
+        translate.mock.calls[0][0].map((item) => item.target_locale),
+      ).toEqual(PROFILE_FIELDS.map(() => target));
+      expect(view.render().unreviewedCount).toBe(PROFILE_FIELDS.length);
+      for (const field of PROFILE_FIELDS)
+        expect(view.render().review(field, target)?.method).toBe("converted");
+      view.render().markReviewed("headline", target);
+      expect(view.render().unreviewedCount).toBe(PROFILE_FIELDS.length - 1);
+      view.render().restore("bio", target);
+      expect(view.options.profile.bio[target]).toBe("");
+      expect(view.render().unreviewedCount).toBe(PROFILE_FIELDS.length - 2);
+      view.render().edit("greeting", target, "Owner's own revision");
+      expect(view.render().unreviewedCount).toBe(0);
+    },
+  );
+
+  it("fills a registry-wide form in requests of at most six without overwriting a filled field", async () => {
+    const supported = LANGUAGES.map(({ tag }) => tag);
+    const source = supported.find((tag) => tag === "en")!;
+    const current = blankSiteState(supported).profile;
+    for (const field of PROFILE_FIELDS)
+      current[field][source] = `Keep exact ${field}`;
+    const translate = vi.fn(async (items: ProfileTranslationItem[]) =>
+      translated(items),
+    );
+    const view = harness(current, translate);
+    await view.render().fillEmpty();
+    const allItems = translate.mock.calls.flatMap(([batch]) => batch);
+    expect(translate).toHaveBeenCalledTimes(2);
+    expect(allItems).toHaveLength(
+      PROFILE_FIELDS.length * (supported.length - 1),
+    );
+    for (const item of allItems) {
+      const derived = planLanguages(supported).derived.find(
+        (pair) => pair.target === item.target_locale,
+      );
+      if (derived) expect(item.source_locale).toBe(derived.source);
+    }
+    for (const [batch] of translate.mock.calls)
+      expect(batch.length).toBeLessThanOrEqual(6);
+    expect(view.render().unreviewedCount).toBe(
+      PROFILE_FIELDS.length * (supported.length - 1),
+    );
+    for (const field of PROFILE_FIELDS) {
+      expect(view.options.profile[field][source]).toBe(current[field][source]);
+      for (const tag of supported)
+        expect(view.options.profile[field][tag]).not.toBe("");
+    }
+  });
+
+  it("rejects a model response for a derive pair and blocks model items while no model is accepted", async () => {
+    const target = LANGUAGES.find((language) => "derive" in language)!;
+    const source = LANGUAGES.find(
+      ({ tag }) => tag === ("derive" in target ? target.derive.from : ""),
+    )!.tag;
+    const current = blankSiteState([source, target.tag]).profile;
+    current.bio[source] = "Another source value";
+    const items = emptyProfileTranslationItems(current);
+    const response = translated(items);
+    response.items[0].method = "model";
+    expect(profileTranslationBody(response, items)).toBeNull();
+    const modelProfile = profile();
+    modelProfile.bio.en = "Model source";
+    const translate = vi.fn();
+    const view = harness(modelProfile, translate);
+    view.options.modelEnabled = false;
+    await view.render().run(emptyProfileTranslationItems(modelProfile));
+    expect(translate).not.toHaveBeenCalled();
+  });
+
+  it("aborts when a language is removed and never resurrects the removed review or text", async () => {
+    const supported = LANGUAGES.map(({ tag }) => tag);
+    const current = blankSiteState(supported).profile;
+    const target = supported[supported.length - 1];
+    current.bio[supported[0]] = "Owner's original public biography";
+    const pending = deferred();
+    const translate = vi.fn<TranslateProfile>(() => pending.promise);
+    const view = harness(current, translate);
+    const items = emptyProfileTranslationItems(current).filter(
+      (item) => item.target_locale === target,
+    );
+    const request = view.render().run(items);
+    view.options.profile = blankSiteState(
+      supported.filter((tag) => tag !== target),
+    ).profile;
+    view.render();
+    expect(translate.mock.calls[0][1].aborted).toBe(true);
+    pending.resolve(translated(items));
+    await request;
+    expect(view.options.onChange).not.toHaveBeenCalled();
+    expect(Object.keys(view.options.profile.bio)).not.toContain(target);
+    expect(view.render().unreviewedCount).toBe(0);
+  });
+
   it("clears proposal review state when the journey starts over", async () => {
     const current = profile();
     current.bio.en = "A public biography";
@@ -299,7 +426,7 @@ describe("profile translation lifecycle", () => {
     expect(view.render().unreviewedCount).toBe(1);
   });
 
-  it.each(LEGACY_LANGUAGES)(
+  it.each(initialLanguages)(
     "fills only empty targets from $tag in one request and restores an empty previous value",
     async ({ tag }) => {
       const current = profile();
@@ -308,7 +435,7 @@ describe("profile translation lifecycle", () => {
       current.greeting = {
         "zh-TW": "Exact greeting",
         en: "Untouched greeting",
-      };
+      } as LocalizedText;
       const translate = vi.fn(async (items: ProfileTranslationItem[]) =>
         translated(items),
       );
@@ -317,7 +444,7 @@ describe("profile translation lifecycle", () => {
       expect(translate).toHaveBeenCalledTimes(1);
       expect(translate.mock.calls[0][0]).toHaveLength(2);
       expect(view.options.profile.greeting).toEqual(current.greeting);
-      const target = LEGACY_LANGUAGES.find(
+      const target = initialLanguages.find(
         (language) => language.tag !== tag,
       )!.tag;
       expect(view.render().unreviewedCount).toBe(2);
@@ -353,7 +480,7 @@ describe("profile translation lifecycle", () => {
       );
       for (const field of PROFILE_FIELDS)
         expect(Object.keys(saved.profile[field]).sort()).toEqual(
-          LEGACY_LANGUAGES.map(({ tag }) => tag).sort(),
+          initialLanguages.map(({ tag }) => tag).sort(),
         );
       expect(JSON.stringify(saved.profile)).not.toMatch(
         /previousText|translatedText|reviewed|method|confirmed/,
@@ -363,11 +490,14 @@ describe("profile translation lifecycle", () => {
 
   it("restores a filled target exactly after retranslation", async () => {
     const current = profile();
-    current.headline = { "zh-TW": " \n原值\n ", en: "Another source" };
+    current.headline = {
+      "zh-TW": " \n原值\n ",
+      en: "Another source",
+    } as LocalizedText;
     const item = profileTranslationSource(
       current,
       "headline",
-      LEGACY_LANGUAGES[0].tag,
+      initialLanguages[0].tag,
     )!;
     const view = harness(current, async (items) => translated(items));
     await view.render().run([item]);

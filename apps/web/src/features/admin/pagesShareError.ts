@@ -1,4 +1,5 @@
-import type { Locale } from "../../i18n/messages";
+import { chromeLocale } from "../../i18n/languages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 
 type Message = readonly [string, string];
 
@@ -36,5 +37,5 @@ const FALLBACK: Message = [
 export function pagesShareErrorMessage(locale: Locale, error: unknown): string {
   const code = error instanceof Error ? error.message : "REQUEST_FAILED";
   const message = Object.hasOwn(MESSAGES, code) ? MESSAGES[code] : FALLBACK;
-  return message[locale === "zh-TW" ? 0 : 1];
+  return message[chromeLocale(locale) === "zh-TW" ? 0 : 1];
 }

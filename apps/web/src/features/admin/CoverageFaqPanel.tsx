@@ -1,3 +1,4 @@
+import { chromeLocale, type LanguageTag } from "../../i18n/languages";
 import "../../p4-w3.css";
 import { useEffect, useRef, useState } from "react";
 import type { ClaimKind } from "./ClaimEditor";
@@ -70,25 +71,27 @@ interface FaqView {
 }
 export function CoverageFaqPanel({
   locale,
+  contentLocale = locale,
   request,
   repositories,
   bundleId,
   draftChanged,
   onAddClaim,
 }: {
-  locale: "zh-TW" | "en";
+  locale: LanguageTag;
+  contentLocale?: LanguageTag;
   request: Request;
   repositories: string[];
   bundleId: string | null;
   draftChanged: boolean;
   onAddClaim: (repository: string, kind: ClaimKind) => void;
 }) {
-  const zh = locale === "zh-TW";
+  const zh = chromeLocale(locale) === "zh-TW";
   const mounted = useRef(true);
-  const currentLocale = useRef(locale);
+  const currentLocale = useRef(contentLocale);
   const generation = useRef(0);
-  if (currentLocale.current !== locale) {
-    currentLocale.current = locale;
+  if (currentLocale.current !== contentLocale) {
+    currentLocale.current = contentLocale;
     generation.current += 1;
   }
   const requestGeneration = generation.current;
@@ -114,16 +117,16 @@ export function CoverageFaqPanel({
     setVariantsEntryId(null);
     setVariantsText("");
     setView(null);
-  }, [locale]);
+  }, [contentLocale]);
   const refresh = () =>
-    request<FaqView>(`/api/admin/portfolio/faq?locale=${locale}`).then(
+    request<FaqView>(`/api/admin/portfolio/faq?locale=${contentLocale}`).then(
       (value) => {
         if (active()) setView(value);
       },
     );
   useEffect(() => {
     let closed = false;
-    void request<FaqView>(`/api/admin/portfolio/faq?locale=${locale}`)
+    void request<FaqView>(`/api/admin/portfolio/faq?locale=${contentLocale}`)
       .then((value) => {
         if (!closed) setView(value);
       })
@@ -133,7 +136,7 @@ export function CoverageFaqPanel({
     return () => {
       closed = true;
     };
-  }, [request, locale, bundleId]);
+  }, [request, contentLocale, bundleId]);
   const statusNames = {
     unchecked: zh ? "尚未檢查" : "Not checked",
     answered: zh ? "已回答" : "Answered",
@@ -187,7 +190,7 @@ export function CoverageFaqPanel({
   async function check() {
     const queue = await request<FaqView>("/api/admin/portfolio/faq/check", {
       method: "POST",
-      body: JSON.stringify({ locale }),
+      body: JSON.stringify({ locale: contentLocale }),
     });
     if (!active()) return;
     setView(queue);
@@ -259,7 +262,7 @@ export function CoverageFaqPanel({
         onClick={() =>
           void run(async () => {
             const payload = await request(
-              `/api/admin/portfolio/faq/export?locale=${locale}`,
+              `/api/admin/portfolio/faq/export?locale=${contentLocale}`,
             );
             const url = URL.createObjectURL(
               new Blob([JSON.stringify(payload, null, 2)], {
@@ -268,7 +271,7 @@ export function CoverageFaqPanel({
             );
             const link = document.createElement("a");
             link.href = url;
-            link.download = `faq-${locale}.json`;
+            link.download = `faq-${contentLocale}.json`;
             link.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
           })
@@ -296,8 +299,9 @@ export function CoverageFaqPanel({
         ))}
       </select>
       <p role="status">{notice}</p>
-      {view?.entries.map((entry) => (
+      {(view?.locale === contentLocale ? view.entries : []).map((entry) => (
         <article
+          lang={contentLocale}
           className="coverage-faq__entry"
           key={entry.entry_id}
           aria-label={entry.question}
@@ -312,7 +316,10 @@ export function CoverageFaqPanel({
           <p>
             {statusNames[entry.coverage_status]}
             {entry.no_match_reason && (
-              <span> · {noMatchLabels[entry.no_match_reason][locale]}</span>
+              <span>
+                {" "}
+                · {noMatchLabels[entry.no_match_reason][chromeLocale(locale)]}
+              </span>
             )}
           </p>
           {entry.needs_reconfirmation && (

@@ -1,3 +1,5 @@
+import type { LocalizedText } from "./guidedOnboarding";
+import type { LanguageTag } from "../../i18n/languages";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import { GuidedOnboardingView } from "./GuidedOnboardingView";
@@ -8,7 +10,7 @@ import {
   type GuidedStep,
 } from "./guidedOnboarding";
 
-function markup(step: GuidedStep, locale: "zh-TW" | "en") {
+function markup(step: GuidedStep, locale: LanguageTag) {
   const props: GuidedOnboardingViewProps = {
     locale,
     state: {
@@ -16,7 +18,7 @@ function markup(step: GuidedStep, locale: "zh-TW" | "en") {
       step,
       profile: {
         ...initialGuidedOnboardingState().profile,
-        greeting: { "zh-TW": "", en: "" },
+        greeting: { "zh-TW": "", en: "" } as LocalizedText,
       },
     },
     busy: false,
@@ -98,7 +100,7 @@ it.each(["zh-TW", "en"] as const)(
         locale={locale}
         id="claim-test"
         kind="responsibility"
-        statement={{ "zh-TW": "原文", en: "Original" }}
+        statement={{ "zh-TW": "原文", en: "Original" } as LocalizedText}
         disabled
         onChange={vi.fn()}
       />,

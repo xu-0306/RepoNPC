@@ -1,6 +1,7 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useEffect, useState, type CSSProperties } from "react";
 
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import {
   onboardingProgress,
   type GuidedOnboardingState,
@@ -46,7 +47,7 @@ export function OnboardingStepper({ copy, locale, state }: Props) {
     return () => media.removeEventListener("change", update);
   }, []);
   if (current < 0) return null;
-  const labels = COPY[locale];
+  const labels = COPY[chromeLocale(locale)];
   const routeLabel = state.route === "manual" ? labels.manual : labels.ai;
 
   return (

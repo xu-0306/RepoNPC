@@ -161,6 +161,7 @@ def test_export_follows_applied_background_without_rebuilding_bundle(tmp_path: P
                 with zipfile.ZipFile(artifact.path) as archive:
                     profile = json.loads(archive.read("profile-en.json"))
                     published = client.get("/api/public/profile?locale=en").json()
+                    assert profile == published
                     assert profile["character"]["revision"] == published["character"]["revision"]
                     scene = profile["character"]["scene"]
                     assert scene["themes"] == published["character"]["scene"]["themes"]
@@ -177,7 +178,11 @@ def test_export_follows_applied_background_without_rebuilding_bundle(tmp_path: P
                         assert scene["background_url"] is None
                         assert not any(name.startswith("scene/") for name in archive.namelist())
                     else:
-                        exported = archive.read(scene["background_url"].removeprefix("./"))
+                        background_path = next(
+                            name for name in archive.namelist() if name.startswith("scene/")
+                        )
+                        exported = archive.read(background_path)
+                        assert hashlib.sha256(exported).hexdigest() in background_path
                         assert (
                             exported
                             == client.get(published["character"]["scene"]["background_url"]).content

@@ -29,6 +29,7 @@ def build_public_card_assets(config: PublicConfig, *, config_directory: Path) ->
             headline=config.profile.headline[locale],
             call_to_action=config.card.call_to_action[locale],
             repository_count=repository_count if config.card.show_repository_count else None,
+            locale=locale,
         )
         for theme in ("light", "dark"):
             configured_theme = getattr(config.card.themes, theme)

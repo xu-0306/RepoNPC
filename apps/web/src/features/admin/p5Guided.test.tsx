@@ -1,3 +1,5 @@
+import type { LocalizedText } from "./guidedOnboarding";
+import type { LanguageTag } from "../../i18n/languages";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import { GuidedOnboardingView } from "./GuidedOnboardingView";
@@ -8,8 +10,11 @@ import {
   type GuidedStep,
 } from "./guidedOnboarding";
 
-function markup(step: GuidedStep, locale: "zh-TW" | "en", confirmed = false) {
-  const text = { "zh-TW": "維護解析器", en: "Maintained the parser" };
+function markup(step: GuidedStep, locale: LanguageTag, confirmed = false) {
+  const text = {
+    "zh-TW": "維護解析器",
+    en: "Maintained the parser",
+  } as LocalizedText;
   const proposal = {
     role: text,
     summary: text,

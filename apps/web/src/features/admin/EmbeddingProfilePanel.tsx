@@ -1,7 +1,8 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import { ModelBrandIcon } from "./ModelBrandIcon";
 import { ModelEditor } from "./ModelEditor";
 import { modelProbeError } from "./modelProbeError";
@@ -167,13 +168,15 @@ function connectionLabel(
   locale: Locale,
 ): string {
   if (connectionId === null)
-    return locale === "zh-TW" ? "本機內建模型" : "Built-in local model";
+    return chromeLocale(locale) === "zh-TW"
+      ? "本機內建模型"
+      : "Built-in local model";
   const connection = connections.find(
     (candidate) => candidate.connection_id === connectionId,
   );
   if (!connection) return "";
   if (connection.source === "host-managed") {
-    return locale === "zh-TW"
+    return chromeLocale(locale) === "zh-TW"
       ? "環境預設連線（資料查找）"
       : "Environment connection (content finding)";
   }
@@ -202,7 +205,7 @@ export function EmbeddingProfilePanel({
   onOllamaDelete,
   managementActions = true,
 }: Props) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const editorRef = useRef<HTMLDetailsElement>(null);
   const [model, setModel] = useState("");
   const [dimension, setDimension] = useState("");
@@ -283,7 +286,7 @@ export function EmbeddingProfilePanel({
       {provider === "ollama" && (
         <details className="model-card__technical">
           <summary>
-            {locale === "zh-TW"
+            {chromeLocale(locale) === "zh-TW"
               ? "查看此服務的已安裝模型"
               : "View this service's installed models"}
           </summary>
@@ -305,19 +308,23 @@ export function EmbeddingProfilePanel({
               disabled={pending || installedState?.status === "loading"}
               onClick={() => onLoadInstalled(connection)}
             >
-              {locale === "zh-TW" ? "讀取模型清單" : "Load model list"}
+              {chromeLocale(locale) === "zh-TW"
+                ? "讀取模型清單"
+                : "Load model list"}
             </button>
           )}
           {installedState?.connectionId === connection &&
             installedState.status === "loading" && (
               <p role="status">
-                {locale === "zh-TW" ? "正在讀取模型清單…" : "Loading models…"}
+                {chromeLocale(locale) === "zh-TW"
+                  ? "正在讀取模型清單…"
+                  : "Loading models…"}
               </p>
             )}
           {installedState?.connectionId === connection &&
             installedState.status === "failed" && (
               <p role="alert">
-                {locale === "zh-TW"
+                {chromeLocale(locale) === "zh-TW"
                   ? "讀取失敗，請確認這個 Ollama 服務正在執行，再按「讀取模型清單」重試。"
                   : "Could not load models. Check that this Ollama service is running, then load the list again."}
               </p>
@@ -342,10 +349,10 @@ export function EmbeddingProfilePanel({
             <p>
               {installedState?.connectionId === connection &&
               installedState.status === "loaded"
-                ? locale === "zh-TW"
+                ? chromeLocale(locale) === "zh-TW"
                   ? "此服務尚未安裝模型。"
                   : "No models are installed on this service."
-                : locale === "zh-TW"
+                : chromeLocale(locale) === "zh-TW"
                   ? "尚未讀取；你也可以直接輸入模型名稱並測試。"
                   : "Not loaded yet. You can also enter a model name and test it directly."}
             </p>
@@ -372,7 +379,7 @@ export function EmbeddingProfilePanel({
                 <strong>{profile.model_id}</strong>
                 <span className="model-card__provider">
                   {profile.last_error_code
-                    ? locale === "zh-TW"
+                    ? chromeLocale(locale) === "zh-TW"
                       ? "測試失敗"
                       : "Test failed"
                     : profile.last_probed_at &&
@@ -381,18 +388,18 @@ export function EmbeddingProfilePanel({
                           "reindex_required",
                           "last_known_good",
                         ].includes(profile.status)
-                      ? locale === "zh-TW"
+                      ? chromeLocale(locale) === "zh-TW"
                         ? "測試通過"
                         : "Test passed"
                       : profile.status === "probe"
-                        ? locale === "zh-TW"
+                        ? chromeLocale(locale) === "zh-TW"
                           ? "待測試"
                           : "Needs test"
                         : profile.status === "reindexing"
-                          ? locale === "zh-TW"
+                          ? chromeLocale(locale) === "zh-TW"
                             ? "正在更新網站資料"
                             : "Updating website data"
-                          : locale === "zh-TW"
+                          : chromeLocale(locale) === "zh-TW"
                             ? "待測試"
                             : "Needs test"}
                 </span>
@@ -403,7 +410,7 @@ export function EmbeddingProfilePanel({
                   {profile.provider === "openai_compatible"
                     ? "OpenAI-compatible"
                     : profile.provider === "builtin_onnx"
-                      ? locale === "zh-TW"
+                      ? chromeLocale(locale) === "zh-TW"
                         ? "本機 ONNX · CPU"
                         : "Local ONNX · CPU"
                       : profile.provider === "vllm"
@@ -446,23 +453,23 @@ export function EmbeddingProfilePanel({
                   <button
                     type="button"
                     disabled={pending}
-                    aria-label={`${locale === "zh-TW" ? "編輯" : "Edit"} ${profile.model_id} · ${connectionLabel(connections, profile.connection_reference, locale)}`}
+                    aria-label={`${chromeLocale(locale) === "zh-TW" ? "編輯" : "Edit"} ${profile.model_id} · ${connectionLabel(connections, profile.connection_reference, locale)}`}
                     onClick={() => edit(profile)}
                   >
-                    {locale === "zh-TW" ? "編輯" : "Edit"}
+                    {chromeLocale(locale) === "zh-TW" ? "編輯" : "Edit"}
                   </button>
                 )}
               <button
                 disabled={pending || profile.status === "reindexing"}
-                aria-label={`${locale === "zh-TW" ? "測試模型" : "Test model"} ${profile.model_id} · ${connectionLabel(connections, profile.connection_reference, locale)}`}
+                aria-label={`${chromeLocale(locale) === "zh-TW" ? "測試模型" : "Test model"} ${profile.model_id} · ${connectionLabel(connections, profile.connection_reference, locale)}`}
                 onClick={() => onProbe(profile.profile_id)}
                 type="button"
               >
                 {pending && pendingProfileId === profile.profile_id
-                  ? locale === "zh-TW"
+                  ? chromeLocale(locale) === "zh-TW"
                     ? "正在測試…"
                     : "Testing…"
-                  : locale === "zh-TW"
+                  : chromeLocale(locale) === "zh-TW"
                     ? "測試模型"
                     : "Test model"}
               </button>
@@ -471,17 +478,19 @@ export function EmbeddingProfilePanel({
                   <ConfirmButton
                     locale={locale}
                     title={
-                      locale === "zh-TW"
+                      chromeLocale(locale) === "zh-TW"
                         ? "重建索引並啟用？"
                         : "Rebuild and activate?"
                     }
                     description={
-                      locale === "zh-TW"
+                      chromeLocale(locale) === "zh-TW"
                         ? "更換資料查找模型需要完整重建索引。重建完成前會保留目前公開資料。"
                         : "Changing the content finder model requires a full reindex. Current public data remains available until it finishes."
                     }
                     confirmLabel={
-                      locale === "zh-TW" ? "重建並啟用" : "Rebuild and activate"
+                      chromeLocale(locale) === "zh-TW"
+                        ? "重建並啟用"
+                        : "Rebuild and activate"
                     }
                     disabled={
                       pending ||
@@ -492,7 +501,7 @@ export function EmbeddingProfilePanel({
                     onConfirm={() => onActivate(profile.profile_id)}
                   >
                     {profile.status === "reindex_required"
-                      ? locale === "zh-TW"
+                      ? chromeLocale(locale) === "zh-TW"
                         ? "更新網站資料並啟用"
                         : "Update website data and activate"
                       : copy.activate}
@@ -506,11 +515,11 @@ export function EmbeddingProfilePanel({
                 pending={pending}
                 blockedReason={
                   profile.active
-                    ? locale === "zh-TW"
+                    ? chromeLocale(locale) === "zh-TW"
                       ? "公開網站正在使用此模型，請先到進階設定切換模型後再刪除。"
                       : "The public site uses this model. Switch to another model in advanced settings before deleting it."
                     : profile.status === "reindexing"
-                      ? locale === "zh-TW"
+                      ? chromeLocale(locale) === "zh-TW"
                         ? "此模型正在重建索引，完成後才能刪除。"
                         : "This model is rebuilding the index. Wait for completion before deleting it."
                       : undefined
@@ -524,12 +533,14 @@ export function EmbeddingProfilePanel({
                     <ConfirmButton
                       locale={locale}
                       title={
-                        locale === "zh-TW"
+                        chromeLocale(locale) === "zh-TW"
                           ? `由 Ollama 安裝「${profile.model_id}」？`
                           : `Install “${profile.model_id}” through Ollama?`
                       }
                       description={copy.installModelConfirm}
-                      confirmLabel={locale === "zh-TW" ? "安裝" : "Install"}
+                      confirmLabel={
+                        chromeLocale(locale) === "zh-TW" ? "安裝" : "Install"
+                      }
                       disabled={pending}
                       onConfirm={() => onOllamaPull(profile.profile_id)}
                     >
@@ -538,12 +549,14 @@ export function EmbeddingProfilePanel({
                     <ConfirmButton
                       locale={locale}
                       title={
-                        locale === "zh-TW"
+                        chromeLocale(locale) === "zh-TW"
                           ? `由 Ollama 刪除「${profile.model_id}」？`
                           : `Delete “${profile.model_id}” through Ollama?`
                       }
                       description={copy.deleteModelConfirm}
-                      confirmLabel={locale === "zh-TW" ? "刪除" : "Delete"}
+                      confirmLabel={
+                        chromeLocale(locale) === "zh-TW" ? "刪除" : "Delete"
+                      }
                       destructive
                       disabled={pending}
                       onConfirm={() => onOllamaDelete(profile.profile_id)}
@@ -558,7 +571,7 @@ export function EmbeddingProfilePanel({
                   <dt>{copy.dimension}</dt>
                   <dd>
                     {profile.dimension ??
-                      (locale === "zh-TW"
+                      (chromeLocale(locale) === "zh-TW"
                         ? "測試後取得"
                         : "Detected during testing")}
                   </dd>
@@ -579,7 +592,7 @@ export function EmbeddingProfilePanel({
       )}
       {connections.length === 0 ? (
         <p>
-          {locale === "zh-TW"
+          {chromeLocale(locale) === "zh-TW"
             ? "請先新增一個服務，再新增模型。"
             : "Add a service before adding a model."}
         </p>
@@ -587,7 +600,7 @@ export function EmbeddingProfilePanel({
         <ModelEditor
           label={
             editingId
-              ? locale === "zh-TW"
+              ? chromeLocale(locale) === "zh-TW"
                 ? "編輯模型"
                 : "Edit model"
               : copy.add
@@ -621,7 +634,7 @@ export function EmbeddingProfilePanel({
                     value={modelConnection.connection_id}
                   >
                     {modelConnection.source === "host-managed"
-                      ? locale === "zh-TW"
+                      ? chromeLocale(locale) === "zh-TW"
                         ? "環境預設連線（資料查找）"
                         : "Environment connection (content finding)"
                       : modelConnection.display_name}
@@ -667,13 +680,13 @@ export function EmbeddingProfilePanel({
               )}
             </label>
             <p>
-              {locale === "zh-TW"
+              {chromeLocale(locale) === "zh-TW"
                 ? "模型名稱請從服務商複製。新增只會儲存設定；按「測試模型」才會連線，服務商可能計費。"
                 : "Copy the model name from your provider. Adding only saves the settings; testing connects to the service and may incur provider charges."}
             </p>
             <details className="model-form__technical">
               <summary>
-                {locale === "zh-TW"
+                {chromeLocale(locale) === "zh-TW"
                   ? "進階設定（一般不需修改）"
                   : "Advanced settings (usually unchanged)"}
               </summary>
@@ -690,7 +703,7 @@ export function EmbeddingProfilePanel({
                 />
               </label>
               <p>
-                {locale === "zh-TW"
+                {chromeLocale(locale) === "zh-TW"
                   ? "維度留空即可，測試時會自動取得。前綴只有服務商特別要求時才需填寫。"
                   : "Leave dimensions blank to detect them during testing. Enter prefixes only if your provider requires them."}
               </p>
@@ -717,7 +730,7 @@ export function EmbeddingProfilePanel({
             </details>
             <button disabled={pending} type="submit">
               {editingId
-                ? locale === "zh-TW"
+                ? chromeLocale(locale) === "zh-TW"
                   ? "儲存修改"
                   : "Save changes"
                 : copy.create}

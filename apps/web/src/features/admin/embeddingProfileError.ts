@@ -1,4 +1,5 @@
-import type { Locale } from "../../i18n/messages";
+import { chromeLocale } from "../../i18n/languages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import { modelProbeError } from "./modelProbeError";
 
 type Message = readonly [string, string];
@@ -138,5 +139,5 @@ export function embeddingProfileErrorMessage(
     return modelProbeError(locale, code);
   }
   const message = Object.hasOwn(MESSAGES, code) ? MESSAGES[code] : FALLBACK;
-  return message[locale === "zh-TW" ? 0 : 1];
+  return message[chromeLocale(locale) === "zh-TW" ? 0 : 1];
 }

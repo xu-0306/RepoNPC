@@ -10,6 +10,7 @@ import {
   sceneThemeStyle,
 } from "./scene";
 import type { PublicProfile, PublicScene } from "./publicTypes";
+import { availableLocales, legacyTags } from "./siteLanguages.test-cases";
 
 const tokens = {
   background: "#f2f3f4",
@@ -56,6 +57,7 @@ const scene: PublicScene = {
 const profile: PublicProfile = {
   schema_version: 1,
   locale: "en",
+  available_locales: availableLocales(legacyTags),
   profile: {
     display_name: "Fixture owner",
     headline: "Fixture headline",
@@ -136,10 +138,10 @@ describe("Main's independent shared visitor review", () => {
       /<ul class="answer-suggestions">([\s\S]*?)<\/ul>/,
     )?.[1];
     expect(buttons).toContain(
-      '<button type="button">Current approved FAQ</button>',
+      '<button lang="en" type="button">Current approved FAQ</button>',
     );
     expect(buttons).toContain(
-      '<button disabled="" type="button">Stale FAQ</button>',
+      '<button disabled="" lang="en" type="button">Stale FAQ</button>',
     );
 
     const pendingMarkup = renderToStaticMarkup(
@@ -155,7 +157,7 @@ describe("Main's independent shared visitor review", () => {
       /<ul class="answer-suggestions">([\s\S]*?)<\/ul>/,
     )?.[1];
     expect(pendingButtons).toContain(
-      '<button disabled="" type="button">Current approved FAQ</button>',
+      '<button disabled="" lang="en" type="button">Current approved FAQ</button>',
     );
   });
 
@@ -418,7 +420,9 @@ describe("Main's independent shared visitor review", () => {
             }),
           );
           const answers = markup.match(
-            /<ol aria-live="polite" class="conversation">([\s\S]*?)<\/ol>/,
+            new RegExp(
+              `<ol aria-live="polite" class="conversation" lang="${locale}">([\\s\\S]*?)<\\/ol>`,
+            ),
           )?.[1];
           expect(answers).toBeDefined();
           expect(

@@ -4,6 +4,7 @@ import { VisitorApp } from "./VisitorApp";
 import { VisitorPage } from "./VisitorPage";
 import { readVisitorScheme, syncVisitorPolicy } from "./scene";
 import type { PublicProfile, PublicScene } from "./publicTypes";
+import { availableLocales, legacyTags } from "./siteLanguages.test-cases";
 
 const hooks = vi.hoisted(() => ({
   values: [] as unknown[],
@@ -101,6 +102,7 @@ const scene: PublicScene = {
 const profile: PublicProfile = {
   schema_version: 1,
   locale: "en",
+  available_locales: availableLocales(legacyTags),
   profile: {
     display_name: "Owner",
     headline: "Headline",

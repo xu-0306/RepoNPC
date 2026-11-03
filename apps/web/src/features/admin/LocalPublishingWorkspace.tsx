@@ -1,6 +1,12 @@
+import {
+  chromeLocale,
+  endonym,
+  isLanguageTag,
+  type LanguageTag,
+} from "../../i18n/languages";
 import "../../p4-w3.css";
 import { useEffect, useRef, useState } from "react";
-import { guidedErrorMessage } from "./guidedOnboarding";
+import { guidedErrorMessage, type SiteLocales } from "./guidedOnboarding";
 import { githubRateLimitMessage } from "./githubRetry";
 import { CoverageFaqPanel } from "./CoverageFaqPanel";
 import type { ClaimKind } from "./ClaimEditor";
@@ -56,7 +62,7 @@ function publicationErrorMessage(
   error: unknown,
   retryAt: string | null = null,
 ): string {
-  const zh = locale === "zh-TW";
+  const zh = chromeLocale(locale) === "zh-TW";
   const code =
     error instanceof TypeError
       ? "REQUEST_FAILED"
@@ -135,8 +141,8 @@ function publicationErrorMessage(
     case "VALIDATION_ERROR":
     case "PORTFOLIO_INVALID":
       return zh
-        ? "草稿未通過驗證，目前輸入仍保留。請回到內容編輯，檢查必填欄位、雙語內容及確認狀態，再預覽並儲存。"
-        : "The draft did not pass validation. Your input is kept. Return to content editing, check required fields, both languages and confirmations, then preview and save.";
+        ? "草稿未通過驗證，目前輸入仍保留。請回到內容編輯，檢查必填欄位、所有網站語言的內容及確認狀態，再預覽並儲存。"
+        : "The draft did not pass validation. Your input is kept. Return to content editing, check required fields, all site languages and confirmations, then preview and save.";
     case "PORTFOLIO_ASSET_REQUIRED":
     case "ASSET_INVALID":
       return zh
@@ -174,6 +180,7 @@ function publicationErrorMessage(
 
 export function LocalPublishingWorkspace({
   locale,
+  locales,
   content,
   spriteBase64,
   revision,
@@ -190,6 +197,7 @@ export function LocalPublishingWorkspace({
   publicSharingAvailable = true,
 }: {
   locale: AdminLocale;
+  locales?: SiteLocales;
   content: string;
   spriteBase64: string | null;
   revision: string | null;
@@ -205,8 +213,12 @@ export function LocalPublishingWorkspace({
   draftUnsaved?: boolean;
   publicSharingAvailable?: boolean;
 }) {
-  const zh = locale === "zh-TW";
+  const zh = chromeLocale(locale) === "zh-TW";
   const [preview, setPreview] = useState<AdminPreview | null>(null);
+  const supported =
+    locales?.supported ??
+    Object.keys(preview?.profile ?? {}).filter(isLanguageTag);
+  const siteLanguages = supported.length ? supported : [locale];
   const [status, setStatus] = useState<PublicationStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [pending, setPending] = useState(false);
@@ -225,6 +237,12 @@ export function LocalPublishingWorkspace({
     key: string;
     text: string;
   } | null>(null);
+  const [selectedLocale, setSelectedLocale] = useState<LanguageTag>(
+    locales?.default ?? locale,
+  );
+  const contentLocale = siteLanguages.includes(selectedLocale)
+    ? selectedLocale
+    : (locales?.default ?? siteLanguages[0]);
   const mounted = useRef(true);
   const operationPending = useRef(false);
   const sceneGeneration = useRef(0);
@@ -341,10 +359,13 @@ export function LocalPublishingWorkspace({
     expected_revision: revision,
   };
   async function showPreview() {
-    const result = await request<AdminPreview>("/api/admin/portfolio/preview", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
+    const result = await request<AdminPreview>(
+      `/api/admin/portfolio/preview?locale=${contentLocale}`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    );
     if (
       mounted.current &&
       previewInputsMatch(
@@ -414,7 +435,7 @@ export function LocalPublishingWorkspace({
       remember(chosen);
     }
   }
-  const selectedCard = preview?.cards?.[`light-${locale}`];
+  const selectedCard = preview?.cards?.[`light-${contentLocale}`];
   async function download() {
     if (!selectedCard?.gif_base64) return;
     let image: Blob;
@@ -456,16 +477,19 @@ export function LocalPublishingWorkspace({
   const verifiedPagesUrl = pagesSharingState?.verified
     ? pagesSharingState.pages_url
     : null;
-  const readmeKey = `${locale}|${verifiedPagesUrl ?? ""}|${pagesSharingState?.verified_content_sha256 ?? ""}|${status?.active_bundle_id ?? ""}`;
+  const readmeKey = `${contentLocale}|${verifiedPagesUrl ?? ""}|${pagesSharingState?.verified_content_sha256 ?? ""}|${status?.active_bundle_id ?? ""}`;
   const readmeKeyRef = useRef(readmeKey);
   readmeKeyRef.current = readmeKey;
   async function loadReadme(previewOnly: boolean) {
     if (!verifiedPagesUrl) return;
     const requestedKey = readmeKey;
-    const response = await fetch(`/api/admin/sharing/readme?locale=${locale}`, {
-      credentials: "same-origin",
-      cache: "no-store",
-    });
+    const response = await fetch(
+      `/api/admin/sharing/readme?locale=${contentLocale}`,
+      {
+        credentials: "same-origin",
+        cache: "no-store",
+      },
+    );
     if (!response.ok) {
       const failure = await response.json();
       throw new Error(failure?.error?.code ?? "SHARING_EXPORT_UNAVAILABLE");
@@ -514,7 +538,9 @@ export function LocalPublishingWorkspace({
   const profile =
     profiles && typeof (profiles as PreviewProfile).display_name === "string"
       ? (profiles as PreviewProfile)
-      : (profiles as Record<string, PreviewProfile> | undefined)?.[locale];
+      : (
+          profiles as Partial<Record<LanguageTag, PreviewProfile>> | undefined
+        )?.[contentLocale];
   const preparing = status?.state === "preparing";
   const prepareReason = pending
     ? zh
@@ -594,6 +620,23 @@ export function LocalPublishingWorkspace({
           </a>
         </nav>
       </header>
+      <label htmlFor="publication-content-language">
+        {zh ? "內容語言" : "Content language"}
+      </label>
+      <select
+        id="publication-content-language"
+        className="px-field"
+        value={contentLocale}
+        onChange={(event) =>
+          setSelectedLocale(event.target.value as LanguageTag)
+        }
+      >
+        {siteLanguages.map((tag) => (
+          <option value={tag} key={tag}>
+            {endonym(tag)}
+          </option>
+        ))}
+      </select>
       <section
         className="publication-local px-panel"
         aria-labelledby="local-publication-heading"
@@ -747,18 +790,20 @@ export function LocalPublishingWorkspace({
         {profile && (
           <article>
             <h3>{profile.display_name}</h3>
-            <p>{profile.headline}</p>
-            <p>{profile.bio}</p>
-            <p>{profile.greeting}</p>
+            <p lang={contentLocale}>{profile.headline}</p>
+            <p lang={contentLocale}>{profile.bio}</p>
+            <p lang={contentLocale}>{profile.greeting}</p>
           </article>
         )}
         {preview?.repositories?.map((repository) => (
           <article key={repository.slug}>
             <h3>{repository.slug}</h3>
-            <p>{repository.role[locale]}</p>
-            <p>{repository.summary[locale]}</p>
+            <p lang={contentLocale}>{repository.role[contentLocale]}</p>
+            <p lang={contentLocale}>{repository.summary[contentLocale]}</p>
             {repository.claims.map((claim) => (
-              <p key={claim.id}>{claim.statement[locale]}</p>
+              <p key={claim.id} lang={contentLocale}>
+                {claim.statement[contentLocale]}
+              </p>
             ))}
           </article>
         ))}
@@ -804,6 +849,7 @@ export function LocalPublishingWorkspace({
         )}
         {status?.scene_state ? (
           <AppearancePanel
+            contentLocale={contentLocale}
             locale={locale}
             initialState={status.scene_state}
             request={request}
@@ -932,6 +978,7 @@ export function LocalPublishingWorkspace({
             : "Optional: check coverage and review FAQ"}
         </summary>
         <CoverageFaqPanel
+          contentLocale={contentLocale}
           locale={locale}
           request={request}
           repositories={repositories}

@@ -1,3 +1,4 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useState } from "react";
 import type { DragEvent, FormEvent } from "react";
 import { Button, FileTrigger } from "react-aria-components";
@@ -351,7 +352,7 @@ export function CharacterAssetConverter({
   onValidate,
   onApply,
 }: CharacterAssetConverterProps) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const [source, setSource] = useState<CharacterMaterialSource | null>(null);
   const [strategy, setStrategy] =
     useState<CharacterConversionStrategy>("pixelize");

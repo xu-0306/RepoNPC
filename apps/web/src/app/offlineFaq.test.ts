@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { matchOfflineFaq } from "./offlineFaq";
 import type { PublicFaq } from "./publicTypes";
+import { LANGUAGES } from "../i18n/languages";
 
 function faq(entries: PublicFaq["entries"]): PublicFaq {
   return {
@@ -21,6 +22,30 @@ function entry(question: string, variants: string[] = []) {
 }
 
 describe("matchOfflineFaq", () => {
+  it.each(LANGUAGES)(
+    "matches approved text and handles ambiguous, missing and empty answers in $tag",
+    ({ tag, endonym }) => {
+      const item = entry(`${endonym} project?`, [`${endonym} work?`]);
+      const localized = { ...faq([item]), locale: tag };
+      expect(matchOfflineFaq(`${endonym} work!`, localized)).toEqual({
+        kind: "answer",
+        entry: item,
+      });
+      expect(matchOfflineFaq(`${endonym} changed`, localized)).toEqual({
+        kind: "suggestions",
+        questions: [item.question],
+      });
+      expect(
+        matchOfflineFaq(item.question, {
+          ...localized,
+          entries: [item, { ...item }],
+        }).kind,
+      ).toBe("suggestions");
+      expect(
+        matchOfflineFaq(item.question, { ...localized, entries: [] }),
+      ).toEqual({ kind: "suggestions", questions: [] });
+    },
+  );
   it("returns an existing approved answer for an exact primary question", () => {
     const item = entry("Which portfolio projects stand out?");
     expect(matchOfflineFaq(item.question, faq([item]))).toEqual({

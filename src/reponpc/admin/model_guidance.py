@@ -18,6 +18,8 @@ from urllib.parse import urlsplit
 
 import yaml
 
+from reponpc.i18n.plan import ANALYSIS_LOCALES
+
 SuitabilityGrade = Literal["suitable", "marginal", "not_recommended", "unknown"]
 ExecutionTarget = Literal["cpu", "gpu"]
 _MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/-]{0,255}\Z")
@@ -50,7 +52,8 @@ class EnvelopeEvidence:
             or type(self.tested_on) is not date
             or type(self.tested_locales) is not tuple
             or any(not isinstance(locale, str) for locale in self.tested_locales)
-            or sorted(self.tested_locales) != ["en", "zh-TW"]
+            # Historical envelope evidence covers the fixed analysis set, not the site set.
+            or sorted(self.tested_locales) != sorted(ANALYSIS_LOCALES)
         ):
             raise ModelGuidanceError("invalid live envelope evidence")
         _identifier(self.model_revision)
@@ -258,7 +261,9 @@ def parse_model_catalog(text: str) -> ModelCatalog:
                 values["envelope_evidence"], set(EnvelopeEvidence.__dataclass_fields__)
             )
             evidence["tested_on"] = _date(evidence["tested_on"])
-            evidence["tested_locales"] = tuple(_list(evidence["tested_locales"], maximum=2))
+            evidence["tested_locales"] = tuple(
+                _list(evidence["tested_locales"], maximum=len(ANALYSIS_LOCALES))
+            )
             values["envelope_evidence"] = EnvelopeEvidence(**evidence)  # type: ignore[arg-type]
             quantizations.append(ModelQuantization(**values))  # type: ignore[arg-type]
         entry["last_reviewed"] = _date(entry["last_reviewed"])

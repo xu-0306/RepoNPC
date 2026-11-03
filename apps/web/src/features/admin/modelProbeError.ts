@@ -1,4 +1,5 @@
-import type { Locale } from "../../i18n/messages";
+import { chromeLocale } from "../../i18n/languages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 
 type Message = readonly [string, string];
 
@@ -56,7 +57,7 @@ export function modelProbeError(
   code: string,
   providerMessage?: string | null,
 ): string {
-  const index = locale === "zh-TW" ? 0 : 1;
+  const index = chromeLocale(locale) === "zh-TW" ? 0 : 1;
   const http = /^PROVIDER_HTTP_([1-5]\d{2})$/.exec(code);
   if (http) {
     const message = providerMessage?.trim()

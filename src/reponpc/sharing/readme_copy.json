@@ -1,0 +1,30 @@
+{
+  "zh-TW": {
+    "chat": "與我的 NPC 對話",
+    "projects": "作品",
+    "demo": "展示",
+    "card": "NPC 名片",
+    "explanation": "點擊連結前往 RepoNPC 網站。GitHub README 顯示名片。對話會在網站進行。"
+  },
+  "zh-CN": {
+    "chat": "与我的 NPC 对话",
+    "projects": "作品",
+    "demo": "展示",
+    "card": "NPC 名片",
+    "explanation": "点击链接前往 RepoNPC 网站。GitHub README 显示名片。对话会在网站进行。"
+  },
+  "en": {
+    "chat": "Chat with my NPC",
+    "projects": "Projects",
+    "demo": "Demo",
+    "card": "NPC card",
+    "explanation": "Open the link to visit my RepoNPC site. GitHub README displays the card; conversations take place on the site."
+  },
+  "es": {
+    "chat": "Habla con mi NPC",
+    "projects": "Proyectos",
+    "demo": "Demostración",
+    "card": "Tarjeta NPC",
+    "explanation": "Abre el enlace para visitar mi sitio RepoNPC. El README de GitHub muestra la tarjeta; las conversaciones tienen lugar en el sitio."
+  }
+}

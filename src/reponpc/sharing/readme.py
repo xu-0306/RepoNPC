@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import html
+import json
 import re
+from functools import lru_cache
+from pathlib import Path
+from typing import cast
 from urllib.parse import quote
 
 from reponpc.config.models import Locale
@@ -12,6 +16,14 @@ from reponpc.sharing.manifest import SiteExportError
 
 _MARKDOWN = re.compile(r"([\\`*_{}\[\]()#+\-.!|>])")
 MAX_README_BYTES = 500 * 1024
+
+
+@lru_cache
+def _readme_copy() -> dict[str, dict[str, str]]:
+    return cast(
+        dict[str, dict[str, str]],
+        json.loads(Path(__file__).with_name("readme_copy.json").read_text(encoding="utf-8")),
+    )
 
 
 def _text(value: str, *, single_line: bool = False) -> str:
@@ -32,8 +44,8 @@ def render_profile_readme(
 ) -> bytes:
     """Render escaped public text and application-owned links, never model output."""
     profile = document.profile
-    zh = locale == "zh-TW"
-    chat_label = "與我的 NPC 對話" if zh else "Chat with my NPC"
+    copy = _readme_copy()[locale]
+    chat_label = copy["chat"]
     card_url = f"{pages_url}card-light-{locale}.gif"
     paragraphs = [
         f"# {_text(profile.display_name, single_line=True)}",
@@ -45,7 +57,7 @@ def render_profile_readme(
     if profile.links:
         paragraphs.append(" · ".join(_link(link.label, link.url) for link in profile.links))
     if document.repositories:
-        paragraphs.append("## 作品" if zh else "## Projects")
+        paragraphs.append("## " + copy["projects"])
     for repository in document.repositories:
         paragraphs.extend(
             [
@@ -58,18 +70,13 @@ def render_profile_readme(
         if repository.tags:
             paragraphs.append(" · ".join(_text(tag) for tag in repository.tags))
         if repository.demo_url:
-            paragraphs.append(_link("展示" if zh else "Demo", repository.demo_url))
+            paragraphs.append(_link(copy["demo"], repository.demo_url))
     paragraphs.extend(
         [
-            "## NPC 名片" if zh else "## NPC card",
+            "## " + copy["card"],
             f"[![{chat_label}](<{card_url}>)](<{pages_url}>)",
             _link(chat_label, pages_url),
-            "點擊連結前往 RepoNPC 網站。GitHub README 顯示名片。對話會在網站進行。"
-            if zh
-            else (
-                "Open the link to visit my RepoNPC site. GitHub README displays the card; "
-                "conversations take place on the site."
-            ),
+            copy["explanation"],
         ]
     )
     content = ("\n\n".join(paragraphs) + "\n").encode("utf-8")

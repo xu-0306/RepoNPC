@@ -29,7 +29,6 @@ from reponpc.admin.onboarding import (
     ANALYSIS_OUTPUT_SCHEMA_VERSION,
     ANALYSIS_PROMPT_VERSION,
     ANALYSIS_TERMINATION_VALIDATION_VERSION,
-    ANALYSIS_TITLE_MAX_CHARACTERS,
     ANALYSIS_TOKEN_ESTIMATOR_VERSION,
     ANALYSIS_VALIDATION_VERSION,
     GuidedOnboardingError,
@@ -38,6 +37,8 @@ from reponpc.admin.onboarding import (
     validate_analysis_output_budget,
 )
 from reponpc.domain.evidence import EVIDENCE_ID_RE
+from reponpc.i18n.languages import title_max
+from reponpc.i18n.plan import ANALYSIS_LOCALES
 from reponpc.providers.runtime import ProviderRuntime
 
 
@@ -447,11 +448,11 @@ def _valid_cached_inference(value: object) -> dict[str, object] | None:
     if value.get("evidence_class") != "MODEL_INFERENCE":
         return None
     if not isinstance(title, dict) or not _valid_cached_localized(
-        title, ANALYSIS_TITLE_MAX_CHARACTERS
+        title, {locale: title_max(locale) for locale in ANALYSIS_LOCALES}
     ):
         return None
     if not isinstance(statement, dict) or not _valid_cached_localized(
-        statement, {"zh-TW": 2000, "en": 2000}
+        statement, dict.fromkeys(ANALYSIS_LOCALES, 2000)
     ):
         return None
     if (
@@ -465,8 +466,8 @@ def _valid_cached_inference(value: object) -> dict[str, object] | None:
         return None
     return {
         "evidence_class": "MODEL_INFERENCE",
-        "title": {"zh-TW": title["zh-TW"], "en": title["en"]},
-        "statement": {"zh-TW": statement["zh-TW"], "en": statement["en"]},
+        "title": {locale: title[locale] for locale in ANALYSIS_LOCALES},
+        "statement": {locale: statement[locale] for locale in ANALYSIS_LOCALES},
         "supporting_evidence_ids": list(evidence_ids),
     }
 

@@ -11,6 +11,7 @@ from httpx import Response
 from reponpc.api.public import SetupState
 from reponpc.cards.sprite_composer import compose_builtin
 from reponpc.config.models import SceneConfig, load_public_config
+from reponpc.i18n.languages import get_language
 from reponpc.main import app, create_app
 from reponpc.runtime.database import RuntimeDatabase
 from reponpc.scene.resolve import resolve_scene
@@ -251,6 +252,9 @@ def _active_public_directory(tmp_path: Path) -> tuple[Path, dict[str, dict[str, 
         locale: {
             "schema_version": 1,
             "locale": locale,
+            "available_locales": [
+                {"tag": tag, "endonym": get_language(tag).endonym} for tag in locales
+            ],
             **payload,
             "character": {**character, "scene": default_scene.model_dump(mode="json")},
             "repositories": [

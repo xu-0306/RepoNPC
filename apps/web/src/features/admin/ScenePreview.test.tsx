@@ -85,6 +85,7 @@ const scene: PublicScene = {
 const profile: PublicProfile = {
   schema_version: 1,
   locale: "en",
+  available_locales: [{ tag: "en", endonym: "English" }],
   profile: {
     display_name: "Example owner",
     headline: "Portfolio guide",

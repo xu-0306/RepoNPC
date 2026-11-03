@@ -1,11 +1,62 @@
 import type { ReactNode } from "react";
 
-import type { Locale } from "../../i18n/messages";
+import {
+  isLanguageTag,
+  LANGUAGES,
+  chromeLocale,
+  type LanguageTag as Locale,
+} from "../../i18n/languages";
+import { resolveLocaleIn } from "../../i18n/initialLocale";
+import { ANALYSIS_LOCALES } from "../../i18n/plan";
 import type { AnalysisSelectionView } from "./AnalysisSelectionPanel";
 import type { AdminValidation } from "./AdminWorkspace";
 import type { TranslateProfile } from "./profileTranslation";
 
 export type LocalizedText = Record<Locale, string>;
+export interface SiteLocales {
+  default: Locale;
+  supported: Locale[];
+}
+
+export function localizedFor(
+  supported: readonly Locale[],
+  value = "",
+): LocalizedText {
+  return Object.fromEntries(
+    supported.map((tag) => [tag, value]),
+  ) as LocalizedText;
+}
+
+export function localizedTags(value: LocalizedText): Locale[] {
+  return Object.keys(value).filter(isLanguageTag);
+}
+
+export function parseSiteLocales(
+  value: unknown,
+  legacyKeys?: unknown,
+): SiteLocales | null {
+  if (value === undefined && isRecord(legacyKeys)) {
+    const supported = Object.keys(legacyKeys);
+    if (supported.length && supported.every(isLanguageTag))
+      return { default: supported[0], supported };
+  }
+  if (
+    !isRecord(value) ||
+    !isLanguageTag(value.default) ||
+    !Array.isArray(value.supported)
+  )
+    return null;
+  const supported = value.supported;
+  if (
+    !supported.length ||
+    supported.length > LANGUAGES.length ||
+    !supported.every(isLanguageTag) ||
+    new Set(supported).size !== supported.length ||
+    !supported.includes(value.default)
+  )
+    return null;
+  return { default: value.default, supported: [...supported] };
+}
 
 const AI_STEPS: readonly GuidedStep[] = [
   "models",
@@ -63,8 +114,8 @@ export interface RepositoryFact {
 
 export interface ModelInference {
   evidence_class: "MODEL_INFERENCE";
-  title: LocalizedText;
-  statement: LocalizedText;
+  title: Record<(typeof ANALYSIS_LOCALES)[number], string>;
+  statement: Record<(typeof ANALYSIS_LOCALES)[number], string>;
   supporting_evidence_ids: string[];
 }
 
@@ -142,6 +193,7 @@ export interface GuidedOnboardingState {
   repositories: GuidedRepository[];
   selectionConfirmed: boolean;
   profile: GuidedProfile;
+  locales: SiteLocales;
   profileConfirmed: boolean;
   modelsConfigured: boolean;
   modelSetupReturn?: {
@@ -202,6 +254,7 @@ export type GuidedOnboardingAction =
   | { type: "REJECT_CONTRIBUTION"; slug: string }
   | { type: "CONTINUE_TO_PROFILE" }
   | { type: "SET_PROFILE"; profile: GuidedProfile }
+  | { type: "SET_LOCALES"; locales: SiteLocales }
   | { type: "CONFIRM_PROFILE" }
   | { type: "DRAFT_READY" }
   | { type: "SET_MODE"; mode: "guided" | "advanced" }
@@ -257,6 +310,7 @@ interface PersistedGuidedOnboarding {
   discoveryHasMore: boolean;
   selectionConfirmed: boolean;
   profile: GuidedProfile;
+  locales: SiteLocales;
   profileConfirmed: boolean;
   modelsConfigured?: boolean;
   route?: "ai" | "manual";
@@ -277,8 +331,14 @@ const STEPS: readonly GuidedStep[] = [
 
 export function initialGuidedOnboardingState(
   hasExistingDraft = false,
+  initialLocale = resolveLocaleIn(
+    LANGUAGES.map(({ tag }) => tag),
+    "zh-TW",
+  ),
 ): GuidedOnboardingState {
+  const supported = Array.from(new Set<Locale>([initialLocale, "en"]));
   return {
+    locales: { default: initialLocale, supported },
     step: hasExistingDraft ? "draft" : "intro",
     mode: hasExistingDraft ? "advanced" : "guided",
     githubAccount: "",
@@ -286,7 +346,7 @@ export function initialGuidedOnboardingState(
     discoveryHasMore: false,
     repositories: [],
     selectionConfirmed: false,
-    profile: emptyGuidedProfile(),
+    profile: emptyGuidedProfile(supported),
     profileConfirmed: false,
     rawYamlHasUnmappedChanges: false,
     modelsConfigured: false,
@@ -306,14 +366,16 @@ export function guidedOnboardingFromConfig(
     return null;
   }
   const profileValue = value.profile;
+  const locales = parseSiteLocales(value.locales, profileValue.headline);
+  if (!locales) return null;
   if (
     typeof profileValue.display_name !== "string" ||
     typeof profileValue.github_login !== "string"
   )
     return null;
-  const headline = localizedText(profileValue.headline);
-  const bio = localizedText(profileValue.bio);
-  const greeting = localizedText(profileValue.greeting);
+  const headline = localizedText(profileValue.headline, locales.supported);
+  const bio = localizedText(profileValue.bio, locales.supported);
+  const greeting = localizedText(profileValue.greeting, locales.supported);
   if (!headline || !bio || !greeting) return null;
 
   const repositories: GuidedRepository[] = [];
@@ -321,9 +383,9 @@ export function guidedOnboardingFromConfig(
     if (!isRecord(item) || typeof item.slug !== "string") return null;
     if (item.enabled === false) continue;
     const metadata = metadataFromConfig(item.slug);
-    const role = localizedText(item.role);
-    const summary = localizedText(item.summary);
-    const claims = parseConfigClaims(item.claims);
+    const role = localizedText(item.role, locales.supported);
+    const summary = localizedText(item.summary, locales.supported);
+    const claims = parseConfigClaims(item.claims, locales.supported);
     const include = stringArray(item.include);
     const exclude = stringArray(item.exclude);
     if (!role || !summary || !claims || !include || !exclude) return null;
@@ -342,7 +404,7 @@ export function guidedOnboardingFromConfig(
       }),
       analysisStatus: "idle",
       analysis: null,
-      ownerStatement: summary["zh-TW"],
+      ownerStatement: summary[locales.default],
       proposal: cloneProposal({ role, summary, claims }),
       proposalSource: "manual",
       previousContribution: null,
@@ -356,6 +418,7 @@ export function guidedOnboardingFromConfig(
   }
   if (repositories.length === 0) return null;
   return {
+    locales,
     step: "profile",
     mode: "guided",
     githubAccount: profileValue.github_login,
@@ -629,8 +692,8 @@ export function guidedOnboardingReducer(
           ...repository,
           proposalSource: "manual",
           proposal: {
-            role: { "zh-TW": "", en: "" },
-            summary: { "zh-TW": "", en: "" },
+            role: localizedFor(state.locales.supported),
+            summary: localizedFor(state.locales.supported),
             claims: [],
           },
           previousContribution: repository.confirmedContribution
@@ -647,15 +710,15 @@ export function guidedOnboardingReducer(
           const proposal = cloneProposal(
             repository.proposal ??
               repository.confirmedContribution ?? {
-                role: { "zh-TW": "", en: "" },
-                summary: { "zh-TW": "", en: "" },
+                role: localizedFor(state.locales.supported),
+                summary: localizedFor(state.locales.supported),
                 claims: [],
               },
           );
           proposal.claims.push({
             id: `claim_${crypto.randomUUID().replaceAll("-", "")}`,
             kind: action.kind,
-            statement: { "zh-TW": "", en: "" },
+            statement: localizedFor(state.locales.supported),
           });
           return {
             ...repository,
@@ -706,7 +769,9 @@ export function guidedOnboardingReducer(
         if (!repository.ownerStatement.trim()) {
           throw new Error("ONBOARDING_OWNER_STATEMENT_REQUIRED");
         }
-        if (!contributionIsComplete(action.contribution)) {
+        if (
+          !contributionIsComplete(action.contribution, state.locales.supported)
+        ) {
           throw new Error("ONBOARDING_BILINGUAL_CONTRIBUTION_REQUIRED");
         }
         return {
@@ -761,6 +826,50 @@ export function guidedOnboardingReducer(
         throw new Error("ONBOARDING_CONFIRMATION_REQUIRED");
       }
       return { ...state, step: "profile" };
+    case "SET_LOCALES": {
+      requireStep(state, "profile");
+      const locales = parseSiteLocales(action.locales);
+      if (!locales) throw new Error("ONBOARDING_PROFILE_REQUIRED");
+      const project = (text: LocalizedText) =>
+        Object.fromEntries(
+          locales.supported.map((tag) => [tag, text[tag] ?? ""]),
+        ) as LocalizedText;
+      const proposal = (value: ContributionProposal | null) =>
+        value && {
+          role: project(value.role),
+          summary: project(value.summary),
+          claims: value.claims.map((claim) => ({
+            ...claim,
+            statement: project(claim.statement),
+          })),
+        };
+      const changed =
+        locales.supported.some(
+          (tag) => !state.locales.supported.includes(tag),
+        ) ||
+        state.locales.supported.some((tag) => !locales.supported.includes(tag));
+      return {
+        ...state,
+        locales,
+        profileConfirmed: false,
+        profile: {
+          ...state.profile,
+          headline: project(state.profile.headline),
+          bio: project(state.profile.bio),
+          greeting: project(state.profile.greeting),
+        },
+        repositories: state.repositories.map((repository) => ({
+          ...repository,
+          proposal: proposal(
+            repository.proposal ?? repository.confirmedContribution,
+          ),
+          previousContribution: proposal(repository.previousContribution),
+          confirmedContribution: changed
+            ? null
+            : repository.confirmedContribution,
+        })),
+      };
+    }
     case "SET_PROFILE":
       requireStep(state, "profile");
       return {
@@ -770,7 +879,7 @@ export function guidedOnboardingReducer(
       };
     case "CONFIRM_PROFILE":
       requireStep(state, "profile");
-      if (!profileIsComplete(state.profile)) {
+      if (!profileIsComplete(state.profile, state.locales.supported)) {
         throw new Error("ONBOARDING_PROFILE_REQUIRED");
       }
       return { ...state, step: "review", profileConfirmed: true };
@@ -821,6 +930,7 @@ export function serializeGuidedOnboarding(
     discoveryHasMore: state.discoveryHasMore,
     selectionConfirmed: state.selectionConfirmed,
     profile: cloneProfile(state.profile),
+    locales: state.locales,
     profileConfirmed: state.profileConfirmed,
     modelsConfigured: state.modelsConfigured,
     route: state.modelSetupReturn?.route ?? state.route,
@@ -856,7 +966,12 @@ export function parseGuidedOnboarding(
     if (!isRecord(value) || value.version !== 1) return null;
     if (!isGuidedStep(value.step) || typeof value.githubAccount !== "string")
       return null;
-    const profile = parseProfile(value.profile);
+    const locales = parseSiteLocales(
+      value.locales,
+      isRecord(value.profile) ? value.profile.headline : undefined,
+    );
+    if (!locales) return null;
+    const profile = parseProfile(value.profile, locales.supported);
     if (
       typeof value.selectionConfirmed !== "boolean" ||
       typeof value.discoveryPage !== "number" ||
@@ -872,7 +987,7 @@ export function parseGuidedOnboarding(
       : null;
     const repositories: GuidedRepository[] = [];
     for (const item of value.repositories) {
-      const persisted = parsePersistedRepository(item);
+      const persisted = parsePersistedRepository(item, locales.supported);
       if (!persisted) return null;
       const repositoryMetadata = bySlug
         ? bySlug.get(persisted.slug)
@@ -911,6 +1026,7 @@ export function parseGuidedOnboarding(
       repositories,
       selectionConfirmed: value.selectionConfirmed,
       profile,
+      locales,
       profileConfirmed: value.profileConfirmed,
       rawYamlHasUnmappedChanges: false,
       modelsConfigured: value.modelsConfigured === true,
@@ -931,11 +1047,14 @@ export function guidedErrorMessage(
     creatingDraft &&
     (code === "VALIDATION_ERROR" || code === "CONFIG_INVALID")
   ) {
-    return locale === "zh-TW"
-      ? "草稿內容未通過驗證，目前輸入仍保留。請返回檢查必填欄位、繁中與英文內容，以及專案、貢獻和基本資料的確認狀態，再重試建立草稿。"
-      : "The draft did not pass validation. Your input is kept. Go back and check required fields, both languages, and project, contribution and profile confirmations, then retry creating the draft.";
+    return chromeLocale(locale) === "zh-TW"
+      ? "草稿內容未通過驗證，目前輸入仍保留。請返回檢查必填欄位、所有網站語言的內容，以及專案、貢獻和基本資料的確認狀態，再重試建立草稿。"
+      : "The draft did not pass validation. Your input is kept. Go back and check required fields, all site languages, and project, contribution and profile confirmations, then retry creating the draft.";
   }
-  const messages: Record<string, LocalizedText> = {
+  const messages: Record<
+    string,
+    Record<ReturnType<typeof chromeLocale>, string>
+  > = {
     ANALYSIS_TIMEOUT: {
       "zh-TW": "此 repository 已達整體分析安全上限，請重試或繼續手動填寫。",
       en: "This repository reached the overall analysis safety ceiling; retry or continue manually.",
@@ -1051,8 +1170,8 @@ export function guidedErrorMessage(
     },
   };
   return (
-    messages[code]?.[locale] ??
-    (locale === "zh-TW"
+    messages[code]?.[chromeLocale(locale)] ??
+    (chromeLocale(locale) === "zh-TW"
       ? "操作未完成，目前無法確認原因，但輸入仍保留。請確認本機服務狀態後重試；若持續失敗，先保留未儲存內容，再到「維護」查看服務狀態。"
       : "The operation did not complete and the cause is unknown. Your input is kept. Check the local service and retry; if it still fails, keep a copy of unsaved content and open Maintenance to check service status.")
   );
@@ -1159,17 +1278,14 @@ function cloneProposal(proposal: ContributionProposal): ContributionProposal {
   };
 }
 
-function emptyGuidedProfile(): GuidedProfile {
+function emptyGuidedProfile(supported: readonly Locale[]): GuidedProfile {
   return {
     displayName: "",
     githubLogin: "",
     aliasesText: "",
-    headline: { "zh-TW": "", en: "" },
-    bio: { "zh-TW": "", en: "" },
-    greeting: {
-      "zh-TW": "嗨，我是你的 RepoNPC。想先了解哪一個專案？",
-      en: "Hi, I am your RepoNPC. Which project would you like to explore?",
-    },
+    headline: localizedFor(supported),
+    bio: localizedFor(supported),
+    greeting: localizedFor(supported),
   };
 }
 
@@ -1184,26 +1300,41 @@ function cloneProfile(profile: GuidedProfile): GuidedProfile {
   };
 }
 
-export function profileIsComplete(profile: GuidedProfile): boolean {
-  return [
-    profile.displayName,
-    profile.githubLogin,
-    profile.headline["zh-TW"],
-    profile.headline.en,
-    profile.bio["zh-TW"],
-    profile.bio.en,
-    profile.greeting["zh-TW"],
-    profile.greeting.en,
-  ].every((value) => value.trim().length > 0);
+export function profileIsComplete(
+  profile: GuidedProfile,
+  supported = localizedTags(profile.headline),
+): boolean {
+  return (
+    supported.length > 0 &&
+    [profile.headline, profile.bio, profile.greeting].every(
+      (text) => Object.keys(text).length === supported.length,
+    ) &&
+    [
+      profile.displayName,
+      profile.githubLogin,
+      ...[profile.headline, profile.bio, profile.greeting].flatMap((text) =>
+        supported.map((tag) => text[tag] ?? ""),
+      ),
+    ].every((value) => value.trim().length > 0)
+  );
 }
 
-function contributionIsComplete(contribution: ContributionProposal): boolean {
-  return [
-    contribution.role["zh-TW"],
-    contribution.role.en,
-    contribution.summary["zh-TW"],
-    contribution.summary.en,
-  ].every((value) => value.trim().length > 0);
+export function contributionIsComplete(
+  contribution: ContributionProposal,
+  supported = localizedTags(contribution.role),
+): boolean {
+  return (
+    supported.length > 0 &&
+    [
+      contribution.role,
+      contribution.summary,
+      ...contribution.claims.map((claim) => claim.statement),
+    ].every(
+      (text) =>
+        Object.keys(text).length === supported.length &&
+        supported.every((tag) => Boolean(text[tag]?.trim())),
+    )
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1220,22 +1351,29 @@ function stringArray(value: unknown): string[] | null {
   return [...value];
 }
 
-function localizedText(value: unknown): LocalizedText | null {
+function localizedText(
+  value: unknown,
+  supported: readonly Locale[],
+): LocalizedText | null {
   if (
     !isRecord(value) ||
-    typeof value["zh-TW"] !== "string" ||
-    typeof value.en !== "string"
-  ) {
+    Object.keys(value).length !== supported.length ||
+    !supported.every((tag) => typeof value[tag] === "string")
+  )
     return null;
-  }
-  return { "zh-TW": value["zh-TW"], en: value.en };
+  return Object.fromEntries(
+    supported.map((tag) => [tag, value[tag]]),
+  ) as LocalizedText;
 }
 
-function parseProfile(value: unknown): GuidedProfile | null {
+function parseProfile(
+  value: unknown,
+  supported: readonly Locale[],
+): GuidedProfile | null {
   if (!isRecord(value) || typeof value.displayName !== "string") return null;
-  const headline = localizedText(value.headline);
-  const bio = localizedText(value.bio);
-  const greeting = localizedText(value.greeting);
+  const headline = localizedText(value.headline, supported);
+  const bio = localizedText(value.bio, supported);
+  const greeting = localizedText(value.greeting, supported);
   if (!headline || !bio || !greeting) return null;
   return {
     displayName: value.displayName,
@@ -1263,7 +1401,10 @@ function metadataFromConfig(slug: string): RepositoryMetadata {
   };
 }
 
-function parseConfigClaims(value: unknown): SuggestedClaim[] | null {
+function parseConfigClaims(
+  value: unknown,
+  supported: readonly Locale[],
+): SuggestedClaim[] | null {
   if (!Array.isArray(value)) return null;
   const claims: SuggestedClaim[] = [];
   for (const item of value) {
@@ -1276,7 +1417,7 @@ function parseConfigClaims(value: unknown): SuggestedClaim[] | null {
     ) {
       return null;
     }
-    const statement = localizedText(item.statement);
+    const statement = localizedText(item.statement, supported);
     if (!statement) return null;
     claims.push({
       id: item.id,
@@ -1289,12 +1430,13 @@ function parseConfigClaims(value: unknown): SuggestedClaim[] | null {
 
 function parseConfirmedContribution(
   value: unknown,
+  supported: readonly Locale[],
 ): ConfirmedContribution | null | false {
   if (value === null) return null;
   if (!isRecord(value) || value.evidence_class !== "OWNER_ASSERTION")
     return false;
-  const role = localizedText(value.role);
-  const summary = localizedText(value.summary);
+  const role = localizedText(value.role, supported);
+  const summary = localizedText(value.summary, supported);
   if (!role || !summary || !Array.isArray(value.claims)) return false;
   const claims: SuggestedClaim[] = [];
   for (const claim of value.claims) {
@@ -1306,7 +1448,7 @@ function parseConfirmedContribution(
     ) {
       return false;
     }
-    const statement = localizedText(claim.statement);
+    const statement = localizedText(claim.statement, supported);
     if (!statement) return false;
     claims.push({
       id: claim.id,
@@ -1317,7 +1459,10 @@ function parseConfirmedContribution(
   return { evidence_class: "OWNER_ASSERTION", role, summary, claims };
 }
 
-function parsePersistedRepository(value: unknown): PersistedRepository | null {
+function parsePersistedRepository(
+  value: unknown,
+  supported: readonly Locale[],
+): PersistedRepository | null {
   if (!isRecord(value) || typeof value.slug !== "string") return null;
   if (value.ref !== null && typeof value.ref !== "string") return null;
   const include = stringArray(value.include);
@@ -1325,6 +1470,7 @@ function parsePersistedRepository(value: unknown): PersistedRepository | null {
   const metadata = parseRepositoryMetadata(value.metadata);
   const confirmedContribution = parseConfirmedContribution(
     value.confirmedContribution,
+    supported,
   );
   if (
     !metadata ||

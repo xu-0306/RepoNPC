@@ -13,6 +13,7 @@ import pytest
 from reponpc.admin import onboarding
 from reponpc.admin.onboarding import GuidedOnboardingError, GuidedOnboardingService, _word_scripts
 from reponpc.chat.limits import ChatLimitError
+from reponpc.i18n.convert import can_convert, convert
 from reponpc.i18n.languages import KNOWN_SCRIPTS, LANGUAGES
 from reponpc.providers.contracts import ProviderError, ProviderFailureCode, ProviderResult
 from reponpc.providers.ollama import _validate_context
@@ -48,7 +49,11 @@ def _item(**changes: Any) -> dict[str, Any]:
     return {
         "field": "bio",
         "source_locale": LANGUAGES[0].tag,
-        "target_locale": LANGUAGES[1].tag,
+        "target_locale": next(
+            target.tag
+            for target in LANGUAGES
+            if target.tag != LANGUAGES[0].tag and not can_convert(LANGUAGES[0].tag, target.tag)
+        ),
         "text": "I co-maintain public tools.",
         **changes,
     }
@@ -73,7 +78,11 @@ def test_profile_translate_six_items_one_call_order_and_unconfirmed(
         _item(
             field=field,
             target_locale=target.tag,
-            source_locale=next(source.tag for source in LANGUAGES if source.tag != target.tag),
+            source_locale=next(
+                source.tag
+                for source in LANGUAGES
+                if source.tag != target.tag and not can_convert(source.tag, target.tag)
+            ),
             text=f"Owner profile {index}.",
         )
         for index, (field, target) in enumerate(
@@ -177,7 +186,7 @@ def test_profile_translate_invalid_requests_do_not_call_provider(
         (source.tag, target.tag)
         for source in LANGUAGES
         for target in LANGUAGES
-        if source.tag != target.tag
+        if source.tag != target.tag and not can_convert(source.tag, target.tag)
     ],
 )
 @pytest.mark.parametrize("text", ["I help maintain tools.", "我協助維護工具。"])
@@ -216,7 +225,11 @@ def test_profile_translate_registry_script_guard(
     chat = TranslationChat({"items": ["Profile " + word]})
     service, _, _, _ = _service(tmp_path, chat=chat)
     item = _item(
-        source_locale=next(language.tag for language in LANGUAGES if language.tag != target),
+        source_locale=next(
+            language.tag
+            for language in LANGUAGES
+            if language.tag != target and not can_convert(language.tag, target)
+        ),
         target_locale=target,
         text="Owner text " + (word if grounded else "only"),
     )
@@ -256,7 +269,11 @@ def test_profile_translate_accepts_every_registry_native_script(
     chat = TranslationChat({"items": [text]})
     service, _, _, _ = _service(tmp_path, chat=chat)
     item = _item(
-        source_locale=next(language.tag for language in LANGUAGES if language.tag != target),
+        source_locale=next(
+            language.tag
+            for language in LANGUAGES
+            if language.tag != target and not can_convert(language.tag, target)
+        ),
         target_locale=target,
         text="123",
     )
@@ -592,3 +609,59 @@ def test_profile_translate_keeps_session_and_generation_permit_during_output_che
     monkeypatch.setattr(onboarding, "_reject_changed_profile_tokens", check)
     _translate(service)
     assert chat.calls == 1
+
+
+@pytest.mark.parametrize("target", [language for language in LANGUAGES if language.derive])
+@pytest.mark.parametrize("text", ["維護軟體與資料庫。", "软件开发 `软件()` αβ acme/repo"])
+def test_profile_translate_conversion_needs_no_provider_limits_or_model_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, target, text: str
+) -> None:
+    assert target.derive is not None
+    chat = TranslationChat(failure=AssertionError("conversion must not call a provider"))
+    service, _, resolver, _ = _service(tmp_path, chat=chat)
+    service._providers_supplier = lambda: pytest.fail("no analysis model needed")
+    service._contribution_providers_supplier = lambda: None
+    service._limits_supplier = lambda: pytest.fail("no generation permit needed")
+    for name in ("_reject_changed_profile_tokens", "_reject_ungrounded_scripts"):
+        monkeypatch.setattr(onboarding, name, lambda *args: pytest.fail("model-only check"))
+    item = _item(source_locale=target.derive.source, target_locale=target.tag, text=text)
+
+    assert _translate(service, item) == {
+        "items": [
+            {
+                "field": item["field"],
+                "target_locale": target.tag,
+                "text": convert(text, target.derive.source, target.tag),
+                "method": "converted",
+                "confirmed": False,
+            }
+        ]
+    }
+    assert chat.calls == resolver.source_calls == 0
+    assert service._active_sessions == set()
+
+
+@pytest.mark.parametrize("target", [language for language in LANGUAGES if language.derive])
+def test_profile_translate_mixed_request_only_sends_model_items_in_order(
+    tmp_path: Path, target
+) -> None:
+    assert target.derive is not None
+    converted = _item(source_locale=target.derive.source, target_locale=target.tag, text="軟體開發")
+    items = [converted, _item(field="headline"), {**converted, "field": "greeting"}, _item()]
+    chat = TranslationChat({"items": ["First model text", "Second model text"]})
+    service, _, _, _ = _service(tmp_path, chat=chat)
+
+    result = _translate(service, *items)["items"]
+
+    assert _user_items(chat) == [items[1], items[3]]
+    assert chat.calls == 1
+    assert chat.schemas[0]["properties"]["items"]["minItems"] == 2
+    assert chat.schemas[0]["properties"]["items"]["maxItems"] == 2
+    assert [item["field"] for item in result] == [item["field"] for item in items]
+    assert [item["method"] for item in result] == ["converted", "model", "converted", "model"]
+    assert [result[index]["text"] for index in (1, 3)] == ["First model text", "Second model text"]
+    assert all(
+        result[index]["text"] == convert("軟體開發", target.derive.source, target.tag)
+        for index in (0, 2)
+    )
+    assert all(item["confirmed"] is False for item in result)

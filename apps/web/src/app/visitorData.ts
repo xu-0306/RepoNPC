@@ -1,4 +1,4 @@
-import type { Locale } from "../i18n/messages";
+import { isLanguageTag, type LanguageTag } from "../i18n/languages";
 import type { PublicFaq, PublicProfile, PublicStatus } from "./publicTypes";
 
 type Fetcher = typeof fetch;
@@ -66,13 +66,17 @@ export async function fetchPublicStatus(
 }
 
 export async function fetchPublicProfile(
-  locale: Locale,
+  locale: LanguageTag | undefined,
   signal: AbortSignal,
   send: Fetcher = fetch,
 ): Promise<PublicProfile> {
   let value: unknown;
   let manifest: StaticExportManifest | undefined;
   if (isStaticExport()) {
+    locale ??= isLanguageTag(document.documentElement.lang)
+      ? document.documentElement.lang
+      : undefined;
+    if (locale === undefined) throw new Error("profile default locale invalid");
     value = await readStaticJson(
       `profile-${locale}.json`,
       signal,
@@ -89,7 +93,9 @@ export async function fetchPublicProfile(
     }
   } else {
     const response = await send(
-      `/api/public/profile?locale=${encodeURIComponent(locale)}`,
+      locale === undefined
+        ? "/api/public/profile"
+        : `/api/public/profile?locale=${encodeURIComponent(locale)}`,
       { signal },
     );
     if (!response.ok) throw new Error("profile unavailable");
@@ -102,7 +108,7 @@ export async function fetchPublicProfile(
 }
 
 export async function fetchPublicFaq(
-  locale: Locale,
+  locale: LanguageTag,
   signal: AbortSignal,
   send: Fetcher = fetch,
   observedFaq?: PublicFaq | null,
@@ -189,7 +195,7 @@ export async function fetchPublicFaq(
 
 export function parsePublicFaq(
   value: unknown,
-  locale: Locale,
+  locale: LanguageTag,
 ): PublicFaq | null {
   if (
     !isRecord(value) ||
@@ -335,13 +341,28 @@ function textList(
 
 function validProfile(
   value: unknown,
-  locale: Locale,
+  locale: LanguageTag | undefined,
   manifest?: StaticExportManifest,
 ): boolean {
   if (
     !isRecord(value) ||
     value.schema_version !== 1 ||
-    value.locale !== locale ||
+    !isLanguageTag(value.locale) ||
+    (locale !== undefined && value.locale !== locale) ||
+    !Array.isArray(value.available_locales) ||
+    value.available_locales.length === 0 ||
+    !value.available_locales.every(
+      (language) =>
+        isRecord(language) &&
+        isLanguageTag(language.tag) &&
+        boundedText(language.endonym, 40, 1) &&
+        language.endonym.trim().length > 0,
+    ) ||
+    new Set(value.available_locales.map((language) => language.tag)).size !==
+      value.available_locales.length ||
+    !value.available_locales.some(
+      (language) => language.tag === value.locale,
+    ) ||
     !isRecord(value.profile) ||
     !isRecord(value.character) ||
     !isRecord(value.index) ||

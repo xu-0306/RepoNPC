@@ -1,4 +1,5 @@
 import { consumeSse, type SseEvent } from "./sse";
+import type { LanguageTag } from "../i18n/languages";
 
 /** Keep in sync with PublicChatRequest/PublicChatHistory in api/public.py. */
 export const CHAT_HISTORY_LIMITS = {
@@ -134,7 +135,7 @@ export function buildChatHistory(
  * request has run for this 413 response; the visible transcript stays intact. */
 export async function requestPortfolioChat(
   message: string,
-  locale: string,
+  locale: LanguageTag,
   exchanges: readonly SuccessfulExchange[],
   signal: AbortSignal,
   send: typeof fetch = fetch,

@@ -1,5 +1,6 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import {
   MaintenancePanel,
   type MaintenanceRestorePreview,
@@ -121,7 +122,7 @@ function errorCode(error: unknown): string {
 }
 
 function failureMessage(locale: Locale, error: unknown): string {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   switch (errorCode(error)) {
     case "MAINTENANCE_BUSY":
     case "RESTORE_WORK_PENDING":
@@ -211,7 +212,7 @@ export function MaintenanceSetup({
   locale,
   sendRequest,
 }: MaintenanceSetupProps) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const [status, setStatus] = useState<MaintenanceStatus | null>(null);
   const [restorePreview, setRestorePreview] =
     useState<MaintenanceRestorePreview | null>(null);
@@ -260,7 +261,7 @@ export function MaintenanceSetup({
           restorationAccepted.current = true;
           setRestorePreview(null);
           setStatus(null);
-          setError(COPY[locale].uncertain);
+          setError(COPY[chromeLocale(locale)].uncertain);
         } else {
           if (errorCode(caught) === "RESTORE_PREVIEW_EXPIRED")
             setRestorePreview(null);

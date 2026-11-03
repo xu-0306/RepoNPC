@@ -354,7 +354,7 @@ def test_internal_checksum_tampering_is_rejected_even_when_outer_digest_matches(
             assert payload is not None
             content = payload.read()
             if member.name == "public/profile.json":
-                marker = b'"headline":"'
+                marker = b'"display_name":"'
                 offset = content.find(marker)
                 assert offset >= 0
                 offset += len(marker)

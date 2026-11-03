@@ -17,6 +17,7 @@ from reponpc.admin.auth import AdminSessionService
 from reponpc.admin.onboarding import GuidedOnboardingService
 from reponpc.admin.operations import AdminOperations
 from reponpc.chat.limits import ChatLimits
+from reponpc.i18n.convert import can_convert, convert
 from reponpc.i18n.languages import LANGUAGES
 from reponpc.main import create_app
 from reponpc.providers.contracts import (
@@ -90,7 +91,12 @@ def translation_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.parametrize(
     ("source", "target"),
-    [(source, target) for source in LANGUAGES for target in LANGUAGES if source != target],
+    [
+        (source, target)
+        for source in LANGUAGES
+        for target in LANGUAGES
+        if source != target and not can_convert(source.tag, target.tag)
+    ],
     ids=lambda language: language.tag,
 )
 def test_profile_translate_http_end_to_end_uses_selected_model_and_exact_response(
@@ -266,3 +272,95 @@ def test_profile_translate_http_unconfigured_onboarding_uses_existing_error(
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "SERVICE_NOT_READY"
     assert state["calls"] == []
+
+
+@pytest.mark.parametrize("target", [language for language in LANGUAGES if language.derive])
+def test_profile_translate_http_conversion_without_model_is_private(
+    translation_app, tmp_path: Path, caplog: pytest.LogCaptureFixture, target
+) -> None:
+    app, database, onboarding, state = translation_app
+    assert target.derive is not None
+    onboarding._contribution_providers_supplier = lambda: None
+    onboarding._limits_supplier = lambda: None
+    state["failure"] = AssertionError("converted-only request called the provider")
+    source = OWNER_CANARY + " 軟體與資料庫 软件开发"
+    text = convert(source, target.derive.source, target.tag)
+    item = _item(source_locale=target.derive.source, target_locale=target.tag, text=source)
+    with TestClient(app, base_url=ORIGIN) as client, caplog.at_level(logging.DEBUG):
+        csrf = _login(client)
+        response = client.post(
+            ROUTE, headers={"Origin": ORIGIN, "X-CSRF-Token": csrf}, json={"items": [item]}
+        )
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {
+        "items": [
+            {
+                "field": item["field"],
+                "target_locale": target.tag,
+                "text": text,
+                "method": "converted",
+                "confirmed": False,
+            }
+        ]
+    }
+    assert state["calls"] == []
+    assert onboarding._active_sessions == set()
+    with database.connection() as connection:
+        stored = "\n".join(connection.iterdump())
+    for private in (source, text, OWNER_CANARY):
+        assert private not in stored
+        assert private not in caplog.text
+        assert private not in repr(onboarding.__dict__)
+        for path in tmp_path.rglob("*"):
+            if path.is_file():
+                assert private.encode() not in path.read_bytes()
+
+
+@pytest.mark.parametrize("target", [language for language in LANGUAGES if language.derive])
+@pytest.mark.parametrize("valid", [True, False])
+def test_profile_translate_http_mixed_order_and_atomic_failure(
+    translation_app, target, valid
+) -> None:
+    app, _, onboarding, state = translation_app
+    assert target.derive is not None
+    items = [
+        _item(source_locale=target.derive.source, target_locale=target.tag, text="軟體工具"),
+        _item(field="headline", text="I work on acme/parser-kit"),
+        _item(
+            source_locale=target.derive.source,
+            target_locale=target.tag,
+            field="greeting",
+            text="資料庫开发",
+        ),
+    ]
+    text = "I maintain acme/parser-kit" if valid else "Missing reference"
+    state["content"] = {"items": [text]}
+    with TestClient(app, base_url=ORIGIN) as client:
+        csrf = _login(client)
+        response = client.post(
+            ROUTE, headers={"Origin": ORIGIN, "X-CSRF-Token": csrf}, json={"items": items}
+        )
+    assert len(state["calls"]) == 1
+    messages, schema, _, _ = state["calls"][0]
+    assert (
+        schema["properties"]["items"]["minItems"] == schema["properties"]["items"]["maxItems"] == 1
+    )
+    assert items[1]["text"] in messages[-1].content
+    assert all(item["text"] not in messages[-1].content for item in (items[0], items[2]))
+    assert onboarding._active_sessions == set()
+    if valid:
+        assert response.status_code == 200
+        result = response.json()["items"]
+        assert [item["field"] for item in result] == [item["field"] for item in items]
+        assert [item["method"] for item in result] == ["converted", "model", "converted"]
+        assert result[1]["text"] == text
+        assert all(item["confirmed"] is False for item in result)
+        for index in (0, 2):
+            assert result[index]["text"] == convert(
+                items[index]["text"], target.derive.source, target.tag
+            )
+    else:
+        assert response.status_code == 502
+        assert response.json()["error"]["details"] == {"reason": "PROVIDER_OUTPUT_SCHEMA_INVALID"}
+        assert "items" not in response.json()

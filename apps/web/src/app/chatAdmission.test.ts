@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { requestPortfolioChat } from "./visitorChat";
+import { LANGUAGES } from "../i18n/languages";
 
 const exchanges = Array.from({ length: 5 }, (_, i) => ({
   question: `Question ${i}`,
@@ -22,6 +23,27 @@ const rejected = (overrides = {}) =>
   );
 
 describe("configured chat history admission", () => {
+  it.each(LANGUAGES)(
+    "carries $tag through the chat body and admission retry",
+    async ({ tag }) => {
+      const send = vi
+        .fn()
+        .mockResolvedValueOnce(rejected())
+        .mockResolvedValueOnce(new Response("ok"));
+      await requestPortfolioChat(
+        "Question?",
+        tag,
+        exchanges,
+        new AbortController().signal,
+        send,
+      );
+      expect(send).toHaveBeenCalledTimes(2);
+      for (const [url, init] of send.mock.calls) {
+        expect(url).toBe("/api/public/chat/stream");
+        expect(JSON.parse(init.body).locale).toBe(tag);
+      }
+    },
+  );
   it("retries with recent whole exchanges after admission rejects oversized history", async () => {
     const success = new Response("validated stream");
     const send = vi

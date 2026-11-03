@@ -1,4 +1,4 @@
-"""Read-only schema-v1 index consumer used by bundle verification and runtime."""
+"""Read-only index consumer for schema versions 1 and 2."""
 
 from __future__ import annotations
 
@@ -14,8 +14,9 @@ from urllib.parse import quote
 
 import numpy as np
 
+from reponpc.config.models import LocalesConfig
 from reponpc.domain.evidence import COMMIT_RE
-from reponpc.indexing.index_database import INDEX_SCHEMA_VERSION
+from reponpc.i18n.plan import ANALYSIS_LOCALES, require_enabled
 from reponpc.indexing.sources import EmbeddingIdentity
 from reponpc.retrieval.fts_query import FtsQueryMode, compile_fts_query
 from reponpc.retrieval.rrf import fuse_rankings, rrf_scores
@@ -101,6 +102,23 @@ class ReadOnlyIndex:
         vectors: ValidatedVectorMatrix,
     ) -> None:
         self._connection = connection
+        self.index_schema_version = int(
+            connection.execute(
+                "SELECT value FROM bundle_meta WHERE key = 'index_schema_version'"
+            ).fetchone()[0]
+        )
+        if self.index_schema_version == 1:
+            self.locales = LocalesConfig(default=ANALYSIS_LOCALES[0], supported=ANALYSIS_LOCALES)
+        else:
+            locale_row = connection.execute(
+                "SELECT value FROM bundle_meta WHERE key = 'locales'"
+            ).fetchone()
+            if locale_row is None:
+                raise IndexReadError("index_locales_invalid")
+            self.locales = LocalesConfig.model_validate_json(locale_row[0])
+            connection.execute(
+                "SELECT repository_id, locale, summary FROM repository_summaries LIMIT 1"
+            )
         self.embedding = embedding
         self.vectors = vectors
         self.retrieval_policy = self._retrieval_policy(connection)
@@ -118,6 +136,48 @@ class ReadOnlyIndex:
             ):
                 raise IndexReadError("owner_identity_invalid")
             self.owner_aliases = (identity["github_login"], *identity["aliases"])
+
+    def repository_summaries(self, locale: str) -> dict[str, str]:
+        """Read summaries in their stored language without conversion."""
+
+        require_enabled(locale, self.locales.supported)
+        if self.index_schema_version == 1:
+            column = "summary_zh_tw" if locale == "zh-TW" else "summary_en"
+            rows = self._connection.execute(
+                f"SELECT slug, {column} FROM repositories WHERE {column} IS NOT NULL ORDER BY slug"
+            )
+        else:
+            rows = self._connection.execute(
+                "SELECT r.slug, s.summary FROM repository_summaries AS s "
+                "JOIN repositories AS r ON r.repo_id = s.repository_id "
+                "WHERE s.locale = ? ORDER BY r.slug",
+                (locale,),
+            )
+        return {str(row[0]): str(row[1]) for row in rows}
+
+    def validate_repository_summaries(self, expected: dict[str, dict[str, str]]) -> None:
+        if self.index_schema_version == 2:
+            columns = self._connection.execute("PRAGMA table_info(repository_summaries)").fetchall()
+            if [(row[1], row[5]) for row in columns if row[5]] != [
+                ("repository_id", 1),
+                ("locale", 2),
+            ]:
+                raise IndexReadError("index_schema_incompatible")
+            rows = self._connection.execute(
+                "SELECT r.slug, s.locale, s.summary FROM repository_summaries AS s "
+                "LEFT JOIN repositories AS r ON r.repo_id = s.repository_id"
+            ).fetchall()
+            wanted = sorted(
+                (slug, locale, summary)
+                for locale, repositories in expected.items()
+                for slug, summary in repositories.items()
+            )
+            if len(rows) != len(wanted) or {tuple(row) for row in rows} != set(wanted):
+                raise IndexReadError("index_summaries_invalid")
+        elif any(
+            self.repository_summaries(locale) != values for locale, values in expected.items()
+        ):
+            raise IndexReadError("index_summaries_invalid")
 
     @classmethod
     def open(cls, path: Path, *, expected_embedding: EmbeddingIdentity) -> ReadOnlyIndex:
@@ -531,7 +591,7 @@ class ReadOnlyIndex:
             str(row["key"]): str(row["value"])
             for row in connection.execute("SELECT key, value FROM bundle_meta")
         }
-        if values.get("index_schema_version") != str(INDEX_SCHEMA_VERSION):
+        if values.get("index_schema_version") not in {"1", "2"}:
             raise IndexReadError("index_schema_incompatible")
         raw_value = values.get("embedding")
         if raw_value is None:

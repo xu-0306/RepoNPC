@@ -1,22 +1,30 @@
-"""Canonical bilingual public profile production and validation."""
+"""Canonical localized public profile production and validation."""
 
 from __future__ import annotations
 
 import json
 import re
 from datetime import UTC, datetime
-from typing import Annotated, Literal, cast
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from reponpc.config.models import Locale, PublicConfig
+from reponpc.i18n.languages import get_language
+from reponpc.i18n.plan import ANALYSIS_LOCALES, require_enabled
 from reponpc.indexing.sources import ResolvedRepository
 from reponpc.scene.resolve import PublicScene, resolve_scene
 
 MAX_PUBLIC_PROFILE_BYTES = 1024 * 1024
-LOCALE_ORDER: tuple[Locale, Locale] = ("zh-TW", "en")
-REQUIRED_LOCALES = frozenset(LOCALE_ORDER)
 _INDEX_VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
 
 
@@ -142,44 +150,49 @@ class IndexMetadata(_StrictProfileModel):
 
 
 class BilingualPublicProfile(_StrictProfileModel):
-    schema_version: Literal[1]
-    locales: dict[Locale, LocalizedPublicProfile]
+    schema_version: Literal[1, 2]
+    locales: Annotated[dict[Locale, LocalizedPublicProfile], Field(min_length=1)]
     character: CharacterMetadata
     index: IndexMetadata
 
+    @field_validator("locales")
+    @classmethod
+    def preserve_legacy_order(
+        cls, value: dict[Locale, LocalizedPublicProfile], info: ValidationInfo
+    ) -> dict[Locale, LocalizedPublicProfile]:
+        if info.data.get("schema_version") == 1 and set(value) == set(ANALYSIS_LOCALES):
+            return {tag: value[tag] for tag in ANALYSIS_LOCALES}
+        return value
+
     @model_validator(mode="after")
     def validate_bilingual_equivalence(self) -> BilingualPublicProfile:
-        if set(self.locales) != REQUIRED_LOCALES:
-            raise ValueError("required locales are missing or unknown")
-        zh_tw = self.locales["zh-TW"]
-        english = self.locales["en"]
-        if (
-            len(zh_tw.repositories) != self.index.repository_count
-            or len(english.repositories) != self.index.repository_count
-        ):
-            raise ValueError("repository count mismatch")
-        if (
-            zh_tw.profile.display_name,
-            zh_tw.profile.location,
-            zh_tw.profile.avatar_url,
-            [link.url for link in zh_tw.profile.links],
-        ) != (
-            english.profile.display_name,
-            english.profile.location,
-            english.profile.avatar_url,
-            [link.url for link in english.profile.links],
-        ):
-            raise ValueError("non-localized profile fields differ")
-        zh_repositories = [
-            (item.slug, item.tags, item.demo_url, item.language, item.stars, item.forks)
-            for item in zh_tw.repositories
-        ]
-        en_repositories = [
-            (item.slug, item.tags, item.demo_url, item.language, item.stars, item.forks)
-            for item in english.repositories
-        ]
-        if zh_repositories != en_repositories:
-            raise ValueError("non-localized repository fields differ")
+        # Schema 1 is the frozen legacy pair, also used by the durable analysis contract.
+        if self.schema_version == 1 and set(self.locales) != set(ANALYSIS_LOCALES):
+            raise ValueError("required legacy locales are missing or unknown")
+        first = next(iter(self.locales.values()))
+        for localized in self.locales.values():
+            if len(localized.repositories) != self.index.repository_count:
+                raise ValueError("repository count mismatch")
+            if (
+                localized.profile.display_name,
+                localized.profile.location,
+                localized.profile.avatar_url,
+                [link.url for link in localized.profile.links],
+            ) != (
+                first.profile.display_name,
+                first.profile.location,
+                first.profile.avatar_url,
+                [link.url for link in first.profile.links],
+            ):
+                raise ValueError("non-localized profile fields differ")
+            if [
+                (item.slug, item.tags, item.demo_url, item.language, item.stars, item.forks)
+                for item in localized.repositories
+            ] != [
+                (item.slug, item.tags, item.demo_url, item.language, item.stars, item.forks)
+                for item in first.repositories
+            ]:
+                raise ValueError("non-localized repository fields differ")
         return self
 
 
@@ -237,10 +250,10 @@ def build_public_profile_bytes(
                 ],
                 suggested_questions=list(config.profile.suggested_questions[locale]),
             )
-            for locale in LOCALE_ORDER
+            for locale in config.locales.supported
         }
         document = BilingualPublicProfile(
-            schema_version=1,
+            schema_version=2,
             locales=locales,
             character=CharacterMetadata(
                 mode=config.character.mode,
@@ -270,7 +283,7 @@ def build_public_profile_bytes(
     serialized = document.model_dump(mode="json")
     if document.character.scene is None:
         serialized["character"].pop("scene", None)
-    return _canonical_json(serialized)
+    return json.dumps(serialized, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
 def parse_public_profile_bytes(payload: bytes) -> BilingualPublicProfile:
@@ -325,16 +338,21 @@ def normalize_public_profile_scene(
     )
 
 
-def localized_public_profile_bytes(document: BilingualPublicProfile, locale: str) -> bytes:
-    """Return the unchanged public response contract for one exact locale."""
+def available_locales(document: BilingualPublicProfile) -> list[dict[str, str]]:
+    """Public language choices in the site's configured order."""
 
-    if locale not in REQUIRED_LOCALES:
-        raise PublicProfileError("public_profile_locale_invalid")
-    selected_locale = cast(Locale, locale)
+    return [{"tag": tag, "endonym": get_language(tag).endonym} for tag in document.locales]
+
+
+def localized_public_profile_bytes(document: BilingualPublicProfile, locale: str) -> bytes:
+    """Return the public response for one exact enabled locale."""
+
+    selected_locale = require_enabled(locale, document.locales)
     localized = document.locales[selected_locale]
     response = {
         "schema_version": 1,
         "locale": selected_locale,
+        "available_locales": available_locales(document),
         **localized.model_dump(mode="json"),
         "character": document.character.model_dump(mode="json"),
         "index": document.index.model_dump(mode="json"),

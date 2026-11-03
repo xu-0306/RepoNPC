@@ -31,6 +31,17 @@
   color: var(--px-accent);
   font-size: max(13px, 0.8125rem);
 }
+.site-languages {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.site-languages__row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .profile-translation__actions [aria-disabled="true"],
 .profile-translation__tools [aria-disabled="true"] {
   cursor: default;

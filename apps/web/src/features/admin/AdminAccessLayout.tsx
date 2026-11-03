@@ -1,3 +1,4 @@
+import { chromeLocale, type LanguageTag } from "../../i18n/languages";
 import type { ReactNode } from "react";
 import "../../p4-w4.css";
 
@@ -8,7 +9,7 @@ export function AdminAccessLayout({
   mode,
   children,
 }: {
-  locale: "zh-TW" | "en";
+  locale: LanguageTag;
   title: ReactNode;
   headingId: string;
   mode: string;
@@ -23,7 +24,9 @@ export function AdminAccessLayout({
       >
         <header className="admin-auth__header">
           <p className="admin-auth__eyebrow">
-            {locale === "zh-TW" ? "本機管理主控台" : "Local admin console"}
+            {chromeLocale(locale) === "zh-TW"
+              ? "本機管理主控台"
+              : "Local admin console"}
           </p>
           <h1 className="admin-auth__title" id={headingId} tabIndex={-1}>
             {title}

@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { CSSProperties, RefObject } from "react";
 
 import { CharacterRenderer } from "../features/character/CharacterRenderer";
-import { messages } from "../i18n/messages";
+import { chromeLocale, type LanguageTag } from "../i18n/languages";
+import { messageLocale, messages } from "../i18n/messages";
 import { VisitorConversation } from "./VisitorConversation";
 import {
   sceneSwatchStyle,
@@ -63,6 +64,7 @@ export function VisitorPage(props: ExtendedProps) {
     compactPreview = false,
   } = props;
   const copy = messages[locale];
+  const availableLocales = profile?.available_locales ?? [];
   const generatedId = useId().replaceAll(":", "");
   const idPrefix = mode === "preview" ? `preview-${generatedId}` : generatedId;
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -241,19 +243,30 @@ export function VisitorPage(props: ExtendedProps) {
 
   function projectCards() {
     if (!profile?.repositories.length) {
-      return <p>{sampleContent ? sampleProject(locale) : copy.noProjects}</p>;
+      return (
+        <p lang={sampleContent ? chromeLocale(locale) : messageLocale(locale)}>
+          {sampleContent ? sampleProject(locale) : copy.noProjects}
+        </p>
+      );
     }
     return (
       <ul className="visitor-project-list">
         {profile.repositories.map((repository) => (
-          <li className="visitor-project-card" key={repository.slug}>
+          <li
+            className="visitor-project-card"
+            key={repository.slug}
+            lang={profile.locale}
+          >
             <h3 className="px-display">{repository.slug}</h3>
             <p>{repository.summary}</p>
             <p className="visitor-project-card__role">{repository.role}</p>
             {(repository.language ||
               repository.stars != null ||
               repository.forks != null) && (
-              <dl className="visitor-repo-metadata">
+              <dl
+                className="visitor-repo-metadata"
+                lang={messageLocale(locale)}
+              >
                 {repository.language && (
                   <MetadataPair
                     label={copy.languageMetadata}
@@ -284,6 +297,7 @@ export function VisitorPage(props: ExtendedProps) {
             {repository.demo_url && (
               <a
                 href={repository.demo_url}
+                lang={messageLocale(locale)}
                 rel="noopener noreferrer"
                 target="_blank"
               >
@@ -304,7 +318,7 @@ export function VisitorPage(props: ExtendedProps) {
       data-preview-mode={mode === "preview" ? previewMode : undefined}
       data-npc-plate-light={npcPlate?.light}
       data-npc-plate-dark={npcPlate?.dark}
-      lang={locale}
+      lang={messageLocale(locale)}
       style={heroStyle}
     >
       {mode === "preview" && (
@@ -336,22 +350,25 @@ export function VisitorPage(props: ExtendedProps) {
           </button>
         </div>
         <div className="visitor-topbar__controls">
-          <nav
-            aria-label={copy.languageLabel}
-            className="visitor-language-switcher"
-          >
-            {(["zh-TW", "en"] as const).map((option) => (
-              <button
-                aria-pressed={locale === option}
-                className="px-chip"
-                key={option}
-                onClick={() => onLocaleChange(option)}
-                type="button"
-              >
-                {messages[option].languageName}
-              </button>
-            ))}
-          </nav>
+          {availableLocales.length > 1 && (
+            <nav
+              aria-label={copy.languageLabel}
+              className="visitor-language-switcher"
+            >
+              {availableLocales.map(({ tag, endonym }) => (
+                <button
+                  aria-pressed={locale === tag}
+                  className="px-chip"
+                  key={tag}
+                  lang={tag}
+                  onClick={() => onLocaleChange(tag)}
+                  type="button"
+                >
+                  {endonym}
+                </button>
+              ))}
+            </nav>
+          )}
           {showAppearance && (
             <button
               aria-controls={appearanceId}
@@ -413,7 +430,9 @@ export function VisitorPage(props: ExtendedProps) {
                       aria-hidden="true"
                       className="visitor-scheme-swatch"
                     />
-                    <span>{scheme.label[locale]}</span>
+                    <span lang={chromeLocale(locale)}>
+                      {scheme.label[chromeLocale(locale)]}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -492,10 +511,28 @@ export function VisitorPage(props: ExtendedProps) {
                 {stateBadge(copy, characterState, hasRestingState)}
               </span>
             </div>
-            <DialogueHeading id={`${idPrefix}-dialogue-title`}>
+            <DialogueHeading
+              id={`${idPrefix}-dialogue-title`}
+              lang={
+                pending || characterState === "think" || hasRestingState
+                  ? messageLocale(locale)
+                  : (profile?.locale ??
+                    (sampleContent
+                      ? chromeLocale(locale)
+                      : messageLocale(locale)))
+              }
+            >
               {dialogueTitle}
             </DialogueHeading>
-            <p>{dialogueBody}</p>
+            <p
+              lang={
+                !hasRestingState && profile
+                  ? profile.locale
+                  : messageLocale(locale)
+              }
+            >
+              {dialogueBody}
+            </p>
             {hasRestingState && restingSuggestions.length > 0 && (
               <div className="visitor-resting-faq">
                 <span className="px-label">{copy.dialogueFaqLabel}</span>
@@ -505,6 +542,7 @@ export function VisitorPage(props: ExtendedProps) {
                       className="px-chip"
                       disabled={pending || !canAskSuggestion(suggestion)}
                       key={suggestion}
+                      lang={locale}
                       onClick={() => onSelectSuggestion(suggestion)}
                       type="button"
                     >
@@ -573,6 +611,7 @@ export function VisitorPage(props: ExtendedProps) {
                       className="px-chip"
                       disabled={pending || !canAskSuggestion(suggestion)}
                       key={suggestion}
+                      lang={locale}
                       onClick={() => onSelectSuggestion(suggestion)}
                       type="button"
                     >
@@ -622,6 +661,7 @@ export function VisitorPage(props: ExtendedProps) {
                   mode === "preview"
                 }
                 id={inputId}
+                lang={locale}
                 maxLength={4000}
                 onChange={(event) => onQuestionChange(event.target.value)}
                 placeholder={copy.inputPlaceholder}
@@ -685,14 +725,21 @@ export function VisitorPage(props: ExtendedProps) {
               ×
             </button>
           </div>
-          <section className="visitor-profile-card">
+          <section
+            className="visitor-profile-card"
+            lang={profile?.locale ?? messageLocale(locale)}
+          >
             <h3 className="px-display">
               {profile?.profile.display_name ?? "RepoNPC"}
             </h3>
             <p className="visitor-profile-card__headline">
               {profile?.profile.headline ?? copy.subtitle}
             </p>
-            <p>
+            <p
+              lang={
+                !profile && sampleContent ? chromeLocale(locale) : undefined
+              }
+            >
               {profile?.profile.bio ??
                 (sampleContent ? sampleAbout(locale) : copy.profileLoading)}
             </p>
@@ -700,11 +747,13 @@ export function VisitorPage(props: ExtendedProps) {
             {profile?.profile.links.length ? (
               <nav
                 aria-label={copy.linksTitle}
+                lang={messageLocale(locale)}
                 className="visitor-profile-links"
               >
                 {profile.profile.links.map((link) => (
                   <a
                     href={link.url}
+                    lang={profile.locale}
                     key={link.url}
                     rel="noopener noreferrer"
                     target="_blank"
@@ -802,48 +851,55 @@ function previewBackgroundUrl(value: string | null): string | null {
   }
 }
 
-function sampleGreeting(locale: "zh-TW" | "en"): string {
-  return locale === "zh-TW"
+function sampleGreeting(locale: LanguageTag): string {
+  return chromeLocale(locale) === "zh-TW"
     ? "我是你的作品導覽員，可以依照已發布的資料回答問題。"
     : "I’m your portfolio guide. Ask me about the verified project information.";
 }
 
-function sampleAbout(locale: "zh-TW" | "en"): string {
-  return locale === "zh-TW"
+function sampleAbout(locale: LanguageTag): string {
+  return chromeLocale(locale) === "zh-TW"
     ? "這裡會介紹作品背景、興趣與作品方向。"
     : "This space introduces the owner’s background, interests and portfolio focus.";
 }
 
-function sampleProject(locale: "zh-TW" | "en"): string {
-  return locale === "zh-TW"
+function sampleProject(locale: LanguageTag): string {
+  return chromeLocale(locale) === "zh-TW"
     ? "作品摘要會顯示在這裡。"
     : "Project summaries appear here.";
 }
 
-function sampleTurns(locale: "zh-TW" | "en"): VisitorPageProps["turns"] {
-  return locale === "zh-TW"
-    ? [
-        { id: "sample-user", role: "user", content: "這個作品解決什麼問題？" },
-        {
-          id: "sample-assistant",
-          role: "assistant",
-          content: "我可以依照已發布的資料，帶你了解作品的重點。",
-          citations: [],
-        },
-      ]
-    : [
-        {
-          id: "sample-user",
-          role: "user",
-          content: "What are the portfolio highlights?",
-        },
-        {
-          id: "sample-assistant",
-          role: "assistant",
-          content: "I can guide you through the published project information.",
-          citations: [],
-        },
-      ];
+function sampleTurns(locale: LanguageTag): VisitorPageProps["turns"] {
+  const turns: VisitorPageProps["turns"] =
+    chromeLocale(locale) === "zh-TW"
+      ? [
+          {
+            id: "sample-user",
+            role: "user",
+            content: "這個作品解決什麼問題？",
+          },
+          {
+            id: "sample-assistant",
+            role: "assistant",
+            content: "我可以依照已發布的資料，帶你了解作品的重點。",
+            citations: [],
+          },
+        ]
+      : [
+          {
+            id: "sample-user",
+            role: "user",
+            content: "What are the portfolio highlights?",
+          },
+          {
+            id: "sample-assistant",
+            role: "assistant",
+            content:
+              "I can guide you through the published project information.",
+            citations: [],
+          },
+        ];
+  return turns.map((turn) => ({ ...turn, locale: chromeLocale(locale) }));
 }
 
 function capitalize(value: string): string {

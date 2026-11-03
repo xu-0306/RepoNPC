@@ -1,6 +1,7 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import {
   ADMIN_MODEL_STATES,
   type AdminModelSummary,
@@ -75,7 +76,7 @@ export function ModelSetupWorkspace({
   localModelView,
   guidanceView,
 }: Props) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const usable = [status?.chat, status?.embedding].filter(isUsable).length;
   return (
     <div className="model-setup-workspace" lang={locale}>
@@ -147,7 +148,7 @@ function ModelRoleTabs({
   chatFlow: ReactNode;
   embeddingFlow: ReactNode;
 }) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const [active, setActive] = useState<Role>(
     isUsable(status?.chat) && !isUsable(status?.embedding)
       ? "embedding"
@@ -204,7 +205,7 @@ function ModelRoleTabs({
                 className="model-role-setup__status px-badge"
                 data-state={state}
               >
-                {ADMIN_MODEL_STATES[locale][state]}
+                {ADMIN_MODEL_STATES[chromeLocale(locale)][state]}
               </span>
             </button>
           );
@@ -319,7 +320,7 @@ function ModelSlot({
           open={open}
           onToggle={(event) => setOpen(event.currentTarget.open)}
         >
-          <summary>{COPY[locale].details}</summary>
+          <summary>{COPY[chromeLocale(locale)].details}</summary>
           <div className="model-role-setup__flow">{children}</div>
         </details>
       </div>

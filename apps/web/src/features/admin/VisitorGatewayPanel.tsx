@@ -1,3 +1,4 @@
+import { chromeLocale } from "../../i18n/languages";
 import { InfoParagraphs } from "./InfoParagraphs";
 import "../../p4-w3.css";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -43,7 +44,10 @@ type GatewayError =
   | "service"
   | "unknown";
 
-const ERROR_MESSAGES: Record<GatewayError, Record<AdminLocale, string>> = {
+const ERROR_MESSAGES: Record<
+  GatewayError,
+  Record<ReturnType<typeof chromeLocale>, string>
+> = {
   conflict: {
     "zh-TW": "設定已在其他位置變更。請載入最新設定後再編輯。",
     en: "The settings changed elsewhere. Load the latest settings before editing.",
@@ -104,7 +108,7 @@ export function visitorGatewayErrorMessage(
   code: unknown,
   locale: AdminLocale,
 ): string {
-  return ERROR_MESSAGES[gatewayErrorKind(code)][locale];
+  return ERROR_MESSAGES[gatewayErrorKind(code)][chromeLocale(locale)];
 }
 
 function useVisitorGateway(request: Request, locale: AdminLocale) {
@@ -240,7 +244,7 @@ export function VisitorGatewayPanel({
   /** False under the loopback evaluation profile, which cannot run the gateway. */
   publicSharingAvailable?: boolean;
 }) {
-  const zh = locale === "zh-TW";
+  const zh = chromeLocale(locale) === "zh-TW";
   const gateway = useVisitorGateway(request, locale);
   const status = gateway.status;
   const [draft, setDraft] = useState<GatewayDraft | null>(null);

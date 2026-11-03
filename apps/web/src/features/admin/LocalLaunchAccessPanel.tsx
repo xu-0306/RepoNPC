@@ -1,7 +1,8 @@
+import { chromeLocale, type LanguageTag } from "../../i18n/languages";
 import { AdminAccessLayout } from "./AdminAccessLayout";
 
 type LocalLaunchAccessPanelProps = {
-  locale: "zh-TW" | "en";
+  locale: LanguageTag;
   state: "checking" | "relaunch";
 };
 
@@ -24,7 +25,7 @@ export function LocalLaunchAccessPanel({
   locale,
   state,
 }: LocalLaunchAccessPanelProps) {
-  const text = copy[locale];
+  const text = copy[chromeLocale(locale)];
 
   return (
     <AdminAccessLayout

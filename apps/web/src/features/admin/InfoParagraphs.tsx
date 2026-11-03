@@ -1,4 +1,4 @@
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 
 export function InfoParagraphs({
   text,

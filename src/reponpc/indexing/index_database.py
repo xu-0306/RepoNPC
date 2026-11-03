@@ -1,4 +1,4 @@
-"""Deterministic schema-v1 immutable index creation.
+"""Deterministic schema-v2 immutable index creation.
 
 The builder is the first real consumer of the P2 exclusion/parser primitives.
 It accepts only already-resolved repository snapshots, writes a fresh SQLite
@@ -37,7 +37,7 @@ from reponpc.indexing.sources import (
 )
 from reponpc.retrieval.vector import validate_vector_matrix
 
-INDEX_SCHEMA_VERSION: Final = 1
+INDEX_SCHEMA_VERSION: Final = 2
 APPLICATION_COMPATIBILITY: Final = {"minimum": "1.0.0", "maximum_exclusive": "2.0.0"}
 _MAX_EMBEDDING_BATCH_ITEMS: Final = 16
 _EMBEDDING_RESPONSE_BUDGET_BYTES: Final = 1_500_000
@@ -114,7 +114,7 @@ class RepositoryEvidenceCollection:
 
 
 def create_schema(connection: sqlite3.Connection) -> None:
-    """Create exactly the required schema-v1 logical tables and FTS channels."""
+    """Create exactly the required schema-v2 logical tables and FTS channels."""
 
     connection.executescript(
         """
@@ -128,9 +128,13 @@ def create_schema(connection: sqlite3.Connection) -> None:
           slug TEXT NOT NULL UNIQUE,
           commit_sha TEXT NOT NULL CHECK(length(commit_sha) = 40),
           default_branch TEXT,
-          github_html_url TEXT NOT NULL,
-          summary_zh_tw TEXT,
-          summary_en TEXT
+          github_html_url TEXT NOT NULL
+        );
+        CREATE TABLE repository_summaries (
+          repository_id INTEGER NOT NULL REFERENCES repositories(repo_id),
+          locale TEXT NOT NULL,
+          summary TEXT NOT NULL CHECK(length(summary) > 0),
+          PRIMARY KEY (repository_id, locale)
         );
         CREATE TABLE sources (
           source_id INTEGER PRIMARY KEY,
@@ -290,6 +294,7 @@ class IndexDatabaseBuilder:
             "application_compatibility": _canonical_json(APPLICATION_COMPATIBILITY),
             "embedding": _canonical_json(_embedding_payload(self._identity)),
             "config_schema_version": str(config.schema_version),
+            "locales": config.locales.model_dump_json(),
             "owner_identity": _canonical_json(
                 {"github_login": config.profile.github_login, "aliases": config.profile.aliases}
             ),
@@ -327,8 +332,13 @@ class IndexDatabaseBuilder:
                 commit_sha=snapshot.commit_sha,
                 default_branch=snapshot.default_branch,
                 github_html_url=snapshot.github_html_url,
-                summary_zh_tw=repository_config.summary["zh-TW"],
-                summary_en=repository_config.summary["en"],
+            )
+            connection.executemany(
+                "INSERT INTO repository_summaries(repository_id, locale, summary) VALUES (?, ?, ?)",
+                [
+                    (repo_id, locale, repository_config.summary[locale])
+                    for locale in config.locales.supported
+                ],
             )
             collection = collect_repository_evidence(
                 config=config,
@@ -383,8 +393,6 @@ class IndexDatabaseBuilder:
             commit_sha=configuration_source.commit_sha,
             default_branch=None,
             github_html_url=configuration_source.github_html_url,
-            summary_zh_tw=None,
-            summary_en=None,
         )
         source_id = self._insert_source(
             connection,
@@ -472,8 +480,6 @@ class IndexDatabaseBuilder:
         commit_sha: str,
         default_branch: str | None,
         github_html_url: str,
-        summary_zh_tw: str | None,
-        summary_en: str | None,
     ) -> int:
         row = connection.execute(
             "SELECT repo_id, commit_sha, github_html_url FROM repositories WHERE slug = ?", (slug,)
@@ -485,10 +491,10 @@ class IndexDatabaseBuilder:
         cursor = connection.execute(
             """
             INSERT INTO repositories(
-              slug, commit_sha, default_branch, github_html_url, summary_zh_tw, summary_en
-            ) VALUES (?, ?, ?, ?, ?, ?)
+              slug, commit_sha, default_branch, github_html_url
+            ) VALUES (?, ?, ?, ?)
             """,
-            (slug, commit_sha, default_branch, github_html_url, summary_zh_tw, summary_en),
+            (slug, commit_sha, default_branch, github_html_url),
         )
         return _cursor_row_id(cursor)
 

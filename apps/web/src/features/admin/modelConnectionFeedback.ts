@@ -1,4 +1,5 @@
-import type { Locale } from "../../i18n/messages";
+import { chromeLocale } from "../../i18n/languages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 
 export interface ModelConnectionFailureDetails {
   code: string;
@@ -80,10 +81,10 @@ export function modelConnectionFailureMessage(
     ? MESSAGES[failure.code]
     : null;
   const base = message
-    ? locale === "zh-TW"
+    ? chromeLocale(locale) === "zh-TW"
       ? message[0]
       : message[1]
-    : locale === "zh-TW"
+    : chromeLocale(locale) === "zh-TW"
       ? "服務設定沒有更新，原設定仍保留。請確認網路與登入狀態後重試；若剛輸入過金鑰，請重新填入。"
       : "The service setting was not updated and the existing setting is preserved. Check your network and sign-in, then retry. Re-enter any key you just submitted.";
   const requestId =
@@ -92,6 +93,6 @@ export function modelConnectionFailureMessage(
       ? failure.requestId
       : undefined;
   if (!requestId) return base;
-  const label = locale === "zh-TW" ? "診斷代碼" : "Diagnostic ID";
+  const label = chromeLocale(locale) === "zh-TW" ? "診斷代碼" : "Diagnostic ID";
   return `${base} ${label}: ${requestId}`;
 }

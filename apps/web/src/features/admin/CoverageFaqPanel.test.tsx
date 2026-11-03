@@ -1,13 +1,21 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CoverageFaqPanel } from "./CoverageFaqPanel";
+import { LANGUAGES } from "../../i18n/languages";
+import { ADMIN_CHROMES } from "./__fixtures__/siteLanguages";
 
 // Seed the fetched queue while retaining React's other hooks and full panel render.
-const queue = vi.hoisted(() => ({ inject: false, view: {} as unknown }));
+const queue = vi.hoisted(() => ({
+  inject: false,
+  view: {} as unknown,
+  effects: null as Array<() => unknown> | null,
+}));
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
   return {
     ...actual,
+    useEffect: (...args: Parameters<typeof actual.useEffect>) =>
+      queue.effects ? queue.effects.push(args[0]) : actual.useEffect(...args),
     useState: (initial: unknown) => {
       if (queue.inject && initial === null) {
         queue.inject = false;
@@ -17,6 +25,44 @@ vi.mock("react", async (importOriginal) => {
     },
   };
 });
+afterEach(() => {
+  queue.effects = null;
+});
+
+it.each(
+  ADMIN_CHROMES.flatMap((locale) =>
+    LANGUAGES.map(({ tag }) => ({ locale, tag })),
+  ),
+)(
+  "requests the selected FAQ language $tag with $locale chrome",
+  async ({ locale, tag }) => {
+    queue.effects = [];
+    const request = vi.fn().mockResolvedValue({
+      locale: tag,
+      bundle_id: "site-bundle",
+      entries: [],
+    });
+    const html = renderToStaticMarkup(
+      <CoverageFaqPanel
+        locale={locale}
+        contentLocale={tag}
+        request={request}
+        repositories={[]}
+        bundleId="site-bundle"
+        draftChanged={false}
+        onAddClaim={vi.fn()}
+      />,
+    );
+    for (const effect of queue.effects) effect();
+    await Promise.resolve();
+    expect(request).toHaveBeenCalledWith(
+      `/api/admin/portfolio/faq?locale=${tag}`,
+    );
+    expect(html).toContain(
+      locale === "en" ? "Coverage and FAQ review" : "涵蓋檢查與 FAQ 審核",
+    );
+  },
+);
 
 const cases = [
   [
@@ -83,7 +129,7 @@ describe.each(["zh-TW", "en"] as const)("owner FAQ reasons in %s", (locale) => {
     expect(html.match(/<span>/g)).toHaveLength(1);
     expect(html).not.toContain(reason);
     expect(html).toContain(
-      '<article class="coverage-faq__entry" aria-label="Fixture question?">',
+      `<article lang="${locale}" class="coverage-faq__entry" aria-label="Fixture question?">`,
     );
   });
   it("renders no diagnostic label for an answered entry with a null reason", () => {

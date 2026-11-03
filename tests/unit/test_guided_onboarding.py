@@ -843,7 +843,7 @@ def test_analysis_person_policy_allows_nonhuman_technical_subjects(zh_tw: str, e
         "",
     )
 
-    assert envelope.inferences[0].statement.zh_tw == zh_tw
+    assert envelope.inferences[0].statement.public()["zh-TW"] == zh_tw
     assert envelope.inferences[0].supporting_evidence_ids == ("E_allowed",)
 
 
@@ -976,8 +976,7 @@ def test_analysis_accepts_writing_systems_from_the_locale_or_the_source(
 ) -> None:
     envelope = _parse_analysis(_analysis_content(zh_tw, en), {"S1": "E_allowed"}, source)
 
-    assert envelope.inferences[0].statement.zh_tw == zh_tw
-    assert envelope.inferences[0].statement.en == en
+    assert envelope.inferences[0].statement.public() == {"zh-TW": zh_tw, "en": en}
 
 
 @pytest.mark.parametrize(
@@ -1058,7 +1057,7 @@ def test_contribution_accepts_writing_system_from_the_owner_statement() -> None:
         "Repository: octocat/demo\n我維護 Привет 問候模組",
     )
 
-    assert proposal.summary.zh_tw == "維護「Привет」問候模組"
+    assert proposal.summary.public()["zh-TW"] == "維護「Привет」問候模組"
 
 
 def test_analysis_service_rejects_ungrounded_writing_system_without_retry(

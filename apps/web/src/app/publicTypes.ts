@@ -3,7 +3,7 @@ import type {
   CharacterState,
 } from "../features/character/CharacterRenderer";
 import type { RefObject } from "react";
-import type { Locale } from "../i18n/messages";
+import type { LanguageTag, chromeLocale } from "../i18n/languages";
 import type { Citation, VisitorTurn } from "./VisitorConversation";
 
 export interface SceneTokens {
@@ -38,7 +38,7 @@ export interface PublicScene {
   schemes: Array<{
     id: string;
     version: number;
-    label: Record<Locale, string>;
+    label: Record<ReturnType<typeof chromeLocale>, string>;
     themes: { light: SceneTokens; dark: SceneTokens };
     npc_plate: { light: boolean; dark: boolean };
   }>;
@@ -61,7 +61,8 @@ export interface PublicRepository {
 
 export interface PublicProfile {
   schema_version: number;
-  locale: Locale;
+  locale: LanguageTag;
+  available_locales: Array<{ tag: LanguageTag; endonym: string }>;
   profile: {
     display_name: string;
     headline: string;
@@ -91,7 +92,7 @@ export interface PublicStatus {
 
 export interface PublicFaq {
   bundle_id: string;
-  locale: Locale;
+  locale: LanguageTag;
   entries: Array<{
     question: string;
     variants: string[];
@@ -101,8 +102,8 @@ export interface PublicFaq {
 }
 
 export interface VisitorPageProps {
-  locale: Locale;
-  onLocaleChange: (locale: Locale) => void;
+  locale: LanguageTag;
+  onLocaleChange: (locale: LanguageTag) => void;
   profile: PublicProfile | null;
   profileError: boolean;
   onRetryProfile: () => void;

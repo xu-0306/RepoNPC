@@ -8,12 +8,19 @@ import "../../p4-w1.css";
 import "../../p4-w2.css";
 import "./profileTranslation.css";
 
-import { messages, type Locale } from "../../i18n/messages";
-import { endonym } from "../../i18n/languages";
+import { messages } from "../../i18n/messages";
+import {
+  chromeLocale,
+  deriveConverter,
+  endonym,
+  type LanguageTag as Locale,
+} from "../../i18n/languages";
 import {
   formatRepositorySize,
   guidedErrorMessage,
   profileIsComplete,
+  localizedFor,
+  contributionIsComplete,
   type ContributionProposal,
   type GuidedOnboardingState,
   type GuidedProfile,
@@ -32,6 +39,7 @@ import { ConfirmButton } from "./ConfirmDialog";
 import { CheckboxField } from "./CheckboxField";
 import type { ClaimKind } from "./ClaimEditor";
 import { DraftValidation } from "./AdminWorkspace";
+import { SiteLanguages } from "./SiteLanguages";
 import { ProfileTranslationFields } from "./ProfileTranslationFields";
 import {
   emptyProfileTranslationItems,
@@ -195,6 +203,7 @@ type Copy = {
   retranslate: string;
   retranslateDescription: string;
   translationUnreviewed: string;
+  conversionUnreviewed: string;
   markTranslationReviewed: string;
   restoreTranslation: string;
   translationReviewed: string;
@@ -230,13 +239,13 @@ type Copy = {
   disabledNeedsConfirmation: string;
 };
 
-const COPY: Record<Locale, Copy> = {
+const COPY: Record<ReturnType<typeof chromeLocale>, Copy> = {
   "zh-TW": {
     product: "RepoNPC",
     title: "引導式作品集設定",
     introTitle: "讓 RepoNPC 認識你的作品",
     introBody:
-      "選擇公開的 GitHub 專案，檢視專案中可確認的資訊，再由你確認自己的貢獻。最後會產生可預覽、複製或下載的雙語設定檔。",
+      "選擇公開的 GitHub 專案，檢視專案中可確認的資訊，再由你確認自己的貢獻。最後會產生可預覽、複製或下載的網站語言設定檔。",
     outcome: "你會得到",
     outcomeItems: [
       "清楚分開的專案中可確認的資訊與 AI 推論",
@@ -358,12 +367,13 @@ const COPY: Record<Locale, Copy> = {
     suggest: "產生可編輯建議",
     suggesting: "產生建議中…",
     manualEntry: "手動輸入貢獻",
-    manualEntryHelp: "模型不可用時，你仍可直接填寫雙語角色、摘要與貢獻描述。",
+    manualEntryHelp:
+      "模型不可用時，你仍可直接填寫所有網站語言的角色、摘要與貢獻描述。",
     statementRequired: "先填寫你的貢獻說明才能請求建議。",
     proposalHeading: "AI 建議（尚未確認）",
     manualProposalHeading: "手動填寫的貢獻",
     manualProposalDescription:
-      "編輯雙語內容後，請明確確認。修改已確認內容後需要重新確認。",
+      "編輯所有網站語言的內容後，請明確確認。修改已確認內容後需要重新確認。",
     confirmManualSelection: "確認專案並填寫貢獻",
     proposalDescription:
       "以下欄位可以編輯；只有你明確確認或編輯後接受，才會成為你已確認的個人貢獻。",
@@ -391,7 +401,7 @@ const COPY: Record<Locale, Copy> = {
       "每個已選專案都需要確認貢獻後才能繼續。拒絕建議後，請重新填寫並確認。",
     profileHeading: "填寫基本資料",
     profileDescription:
-      "這些公開文字會成為完整設定草稿的一部分。可以先填寫任一語言，再用 AI 翻譯並檢視另一欄；請勿讓模型猜測個人資料。確認前仍需填妥所有欄位。",
+      "這些公開文字會成為完整設定草稿的一部分。可以先填寫任一語言，再翻譯或轉換並檢視其他欄位；請勿讓模型猜測個人資料。確認前仍需填妥所有欄位。",
     displayNameLabel: "顯示名稱",
     githubLoginLabel: "你的 GitHub 帳號",
     githubLoginHelp:
@@ -400,23 +410,24 @@ const COPY: Record<Locale, Copy> = {
     headlineLabel: "一句話介紹自己",
     bioLabel: "簡介",
     greetingLabel: "問候語",
-    profileRequired: "完成所有中英文基本資料欄位後才能繼續。",
-    translateEmpty: "AI 補齊空白欄位",
+    profileRequired: "完成所有網站語言的基本資料欄位後才能繼續。",
+    translateEmpty: "補齊空白欄位",
     translatingProfile: "正在翻譯；你仍可編輯欄位。",
-    translateRequired: "另一欄已有內容時，可按「AI 補齊空白欄位」翻譯。",
+    translateRequired: "其他欄位已有內容時，可按「補齊空白欄位」翻譯或轉換。",
     nothingToTranslate: "沒有可補齊的欄位；同一項目需有一欄已填、另一欄空白。",
     translationSourceRequired: "另一欄需有內容才能翻譯。",
     retranslate: "用另一欄重新翻譯",
     retranslateDescription:
       "重新翻譯會取代這一欄的文字；完成後仍可編輯或還原翻譯前的內容。",
     translationUnreviewed: "自動翻譯，尚未檢視",
+    conversionUnreviewed: "自動轉換，尚未檢視",
     markTranslationReviewed: "標示為已檢視",
     restoreTranslation: "還原翻譯前",
     translationReviewed: "已標示為已檢視。",
     translationRestored: "已還原翻譯前的文字。",
     translationComplete: (applied, discarded) =>
       `已翻譯 ${applied} 個欄位；因內容已變更而略過 ${discarded} 個欄位。請檢視翻譯。`,
-    unreviewedTranslations: (count) => `尚未檢視的自動翻譯：${count} 個欄位。`,
+    unreviewedTranslations: (count) => `尚未檢視的自動填寫：${count} 個欄位。`,
     confirmProfile: "確認基本資料並檢閱草稿",
     continueReview: "繼續檢閱草稿",
     reviewHeading: "檢閱已確認內容",
@@ -445,7 +456,7 @@ const COPY: Record<Locale, Copy> = {
     disabledNeedsStatement: "填寫原始貢獻說明後才能產生建議。",
     disabledNeedsProposal: "先產生一份模型建議，或完成可確認的貢獻文字。",
     disabledNeedsBilingualContribution:
-      "請完成繁體中文與英文的角色和摘要後才能接受。",
+      "請完成所有網站語言的角色、摘要及貢獻描述後才能接受。",
     disabledNeedsConfirmation:
       "請確認每個專案的貢獻；拒絕建議後仍需重新填寫並確認。",
   },
@@ -454,7 +465,7 @@ const COPY: Record<Locale, Copy> = {
     title: "Guided portfolio setup",
     introTitle: "Let RepoNPC understand your work",
     introBody:
-      "Choose public GitHub projects, review information you can verify from them, and confirm your own contribution. The result is a complete bilingual configuration draft that you can check, preview, copy, or download.",
+      "Choose public GitHub projects, review information you can verify from them, and confirm your own contribution. The result is a complete site language configuration draft that you can check, preview, copy, or download.",
     outcome: "You will get",
     outcomeItems: [
       "Project information you can verify, kept separate from AI inferences",
@@ -589,13 +600,13 @@ const COPY: Record<Locale, Copy> = {
     suggesting: "Generating suggestion…",
     manualEntry: "Enter contribution manually",
     manualEntryHelp:
-      "When the model is unavailable, fill in the bilingual role, summary, and contribution descriptions yourself.",
+      "When the model is unavailable, fill in the role, summary, and contribution descriptions in every site language yourself.",
     statementRequired:
       "Enter your contribution description before requesting a suggestion.",
     proposalHeading: "AI suggestion (unconfirmed)",
     manualProposalHeading: "Manually entered contribution",
     manualProposalDescription:
-      "Edit both languages, then explicitly confirm. Changes to confirmed content require confirmation again.",
+      "Edit every site language, then explicitly confirm. Changes to confirmed content require confirmation again.",
     confirmManualSelection: "Confirm projects and enter contributions",
     proposalDescription:
       "You can edit these fields. Only explicit confirmation makes this your confirmed contribution.",
@@ -626,7 +637,7 @@ const COPY: Record<Locale, Copy> = {
       "Confirm a contribution for every selected project. After rejecting a suggestion, rewrite and confirm it before continuing.",
     profileHeading: "Add your basic profile",
     profileDescription:
-      "These public fields become part of the complete YAML draft. Start in either language, then use AI to translate and review the other column. Do not ask the model to guess personal details. Complete every field before confirming.",
+      "These public fields become part of the complete YAML draft. Start in any site language, then translate or convert and review the other columns. Do not ask the model to guess personal details. Complete every field before confirming.",
     displayNameLabel: "Display name",
     githubLoginLabel: "Your GitHub login",
     githubLoginHelp:
@@ -636,11 +647,11 @@ const COPY: Record<Locale, Copy> = {
     bioLabel: "Bio",
     greetingLabel: "Greeting",
     profileRequired:
-      "Complete every bilingual profile field before continuing.",
-    translateEmpty: "Fill empty fields with AI",
+      "Complete every profile field in every site language before continuing.",
+    translateEmpty: "Fill empty fields",
     translatingProfile: "Translating; you can still edit the fields.",
     translateRequired:
-      "When the other column has text, use Fill empty fields with AI to translate it.",
+      "When another column has text, use Fill empty fields to translate or convert it.",
     nothingToTranslate:
       "No empty fields to fill. A field needs text in one column and an empty other column.",
     translationSourceRequired: "The other column needs text to translate from.",
@@ -648,6 +659,7 @@ const COPY: Record<Locale, Copy> = {
     retranslateDescription:
       "Retranslating replaces this column's text. You can edit the result or restore the previous text afterwards.",
     translationUnreviewed: "Machine translated, not reviewed yet",
+    conversionUnreviewed: "Converted automatically, not reviewed yet",
     markTranslationReviewed: "Mark as reviewed",
     restoreTranslation: "Restore previous text",
     translationReviewed: "Marked as reviewed.",
@@ -655,7 +667,7 @@ const COPY: Record<Locale, Copy> = {
     translationComplete: (applied, discarded) =>
       `Translated ${englishFields(applied)}; skipped ${englishFields(discarded)} whose text changed. Review the translations.`,
     unreviewedTranslations: (count) =>
-      `Machine translations not reviewed yet: ${englishFields(count)}.`,
+      `Automatically filled fields not reviewed yet: ${englishFields(count)}.`,
     confirmProfile: "Confirm profile and review draft",
     continueReview: "Continue to draft review",
     reviewHeading: "Review confirmed content",
@@ -690,7 +702,7 @@ const COPY: Record<Locale, Copy> = {
     disabledNeedsProposal:
       "Generate a proposal first, or finish contribution text that can be confirmed.",
     disabledNeedsBilingualContribution:
-      "Complete both Traditional Chinese and English role and summary fields before accepting.",
+      "Complete the role, summary, and contribution descriptions in every site language before accepting.",
     disabledNeedsConfirmation:
       "Confirm each project's contribution. Rejected suggestions must be rewritten and confirmed before continuing.",
   },
@@ -828,12 +840,13 @@ export function AnalysisHighlight({
       <div className="guided-analysis__row">
         <button
           className="guided-analysis__toggle"
+          lang={chromeLocale(locale)}
           aria-expanded={expanded}
           aria-controls={bodyId}
           onClick={() => setExpanded(!expanded)}
           type="button"
         >
-          {localized(inference.title, locale)}
+          {inference.title[chromeLocale(locale)]}
           {expanded && facts.length > 1 && (
             <span className="guided-analysis__more" aria-hidden="true">
               +{facts.length - 1}
@@ -851,7 +864,7 @@ export function AnalysisHighlight({
               {firstSource.path.split("/").pop()}{" "}
               <span aria-hidden="true">↗</span>
               <span className="visually-hidden">
-                {locale === "zh-TW"
+                {chromeLocale(locale) === "zh-TW"
                   ? "（在新分頁開啟 GitHub）"
                   : " (opens GitHub in a new tab)"}
               </span>
@@ -863,14 +876,16 @@ export function AnalysisHighlight({
         )}
       </div>
       <div className="guided-analysis__body" id={bodyId} hidden={!expanded}>
-        <p>{localized(inference.statement, locale)}</p>
+        <p lang={chromeLocale(locale)}>
+          {inference.statement[chromeLocale(locale)]}
+        </p>
         <ul>
           {facts.map((fact) => (
             <li key={fact.evidence_id} data-evidence-class="REPOSITORY_FACT">
               <a href={fact.url} target="_blank" rel="noopener noreferrer">
                 {sourceLocation(fact)} <span aria-hidden="true">↗</span>
                 <span className="visually-hidden">
-                  {locale === "zh-TW"
+                  {chromeLocale(locale) === "zh-TW"
                     ? "（在新分頁開啟 GitHub）"
                     : " (opens GitHub in a new tab)"}
                 </span>
@@ -880,7 +895,7 @@ export function AnalysisHighlight({
         </ul>
         {missingSources && (
           <p className="guided-analysis__missing">
-            {locale === "zh-TW"
+            {chromeLocale(locale) === "zh-TW"
               ? "部分出處不在這次結果中，請勿視為已核對。"
               : "Some sources are not in this result; do not treat them as verified."}
           </p>
@@ -1163,6 +1178,7 @@ function RepositoryRow({
 
 function ContributionEditor({
   locale,
+  supported,
   repository,
   copy,
   busy,
@@ -1170,6 +1186,7 @@ function ContributionEditor({
   onSuggestContribution,
 }: {
   locale: Locale;
+  supported: Locale[];
   repository: GuidedRepository;
   copy: Copy;
   busy: boolean;
@@ -1209,16 +1226,7 @@ function ContributionEditor({
   const proposal = repository.proposal;
   const proposalLocked = repository.confirmedContribution !== null;
   const proposalMissingBilingual = proposal
-    ? [
-        proposal.role["zh-TW"],
-        proposal.role.en,
-        proposal.summary["zh-TW"],
-        proposal.summary.en,
-        ...proposal.claims.flatMap((claim) => [
-          claim.statement["zh-TW"],
-          claim.statement.en,
-        ]),
-      ].some((value) => value.trim().length === 0)
+    ? !contributionIsComplete(proposal, supported)
     : false;
   const proposalDisabledReason = !proposal
     ? copy.disabledNeedsProposal
@@ -1336,10 +1344,11 @@ function ContributionEditor({
                   : copy.proposedAssertionsHeading}
               </h5>
               <div className="p4-w2__fields">
-                {(["zh-TW", "en"] as const).map((proposalLocale) => (
+                {supported.map((proposalLocale) => (
                   <label
                     htmlFor={`guided-role-${slugId}-${proposalLocale}`}
                     key={`role-${proposalLocale}`}
+                    lang={proposalLocale}
                   >
                     {copy.roleLabel} ({endonym(proposalLocale)})
                     <input
@@ -1360,10 +1369,11 @@ function ContributionEditor({
                     />
                   </label>
                 ))}
-                {(["zh-TW", "en"] as const).map((proposalLocale) => (
+                {supported.map((proposalLocale) => (
                   <label
                     htmlFor={`guided-summary-${slugId}-${proposalLocale}`}
                     key={`summary-${proposalLocale}`}
+                    lang={proposalLocale}
                   >
                     {copy.summaryLabel} ({endonym(proposalLocale)})
                     <textarea
@@ -1427,13 +1437,15 @@ function ContributionEditor({
                           {
                             id: `claim_${crypto.randomUUID().replaceAll("-", "")}`,
                             kind: newClaimKind,
-                            statement: { "zh-TW": "", en: "" },
+                            statement: localizedFor(supported),
                           },
                         ],
                       })
                     }
                   >
-                    {locale === "en" ? "Add my statement" : "新增自述"}
+                    {chromeLocale(locale) === "en"
+                      ? "Add my statement"
+                      : "新增自述"}
                   </button>
                 </div>
                 {proposal.claims.map((claim, index) => (
@@ -1457,15 +1469,18 @@ function ContributionEditor({
                           })
                         }
                       >
-                        {locale === "en" ? "Remove my statement" : "移除自述"}{" "}
+                        {chromeLocale(locale) === "en"
+                          ? "Remove my statement"
+                          : "移除自述"}{" "}
                         {index + 1}
                       </button>
                     </header>
                     <div className="p4-w2__fields">
-                      {(["zh-TW", "en"] as const).map((proposalLocale) => (
+                      {supported.map((proposalLocale) => (
                         <label
                           htmlFor={`guided-claim-${slugId}-${index}-${proposalLocale}`}
                           key={`${claim.id}-${proposalLocale}`}
+                          lang={proposalLocale}
                         >
                           {copy.claimLabel(claim.kind)} (
                           {endonym(proposalLocale)})
@@ -2048,7 +2063,7 @@ function AnalysisStep({
           {batchAnalysisTerminal ? (
             <details className="p4-w1-diagnostics">
               <summary>
-                {locale === "zh-TW"
+                {chromeLocale(locale) === "zh-TW"
                   ? "分析診斷與批次詳情"
                   : "Analysis diagnostics and batch details"}
               </summary>
@@ -2258,6 +2273,7 @@ function ContributionsStep({
           </summary>
           <ContributionEditor
             locale={locale}
+            supported={state.locales.supported}
             busy={busy}
             copy={copy}
             key={repository.metadata.slug}
@@ -2305,7 +2321,7 @@ function ProfileStep({
   modelReason: string | null;
 }) {
   const profile = state.profile;
-  const complete = profileIsComplete(profile);
+  const complete = profileIsComplete(profile, state.locales.supported);
   const missing = [
     {
       id: "guided-profile-display-name",
@@ -2318,20 +2334,29 @@ function ProfileStep({
       value: profile.githubLogin,
     },
     ...PROFILE_FIELDS.flatMap((field) =>
-      profileLanguages(locale).map(({ tag }) => ({
+      profileLanguages(state.locales.supported).map(({ tag }) => ({
         id: `guided-profile-${field}-${tag}`,
         label: `${copy[`${field}Label`]} (${endonym(tag)})`,
         value: localized(profile[field], tag),
       })),
     ),
   ].filter((field) => !field.value.trim());
-  const translationItems = emptyProfileTranslationItems(profile);
+  const allTranslationItems = emptyProfileTranslationItems(
+    profile,
+    state.locales.supported,
+  );
+  const translationItems = modelReason
+    ? allTranslationItems.filter((item) =>
+        deriveConverter(item.source_locale, item.target_locale),
+      )
+    : allTranslationItems;
   const translateReason = busy
     ? copy.disabledBusy
     : translation.pending
       ? copy.translatingProfile
-      : (modelReason ??
-        (translationItems.length ? null : copy.nothingToTranslate));
+      : translationItems.length
+        ? null
+        : (modelReason ?? copy.nothingToTranslate);
   // The status line below already says "translating"; showing it twice is noise.
   const translateHint = translation.pending ? null : translateReason;
   const confirmationReason = busy
@@ -2350,6 +2375,12 @@ function ProfileStep({
       className="guided-onboarding__step p4-w2 p4-w2--profile px-panel px-panel--raised"
     >
       <h2 id="guided-profile-heading">{copy.profileHeading}</h2>
+      <SiteLanguages
+        locale={locale}
+        state={state}
+        disabled={busy}
+        onChange={(locales) => onAction({ type: "SET_LOCALES", locales })}
+      />
       <details className="p4-w2__info px-info">
         <summary>ⓘ {copy.p4Help}</summary>
         <p>{copy.profileDescription}</p>
@@ -2391,7 +2422,7 @@ function ProfileStep({
           }
           type="button"
           onClick={() => {
-            if (!translateReason) void translation.run(translationItems);
+            if (!translateReason) void translation.fillEmpty();
           }}
         >
           {copy.translateEmpty}
@@ -2495,6 +2526,7 @@ function ProfileStep({
         <ProfileTranslationFields
           locale={locale}
           profile={profile}
+          supported={state.locales.supported}
           busy={busy}
           modelReason={modelReason}
           translation={translation}
@@ -2520,7 +2552,6 @@ function ProfileStep({
 }
 
 function ReviewStep({
-  locale,
   state,
   copy,
   busy,
@@ -2528,7 +2559,6 @@ function ReviewStep({
   onAction,
   unreviewedCount,
 }: {
-  locale: string;
   state: GuidedOnboardingState;
   copy: Copy;
   busy: boolean;
@@ -2537,6 +2567,20 @@ function ReviewStep({
   unreviewedCount: number;
 }) {
   const repositories = selectedRepositories(state);
+  const confirmationReason = busy
+    ? copy.disabledBusy
+    : !profileIsComplete(state.profile, state.locales.supported)
+      ? copy.profileRequired
+      : repositories.some(
+            (repository) =>
+              !repository.confirmedContribution ||
+              !contributionIsComplete(
+                repository.confirmedContribution,
+                state.locales.supported,
+              ),
+          )
+        ? copy.disabledNeedsConfirmation
+        : null;
   return (
     <section
       aria-labelledby="guided-review-heading"
@@ -2557,22 +2601,24 @@ function ReviewStep({
           <dd>{state.profile.displayName}</dd>
           <dt>{copy.githubLoginLabel}</dt>
           <dd>{state.profile.githubLogin}</dd>
-          {profileLanguages(locale).map(({ tag: profileLocale }) => (
-            <div key={profileLocale}>
-              <dt>
-                {copy.headlineLabel} ({endonym(profileLocale)})
-              </dt>
-              <dd>{localized(state.profile.headline, profileLocale)}</dd>
-              <dt>
-                {copy.bioLabel} ({endonym(profileLocale)})
-              </dt>
-              <dd>{localized(state.profile.bio, profileLocale)}</dd>
-              <dt>
-                {copy.greetingLabel} ({endonym(profileLocale)})
-              </dt>
-              <dd>{localized(state.profile.greeting, profileLocale)}</dd>
-            </div>
-          ))}
+          {profileLanguages(state.locales.supported).map(
+            ({ tag: profileLocale }) => (
+              <div key={profileLocale} lang={profileLocale}>
+                <dt>
+                  {copy.headlineLabel} ({endonym(profileLocale)})
+                </dt>
+                <dd>{localized(state.profile.headline, profileLocale)}</dd>
+                <dt>
+                  {copy.bioLabel} ({endonym(profileLocale)})
+                </dt>
+                <dd>{localized(state.profile.bio, profileLocale)}</dd>
+                <dt>
+                  {copy.greetingLabel} ({endonym(profileLocale)})
+                </dt>
+                <dd>{localized(state.profile.greeting, profileLocale)}</dd>
+              </div>
+            ),
+          )}
         </dl>
       </section>
       <ul className="p4-w2__review-repositories">
@@ -2582,7 +2628,7 @@ function ReviewStep({
             {repository.confirmedContribution ? (
               <>
                 <span>{copy.confirmed}</span>
-                {(["zh-TW", "en"] as const).map((language) => (
+                {state.locales.supported.map((language) => (
                   <section
                     className="ux-review-item"
                     lang={language}
@@ -2632,12 +2678,16 @@ function ReviewStep({
         </button>
         <button
           className="ux-primary px-button px-button--primary"
-          disabled={busy}
+          disabled={Boolean(confirmationReason)}
+          aria-describedby={
+            confirmationReason ? "guided-review-confirm-reason" : undefined
+          }
           onClick={onCreateDraft}
           type="button"
         >
           {copy.createDraft}
         </button>
+        {disabledReason(confirmationReason, "guided-review-confirm-reason")}
       </footer>
     </section>
   );
@@ -2669,7 +2719,7 @@ function DraftStep({
   const [copyStatus, setCopyStatus] = useState<
     "idle" | "pending" | "done" | "failed"
   >("idle");
-  const chinese = locale === "zh-TW";
+  const chinese = chromeLocale(locale) === "zh-TW";
   return (
     <section
       aria-labelledby="guided-draft-heading"
@@ -2837,7 +2887,7 @@ export function GuidedOnboardingView({
   useEffect(() => {
     if (errorCode) errorRef.current?.focus();
   }, [errorCode]);
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const translationModelReason = analysisSelectionPending
     ? copy.checkingProvider
     : !analysisSelection?.selection.chat_profile_id || !onTranslateProfile
@@ -2854,7 +2904,9 @@ export function GuidedOnboardingView({
     active: state.step === "profile" && state.mode === "guided",
     reset: state.step === "intro",
     modelGeneration: analysisSelection?.selection.generation,
-    enabled: !busy && !translationModelReason,
+    enabled: !busy,
+    modelEnabled: !translationModelReason,
+    supported: state.locales.supported,
     translate: onTranslateProfile,
     onChange: (profile) => onAction({ type: "SET_PROFILE", profile }),
   });
@@ -3048,7 +3100,6 @@ export function GuidedOnboardingView({
           )}
           {state.step === "review" && (
             <ReviewStep
-              locale={locale}
               busy={busy}
               copy={copy}
               onAction={onAction}

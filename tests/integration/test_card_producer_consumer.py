@@ -112,7 +112,10 @@ def test_long_bilingual_copy_is_readable_across_every_card_variant(tmp_path: Pat
             card = card_render._Card(
                 card_render.CardPalette(**getattr(config.card.themes, theme).model_dump())
             )
-            repos = f"{sum(repository.enabled for repository in config.repositories)} repos"
+            repos = card_render.repository_count_text(
+                sum(repository.enabled for repository in config.repositories), locale
+            )
+            assert repos is not None
             label_max = 570 - card.measure(repos, "body", 110) - 20 - 242 - 24
             for value, role, width in (
                 (config.profile.display_name[:80], "display", 350),

@@ -469,7 +469,7 @@ class PublicConfig(StrictModel):
             raise ValueError("profile.suggested_questions locale keys mismatch")
         for questions in self.profile.suggested_questions.values():
             if not questions or any(not question for question in questions):
-                raise ValueError("suggested questions must be non-empty")
+                raise ValueError("profile.suggested_questions must be non-empty")
         for link in self.profile.links:
             _localized(link.label, supported, "profile.links.label")
         _localized(self.card.call_to_action, supported, "card.call_to_action")

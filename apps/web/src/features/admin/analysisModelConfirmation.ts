@@ -1,4 +1,5 @@
-import type { Locale } from "../../i18n/messages";
+import { chromeLocale } from "../../i18n/languages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 
 export interface AnalysisModelPairBody {
   selection_generation?: number;
@@ -34,7 +35,7 @@ export function analysisModelConfirmationMessage(
     embedding_profile_id?: string | null;
   },
 ): string {
-  if (locale === "zh-TW") {
+  if (chromeLocale(locale) === "zh-TW") {
     return `原提交：${commitSha ?? "未知"}\n原模型：${frozen?.chat?.profile_id ?? "未知"} / ${frozen?.embedding?.profile_id ?? "未知"}\n目前模型：${current.chat_profile_id ?? "未設定"} / ${current.embedding_profile_id ?? "未設定"}\n確認以目前模型建立新一輪分析？`;
   }
   return `Original commit: ${commitSha ?? "unknown"}\nOriginal models: ${frozen?.chat?.profile_id ?? "unknown"} / ${frozen?.embedding?.profile_id ?? "unknown"}\nCurrent models: ${current.chat_profile_id ?? "not configured"} / ${current.embedding_profile_id ?? "not configured"}\nCreate a successor analysis with the current models?`;

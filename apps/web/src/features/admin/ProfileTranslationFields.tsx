@@ -1,8 +1,11 @@
 import type { CSSProperties } from "react";
 
-import type { Locale } from "../../i18n/messages";
-import { endonym } from "../../i18n/languages";
-import type { GuidedProfile } from "./guidedOnboarding";
+import {
+  deriveConverter,
+  endonym,
+  type LanguageTag as Locale,
+} from "../../i18n/languages";
+import { localizedTags, type GuidedProfile } from "./guidedOnboarding";
 import { ConfirmButton } from "./ConfirmDialog";
 import {
   PROFILE_FIELDS,
@@ -17,6 +20,7 @@ const FIELD_ROWS = { headline: 1, bio: 4, greeting: 3 } as const;
 export function ProfileTranslationFields({
   locale,
   profile,
+  supported = localizedTags(profile.headline),
   busy,
   modelReason,
   translation,
@@ -24,6 +28,7 @@ export function ProfileTranslationFields({
 }: {
   locale: Locale;
   profile: GuidedProfile;
+  supported?: Locale[];
   busy: boolean;
   modelReason: string | null;
   translation: ReturnType<typeof useProfileTranslation>;
@@ -39,6 +44,7 @@ export function ProfileTranslationFields({
     retranslate: string;
     retranslateDescription: string;
     translationUnreviewed: string;
+    conversionUnreviewed: string;
     markTranslationReviewed: string;
     restoreTranslation: string;
   };
@@ -46,10 +52,10 @@ export function ProfileTranslationFields({
   return PROFILE_FIELDS.map((field) => (
     <fieldset className="p4-w2__fields p4-w2__wide" disabled={busy} key={field}>
       <legend>{copy[`${field}Label`]}</legend>
-      {profileLanguages(locale).map(({ tag, direction }) => {
+      {profileLanguages(supported).map(({ tag, direction }) => {
         const id = `guided-profile-${field}-${tag}`;
         const value = profile[field][tag];
-        const source = profileTranslationSource(profile, field, tag);
+        const source = profileTranslationSource(profile, field, tag, supported);
         const review = translation.review(field, tag);
         const unreviewed =
           review && !review.reviewed && review.translatedText === value;
@@ -57,7 +63,11 @@ export function ProfileTranslationFields({
           ? copy.disabledBusy
           : translation.pending
             ? copy.translatingProfile
-            : (modelReason ?? (source ? null : copy.translationSourceRequired));
+            : source &&
+                deriveConverter(source.source_locale, source.target_locale)
+              ? null
+              : (modelReason ??
+                (source ? null : copy.translationSourceRequired));
         // The section status line already says "translating"; six more copies are noise.
         const hint = !busy && translation.pending ? null : reason;
         const actionProps = {
@@ -101,7 +111,9 @@ export function ProfileTranslationFields({
             )}
             {unreviewed && (
               <p className="profile-translation__marker" id={`${id}-review`}>
-                {copy.translationUnreviewed}
+                {review.method === "converted"
+                  ? copy.conversionUnreviewed
+                  : copy.translationUnreviewed}
               </p>
             )}
             <div className="profile-translation__actions">

@@ -1,6 +1,7 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useEffect, useMemo, useState } from "react";
 
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import type { ChatProfileView } from "./ChatProfilePanel";
 import type { EmbeddingProfileView } from "./EmbeddingProfilePanel";
 import type { ModelConnectionView } from "./ModelConnectionPanel";
@@ -27,7 +28,7 @@ export type AnalysisSelectionView = {
 };
 
 function analysisConfirmLabel(locale: Locale, returning = false) {
-  return locale === "zh-TW"
+  return chromeLocale(locale) === "zh-TW"
     ? returning
       ? "完成設定並返回準備 NPC"
       : "確認並前往選擇專案"
@@ -131,7 +132,7 @@ export function AnalysisSelectionPanel({
     value?.selection.embedding_profile_id,
   ]);
 
-  const chinese = locale === "zh-TW";
+  const chinese = chromeLocale(locale) === "zh-TW";
   const changed =
     chatProfileId !== (value?.selection.chat_profile_id ?? "") ||
     embeddingProfileId !== (value?.selection.embedding_profile_id ?? "");

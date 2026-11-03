@@ -1,5 +1,6 @@
+import type { LocalizedText } from "./guidedOnboarding";
 import { describe, expect, it } from "vitest";
-import { LEGACY_LANGUAGES } from "../../i18n/languages";
+import { LANGUAGES, chromeLocale } from "../../i18n/languages";
 import { PROFILE_FIELDS } from "./profileTranslation";
 
 import {
@@ -119,7 +120,7 @@ describe("guided onboarding config hydration", () => {
               statement: {
                 "zh-TW": "已保存的新自述",
                 en: "Saved rewritten statement",
-              },
+              } as LocalizedText,
             },
           ],
         },
@@ -130,7 +131,10 @@ describe("guided onboarding config hydration", () => {
       metadata: { ...metadata, slug: "octocat/other" },
       proposal: {
         ...proposal,
-        summary: { "zh-TW": "未儲存編輯", en: "Unrelated unsaved edit" },
+        summary: {
+          "zh-TW": "未儲存編輯",
+          en: "Unrelated unsaved edit",
+        } as LocalizedText,
       },
     });
     const next = guidedOnboardingReducer(original, {
@@ -153,9 +157,12 @@ describe("guided onboarding config hydration", () => {
         display_name: "Existing owner",
         github_login: "octocat",
         aliases: ["Ada"],
-        headline: { "zh-TW": "既有標題", en: "Existing headline" },
-        bio: { "zh-TW": "既有簡介", en: "Existing bio" },
-        greeting: { "zh-TW": "你好", en: "Hello" },
+        headline: {
+          "zh-TW": "既有標題",
+          en: "Existing headline",
+        } as LocalizedText,
+        bio: { "zh-TW": "既有簡介", en: "Existing bio" } as LocalizedText,
+        greeting: { "zh-TW": "你好", en: "Hello" } as LocalizedText,
       },
       repositories: [
         {
@@ -164,8 +171,11 @@ describe("guided onboarding config hydration", () => {
           ref: "a".repeat(40),
           include: ["src/**"],
           exclude: ["node_modules/**"],
-          role: { "zh-TW": "維護者", en: "Maintainer" },
-          summary: { "zh-TW": "維護專案", en: "Maintained project" },
+          role: { "zh-TW": "維護者", en: "Maintainer" } as LocalizedText,
+          summary: {
+            "zh-TW": "維護專案",
+            en: "Maintained project",
+          } as LocalizedText,
           claims: [],
         },
       ],
@@ -245,13 +255,19 @@ describe("discovery account changes", () => {
 });
 
 const proposal: ContributionProposal = {
-  role: { "zh-TW": "共同維護者", en: "Co-maintainer" },
-  summary: { "zh-TW": "維護公開模組", en: "Maintained public modules" },
+  role: { "zh-TW": "共同維護者", en: "Co-maintainer" } as LocalizedText,
+  summary: {
+    "zh-TW": "維護公開模組",
+    en: "Maintained public modules",
+  } as LocalizedText,
   claims: [
     {
       id: "parser_work",
       kind: "responsibility",
-      statement: { "zh-TW": "維護解析器", en: "Maintained the parser" },
+      statement: {
+        "zh-TW": "維護解析器",
+        en: "Maintained the parser",
+      } as LocalizedText,
     },
   ],
 };
@@ -272,23 +288,29 @@ const profile = {
   displayName: "Example Developer",
   githubLogin: "octocat",
   aliasesText: "",
-  headline: { "zh-TW": "打造可靠系統", en: "Building reliable systems" },
-  bio: { "zh-TW": "專注於開發者工具。", en: "Focused on developer tooling." },
+  headline: {
+    "zh-TW": "打造可靠系統",
+    en: "Building reliable systems",
+  } as LocalizedText,
+  bio: {
+    "zh-TW": "專注於開發者工具。",
+    en: "Focused on developer tooling.",
+  } as LocalizedText,
   greeting: {
     "zh-TW": "嗨，我是你的 RepoNPC。",
     en: "Hi, I am your RepoNPC.",
-  },
+  } as LocalizedText,
 };
 
 describe("profile editing and confirmation", () => {
-  it.each(LEGACY_LANGUAGES)(
+  it.each(LANGUAGES)(
     "uses profile-specific validation guidance in $tag",
     ({ tag }) => {
       const error = guidedErrorMessage(tag, "VALIDATION_ERROR", "profile");
       expect(error).toContain("1–2,000");
       expect(error).not.toContain("GitHub");
       expect(error).toBe(
-        tag === "en"
+        chromeLocale(tag) === "en"
           ? "Check the fields to translate. Source text must contain 1–2,000 characters. Your existing text is kept."
           : "請檢查要翻譯的欄位；來源文字需為 1–2,000 個字元。原有內容仍保留。",
       );
@@ -297,9 +319,17 @@ describe("profile editing and confirmation", () => {
       ).toContain("GitHub");
     },
   );
-  it.each(LEGACY_LANGUAGES)(
+  it.each(LANGUAGES)(
     "allows a blank $tag while editing and requires every localized value before confirmation",
     ({ tag }) => {
+      const profile = {
+        ...initialGuidedOnboardingState(false, tag).profile,
+        displayName: "Owner",
+        githubLogin: "another-owner",
+      };
+      for (const field of PROFILE_FIELDS)
+        for (const key of Object.keys(profile[field]))
+          profile[field][key as typeof tag] = `Owner ${field}`;
       expect(profileIsComplete(profile)).toBe(true);
       for (const field of PROFILE_FIELDS) {
         for (const blank of ["", " \n "]) {
@@ -309,7 +339,7 @@ describe("profile editing and confirmation", () => {
           };
           const editing = guidedOnboardingReducer(
             {
-              ...initialGuidedOnboardingState(),
+              ...initialGuidedOnboardingState(false, tag),
               step: "profile",
               profile,
               profileConfirmed: true,
@@ -325,7 +355,11 @@ describe("profile editing and confirmation", () => {
         }
       }
       const confirmed = guidedOnboardingReducer(
-        { ...initialGuidedOnboardingState(), step: "profile", profile },
+        {
+          ...initialGuidedOnboardingState(false, tag),
+          step: "profile",
+          profile,
+        },
         { type: "CONFIRM_PROFILE" },
       );
       expect(confirmed.step).toBe("review");
@@ -548,7 +582,7 @@ describe("guidedOnboardingReducer", () => {
         summary: {
           "zh-TW": "共同維護公開解析器",
           en: "Co-maintained the public parser",
-        },
+        } as LocalizedText,
       },
     });
 
@@ -564,7 +598,7 @@ describe("guidedOnboardingReducer", () => {
         summary: {
           "zh-TW": "再次編輯的摘要",
           en: "An edited summary",
-        },
+        } as LocalizedText,
       },
     });
     expect(state.repositories[0].proposal?.summary.en).toBe(
@@ -591,7 +625,7 @@ describe("guidedOnboardingReducer", () => {
         summary: {
           "zh-TW": "再次編輯的摘要",
           en: "An edited summary",
-        },
+        } as LocalizedText,
       },
     });
     expect(() =>
@@ -648,8 +682,8 @@ describe("guidedOnboardingReducer", () => {
     });
 
     expect(state.repositories[0].proposal).toEqual({
-      role: { "zh-TW": "", en: "" },
-      summary: { "zh-TW": "", en: "" },
+      role: { "zh-TW": "", en: "" } as LocalizedText,
+      summary: { "zh-TW": "", en: "" } as LocalizedText,
       claims: [],
     });
     expect(state.repositories[0].confirmedContribution).toBeNull();

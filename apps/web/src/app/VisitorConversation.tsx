@@ -1,4 +1,5 @@
-import { messages, type Locale } from "../i18n/messages";
+import { messageLocale, messages } from "../i18n/messages";
+import type { LanguageTag } from "../i18n/languages";
 import { useEffect, useState } from "react";
 import type { ChatProcess } from "./visitorChat";
 import {
@@ -24,6 +25,7 @@ export interface VisitorTurn {
   id: string;
   role: "user" | "assistant";
   content: string;
+  locale?: LanguageTag;
   contentKey?:
     | "offlineFaqNoMatch"
     | "offlineFaqNoMatchWithoutSuggestions"
@@ -40,7 +42,7 @@ export interface VisitorTurn {
 
 interface Props {
   chatAvailable: boolean;
-  locale: Locale;
+  locale: LanguageTag;
   ownerName?: string;
   onRetry: (question: string) => void;
   canAskSuggestion?: (question: string) => boolean;
@@ -53,7 +55,7 @@ interface Props {
   reducedMotion?: boolean;
 }
 
-type MessageCopy = (typeof messages)[Locale];
+type MessageCopy = (typeof messages)[LanguageTag];
 
 function citationLabel(
   evidenceClass: string,
@@ -97,7 +99,11 @@ export function VisitorConversation({
     .find((turn) => turn.role === "assistant")?.id;
 
   return (
-    <ol aria-live="polite" className="conversation">
+    <ol
+      aria-live="polite"
+      className="conversation"
+      lang={messageLocale(locale)}
+    >
       {turns.map((turn) => (
         <li className={`turn turn--${turn.role}`} key={turn.id}>
           {turn.role === "assistant" && (
@@ -112,9 +118,17 @@ export function VisitorConversation({
             />
           )}
           {turn.process && (
-            <ProcessingDetails process={turn.process} locale={locale} />
+            <ProcessingDetails
+              process={turn.process}
+              locale={locale}
+              contentLocale={turn.locale ?? locale}
+            />
           )}
-          <p>
+          <p
+            lang={
+              turn.contentKey ? messageLocale(locale) : (turn.locale ?? locale)
+            }
+          >
             {turn.contentKey
               ? copy[turn.contentKey]
               : turn.content ||
@@ -132,6 +146,7 @@ export function VisitorConversation({
                       !(canAskSuggestion?.(suggestion) ?? chatAvailable)
                     }
                     onClick={() => onRetry(suggestion)}
+                    lang={turn.locale ?? locale}
                     type="button"
                   >
                     {suggestion}
@@ -144,6 +159,7 @@ export function VisitorConversation({
             <p>
               <a
                 href={turn.contactLink.url}
+                lang={turn.locale ?? locale}
                 rel="noopener noreferrer"
                 target="_blank"
               >
@@ -169,12 +185,13 @@ export function VisitorConversation({
                   <li key={citation.id}>
                     <a
                       href={citation.url}
+                      lang={turn.locale ?? locale}
                       rel="noopener noreferrer"
                       target="_blank"
                     >
                       {citation.id}: {citation.title}
                     </a>
-                    <p>{citation.excerpt}</p>
+                    <p lang={turn.locale ?? locale}>{citation.excerpt}</p>
                     <dl>
                       <dt>{copy.citationClass}</dt>
                       <dd>
@@ -205,9 +222,11 @@ export function VisitorConversation({
 function ProcessingDetails({
   process,
   locale,
+  contentLocale,
 }: {
   process: ChatProcess;
-  locale: Locale;
+  locale: LanguageTag;
+  contentLocale: LanguageTag;
 }) {
   const copy = messages[locale];
   const [, tick] = useState(0);
@@ -227,7 +246,7 @@ function ProcessingDetails({
   );
   const latest = process.currentStage ?? process.stages.at(-1);
   return (
-    <div className="chat-process" aria-live="off">
+    <div className="chat-process" aria-live="off" lang={messageLocale(locale)}>
       <p className="chat-process__status" role="status" aria-live="polite">
         {process.status === "pending"
           ? latest
@@ -250,7 +269,11 @@ function ProcessingDetails({
             <h3>{copy.processingSummary}</h3>
             <p className="chat-process__note">{copy.processingSummaryNote}</p>
             {process.summaries?.map((text, index) => (
-              <p className="chat-process__summary" key={index}>
+              <p
+                className="chat-process__summary"
+                key={index}
+                lang={contentLocale}
+              >
                 {text}
               </p>
             ))}

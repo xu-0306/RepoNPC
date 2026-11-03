@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VisitorApp } from "./VisitorApp";
 import { VisitorPage } from "./VisitorPage";
 import { VisitorConversation } from "./VisitorConversation";
-import { messages, type Locale } from "../i18n/messages";
+import { messages } from "../i18n/messages";
+import type { LanguageTag } from "../i18n/languages";
+import { availableLocales, legacyTags } from "./siteLanguages.test-cases";
 import type { PublicFaq, PublicProfile } from "./publicTypes";
 
 // Follow the existing Node hook harness: exercise real handlers, SSE and page
@@ -96,7 +98,7 @@ afterEach(() => {
 });
 
 async function app(
-  locale: Locale,
+  locale: LanguageTag,
   suggestions: string[],
   faqQuestions: string[] = [],
   online = true,
@@ -104,6 +106,7 @@ async function app(
   const profile: PublicProfile = {
     schema_version: 1,
     locale,
+    available_locales: availableLocales(legacyTags),
     profile: {
       display_name: "Fixture owner",
       headline: "Headline",
@@ -166,7 +169,11 @@ describe("visitor no-match UX", () => {
       const view = await app(locale, ["Next?"]);
       const markup = view.markup();
       expect(markup.match(/<h1\b/g)).toHaveLength(1);
-      expect(markup).toMatch(/<h1 id="[^"]+-dialogue-title">Greeting<\/h1>/);
+      expect(markup).toMatch(
+        new RegExp(
+          `<h1 id="[^"]+-dialogue-title" lang="${locale}">Greeting<\\/h1>`,
+        ),
+      );
       expect(markup.match(/<main\b/g)).toHaveLength(1);
       expect(markup).not.toContain('data-preview="true"');
     },
@@ -260,8 +267,10 @@ describe("visitor no-match UX", () => {
         1,
       );
       expect(
-        view.markup().split(`<button type="button">${next}</button>`).length -
-          1,
+        view
+          .markup()
+          .split(`<button lang="${locale}" type="button">${next}</button>`)
+          .length - 1,
       ).toBe(1);
       expect(view.markup()).toContain(
         `<h3 class="px-label">${messages[locale].suggested}</h3>`,

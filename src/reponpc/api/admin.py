@@ -65,6 +65,7 @@ from reponpc.admin.onboarding import (
     GuidedProfileDraft,
     GuidedRepositoryDraft,
     ProfileTranslateRequest,
+    validate_draft_locales,
 )
 from reponpc.admin.operations import AdminOperations
 from reponpc.admin.preview_assets import PreviewAssetError, PreviewAssetStore
@@ -91,16 +92,20 @@ from reponpc.cards.conversion import (
 from reponpc.cards.render import CardRenderError
 from reponpc.chat.limits import ChatLimitError
 from reponpc.config.environment import _canonical_origin
-from reponpc.config.models import ConfigValidationError, PublicConfig, SceneFocusConfig
+from reponpc.config.models import (
+    ConfigValidationError,
+    LocalesConfig,
+    PublicConfig,
+    SceneFocusConfig,
+)
+from reponpc.i18n.languages import Locale
+from reponpc.i18n.plan import ANALYSIS_LOCALES, LocaleNotEnabledError, require_enabled
 from reponpc.providers import ProviderError
 from reponpc.runtime.database import RuntimeDatabaseError
 from reponpc.scene.registry import DEFAULT_SCHEME_ID
 from reponpc.sharing.export import build_visitor_site_export
 from reponpc.sharing.manifest import SiteExportError
 from reponpc.sharing.pages import PagesSharingService
-
-# Keep phase-A API acceptance until the admin API worker updates its boundary.
-_ApiLocale = Literal["zh-TW", "en"]
 
 
 class _StrictRequest(BaseModel):
@@ -355,6 +360,12 @@ class AnalysisBatchReanalyzeRequest(_StrictRequest):
 class ContributionSuggestRequest(_StrictRequest):
     slug: str = Field(min_length=3, max_length=201)
     owner_statement: str = Field(min_length=1, max_length=4000)
+    locales: tuple[Locale, ...] = Field(default=ANALYSIS_LOCALES, min_length=1, max_length=4)
+
+    @model_validator(mode="after")
+    def site_languages(self) -> ContributionSuggestRequest:
+        LocalesConfig(default=self.locales[0], supported=self.locales)
+        return self
 
 
 class OnboardingDraftRequest(_StrictRequest):
@@ -362,10 +373,20 @@ class OnboardingDraftRequest(_StrictRequest):
     repositories: tuple[GuidedRepositoryDraft, ...] = Field(min_length=1, max_length=50)
     base_config: PublicConfig | None = None
     confirmed_assertions: Literal[True]
+    locales: LocalesConfig = Field(
+        default_factory=lambda: LocalesConfig(
+            default=ANALYSIS_LOCALES[0], supported=ANALYSIS_LOCALES
+        )
+    )
+
+    @model_validator(mode="after")
+    def localized_values(self) -> OnboardingDraftRequest:
+        validate_draft_locales(self.profile, self.repositories, self.locales)
+        return self
 
 
 class FaqQueueRequest(_StrictRequest):
-    locale: _ApiLocale
+    locale: Locale | None = None
 
 
 class FaqGenerateRequest(_StrictRequest):
@@ -455,6 +476,23 @@ def create_admin_router(
             code="SERVICE_NOT_READY",
             message="The admin operation is not configured.",
         )
+
+    def admin_locale(request: Request, locale: str | None) -> tuple[str, tuple[str, ...]]:
+        manager = getattr(request.app.state, "bundle_manager", None)
+        configured = operations_supplier()
+        if manager is not None and manager.status().active_bundle_id is not None:
+            try:
+                with manager.acquire_snapshot() as (index, _bundle_id, _public_directory):
+                    site = index.locales
+            except BundleActivationError:
+                raise GuidedOnboardingError("SERVICE_NOT_READY") from None
+            return require_enabled(locale or site.default, site.supported), site.supported
+        if configured is not None and configured.local_portfolio is not None:
+            draft = configured.local_portfolio.read()
+            if draft is not None:
+                site = configured.validate_config(draft.content.encode("utf-8")).locales
+                return require_enabled(locale or site.default, site.supported), site.supported
+        return require_enabled(locale or ANALYSIS_LOCALES[0], ANALYSIS_LOCALES), ANALYSIS_LOCALES
 
     def same_origin(request: Request) -> JSONResponse | None:
         allowed = frozenset(filter(None, map(_canonical_origin, origins_supplier())))
@@ -550,7 +588,12 @@ def create_admin_router(
                     rejected = same_origin(request)
                     if rejected is not None:
                         return rejected
-                return await handler(request)
+                try:
+                    return await handler(request)
+                except LocaleNotEnabledError:
+                    return _locale_error(request)
+                except GuidedOnboardingError as exc:
+                    return _onboarding_error(request, exc)
 
             return guarded
 
@@ -2009,12 +2052,13 @@ def create_admin_router(
     @router.get("/portfolio/faq/export")
     async def read_faq(
         request: Request,
-        locale: _ApiLocale = "zh-TW",
+        locale: Locale | None = None,
         session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
     ) -> Response:
         faq = faq_boundary(request, session_token)
         if isinstance(faq, JSONResponse):
             return faq
+        locale, _ = admin_locale(request, locale)
         response = await faq_operation(
             request,
             lambda: (
@@ -2037,7 +2081,8 @@ def create_admin_router(
         faq = faq_boundary(request, session_token, csrf_token or "")
         if isinstance(faq, JSONResponse):
             return faq
-        return await faq_operation(request, lambda: faq.initialize_queue(body.locale))
+        locale, _ = admin_locale(request, body.locale)
+        return await faq_operation(request, lambda: faq.initialize_queue(locale))
 
     @router.post("/portfolio/faq/{entry_id}/regenerate")
     async def generate_faq(
@@ -2151,12 +2196,13 @@ def create_admin_router(
     @router.get("/sharing/readme")
     async def export_profile_readme(
         request: Request,
-        locale: _ApiLocale = "zh-TW",
+        locale: Locale | None = None,
         session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
     ) -> Response:
         faq = faq_boundary(request, session_token)
         if isinstance(faq, JSONResponse):
             return faq
+        locale, _ = admin_locale(request, locale)
         sharing = pages_sharing_service(request, faq)
         if isinstance(sharing, JSONResponse):
             return sharing
@@ -2746,19 +2792,20 @@ def create_admin_router(
     @router.get("/readme-snippet")
     async def readme_snippet(
         request: Request,
-        locale: Annotated[str, Query(pattern=r"^(zh-TW|en)$")],
         theme: Annotated[str, Query(pattern=r"^(light|dark)$")],
         extension: Annotated[str, Query(pattern=r"^(svg|gif|png)$")],
         revision: Annotated[int, Query(ge=0)],
+        locale: Locale | None = None,
         session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
     ) -> Response:
         boundary = protected(request, session_token)
         if isinstance(boundary, JSONResponse):
             return boundary
         configured, _session_hash = boundary
+        locale, locales = admin_locale(request, locale)
         try:
             markdown = configured.readme_snippet(
-                locale=locale, theme=theme, extension=extension, revision=revision
+                locale=locale, theme=theme, extension=extension, revision=revision, locales=locales
             )
         except CardRenderError:
             return error_response(
@@ -3111,6 +3158,7 @@ def create_admin_router(
                 session_hash=session_hash,
                 slug=body.slug,
                 owner_statement=body.owner_statement,
+                locales=body.locales,
             )
         except GuidedOnboardingError as exc:
             return _onboarding_error(request, exc)
@@ -3158,6 +3206,7 @@ def create_admin_router(
                 repositories=body.repositories,
                 base_config=body.base_config,
                 confirmed_assertions=body.confirmed_assertions,
+                locales=body.locales,
             )
         except ConfigValidationError as exc:
             return _config_error(request, exc)
@@ -3190,6 +3239,23 @@ def _local_launch_error(request: Request, error: AdminAuthError | None = None) -
         code="LOCAL_LAUNCH_DENIED",
         message="Authentication failed.",
         retry_after_seconds=error.retry_after_seconds if error is not None else None,
+    )
+
+
+def _locale_error(request: Request) -> JSONResponse:
+    return error_response(
+        request,
+        status_code=400,
+        code="VALIDATION_ERROR",
+        message="Validation failed for request: invalid.",
+        details={
+            "fields": [
+                {
+                    "path": "body.locale" if request.method == "POST" else "query.locale",
+                    "code": "invalid",
+                }
+            ]
+        },
     )
 
 

@@ -1,7 +1,8 @@
+import { chromeLocale } from "../../i18n/languages";
 import type { CSSProperties } from "react";
 import "../../p4-w4.css";
 
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import {
   onboardingProgress,
   type GuidedOnboardingState,
@@ -95,7 +96,7 @@ const COPY = {
 } as const;
 
 export function AdminStatusCards({ locale, state, status }: Props) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const progress = onboardingProgress(state);
   const selected = state.repositories.filter(
     (repository) => repository.selected,
@@ -181,7 +182,7 @@ function ModelStatusCard({
   label,
   summary,
 }: {
-  copy: (typeof COPY)[Locale];
+  copy: (typeof COPY)[ReturnType<typeof chromeLocale>];
   icon: "chat" | "search";
   label: string;
   summary: AdminModelSummary;

@@ -9,6 +9,12 @@ import {
   storeLocale,
 } from "./initialLocale";
 import { LEGACY_LANGUAGES, type PairTag } from "./languages";
+import { LANGUAGES, matchLocale } from "./languages";
+import {
+  languageProfile,
+  legacyTags,
+  siteSets,
+} from "../app/siteLanguages.test-cases";
 
 // Exercise the real state owners with the existing Node hook-harness pattern.
 const hooks = vi.hoisted(() => ({
@@ -36,11 +42,27 @@ vi.mock("react", async (importOriginal) => ({
     return hooks.values[index];
   },
   useCallback: (callback: unknown) => callback,
-  useEffect: (effect: () => unknown) => hooks.effects.push(effect),
+  useEffect: (effect: () => unknown, dependencies?: unknown[]) => {
+    const index = hooks.cursor++;
+    const previous = hooks.values[index] as unknown[] | undefined;
+    if (
+      !dependencies ||
+      !previous ||
+      dependencies.some(
+        (value, position) => !Object.is(value, previous[position]),
+      )
+    ) {
+      hooks.effects.push(() => {
+        hooks.values[index] = dependencies;
+        return effect();
+      });
+    }
+  },
 }));
 vi.mock("../app/visitorData", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../app/visitorData")>()),
-  fetchPublicProfile: () => new Promise(() => undefined),
+  fetchPublicProfile: async (locale?: PairTag) =>
+    languageProfile(locale ?? legacyTags[0]!, legacyTags),
   fetchPublicFaq: () => new Promise(() => undefined),
   fetchPublicStatus: () => new Promise(() => undefined),
 }));
@@ -164,7 +186,7 @@ describe("initial locale", () => {
 });
 
 describe("resolveLocaleIn", () => {
-  const SET = ["zh-TW", "zh-CN", "en", "es"];
+  const SET = LANGUAGES.map(({ tag }) => tag);
 
   it.each([
     { languages: ["zh-CN"], supported: SET, expected: "zh-CN" },
@@ -204,6 +226,38 @@ describe("resolveLocaleIn", () => {
     vi.stubGlobal("navigator", { languages: ["es"] });
     expect(resolveInitialLocale()).toBe("zh-TW");
   });
+
+  describe.each(siteSets.map((supported) => ({ supported })))(
+    "site set $supported",
+    ({ supported }) => {
+      it.each(LANGUAGES)(
+        "resolves browser and stored choices for $tag only within the set",
+        ({ tag }) => {
+          const fallback = supported[0]!;
+          vi.stubGlobal("navigator", { languages: [tag] });
+          const expected = matchLocale([tag], supported, fallback);
+          for (const invalid of [undefined, "", "__proto__", "not-a-tag"]) {
+            if (invalid !== undefined) stored.set("reponpc.locale", invalid);
+            else stored.delete("reponpc.locale");
+            expect(resolveLocaleIn(supported, fallback)).toBe(expected);
+          }
+          stored.set("reponpc.locale", tag);
+          expect(resolveLocaleIn(supported, fallback)).toBe(
+            supported.includes(tag) ? tag : expected,
+          );
+          storage.getItem.mockImplementationOnce(() => {
+            throw new Error("unavailable");
+          });
+          expect(resolveLocaleIn(supported, fallback)).toBe(expected);
+          vi.stubGlobal("navigator", { languages: [], language: tag });
+          stored.clear();
+          expect(resolveLocaleIn(supported, fallback)).toBe(expected);
+          vi.stubGlobal("navigator", { languages: ["fr-FR"] });
+          expect(resolveLocaleIn(supported, fallback)).toBe(fallback);
+        },
+      );
+    },
+  );
 });
 
 interface LocaleProps {
@@ -211,7 +265,7 @@ interface LocaleProps {
   onLocaleChange: (locale: PairTag) => void;
 }
 
-function render(app: "admin" | "visitor"): LocaleProps {
+function render(app: "admin" | "visitor"): LocaleProps & { profile?: unknown } {
   hooks.cursor = 0;
   hooks.effects = [];
   let props: LocaleProps;
@@ -230,36 +284,47 @@ function render(app: "admin" | "visitor"): LocaleProps {
   return props;
 }
 
+async function settled(app: "admin" | "visitor"): Promise<LocaleProps> {
+  let props = render(app);
+  if (app === "visitor") {
+    await vi.waitFor(() => {
+      props = render(app);
+      expect(props.profile).toBeTruthy();
+    });
+  }
+  return props;
+}
+
 describe.each(["admin", "visitor"] as const)("%s locale owner", (app) => {
   it.each(LEGACY_LANGUAGES)(
     "persists a manual switch to $tag across remounts and syncs html lang",
-    ({ tag }) => {
+    async ({ tag }) => {
       const other = LEGACY_LANGUAGES.find((entry) => entry.tag !== tag)!;
       vi.stubGlobal("navigator", { languages: [other.tag] });
-      expect(render(app).locale).toBe(other.tag);
+      expect((await settled(app)).locale).toBe(other.tag);
       expect(document.documentElement.lang).toBe(other.tag);
       expect(storage.setItem).not.toHaveBeenCalled();
-      render(app).onLocaleChange(tag);
-      expect(render(app).locale).toBe(tag);
+      (await settled(app)).onLocaleChange(tag);
+      expect((await settled(app)).locale).toBe(tag);
       expect(document.documentElement.lang).toBe(tag);
       expect(stored.get("reponpc.locale")).toBe(tag);
 
       hooks.values = [];
-      expect(render(app).locale).toBe(tag);
+      expect((await settled(app)).locale).toBe(tag);
       expect(document.documentElement.lang).toBe(tag);
     },
   );
 
   it.each(["getItem", "setItem"] as const)(
     "renders and switches when storage %s throws",
-    (method) => {
+    async (method) => {
       storage[method].mockImplementation(() => {
         throw new Error("Storage disabled");
       });
-      expect(render(app).locale).toBe("en");
+      expect((await settled(app)).locale).toBe("en");
       expect(document.documentElement.lang).toBe("en");
-      render(app).onLocaleChange("zh-TW");
-      expect(render(app).locale).toBe("zh-TW");
+      (await settled(app)).onLocaleChange("zh-TW");
+      expect((await settled(app)).locale).toBe("zh-TW");
       expect(document.documentElement.lang).toBe("zh-TW");
     },
   );

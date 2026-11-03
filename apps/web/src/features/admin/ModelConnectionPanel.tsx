@@ -1,7 +1,8 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent, RefObject } from "react";
 
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import { ProviderBrandIcon } from "./ModelBrandIcon";
 import { ModelEditor } from "./ModelEditor";
 import { DeleteSettingButton } from "./DeleteSettingButton";
@@ -149,7 +150,7 @@ export function ModelConnectionPanel({
   onReadEndpoint,
   purpose,
 }: Props) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const editorRef = useRef<HTMLDetailsElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const [displayName, setDisplayName] = useState("");
@@ -347,7 +348,7 @@ export function ModelConnectionPanel({
         <form className="model-connection-form" onSubmit={submit}>
           <h3>{editingId ? copy.editService : copy.addService}</h3>
           <p>
-            {locale === "zh-TW"
+            {chromeLocale(locale) === "zh-TW"
               ? "從服務商的設定頁複製服務網址與 API key。金鑰只用於連線。送出或離開表單後會清除輸入。重試時請重新填入。"
               : "Copy the service URL and API key from your service's settings. RepoNPC uses the key only to connect to the service. The form clears your key after submission or when you leave it. Enter the key again for each retry."}
           </p>
@@ -391,7 +392,9 @@ export function ModelConnectionPanel({
           </label>
           {provider === "openai_compatible" && purpose !== "embedding" && (
             <label htmlFor={`model-connection-chat-api${idSuffix}`}>
-              {locale === "zh-TW" ? "聊天 API 接口" : "Chat API interface"}
+              {chromeLocale(locale) === "zh-TW"
+                ? "聊天 API 接口"
+                : "Chat API interface"}
               <select
                 id={`model-connection-chat-api${idSuffix}`}
                 disabled={pending}
@@ -404,7 +407,7 @@ export function ModelConnectionPanel({
                 <option value="responses">Responses</option>
               </select>
               <span>
-                {locale === "zh-TW"
+                {chromeLocale(locale) === "zh-TW"
                   ? "請依服務商支援選擇。Responses 可顯示服務商提供的公開摘要。模型不一定提供摘要。變更後需重新測試模型。"
                   : "Choose the interface supported by your service. Responses can display provider public summaries when the model supplies them. Test the model again after a change."}
               </span>
@@ -424,12 +427,14 @@ export function ModelConnectionPanel({
                 if (event.target.checked) void readEndpoint();
               }}
             >
-              {locale === "zh-TW" ? "更換服務網址" : "Replace the service URL"}
+              {chromeLocale(locale) === "zh-TW"
+                ? "更換服務網址"
+                : "Replace the service URL"}
             </CheckboxField>
           )}
           {editingId && !replaceAddress && (
             <p>
-              {locale === "zh-TW"
+              {chromeLocale(locale) === "zh-TW"
                 ? "保留目前網址。勾選「更換服務網址」可載入原網址並修改；只改名稱不需要重新測試模型。"
                 : "Keep the current URL. Select Replace the service URL to load and edit it. Changing only the name does not require a new model test."}
             </p>
@@ -455,7 +460,7 @@ export function ModelConnectionPanel({
           )}
           {endpointLoading && (
             <p role="status">
-              {locale === "zh-TW"
+              {chromeLocale(locale) === "zh-TW"
                 ? "正在讀取目前網址…"
                 : "Loading the current URL…"}
             </p>
@@ -463,7 +468,7 @@ export function ModelConnectionPanel({
           {endpointError && (
             <div role="alert">
               <p>
-                {locale === "zh-TW"
+                {chromeLocale(locale) === "zh-TW"
                   ? "無法讀取目前網址。你可以重試，或直接輸入新網址。"
                   : "Could not load the current URL. Retry or enter a new URL."}
               </p>
@@ -472,17 +477,19 @@ export function ModelConnectionPanel({
                 onClick={() => void readEndpoint()}
                 disabled={pending}
               >
-                {locale === "zh-TW" ? "重新讀取網址" : "Reload URL"}
+                {chromeLocale(locale) === "zh-TW"
+                  ? "重新讀取網址"
+                  : "Reload URL"}
               </button>
             </div>
           )}
           {editingId && replaceAddress && (
             <p>
               {editingHostConnection && !editingConnection.key_configured
-                ? locale === "zh-TW"
+                ? chromeLocale(locale) === "zh-TW"
                   ? "這筆環境連線目前沒有已設定的金鑰；若新網址也不需要金鑰，可保持空白。之後需要更新模型設定並重新測試。"
                   : "This environment connection has no configured key. Leave the key blank if the new URL also needs no key. Then update and retest its model settings."
-                : locale === "zh-TW"
+                : chromeLocale(locale) === "zh-TW"
                   ? "連線方式、協定、主機與連接埠不變時，只修改路徑（例如加上 /v1）可安全沿用已儲存的金鑰。若 origin 或連線方式改變，請填入新金鑰或明確移除；網址變更後仍需重新測試模型。"
                   : "When the connection type, protocol, host, and port stay the same, a path-only edit such as adding /v1 can safely retain the saved key. If the origin or connection type changes, enter a new key or explicitly remove it. Retest models after any URL change."}
             </p>
@@ -521,7 +528,7 @@ export function ModelConnectionPanel({
                 }}
               >
                 {replaceAddress
-                  ? locale === "zh-TW"
+                  ? chromeLocale(locale) === "zh-TW"
                     ? "新網址不使用金鑰（移除已儲存的金鑰）"
                     : "Use no key at the new URL (remove saved key)"
                   : copy.removeKey}
@@ -631,7 +638,7 @@ function OperationError({
   errorRef,
   secretCleared,
 }: {
-  copy: (typeof COPY)[Locale];
+  copy: (typeof COPY)[ReturnType<typeof chromeLocale>];
   error: string;
   errorId: string;
   errorRef: RefObject<HTMLDivElement | null>;
@@ -658,7 +665,7 @@ function ConnectionMetadata({
   copy,
 }: {
   connection: ModelConnectionView;
-  copy: (typeof COPY)[Locale];
+  copy: (typeof COPY)[ReturnType<typeof chromeLocale>];
 }) {
   return (
     <dl>

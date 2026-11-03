@@ -1,5 +1,6 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useId, useState } from "react";
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import { CheckboxField } from "./CheckboxField";
 
 export interface BuiltinModelInfo {
@@ -146,7 +147,7 @@ export function BuiltinModelPanel({
   onExternal,
   onLater,
 }: BuiltinModelPanelProps) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const id = useId();
   const [consentedModelId, setConsentedModelId] = useState<string | null>(null);
   const [deferred, setDeferred] = useState(false);

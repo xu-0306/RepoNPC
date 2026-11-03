@@ -173,8 +173,10 @@ def test_api_models_keep_their_phase_a_language_boundary() -> None:
     from reponpc.api.public import PublicChatRequest
 
     for language in languages.LANGUAGES:
+        assert FaqQueueRequest(locale=language.tag).locale == language.tag
         if language.tag not in SUPPORTED_LOCALES:
             with pytest.raises(ValidationError):
                 PublicChatRequest(message="Project?", locale=language.tag)
-            with pytest.raises(ValidationError):
-                FaqQueueRequest(locale=language.tag)
+    for unknown in ("unknown", " " + languages.LANGUAGES[0].tag):
+        with pytest.raises(ValidationError):
+            FaqQueueRequest(locale=unknown)

@@ -1,3 +1,4 @@
+import type { LocalizedText } from "./guidedOnboarding";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
@@ -13,8 +14,8 @@ import {
 } from "./guidedOnboarding";
 
 const contribution = {
-  role: { "zh-TW": "測試角色", en: "Fixture role" },
-  summary: { "zh-TW": "測試貢獻", en: "Fixture contribution" },
+  role: { "zh-TW": "測試角色", en: "Fixture role" } as LocalizedText,
+  summary: { "zh-TW": "測試貢獻", en: "Fixture contribution" } as LocalizedText,
   claims: [],
 };
 const repository: GuidedRepository = {

@@ -1,0 +1,6 @@
+{
+  "zh-TW": { "one": "{count} 個專案", "many": "{count} 個專案" },
+  "zh-CN": { "one": "{count} 个项目", "many": "{count} 个项目" },
+  "en": { "one": "{count} repos", "many": "{count} repos" },
+  "es": { "one": "{count} proyecto", "many": "{count} proyectos" }
+}

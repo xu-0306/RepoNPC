@@ -1,3 +1,4 @@
+import { chromeLocale, type LanguageTag } from "../../i18n/languages";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
 import { Button, FileTrigger } from "react-aria-components";
@@ -45,18 +46,20 @@ type Request = <T>(path: string, options?: RequestInit) => Promise<T>;
 
 export function AppearancePanel({
   locale,
+  contentLocale = locale,
   initialState,
   request,
   onStateChange,
   applyDisabled = false,
 }: {
-  locale: "zh-TW" | "en";
+  locale: LanguageTag;
+  contentLocale?: LanguageTag;
   initialState: SceneAppearanceState;
   request: Request;
   onStateChange: (state: SceneAppearanceState) => void;
   applyDisabled?: boolean;
 }) {
-  const copy = appearanceCopy[locale];
+  const copy = appearanceCopy[chromeLocale(locale)];
   const [state, setState] = useState(initialState);
   const [settings, setSettings] = useState<ScenePreviewSettings>(
     initialState.settings ?? initialState.defaults,
@@ -89,7 +92,7 @@ export function AppearancePanel({
   const hasPrivateReceipt = state.settings !== null;
   const matchingProfile =
     isCurrentAppearanceState(state, initialState) &&
-    matchesAppearanceProfile(profile, state, locale)
+    matchesAppearanceProfile(profile, state, contentLocale)
       ? profile
       : null;
 
@@ -128,7 +131,7 @@ export function AppearancePanel({
     setProfile(null);
     setProfileUnavailable(false);
     void request<PublicProfile>(
-      "/api/public/profile?locale=" + encodeURIComponent(locale),
+      "/api/public/profile?locale=" + encodeURIComponent(contentLocale),
       { signal: controller.signal },
     )
       .then((value) => {
@@ -138,7 +141,12 @@ export function AppearancePanel({
         if (!controller.signal.aborted) setProfileUnavailable(true);
       });
     return () => controller.abort();
-  }, [locale, request, state.character_revision, state.source_bundle_id]);
+  }, [
+    contentLocale,
+    request,
+    state.character_revision,
+    state.source_bundle_id,
+  ]);
 
   useEffect(() => {
     if (
@@ -431,7 +439,7 @@ export function AppearancePanel({
       {profileUnavailable && <p role="alert">{copy.profileUnavailable}</p>}
       {!matchingProfile && !profileUnavailable && (
         <p role="status">
-          {locale === "zh-TW"
+          {chromeLocale(locale) === "zh-TW"
             ? "正在讀取與場景版本相符的作品集…"
             : "Loading the portfolio for this scene revision…"}
         </p>
@@ -469,7 +477,7 @@ export function AppearancePanel({
                     onChange={() => update({ color_scheme: scheme.id })}
                     type="radio"
                   />
-                  {scheme.labels[locale]}
+                  {scheme.labels[chromeLocale(locale)]}
                 </label>
               ))}
             </div>
@@ -521,10 +529,10 @@ export function AppearancePanel({
             {copy.schemeChoice}
             <span className="px-badge" role="status">
               {settings.visitor_scheme_choice
-                ? locale === "zh-TW"
+                ? chromeLocale(locale) === "zh-TW"
                   ? "開啟"
                   : "On"
-                : locale === "zh-TW"
+                : chromeLocale(locale) === "zh-TW"
                   ? "關閉"
                   : "Off"}
             </span>
@@ -532,7 +540,9 @@ export function AppearancePanel({
         </div>
         <details className="scene-appearance__advanced">
           <summary>
-            {locale === "zh-TW" ? "進階：強調色" : "Advanced: accent color"}
+            {chromeLocale(locale) === "zh-TW"
+              ? "進階：強調色"
+              : "Advanced: accent color"}
           </summary>
           <label>
             {copy.accent}
@@ -789,7 +799,7 @@ export function AppearancePanel({
 export function matchesAppearanceProfile(
   profile: PublicProfile | null,
   state: Pick<SceneAppearanceState, "source_bundle_id" | "character_revision">,
-  locale: "zh-TW" | "en",
+  locale: LanguageTag,
 ): profile is PublicProfile {
   return (
     profile !== null &&
@@ -861,9 +871,9 @@ function noticeCopy(copy: AppearanceCopy, kind: string): string {
 function noticeReasonCopy(
   copy: AppearanceCopy,
   item: PreviewNotice,
-  locale: "zh-TW" | "en",
+  locale: LanguageTag,
 ): string {
-  if (locale === "en" && item.reason) return item.reason;
+  if (chromeLocale(locale) === "en" && item.reason) return item.reason;
   const values: Record<string, string> = {
     accent_adjusted: copy.reasonAccentAdjusted,
     stage_adjusted: copy.reasonStageAdjusted,
@@ -878,10 +888,10 @@ function noticeReasonCopy(
 
 // eslint-disable-next-line react-refresh/only-export-components -- tested localization helper used by the component above
 export function localizedPreviewNotice(
-  locale: "zh-TW" | "en",
+  locale: LanguageTag,
   item: PreviewNotice,
 ): { adjustedLabel: string | null; reason: string } {
-  const copy = appearanceCopy[locale];
+  const copy = appearanceCopy[chromeLocale(locale)];
   const adjustedValue = adjustedValueCopy(copy, item);
   return {
     adjustedLabel: adjustedValue ? `${copy.adjustedTo} ${adjustedValue}` : null,

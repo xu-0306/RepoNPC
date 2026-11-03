@@ -14,10 +14,10 @@ from typing import Protocol
 from urllib.parse import urlsplit
 
 from reponpc.bundles.archive import (
-    REQUIRED_PAYLOAD_PATHS,
     BuiltBundle,
     BundleError,
     build_bundle,
+    required_payload_paths,
     verify_bundle_archive,
 )
 from reponpc.bundles.manifest import (
@@ -166,7 +166,7 @@ def build_index_bundle(
         output_path=output / "index.sqlite",
     )
     assets = (
-        _load_public_assets(Path(public_directory).resolve())
+        _load_public_assets(Path(public_directory).resolve(), config.locales.supported)
         if public_directory is not None
         else build_public_card_assets(config, config_directory=config_path.parent)
     )
@@ -227,9 +227,9 @@ def _embedding_provider(config: PublicConfig) -> EmbeddingProvider:
     )
 
 
-def _load_public_assets(public_directory: Path) -> dict[str, bytes]:
+def _load_public_assets(public_directory: Path, locales: tuple[str, ...]) -> dict[str, bytes]:
     assets: dict[str, bytes] = {}
-    required = REQUIRED_PAYLOAD_PATHS - {"index.sqlite", "public/profile.json"}
+    required = required_payload_paths(locales) - {"index.sqlite", "public/profile.json"}
     try:
         for bundle_path in sorted(required):
             relative = bundle_path.removeprefix("public/")

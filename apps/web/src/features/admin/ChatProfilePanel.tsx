@@ -1,7 +1,8 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import { ModelBrandIcon } from "./ModelBrandIcon";
 import { ModelEditor } from "./ModelEditor";
 import { modelProbeError } from "./modelProbeError";
@@ -115,7 +116,7 @@ function connectionLabel(
   );
   if (!connection) return connectionId;
   if (connection.source === "host-managed") {
-    return locale === "zh-TW"
+    return chromeLocale(locale) === "zh-TW"
       ? "環境預設連線（回答）"
       : "Environment connection (answers)";
   }
@@ -139,7 +140,7 @@ export function ChatProfilePanel({
   managementActions = true,
   catalogChoice,
 }: Props) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const editorRef = useRef<HTMLDetailsElement>(null);
   const [connectionId, setConnectionId] = useState("");
   const [modelId, setModelId] = useState("");
@@ -212,10 +213,10 @@ export function ChatProfilePanel({
       {notice && <p role="status">{notice}</p>}
       {catalogChoice && (
         <p role="status">
-          {locale === "zh-TW" ? "清單選擇" : "Catalog choice"}:{" "}
+          {chromeLocale(locale) === "zh-TW" ? "清單選擇" : "Catalog choice"}:{" "}
           {catalogChoice.model_id} · {catalogChoice.envelope_evidence.provider}{" "}
           · {catalogChoice.quantization_id}.{" "}
-          {locale === "zh-TW"
+          {chromeLocale(locale) === "zh-TW"
             ? "請確認服務提供相同模型與版本。現有設定與尚未儲存的輸入會保留；仍需新增、測試及選用。"
             : "Confirm that your service provides the same model and revision. Existing settings and unsaved input are preserved; adding, testing and selection are still required."}
         </p>
@@ -239,14 +240,14 @@ export function ChatProfilePanel({
                 <strong>{profile.model_id}</strong>
                 <span className="model-card__provider">
                   {profile.last_error_code
-                    ? locale === "zh-TW"
+                    ? chromeLocale(locale) === "zh-TW"
                       ? "測試失敗"
                       : "Test failed"
                     : profile.status === "ready"
-                      ? locale === "zh-TW"
+                      ? chromeLocale(locale) === "zh-TW"
                         ? "測試通過"
                         : "Test passed"
-                      : locale === "zh-TW"
+                      : chromeLocale(locale) === "zh-TW"
                         ? "待測試"
                         : "Needs test"}
                 </span>
@@ -289,7 +290,7 @@ export function ChatProfilePanel({
                 type="button"
               >
                 {pending && pendingProfileId === profile.profile_id
-                  ? locale === "zh-TW"
+                  ? chromeLocale(locale) === "zh-TW"
                     ? "正在測試…"
                     : "Testing…"
                   : copy.probe}
@@ -312,7 +313,7 @@ export function ChatProfilePanel({
                 pending={pending}
                 blockedReason={
                   profile.active
-                    ? locale === "zh-TW"
+                    ? chromeLocale(locale) === "zh-TW"
                       ? "公開網站正在使用此模型，請先到進階設定切換模型後再刪除。"
                       : "The public site uses this model. Switch to another model in advanced settings before deleting it."
                     : undefined
@@ -370,14 +371,14 @@ export function ChatProfilePanel({
                       ?.focus();
                   }}
                 >
-                  {locale === "zh-TW"
+                  {chromeLocale(locale) === "zh-TW"
                     ? "填入所選模型名稱"
                     : "Fill selected model name"}
                   : {catalogChoice.model_id}
                 </button>
                 {editingId && (
                   <p>
-                    {locale === "zh-TW"
+                    {chromeLocale(locale) === "zh-TW"
                       ? "請先完成或取消目前的編輯，再新增清單模型。"
                       : "Finish or cancel the current edit before adding a catalog model."}
                   </p>
@@ -423,7 +424,7 @@ export function ChatProfilePanel({
               {editingId ? copy.update : copy.create}
             </button>
             <p>
-              {locale === "zh-TW"
+              {chromeLocale(locale) === "zh-TW"
                 ? "模型名稱請從服務商複製。新增只會儲存設定；按「測試模型」才會連線，服務商可能計費。"
                 : "Copy the model name from your provider. Adding only saves the settings; testing connects to the service and may incur provider charges."}
             </p>

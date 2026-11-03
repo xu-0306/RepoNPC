@@ -1,3 +1,9 @@
+import {
+  LANGUAGES,
+  chromeLocale,
+  endonym,
+  type LanguageTag,
+} from "../../i18n/languages";
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 import { Button, Dialog, DialogTrigger, Popover } from "react-aria-components";
@@ -14,7 +20,7 @@ import {
   type AdminUiScale,
 } from "./adminUiScale";
 
-export type AdminLocale = "zh-TW" | "en";
+export type AdminLocale = LanguageTag;
 export type AdminWorkspaceMode =
   | "guided"
   | "character"
@@ -71,11 +77,11 @@ export interface PreviewCard {
 export interface AdminPreview {
   repositories?: Array<{
     slug: string;
-    role: Record<string, string>;
-    summary: Record<string, string>;
-    claims: Array<{ id: string; statement: Record<string, string> }>;
+    role: Record<LanguageTag, string>;
+    summary: Record<LanguageTag, string>;
+    claims: Array<{ id: string; statement: Record<LanguageTag, string> }>;
   }>;
-  profile?: Record<string, PreviewProfile> | PreviewProfile;
+  profile?: Partial<Record<LanguageTag, PreviewProfile>> | PreviewProfile;
   character?: PreviewCharacter;
   cards?: Record<string, PreviewCard>;
 }
@@ -95,6 +101,7 @@ export interface AdminSnippet {
 
 export interface AdminWorkspaceProps {
   locale: AdminLocale;
+  contentLocale?: AdminLocale;
   draft: string;
   validation: AdminValidation | null;
   preview: AdminPreview | null;
@@ -251,7 +258,7 @@ function profileForLocale(
   if (typeof (profile as PreviewProfile).display_name === "string") {
     return profile as PreviewProfile;
   }
-  const localized = profile as Record<string, PreviewProfile>;
+  const localized = profile as Partial<Record<LanguageTag, PreviewProfile>>;
   return localized[locale] ?? null;
 }
 
@@ -271,6 +278,7 @@ function cardEntries(
 
 export function AdminWorkspace({
   locale,
+  contentLocale = locale,
   draft,
   validation,
   preview,
@@ -295,7 +303,7 @@ export function AdminWorkspace({
   workspaceMode = guidedView ? "guided" : "advanced",
   onWorkspaceModeChange,
 }: AdminWorkspaceProps) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const [uiScale, setUiScale] = useState<AdminUiScale>(readAdminUiScale);
   const previousMode = useRef(workspaceMode);
   useEffect(() => {
@@ -310,7 +318,7 @@ export function AdminWorkspace({
   }, [workspaceMode]);
   const errors = issueList(validation?.errors, "error");
   const warnings = issueList(validation?.warnings, "warning");
-  const profile = profileForLocale(preview?.profile, locale);
+  const profile = profileForLocale(preview?.profile, contentLocale);
   const snippetValue = snippetText(snippet);
 
   useEffect(() => {
@@ -420,16 +428,16 @@ export function AdminWorkspace({
               className="admin-workspace__locale"
               role="group"
             >
-              {(["zh-TW", "en"] as const).map((option) => (
+              {LANGUAGES.map(({ tag: option }) => (
                 <button
                   className="px-button px-button--quiet"
-                  aria-label={option === "zh-TW" ? "繁體中文" : "English"}
+                  aria-label={endonym(option)}
                   aria-pressed={locale === option}
                   key={option}
                   onClick={() => onLocaleChange(option)}
                   type="button"
                 >
-                  {option === "zh-TW" ? "中" : "EN"}
+                  {endonym(option)}
                 </button>
               ))}
             </div>
@@ -670,10 +678,12 @@ export function AdminWorkspace({
                   {profile && (
                     <article aria-labelledby="admin-preview-profile-heading">
                       <h3 id="admin-preview-profile-heading">{copy.profile}</h3>
-                      <h4>{profile.display_name}</h4>
-                      <p>{profile.headline}</p>
-                      <p>{profile.bio}</p>
-                      {profile.greeting && <p>{profile.greeting}</p>}
+                      <h4 lang={contentLocale}>{profile.display_name}</h4>
+                      <p lang={contentLocale}>{profile.headline}</p>
+                      <p lang={contentLocale}>{profile.bio}</p>
+                      {profile.greeting && (
+                        <p lang={contentLocale}>{profile.greeting}</p>
+                      )}
                     </article>
                   )}
                   {preview.character?.png_base64 && (
@@ -797,7 +807,7 @@ export function DraftValidation({
   validation: AdminValidation | null;
 }) {
   if (!validation) return null;
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const errors = validation.errors ?? [];
   const warnings = validation.warnings ?? [];
   return (

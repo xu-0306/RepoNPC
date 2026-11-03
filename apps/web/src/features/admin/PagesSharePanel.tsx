@@ -1,3 +1,4 @@
+import { chromeLocale, type LanguageTag } from "../../i18n/languages";
 import { InfoParagraphs } from "./InfoParagraphs";
 import { pagesShareErrorMessage } from "./pagesShareError";
 import "../../p4-w3.css";
@@ -31,14 +32,14 @@ export function PagesSharePanel({
   onOperationPendingChange,
   publicSharingAvailable = true,
 }: {
-  locale: "zh-TW" | "en";
+  locale: LanguageTag;
   request: Request;
   observedState: PagesSharingState | null;
   onStateChange: (state: PagesSharingState | null) => void;
   onOperationPendingChange: (pending: boolean) => void;
   publicSharingAvailable?: boolean;
 }) {
-  const zh = locale === "zh-TW";
+  const zh = chromeLocale(locale) === "zh-TW";
   const [state, setState] = useState<PagesSharingState | null>(observedState);
   const [pagesUrl, setPagesUrl] = useState(observedState?.pages_url ?? "");
   const [pending, setPending] = useState(false);

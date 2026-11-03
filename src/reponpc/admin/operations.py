@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, replace
 from typing import Any, cast
 
@@ -70,9 +70,11 @@ from reponpc.cards.sprite_composer import compose_builtin
 from reponpc.config.models import (
     ConfigIssue,
     ConfigValidationError,
+    LocalesConfig,
     PublicConfig,
     parse_public_config_bytes,
 )
+from reponpc.i18n.plan import ANALYSIS_LOCALES, require_enabled
 from reponpc.providers.builtin_artifacts import builtin_embedding_identity, load_builtin_manifest
 from reponpc.runtime.database import RuntimeDatabase
 
@@ -186,7 +188,16 @@ class AdminOperations:
             candidate_id=candidate_id,
         )
 
-    def readme_snippet(self, *, locale: str, theme: str, extension: str, revision: int) -> str:
+    def readme_snippet(
+        self,
+        *,
+        locale: str,
+        theme: str,
+        extension: str,
+        revision: int,
+        locales: Sequence[str] = ANALYSIS_LOCALES,
+    ) -> str:
+        require_enabled(locale, locales)
         return render_readme_snippet(
             public_base_url=self.public_base_url,
             locale=cast(Locale, locale),
@@ -505,11 +516,13 @@ class AdminOperations:
         session_hash: str,
         slug: str,
         owner_statement: str,
+        locales: Sequence[str] = ANALYSIS_LOCALES,
     ) -> dict[str, object]:
         return self._onboarding().suggest_contributions(
             session_hash=session_hash,
             slug=slug,
             owner_statement=owner_statement,
+            locales=locales,
         )
 
     def create_onboarding_draft(
@@ -519,12 +532,14 @@ class AdminOperations:
         repositories: tuple[GuidedRepositoryDraft, ...],
         base_config: PublicConfig | None,
         confirmed_assertions: bool,
+        locales: LocalesConfig | None = None,
     ) -> dict[str, object]:
         return self._onboarding().create_draft(
             profile=profile,
             repositories=repositories,
             base_config=base_config,
             confirmed_assertions=confirmed_assertions,
+            locales=locales,
         )
 
     def _sprite(self, config: PublicConfig) -> CanonicalSprite:

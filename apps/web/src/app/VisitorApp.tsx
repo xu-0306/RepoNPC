@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type CharacterState } from "../features/character/CharacterRenderer";
-import { resolveInitialLocale, storeLocale } from "../i18n/initialLocale";
-import { messages, type Locale } from "../i18n/messages";
+import { resolveLocaleIn, storeLocale } from "../i18n/initialLocale";
+import { isLanguageTag, type LanguageTag } from "../i18n/languages";
+import { messages } from "../i18n/messages";
 import {
   collectValidatedReply,
   chatProgress,
@@ -34,15 +35,22 @@ import "../visitor.css";
 import "./scene-fallback.generated.css";
 
 export function VisitorApp() {
-  const [locale, setLocale] = useState<Locale>(resolveInitialLocale);
+  const [requestedLocale, setLocale] = useState<LanguageTag>();
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<VisitorTurn[]>([]);
   const [exchanges, setExchanges] = useState<SuccessfulExchange[]>([]);
   const [chatAvailable, setChatAvailable] = useState(false);
   const [statusBundleMismatch, setStatusBundleMismatch] = useState(false);
-  const observedFaq = useRef<Partial<Record<Locale, PublicFaq | null>>>({});
+  const observedFaq = useRef<Partial<Record<LanguageTag, PublicFaq | null>>>(
+    {},
+  );
   const [pending, setPending] = useState(false);
   const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const documentLocale = document.documentElement.lang;
+  const locale =
+    requestedLocale ??
+    profile?.locale ??
+    (isLanguageTag(documentLocale) ? documentLocale : "en");
   const [profileError, setProfileError] = useState(false);
   const [profileReload, setProfileReload] = useState(0);
   const [faq, setFaq] = useState<PublicFaq | null>(null);
@@ -173,8 +181,17 @@ export function VisitorApp() {
     setProfile(null);
     setFaq(null);
     setProfileError(false);
-    void fetchPublicProfile(locale, controller.signal)
-      .then((value) => {
+    void fetchPublicProfile(requestedLocale, controller.signal)
+      .then(async (initial) => {
+        let value = initial;
+        if (requestedLocale === undefined) {
+          const resolved = resolveLocaleIn(
+            initial.available_locales.map(({ tag }) => tag),
+            initial.locale,
+          );
+          if (resolved !== initial.locale && !controller.signal.aborted)
+            value = await fetchPublicProfile(resolved, controller.signal);
+        }
         if (!controller.signal.aborted) {
           setProfile(value);
           const scene = value.character.scene;
@@ -188,34 +205,36 @@ export function VisitorApp() {
             ),
           );
           setCurrentVisitorScheme(readVisitorScheme());
+          try {
+            const loadedFaq = await fetchPublicFaq(
+              value.locale,
+              controller.signal,
+              fetch,
+              observedFaq.current[value.locale],
+            );
+            if (!controller.signal.aborted) {
+              observedFaq.current[value.locale] = loadedFaq;
+              setFaq(loadedFaq);
+            }
+          } catch {
+            if (!controller.signal.aborted) {
+              observedFaq.current[value.locale] = null;
+              setFaq(null);
+            }
+          }
         }
       })
       .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
+        if (
+          !controller.signal.aborted &&
+          !(error instanceof DOMException && error.name === "AbortError")
+        ) {
           setProfileError(true);
           window.setTimeout(() => profileErrorAlert.current?.focus(), 0);
         }
       });
-    void fetchPublicFaq(
-      locale,
-      controller.signal,
-      fetch,
-      observedFaq.current[locale],
-    )
-      .then((value) => {
-        if (!controller.signal.aborted) {
-          observedFaq.current[locale] = value;
-          setFaq(value);
-        }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          observedFaq.current[locale] = null;
-          setFaq(null);
-        }
-      });
     return () => controller.abort();
-  }, [locale, profileReload]);
+  }, [requestedLocale, profileReload]);
 
   async function submit(questionText: string) {
     const trimmed = questionText.trim();
@@ -226,10 +245,11 @@ export function VisitorApp() {
       const requestId = createRequestId();
       setTurns((current) => [
         ...current,
-        { id: requestId + "-user", role: "user", content: trimmed },
+        { id: requestId + "-user", role: "user", content: trimmed, locale },
         {
           id: requestId + "-assistant",
           role: "assistant",
+          locale,
           content:
             matched.kind === "answer"
               ? matched.entry.answer_markdown
@@ -259,10 +279,11 @@ export function VisitorApp() {
     const startedAt = performance.now();
     setTurns((current) => [
       ...current,
-      { id: requestId + "-user", role: "user", content: trimmed },
+      { id: requestId + "-user", role: "user", content: trimmed, locale },
       {
         id: assistantId,
         role: "assistant",
+        locale,
         content: "",
         citations: [],
         retryQuestion: trimmed,
@@ -490,10 +511,11 @@ export function VisitorApp() {
     const id = createRequestId();
     setTurns((current) => [
       ...current,
-      { id: id + "-user", role: "user", content: suggestion },
+      { id: id + "-user", role: "user", content: suggestion, locale },
       {
         id: id + "-assistant",
         role: "assistant",
+        locale,
         content: approved.answer_markdown,
         citations: approved.citations,
       },

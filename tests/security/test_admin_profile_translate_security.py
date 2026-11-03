@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from reponpc.admin.onboarding import GuidedOnboardingError, ProfileTranslateRequest
+from reponpc.i18n.languages import LANGUAGES
 from reponpc.providers.contracts import ProviderError, ProviderFailureCode
 from tests.integration.test_admin_onboarding import ORIGIN, _login
 from tests.integration.test_admin_profile_translate import (
@@ -32,8 +33,9 @@ from tests.unit.test_profile_translate import _item
         ("wrong_host", 403, "CSRF_FAILED"),
     ],
 )
+@pytest.mark.parametrize("target", [None, *(language for language in LANGUAGES if language.derive)])
 def test_profile_translate_authorization_matches_contribution_suggest(
-    translation_app, access: str, status: int, code: str
+    translation_app, access: str, status: int, code: str, target
 ) -> None:
     app, _, _, state = translation_app
     with TestClient(app, base_url=ORIGIN) as client:
@@ -50,8 +52,12 @@ def test_profile_translate_authorization_matches_contribution_suggest(
             headers.pop("Origin")
         elif access == "wrong_host":
             headers["Host"] = "attacker.example"
+        item = _item(text=OWNER_CANARY)
+        if target is not None:
+            assert target.derive is not None
+            item.update(source_locale=target.derive.source, target_locale=target.tag)
         responses = [
-            client.post(ROUTE, headers=headers, json={"items": [_item(text=OWNER_CANARY)]}),
+            client.post(ROUTE, headers=headers, json={"items": [item]}),
             client.post(
                 "/api/admin/onboarding/contributions/suggest",
                 headers=headers,

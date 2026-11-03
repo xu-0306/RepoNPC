@@ -21,7 +21,7 @@ from reponpc.admin.faq import FaqError, ReviewedFaq
 from reponpc.admin.scene import AdminSceneService, PublishedProfileSnapshot
 from reponpc.api.visitor_document import render_visitor_document
 from reponpc.api.visitor_ingress import _visitor_files
-from reponpc.bundles.archive import BundleError
+from reponpc.bundles.archive import BundleError, card_variant_paths
 from reponpc.bundles.index_reader import IndexReadError
 from reponpc.bundles.manifest import BundleManifest, ManifestError, parse_bundle_manifest
 from reponpc.domain.evidence import COMMIT_RE, EVIDENCE_ID_RE
@@ -50,13 +50,6 @@ _PEM_SECRET = re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")
 _CREDENTIAL_CANARY = re.compile(
     rb"(?:PRIVATE_KEY_CANARY|A5_SECRET_CANARY|gh[pousr]_[A-Za-z0-9]{20,}|"
     rb"sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16})"
-)
-
-_CARD_PATHS = tuple(
-    f"public/card-{theme}-{locale}.{extension}"
-    for theme in ("light", "dark")
-    for locale in ("zh-TW", "en")
-    for extension in ("svg", "gif", "png")
 )
 
 
@@ -147,7 +140,7 @@ def build_site_files(
             snapshot = scene_service._snapshot_from_lease(bundle_id, public_directory)
             public_manifest = _bundle_manifest(public_directory, bundle_id)
             files = _visitor_dependencies(normalized_web_dist)
-            _rewrite_entry_html(files, snapshot, gateway_origin)
+            _rewrite_entry_html(files, snapshot, gateway_origin, index.locales.default)
             _add_public_documents(files, snapshot, faq, bundle_id)
             _add_bundle_assets(files, public_directory, public_manifest, snapshot)
             _put_file(files, ".nojekyll", b"")
@@ -295,7 +288,10 @@ def _visitor_dependencies(web_dist: Path) -> dict[str, bytes]:
 
 
 def _rewrite_entry_html(
-    files: dict[str, bytes], snapshot: PublishedProfileSnapshot, gateway_origin: str
+    files: dict[str, bytes],
+    snapshot: PublishedProfileSnapshot,
+    gateway_origin: str,
+    default_locale: str,
 ) -> None:
     content = files.get("index.html")
     if content is None:
@@ -306,7 +302,10 @@ def _rewrite_entry_html(
         raise SiteExportError("SHARING_EXPORT_INVALID") from None
     if (
         document.count('<script src="./scene-mode.js"></script>') != 1
-        or '<html lang="zh-TW" data-owner-mode="system" data-visitor-toggle="true">' not in document
+        or re.search(
+            r'<html lang="[^"]+" data-owner-mode="system" data-visitor-toggle="true">', document
+        )
+        is None
         or document.count("<head>") != 1
         or "<base " in document.lower()
     ):
@@ -341,6 +340,22 @@ def _rewrite_entry_html(
     if '="/api/public/' in document or "/src/main.tsx" in document:
         raise SiteExportError("SHARING_EXPORT_INVALID")
     _put_file(files, "index.html", document.encode("utf-8"))
+    for path, payload in tuple(files.items()):
+        if not path.endswith(".html"):
+            continue
+        try:
+            text = payload.decode("utf-8")
+        except UnicodeDecodeError:
+            raise SiteExportError("SHARING_EXPORT_INVALID") from None
+        text, count = re.subn(
+            r'(<html\s[^>]*\blang=")[^"]+(?=")',
+            r"\g<1>" + default_locale,
+            text,
+            count=1,
+        )
+        if count != 1 or f'lang="{default_locale}"' not in text:
+            raise SiteExportError("SHARING_EXPORT_INVALID")
+        _put_file(files, path, text.encode("utf-8"))
 
 
 def _add_public_documents(
@@ -351,30 +366,19 @@ def _add_public_documents(
 ) -> None:
     with faq.database.connection() as connection:
         connection.execute("BEGIN")
-        for locale in ("zh-TW", "en"):
+        for locale in snapshot.document.locales:
+            _put_file(
+                files,
+                f"profile-{locale}.json",
+                localized_public_profile_bytes(snapshot.document, locale),
+            )
             try:
-                profile = json.loads(localized_public_profile_bytes(snapshot.document, locale))
-            except TypeError, ValueError:
-                raise SiteExportError("SHARING_EXPORT_INVALID") from None
-            if not isinstance(profile, dict) or not isinstance(profile.get("character"), dict):
-                raise SiteExportError("SHARING_EXPORT_INVALID")
-            profile["character"]["asset_url"] = "./character.png"
-            scene = profile["character"].get("scene")
-            if isinstance(scene, dict):
-                scene["background_url"] = _static_background_path(snapshot)
-            _put_file(files, f"profile-{locale}.json", canonical_json_bytes(profile))
-            faq_payload = faq.public_payload_for_bundle(locale, bundle_id, connection)
+                faq_payload = faq.public_payload_for_bundle(locale, bundle_id, connection)
+            except Exception:
+                faq_payload = {"bundle_id": bundle_id, "locale": locale, "entries": []}
             if len(canonical_json_bytes(faq_payload)) > _MAX_FAQ_BYTES:
                 raise SiteExportError("SHARING_EXPORT_TOO_LARGE")
             _put_file(files, f"faq-{locale}.json", canonical_json_bytes(faq_payload))
-
-
-def _static_background_path(snapshot: PublishedProfileSnapshot) -> str | None:
-    if snapshot.background_content is None:
-        return None
-    extension = "webp" if snapshot.background_content.startswith(b"RIFF") else "png"
-    digest = hashlib.sha256(snapshot.background_content).hexdigest()
-    return f"./scene/{digest}.{extension}"
 
 
 def _add_bundle_assets(
@@ -392,7 +396,7 @@ def _add_bundle_assets(
     ):
         raise SiteExportError("SHARING_EXPORT_INVALID")
     _put_file(files, "character.png", snapshot.sprite_content)
-    for path in _CARD_PATHS:
+    for path in card_variant_paths(snapshot.document.locales):
         record = records.get(path)
         if record is None:
             raise SiteExportError("SHARING_EXPORT_INVALID")
@@ -452,8 +456,9 @@ def _add_bundle_assets(
 def _add_cited_owner_assertions(files: dict[str, bytes], index: Any) -> None:
     payloads: dict[str, dict[str, Any]] = {}
     cited: dict[str, Any] = {}
-    for locale in ("zh-TW", "en"):
-        faq_path = f"faq-{locale}.json"
+    for faq_path in tuple(
+        path for path in files if path.startswith("faq-") and path.endswith(".json")
+    ):
         try:
             payload = json.loads(files[faq_path])
         except KeyError, UnicodeDecodeError, json.JSONDecodeError:
@@ -544,9 +549,11 @@ def _add_cited_owner_assertions(files: dict[str, bytes], index: Any) -> None:
 
 
 def _validate_public_links(files: dict[str, bytes]) -> None:
-    for locale in ("zh-TW", "en"):
+    for faq_path in files:
+        if not faq_path.startswith("faq-") or not faq_path.endswith(".json"):
+            continue
         try:
-            payload = json.loads(files[f"faq-{locale}.json"])
+            payload = json.loads(files[faq_path])
         except KeyError, UnicodeDecodeError, json.JSONDecodeError:
             raise SiteExportError("SHARING_EXPORT_INVALID") from None
         if not isinstance(payload, dict) or not isinstance(payload.get("entries"), list):

@@ -1,3 +1,4 @@
+import { chromeLocale, type LanguageTag } from "../../i18n/languages";
 import { InfoParagraphs } from "./InfoParagraphs";
 import "../../p4-w3.css";
 import type { ChangeEvent } from "react";
@@ -5,7 +6,7 @@ import type { ChangeEvent } from "react";
 import { githubAccount, verifiedPagesMarkdown } from "./sharing";
 
 export type GitHubShareGuideProps = {
-  locale: "zh-TW" | "en";
+  locale: LanguageTag;
   account: string;
   verifiedPagesUrl: string | null;
   profileStatus:
@@ -101,7 +102,7 @@ type GuideCopy = {
   notCheckedAction: string;
 };
 
-const COPY: Record<GitHubShareGuideProps["locale"], GuideCopy> = {
+const COPY: Record<ReturnType<typeof chromeLocale>, GuideCopy> = {
   "zh-TW": {
     title: "4. GitHub 個人頁",
     subtitle:
@@ -356,7 +357,7 @@ export function GitHubShareGuide({
   readmePreview,
   onCopy,
 }: GitHubShareGuideProps) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const accountIsEmpty = account.trim().length === 0;
   const normalizedAccount = githubAccount(account);
   const profileOpen = profileStatus !== "ready";
@@ -410,7 +411,8 @@ export function GitHubShareGuide({
       <h2 id="github-share-guide-heading">{copy.title}</h2>
       <details className="publication-info px-info">
         <summary>
-          ⓘ {locale === "zh-TW" ? "分享方式" : "How sharing works"}
+          ⓘ{" "}
+          {chromeLocale(locale) === "zh-TW" ? "分享方式" : "How sharing works"}
         </summary>
         <InfoParagraphs locale={locale} text={copy.subtitle} />
         <InfoParagraphs
@@ -430,7 +432,7 @@ export function GitHubShareGuide({
       <div className="github-share__stage">
         <details className="publication-info px-info">
           <summary>
-            ⓘ {locale === "zh-TW" ? "檔案內容" : "File contents"}
+            ⓘ {chromeLocale(locale) === "zh-TW" ? "檔案內容" : "File contents"}
           </summary>
           <InfoParagraphs locale={locale} text={copy.readmeContents} />
           <InfoParagraphs
@@ -466,10 +468,10 @@ export function GitHubShareGuide({
         </div>
         <p id="github-share-readme-download-status" role="status">
           {pagesReady
-            ? locale === "zh-TW"
+            ? chromeLocale(locale) === "zh-TW"
               ? "已核對"
               : "Verified"
-            : locale === "zh-TW"
+            : chromeLocale(locale) === "zh-TW"
               ? "未核對 Pages"
               : "Pages unverified"}
         </p>
@@ -495,7 +497,7 @@ export function GitHubShareGuide({
 
       <details className="github-share__alternative">
         <summary>
-          {locale === "zh-TW" ? "卡片 → README" : "Card → README"}
+          {chromeLocale(locale) === "zh-TW" ? "卡片 → README" : "Card → README"}
         </summary>
         <section
           aria-labelledby="github-share-profile-heading"

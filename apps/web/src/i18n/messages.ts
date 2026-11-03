@@ -1,4 +1,11 @@
-export const messages = {
+import {
+  chromeLocale,
+  endonym,
+  LANGUAGES,
+  type LanguageTag,
+} from "./languages";
+
+const catalogs = {
   "zh-TW": {
     title: "認識熟悉你程式碼的 NPC",
     subtitle: "從可驗證的作品集證據探索專案，回答會附上固定版本的引用。",
@@ -31,7 +38,7 @@ export const messages = {
     citationOther: "引用來源",
     suggested: "建議問題",
     languageLabel: "選擇語言",
-    languageName: "繁體中文",
+    languageName: endonym("zh-TW"),
     characterIdle: "角色待機中",
     characterWalk: "角色正在行走",
     characterListen: "角色正在聆聽",
@@ -110,6 +117,119 @@ export const messages = {
       "哪些證據顯示使用了 Python？",
     ],
   },
+  // generated, do not edit (scripts/generate_zh_cn_catalog.py)
+  "zh-CN": {
+    title: "认识熟悉你代码的 NPC",
+    subtitle: "从可验证的作品集证据探索项目，回答会附上固定版本的引用。",
+    profileTitle: "作品集导览",
+    profileLoading: "正在加载作品集…",
+    profileUnavailable: "作品集目前无法加载，请稍后再试。",
+    projectsTitle: "精选项目",
+    emptyRepositoryHint: "此项目看起来是空的，分析可能失败。",
+    tagsLabel: "技术标签",
+    demoLink: "打开示范",
+    linksTitle: "相关链接",
+    chatTitle: "询问作品集",
+    statusReady: "聊天目前可以使用。",
+    statusUnavailable: "聊天目前休息中，作品集仍可浏览。",
+    npcOnline: "NPC 在线",
+    npcResting: "NPC 休息中",
+    recheckStatus: "重新检查聊天状态",
+    inputLabel: "你的问题",
+    inputPlaceholder: "例如：哪些项目使用了混合检索？",
+    send: "送出问题",
+    sending: "正在查找证据…",
+    citations: "来源",
+    citationClass: "证据类别",
+    citationLocation: "来源位置",
+    citationOwner: (owner: string) => `${owner} 自述`,
+    citationOwnerFallback: "作品集拥有者",
+    citationParticipation: "GitHub 参与纪录",
+    citationProject: "项目文档与代码",
+    citationInference: "推论",
+    citationOther: "引用来源",
+    suggested: "建议问题",
+    languageLabel: "选择语言",
+    languageName: endonym("zh-CN"),
+    characterIdle: "角色待机中",
+    characterWalk: "角色正在行走",
+    characterListen: "角色正在聆听",
+    characterThink: "角色正在查找证据",
+    characterTalk: "角色正在回答",
+    characterSuccess: "回答完成",
+    characterOffline: "聊天目前脱机",
+    offlineFaqNoMatch:
+      "这个问题没有足够接近的已核准问答。可以试试这些建议问题。",
+    offlineFaqNoMatchWithoutSuggestions: "这个问题没有足够接近的已核准问答。",
+    genericError: "目前无法完成回答，请稍后再试。",
+    retry: "重试这个问题",
+    askAgain: "再问一次",
+    retryProfile: "重新加载作品集",
+    avatarLink: "查看头像",
+    streamingAnswer: "正在接收已验证的回答…",
+    processingDetails: "展开或收起处理过程",
+    processingConnecting: "正在连接…",
+    processingSending: "处理中…",
+    processingCancel: "停止回答",
+    processingCancelled: "已停止这次回答。",
+    processingDuration: (minutes: number, seconds: number) =>
+      minutes > 0 ? `${minutes} 分钟 ${seconds} 秒` : `${seconds} 秒`,
+    processingFor: (duration: string) => `处理中・已等待 ${duration}`,
+    processedFor: (duration: string) => `处理了 ${duration}`,
+    processingStatus: {
+      complete: "回答完成",
+      failed: "这次回答未完成",
+      cancelled: "已停止处理",
+    },
+    processingStages: {
+      searching: "搜索作品集数据",
+      evidence_ready: "已整理相关证据",
+      waiting_model: "等待模型回应",
+      thinking: "模型正在思考",
+      generating: "模型正在产生回答",
+      validating: "核对回答与引用",
+    },
+    processingPrivacy: "这里记录实际处理阶段；模型的原始思考文本不会公开。",
+    processingSummary: "模型公开摘要",
+    processingSummaryNote:
+      "这是模型提供的处理说明，尚未核对；请以完成后的答案与引用为准。",
+    modeSystem: "系统",
+    modeLight: "浅色",
+    modeDark: "深色",
+    modeLabel: "显示模式",
+    appearance: "外观",
+    appearanceClose: "关闭外观",
+    schemeChoiceLabel: "配色方案",
+    projectsButton: "项目",
+    projectsClose: "关闭项目",
+    noProjects: "目前没有公开项目。",
+    sceneTitle: "像素场景",
+    dialogueAvailable: "欢迎来到这个作品集。",
+    dialoguePrompt: "选一个问题，或直接输入你想了解的内容。",
+    dialogueThinking: "我正在查找相关证据。",
+    dialogueResting: "我正在休息。",
+    dialogueFaq: "先查看已核准的常见问答。",
+    dialogueFaqLabel: "已核准问答",
+    statusAvailable: "可用",
+    statusThinking: "查找中",
+    restingBadge: "休息中",
+    menuOpen: "打开导览",
+    menuClose: "收起导览",
+    about: "关于",
+    languageMetadata: "语言",
+    starsMetadata: "星标",
+    forksMetadata: "分支",
+    visitorPreview: "访客页面预览・范例内容",
+    visitorWelcome: "嗨，我可以帮你认识这份作品集",
+    visitorWelcomeText:
+      "从下方问题开始，或直接输入你想了解的内容。回答会附上可查证的来源。",
+    questionEvidenceHint: "RepoNPC 会依照作品集里的证据回答。",
+    suggestionItems: [
+      "这些项目解决了哪些问题？",
+      "哪些证据显示使用了 Python？",
+    ],
+  },
+  // end generated catalog
   en: {
     title: "Meet the NPC who knows your code",
     subtitle:
@@ -144,7 +264,7 @@ export const messages = {
     citationOther: "Cited source",
     suggested: "Suggested questions",
     languageLabel: "Choose language",
-    languageName: "English",
+    languageName: endonym("en"),
     characterIdle: "Character is idle",
     characterWalk: "Character is walking",
     characterListen: "Character is listening",
@@ -227,4 +347,13 @@ export const messages = {
   },
 } as const;
 
-export type Locale = keyof typeof messages;
+// Hand-written chrome remains independent of the site's content languages.
+export type Locale = ReturnType<typeof chromeLocale>;
+
+export function messageLocale(tag: LanguageTag): keyof typeof catalogs {
+  return tag in catalogs ? (tag as keyof typeof catalogs) : chromeLocale(tag);
+}
+
+export const messages = Object.fromEntries(
+  LANGUAGES.map(({ tag }) => [tag, catalogs[messageLocale(tag)]]),
+) as Record<LanguageTag, (typeof catalogs)[keyof typeof catalogs]>;

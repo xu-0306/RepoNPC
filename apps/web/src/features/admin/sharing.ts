@@ -1,3 +1,4 @@
+import { chromeLocale, type LanguageTag } from "../../i18n/languages";
 export const CARD_FILENAME = "reponpc-card.gif";
 
 export function githubAccount(value: string): string | null {
@@ -46,7 +47,7 @@ export function previewInputsMatch(
 
 export function verifiedPagesMarkdown(
   value: string,
-  locale: "zh-TW" | "en",
+  locale: LanguageTag,
 ): string {
   try {
     const url = new URL(value);
@@ -72,7 +73,7 @@ export function verifiedPagesMarkdown(
     ) {
       return "";
     }
-    return `[![${locale === "zh-TW" ? "與我的 RepoNPC 對話" : "Chat with my RepoNPC"}](./${CARD_FILENAME})](<${url.href}>)`;
+    return `[![${chromeLocale(locale) === "zh-TW" ? "與我的 RepoNPC 對話" : "Chat with my RepoNPC"}](./${CARD_FILENAME})](<${url.href}>)`;
   } catch {
     return "";
   }

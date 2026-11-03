@@ -13,7 +13,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from reponpc.admin.faq import FaqError, ReviewedFaq
+from reponpc.admin.scene import AdminSceneService
 from reponpc.chat.service import ChatDelivery
+from reponpc.i18n.plan import ANALYSIS_LOCALES
 from reponpc.runtime.database import RuntimeDatabase
 from tests.security.test_admin_assets import ORIGIN, _login, local_admin_application
 
@@ -60,8 +62,20 @@ def _seed(
     return entry_id
 
 
-@pytest.mark.parametrize("locale", ["zh-TW", "en"])
-def test_faq_routes_protect_mutations_and_share_only_approved_current_rows(tmp_path, locale):
+@pytest.mark.parametrize("locale", ANALYSIS_LOCALES)
+def test_faq_routes_protect_mutations_and_share_only_approved_current_rows(
+    tmp_path, locale, monkeypatch
+):
+    snapshots = []
+
+    @contextmanager
+    def published_profile(_self):
+        snapshots.append(True)
+        yield SimpleNamespace(
+            document=SimpleNamespace(schema_version=1, locales=dict.fromkeys(ANALYSIS_LOCALES))
+        )
+
+    monkeypatch.setattr(AdminSceneService, "published_profile", published_profile)
     app = local_admin_application(tmp_path)
     database = app.state.admin_operations.database
     app.state.runtime_database = database
@@ -114,6 +128,7 @@ def test_faq_routes_protect_mutations_and_share_only_approved_current_rows(tmp_p
         served = client.get(f"/api/public/faq?locale={locale}")
         exported = client.get(f"/api/admin/portfolio/faq/export?locale={locale}", headers=headers)
         assert served.status_code == exported.status_code == 200
+        assert snapshots == [True]
         assert served.json() == exported.json()
         assert served.headers["cache-control"] == exported.headers["cache-control"] == "no-store"
         assert "attachment" in exported.headers["content-disposition"]

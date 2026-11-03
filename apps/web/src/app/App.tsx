@@ -1,13 +1,17 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
 import { AdminAccessLayout } from "../features/admin/AdminAccessLayout";
-import { resolveInitialLocale, storeLocale } from "../i18n/initialLocale";
-import type { Locale } from "../i18n/messages";
+import { resolveLocaleIn, storeLocale } from "../i18n/initialLocale";
+import {
+  LANGUAGES,
+  chromeLocale,
+  type LanguageTag as Locale,
+} from "../i18n/languages";
 import { VisitorApp } from "./VisitorApp";
 
 export { consumeSse, type SseEvent } from "./sse";
 
-const ADMIN_LOADING_COPY: Record<Locale, string> = {
+const ADMIN_LOADING_COPY: Record<ReturnType<typeof chromeLocale>, string> = {
   "zh-TW": "正在載入管理介面…",
   en: "Loading admin…",
 };
@@ -27,7 +31,12 @@ export function App() {
 }
 
 function AdminRouter() {
-  const [locale, setLocale] = useState<Locale>(resolveInitialLocale);
+  const [locale, setLocale] = useState<Locale>(() =>
+    resolveLocaleIn(
+      LANGUAGES.map(({ tag }) => tag),
+      "zh-TW",
+    ),
+  );
   useEffect(() => syncDocumentLanguage(locale), [locale]);
   return (
     <Suspense
@@ -39,7 +48,7 @@ function AdminRouter() {
           mode="loading"
         >
           <p className="admin-auth__status" role="status">
-            {ADMIN_LOADING_COPY[locale]}
+            {ADMIN_LOADING_COPY[chromeLocale(locale)]}
           </p>
         </AdminAccessLayout>
       }

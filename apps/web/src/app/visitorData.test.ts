@@ -1,4 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { LANGUAGES } from "../i18n/languages";
+import {
+  availableLocales,
+  legacyTags,
+  siteSets,
+} from "./siteLanguages.test-cases";
 
 import {
   fetchPublicFaq,
@@ -103,6 +109,7 @@ function profileValue() {
   return {
     schema_version: 1,
     locale,
+    available_locales: availableLocales(legacyTags),
     profile: {
       display_name: "Fixture",
       headline: "Fixture headline",
@@ -161,6 +168,162 @@ function profileValue() {
     suggested_questions: ["Which project stands out?"],
   };
 }
+
+describe.each(siteSets.map((supported) => ({ supported })))(
+  "site languages $supported",
+  ({ supported }) => {
+    it("discovers the API default without a locale and loads every selected language", async () => {
+      const signal = new AbortController().signal;
+      const send = vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(urlOf(input), "https://fixture.invalid");
+        expect(url.pathname).toBe("/api/public/profile");
+        const selected = url.searchParams.get("locale") ?? supported[0]!;
+        return Response.json({
+          ...profileValue(),
+          locale: selected,
+          available_locales: availableLocales(supported),
+        });
+      });
+      const initial = await fetchPublicProfile(undefined, signal, send);
+      expect(send.mock.calls[0][0]).toBe("/api/public/profile");
+      expect(initial.locale).toBe(supported[0]);
+      expect(initial.available_locales).toEqual(availableLocales(supported));
+      for (const tag of supported) {
+        expect((await fetchPublicProfile(tag, signal, send)).locale).toBe(tag);
+        expect(send.mock.lastCall?.[0]).toBe(
+          `/api/public/profile?locale=${tag}`,
+        );
+      }
+    });
+
+    it("discovers the static HTML default and verifies profiles and offline FAQs for the set", async () => {
+      enableStaticExport();
+      document.documentElement.lang = supported[0]!;
+      const files: Record<string, string> = {
+        "character.png": "fixture sprite",
+      };
+      for (const tag of supported) {
+        const profile = profileValue();
+        profile.character.asset_url = "./character.png";
+        files[`profile-${tag}.json`] = JSON.stringify({
+          ...profile,
+          locale: tag,
+          available_locales: availableLocales(supported),
+        });
+        files[`faq-${tag}.json`] = JSON.stringify({
+          ...JSON.parse(faqJson()),
+          locale: tag,
+        });
+      }
+      const manifest = await staticManifest(files);
+      const send = vi.fn(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = urlOf(input);
+          expect(init?.credentials).toBe("omit");
+          if (url === "./export-manifest.json") return new Response(manifest);
+          if (url.startsWith(gatewayOrigin)) throw new TypeError("offline");
+          const content = files[url.slice(2)];
+          expect(content).toBeDefined();
+          return new Response(content);
+        },
+      );
+      const signal = new AbortController().signal;
+      const initial = await fetchPublicProfile(undefined, signal, send);
+      expect(initial.locale).toBe(supported[0]);
+      expect(
+        send.mock.calls.some(
+          ([url]) => url === `./profile-${supported[0]}.json`,
+        ),
+      ).toBe(true);
+      for (const tag of supported) {
+        expect(
+          (await fetchPublicProfile(tag, signal, send)).available_locales,
+        ).toEqual(availableLocales(supported));
+        expect((await fetchPublicFaq(tag, signal, send))?.locale).toBe(tag);
+        expect(
+          send.mock.calls.some(
+            ([url]) => url === `${gatewayOrigin}/api/public/faq?locale=${tag}`,
+          ),
+        ).toBe(true);
+        expect(
+          send.mock.calls.some(([url]) => url === `./faq-${tag}.json`),
+        ).toBe(true);
+      }
+    });
+  },
+);
+
+describe("available visitor languages validation", () => {
+  it.each(
+    [
+      undefined,
+      null,
+      [],
+      {},
+      [...availableLocales(legacyTags), ...availableLocales(legacyTags)],
+      [{ tag: "unknown", endonym: "Unknown" }],
+      [{ tag: locale }],
+      [{ tag: locale, endonym: "" }],
+      [{ tag: locale, endonym: "  " }],
+      [{ tag: locale, endonym: 1 }],
+      [null],
+      availableLocales(
+        LANGUAGES.filter(({ tag }) => tag !== locale).map(({ tag }) => tag),
+      ),
+    ].map((invalid) => ({ invalid })),
+  )("rejects invalid available_locales %#", async ({ invalid }) => {
+    const send = vi.fn(async () =>
+      Response.json({ ...profileValue(), available_locales: invalid }),
+    );
+    await expect(
+      fetchPublicProfile(undefined, new AbortController().signal, send),
+    ).rejects.toThrow("profile invalid");
+  });
+
+  it.each(LANGUAGES)(
+    "rejects a mismatched or disabled response locale for $tag",
+    async ({ tag }) => {
+      const other = LANGUAGES.find((entry) => entry.tag !== tag)!;
+      const signal = new AbortController().signal;
+      await expect(
+        fetchPublicProfile(
+          tag,
+          signal,
+          vi.fn(async () =>
+            Response.json({
+              ...profileValue(),
+              locale: other.tag,
+              available_locales: availableLocales([tag, other.tag]),
+            }),
+          ),
+        ),
+      ).rejects.toThrow("profile invalid");
+      await expect(
+        fetchPublicProfile(
+          undefined,
+          signal,
+          vi.fn(async () =>
+            Response.json({
+              ...profileValue(),
+              locale: tag,
+              available_locales: availableLocales([other.tag]),
+            }),
+          ),
+        ),
+      ).rejects.toThrow("profile invalid");
+    },
+  );
+
+  it("rejects a non-registry static HTML language before requesting a path", async () => {
+    enableStaticExport();
+    document.documentElement.lang = "../private";
+    const send = vi.fn();
+    await expect(
+      fetchPublicProfile(undefined, new AbortController().signal, send),
+    ).rejects.toThrow("profile default locale invalid");
+    expect(send).not.toHaveBeenCalled();
+  });
+});
 
 describe("static visitor data verification", () => {
   it.each(["/", "/portfolio/"])(

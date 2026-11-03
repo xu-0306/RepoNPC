@@ -19,6 +19,7 @@ from reponpc.api.visitor_gateway import VisitorGateway, _pages_origin
 from reponpc.bundles.manager import BundleManager
 from reponpc.config.environment import _canonical_origin
 from reponpc.config.models import Locale
+from reponpc.i18n.plan import require_enabled
 from reponpc.indexing.public_profile import LocalizedPublicProfile
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 from reponpc.sharing.export import build_site_files
@@ -169,6 +170,8 @@ class PagesSharingService:
         return self._current_origins()
 
     def readme(self, *, web_dist: Path, locale: Locale) -> bytes:
+        with self.faq.bundles.acquire() as index:
+            require_enabled(locale, index.locales.supported)
         state = self.state()
         if not state["verified"] or not isinstance(state["pages_url"], str):
             raise SiteExportError("SHARING_CONFLICT")

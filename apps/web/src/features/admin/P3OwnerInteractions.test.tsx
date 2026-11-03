@@ -467,6 +467,7 @@ const appearance: SceneAppearanceState = {
 const profile: PublicProfile = {
   schema_version: 1,
   locale: "en",
+  available_locales: [{ tag: "en", endonym: "English" }],
   profile: {
     display_name: "Fixture",
     headline: "",

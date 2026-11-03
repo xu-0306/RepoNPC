@@ -1,3 +1,4 @@
+import { chromeLocale, type LanguageTag } from "../../i18n/languages";
 import { useEffect, useId, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 
@@ -17,7 +18,7 @@ import type { VisitorMode } from "../../app/scene";
 export interface SceneSchemeOption {
   id: string;
   version: number;
-  labels: Record<"zh-TW" | "en", string>;
+  labels: Record<ReturnType<typeof chromeLocale>, string>;
   themes: { light: SceneTokens; dark: SceneTokens };
 }
 
@@ -61,7 +62,7 @@ export function ScenePreview({
   desktopFrameLabel,
   phoneFrameLabel,
 }: {
-  locale: "zh-TW" | "en";
+  locale: LanguageTag;
   profile: PublicProfile;
   appliedScene: PublicScene;
   proposedScene: PublicScene | null;
@@ -107,7 +108,7 @@ export function ScenePreview({
   const [visibleScale, setVisibleScale] = useState(1);
   const [logicalViewportHeight, setLogicalViewportHeight] = useState(800);
   const [logicalContentHeight, setLogicalContentHeight] = useState(800);
-  const zh = locale === "zh-TW";
+  const zh = chromeLocale(locale) === "zh-TW";
   const selectedScheme = schemes.find(
     (scheme) => scheme.id === settings.color_scheme,
   );
@@ -125,7 +126,9 @@ export function ScenePreview({
     ? settings.focus
     : selectedScene.background_focus;
   const modeLabel = (mode: "light" | "dark") =>
-    mode === "light" ? messages[locale].modeLight : messages[locale].modeDark;
+    mode === "light"
+      ? messages[chromeLocale(locale)].modeLight
+      : messages[chromeLocale(locale)].modeDark;
 
   useEffect(() => {
     const measure = () => {
@@ -286,7 +289,7 @@ export function ScenePreview({
                   <label
                     htmlFor={`${idPrefix}-scene-preview-scheme-${scheme.id}`}
                   >
-                    {scheme.labels[locale]}
+                    {scheme.labels[chromeLocale(locale)]}
                   </label>
                 </span>
                 <div
@@ -307,7 +310,7 @@ export function ScenePreview({
                           canAskSuggestion={() => false}
                           chatAvailable={chatAvailable}
                           characterState="idle"
-                          locale={locale}
+                          locale={chromeLocale(locale)}
                           mode="preview"
                           onLocaleChange={() => undefined}
                           onQuestionChange={() => undefined}
@@ -507,7 +510,7 @@ export function ScenePreview({
               canAskSuggestion={() => false}
               chatAvailable={chatAvailable}
               characterState={characterState}
-              locale={locale}
+              locale={chromeLocale(locale)}
               mode="preview"
               onLocaleChange={() => undefined}
               onQuestionChange={() => undefined}
@@ -676,7 +679,7 @@ export function ScenePreview({
             type="button"
           >
             {
-              messages[locale][
+              messages[chromeLocale(locale)][
                 ("character" +
                   capitalize(state)) as keyof (typeof messages)["en"]
               ] as string
@@ -698,7 +701,7 @@ export function ScenePreview({
               reducedMotion={reducedMotion || state !== characterState}
               state={state}
               stateLabel={
-                messages[locale][
+                messages[chromeLocale(locale)][
                   ("character" +
                     capitalize(state)) as keyof (typeof messages)["en"]
                 ] as string
@@ -706,7 +709,7 @@ export function ScenePreview({
             />
             <figcaption>
               {
-                messages[locale][
+                messages[chromeLocale(locale)][
                   ("character" +
                     capitalize(state)) as keyof (typeof messages)["en"]
                 ] as string
@@ -724,7 +727,7 @@ export function ScenePreview({
             canAskSuggestion={() => false}
             chatAvailable={chatAvailable}
             characterState={characterState}
-            locale={locale}
+            locale={chromeLocale(locale)}
             mode="preview"
             onLocaleChange={() => undefined}
             onQuestionChange={() => undefined}
@@ -755,7 +758,7 @@ export function ScenePreview({
             canAskSuggestion={() => false}
             chatAvailable={chatAvailable}
             characterState={characterState}
-            locale={locale}
+            locale={chromeLocale(locale)}
             mode="preview"
             onLocaleChange={() => undefined}
             onQuestionChange={() => undefined}

@@ -1,5 +1,6 @@
+import { chromeLocale } from "../../i18n/languages";
 import { useEffect, useId, useRef, useState } from "react";
-import type { Locale } from "../../i18n/messages";
+import type { LanguageTag as Locale } from "../../i18n/languages";
 import { CheckboxField } from "./CheckboxField";
 import "../../p4-w4.css";
 
@@ -227,7 +228,7 @@ function MaintenanceContent({
   onPinPrevious,
   onStopGateway,
 }: MaintenancePanelProps) {
-  const copy = COPY[locale];
+  const copy = COPY[chromeLocale(locale)];
   const id = useId();
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
