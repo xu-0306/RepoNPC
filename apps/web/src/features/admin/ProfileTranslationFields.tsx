@@ -53,8 +53,10 @@ export function ProfileTranslationFields({
           : translation.pending
             ? copy.translatingProfile
             : (modelReason ?? (source ? null : copy.translationSourceRequired));
+        // The section status line already says "translating"; six more copies are noise.
+        const hint = !busy && translation.pending ? null : reason;
         const actionProps = {
-          "aria-describedby": reason ? `${id}-translate-reason` : undefined,
+          "aria-describedby": hint ? `${id}-translate-reason` : undefined,
           "aria-disabled": Boolean(reason),
           className: "px-button px-button--secondary",
         };
@@ -135,12 +137,12 @@ export function ProfileTranslationFields({
                 </>
               )}
             </div>
-            {reason && (
+            {hint && (
               <p
                 className="guided-onboarding__disabled-reason"
                 id={`${id}-translate-reason`}
               >
-                {reason}
+                {hint}
               </p>
             )}
           </div>

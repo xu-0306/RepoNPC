@@ -187,6 +187,12 @@ describe("ADR-078 profile UI", () => {
         expect(renderToStaticMarkup(view.body)).toContain(
           view.copy.translatingProfile,
         );
+        // The pending text is announced once, by the status line only.
+        expect(
+          renderToStaticMarkup(view.body).split(
+            view.copy.translatingProfile as string,
+          ),
+        ).toHaveLength(2);
         const sectionAction = view.nodes.find(
           (node) =>
             node.type === "button" &&
@@ -204,6 +210,57 @@ describe("ADR-078 profile UI", () => {
       }
     },
   );
+
+  it.each(LANGUAGES)(
+    "lists the $tag profile first in the review step",
+    ({ tag }) => {
+      const markup = renderToStaticMarkup(
+        <GuidedOnboardingView
+          {...props({
+            locale: tag,
+            state: state({ step: "review", profile }),
+          })}
+        />,
+      );
+      const labels = [...markup.matchAll(/<dt>[^<(]*\(([^)]+)\)<\/dt>/g)].map(
+        (match) => match[1],
+      );
+      const perLanguage = PROFILE_FIELDS.length;
+      expect(labels).toHaveLength(perLanguage * LANGUAGES.length);
+      expect(labels.slice(0, perLanguage)).toEqual(
+        Array(perLanguage).fill(endonym(tag)),
+      );
+      expect(new Set(labels)).toEqual(
+        new Set(LANGUAGES.map((language) => endonym(language.tag))),
+      );
+    },
+  );
+
+  it("uses the singular for one field in the English counts", () => {
+    directHooks.values = [];
+    directHooks.refs = [];
+    try {
+      const { copy } = profileView(
+        props({ locale: "en", state: state({ step: "review", profile }) }),
+      );
+      const unreviewed = copy.unreviewedTranslations as (
+        count: number,
+      ) => string;
+      const complete = copy.translationComplete as (
+        applied: number,
+        skipped: number,
+      ) => string;
+      expect(unreviewed(1)).toMatch(/\b1 field\b(?!s)/);
+      expect(unreviewed(2)).toMatch(/\b2 fields\b/);
+      expect(unreviewed(0)).toMatch(/\b0 fields\b/);
+      expect(complete(1, 1)).toMatch(/\b1 field\b(?!s).*\b1 field\b(?!s)/);
+      expect(complete(2, 0)).toMatch(/\b2 fields\b.*\b0 fields\b/);
+    } finally {
+      directHooks.values = null;
+      directHooks.refs = null;
+      directHooks.effects = null;
+    }
+  });
 
   it.each(LANGUAGES)(
     "uses endonyms and orders the $tag profile column first",

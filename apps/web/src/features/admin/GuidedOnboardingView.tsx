@@ -653,9 +653,9 @@ const COPY: Record<Locale, Copy> = {
     translationReviewed: "Marked as reviewed.",
     translationRestored: "Restored the previous text.",
     translationComplete: (applied, discarded) =>
-      `Translated ${applied} fields; skipped ${discarded} fields whose text changed. Review the translations.`,
+      `Translated ${englishFields(applied)}; skipped ${englishFields(discarded)} whose text changed. Review the translations.`,
     unreviewedTranslations: (count) =>
-      `Machine translations not reviewed yet: ${count} fields.`,
+      `Machine translations not reviewed yet: ${englishFields(count)}.`,
     confirmProfile: "Confirm profile and review draft",
     continueReview: "Continue to draft review",
     reviewHeading: "Review confirmed content",
@@ -782,6 +782,10 @@ function dispatchProposal(
     originalStatement: repository.ownerStatement,
     proposal,
   });
+}
+
+function englishFields(count: number): string {
+  return `${count} ${count === 1 ? "field" : "fields"}`;
 }
 
 function disabledReason(reason: string | null, id: string): ReactNode {
@@ -2328,6 +2332,8 @@ function ProfileStep({
       ? copy.translatingProfile
       : (modelReason ??
         (translationItems.length ? null : copy.nothingToTranslate));
+  // The status line below already says "translating"; showing it twice is noise.
+  const translateHint = translation.pending ? null : translateReason;
   const confirmationReason = busy
     ? copy.disabledBusy
     : !complete
@@ -2381,7 +2387,7 @@ function ProfileStep({
           className="px-button px-button--secondary"
           aria-disabled={Boolean(translateReason)}
           aria-describedby={
-            translateReason ? "guided-profile-translate-reason" : undefined
+            translateHint ? "guided-profile-translate-reason" : undefined
           }
           type="button"
           onClick={() => {
@@ -2390,7 +2396,7 @@ function ProfileStep({
         >
           {copy.translateEmpty}
         </button>
-        {disabledReason(translateReason, "guided-profile-translate-reason")}
+        {disabledReason(translateHint, "guided-profile-translate-reason")}
         <p
           className="px-meta"
           role="status"
@@ -2514,6 +2520,7 @@ function ProfileStep({
 }
 
 function ReviewStep({
+  locale,
   state,
   copy,
   busy,
@@ -2521,6 +2528,7 @@ function ReviewStep({
   onAction,
   unreviewedCount,
 }: {
+  locale: string;
   state: GuidedOnboardingState;
   copy: Copy;
   busy: boolean;
@@ -2549,7 +2557,7 @@ function ReviewStep({
           <dd>{state.profile.displayName}</dd>
           <dt>{copy.githubLoginLabel}</dt>
           <dd>{state.profile.githubLogin}</dd>
-          {(["zh-TW", "en"] as const).map((profileLocale) => (
+          {profileLanguages(locale).map(({ tag: profileLocale }) => (
             <div key={profileLocale}>
               <dt>
                 {copy.headlineLabel} ({endonym(profileLocale)})
@@ -3040,6 +3048,7 @@ export function GuidedOnboardingView({
           )}
           {state.step === "review" && (
             <ReviewStep
+              locale={locale}
               busy={busy}
               copy={copy}
               onAction={onAction}
