@@ -66,6 +66,7 @@ datas += collect_data_files(
     includes=[
         "**/*.yml",
         "**/*.yaml",
+        "i18n/languages.json",
         "cards/fonts/*.otf",
         "cards/fonts/press-start-2p-latin-400-normal.woff2",
         "cards/fonts/*OFL.txt",

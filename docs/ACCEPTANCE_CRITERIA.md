@@ -1017,6 +1017,42 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **And** no source file holds a literal colour or scheme id outside the registry and the generated fallback block, no code branches on a scheme id, the CSP is unchanged, and no external font, stylesheet or script is requested.
 - **Verification:** registry contrast tests; source and style guards; Playwright screenshots and computed-style checks over scheme × variant × width × state, live and exported; keyboard and screen-reader checks in both locales; an export manifest check.
 
+### AC-083 - One language registry, mirrored and matched
+
+**Maps to:** FR-054, NFR-001 (ADR-078)
+
+- **Given** `src/reponpc/i18n/languages.json`, the web registry module and browser tag lists,
+- **When** both are loaded and browser tags are matched,
+- **Then** both sides hold the same tags, endonyms, allowed scripts, directions and match prefixes; the load fails naming the entry for a duplicate tag, an empty endonym, an unknown script name or a match prefix claimed by two entries; matching returns the entry with the longest matching prefix, the first browser tag that matches wins, and no match returns the caller's fallback; the writing-system guard of analysis and contribution output behaves exactly as before for `zh-TW` and `en` while taking its script table from the registry.
+- **Verification:** a Python registry test, a web test that reads the JSON file and compares it with the module, table-driven matching tests derived from every entry's own prefixes, and the existing analysis and contribution guard tests unchanged.
+
+### AC-084 - Profile translation is a bounded, unconfirmed model proposal
+
+**Maps to:** FR-028, FR-040, FR-054, NFR-003, NFR-012 (ADR-078)
+
+- **Given** an authenticated owner session with an accepted chat model,
+- **When** the owner requests `profile/translate` in either direction,
+- **Then** the response keeps request order, labels every item `method: "model"` and `confirmed: false`; a request outside the contract (0 or more than 6 items, duplicate `(field, target_locale)`, unknown or equal tags, empty or over-long text) is rejected before any provider call; the direction is exactly the one given, including Chinese text sent as `en`; output with the wrong count, empty or over-long items, words in a script neither the target locale nor the source uses, or a missing URL, code span, handle or slug is rejected as `PROVIDER_ERROR` / `PROVIDER_OUTPUT_SCHEMA_INVALID` and returns nothing; the owner text appears only in the user message block; a provider error or limit maps to the existing code with no retry and no second provider call; a missing session, CSRF token or same-origin header is rejected like `contributions/suggest`; the text is not logged, stored or put in any job record.
+- **Verification:** unit, security and integration tests with the fake provider, a registry-derived script matrix, a preservation matrix, a logging and storage scan, and a mutation check that turns the preservation check and the script guard off in turn.
+
+### AC-085 - The profile form keeps translations editable and reviewable
+
+**Maps to:** FR-028, FR-054, NFR-009, NFR-011 (ADR-078)
+
+- **Given** the profile step in both admin locales, desktop and phone widths,
+- **When** the owner fills one side, uses the section or per-field translate action, edits, marks reviewed, restores or leaves the page,
+- **Then** columns carry endonym labels and the current admin language comes first; the section action fills only empty targets and never overwrites text; the per-field action asks for confirmation before replacing text; each filled-by-translation field shows the unreviewed marker until edited or marked reviewed; restoring brings back the exact previous value, empty included; a response for a field whose source changed after the request began is discarded for that field; the review step counts unreviewed fields and never blocks; nothing marker-related reaches YAML, the draft request or storage; the action is disabled with a visible reason while no chat model is accepted; status changes are announced politely, controls are keyboard reachable, targets are at least 24 px and nothing scrolls horizontally.
+- **Verification:** component tests for both directions (including Chinese in the English column) and both locales, a stale-response test, a draft-request shape test, and layout measurements at 1280 and 375 px.
+
+### AC-086 - Browser language sets the default; a stored choice wins
+
+**Maps to:** FR-054, NFR-011 (ADR-078)
+
+- **Given** the admin and visitor pages, a browser with a language list, and storage that works, is empty, holds an invalid value or throws,
+- **When** a page loads and the person switches language,
+- **Then** a valid stored tag wins; otherwise the first browser tag with a registry match wins (`["fr","en-GB"]` gives `en`, `["zh-HK","en"]` gives `zh-TW`); an empty list falls back to the single browser language and then to `zh-TW`; an invalid stored value is ignored; a storage failure never stops rendering; a manual switch persists across a reload; `<html lang>` follows the locale; nothing is sent to a server or placed in a cookie.
+- **Verification:** table-driven web tests over every registry entry, storage-failure tests, a visitor bundle guard run, and browser checks that now set the browser language explicitly.
+
 **0.4.0–0.4.5 traceability additions:**
 
 | Requirement | Acceptance criteria            |
@@ -1036,6 +1072,17 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 | NFR-009     | AC-072, AC-073, AC-074, AC-075 |
 | NFR-011     | AC-072, AC-074, AC-082         |
 | NFR-014     | AC-071                         |
+
+**0.4.20 traceability additions (ADR-078):**
+
+| Requirement | Acceptance criteria            |
+| ----------- | ------------------------------ |
+| FR-028      | AC-084, AC-085                 |
+| FR-054      | AC-083, AC-084, AC-085, AC-086 |
+| NFR-003     | AC-084                         |
+| NFR-009     | AC-085                         |
+| NFR-011     | AC-085, AC-086                 |
+| NFR-012     | AC-084                         |
 
 **AC-057 extension (0.4.0):** the device check, `model_catalog.yml` guidance (適合 / 勉強可用 / 不建議), canirun.ai link, Ollama explicit pull, plain-language error mapping, one-line status and cloud data disclosure are owner-only admin surfaces; none of them appear in visitor pages or responses.
 

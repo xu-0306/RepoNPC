@@ -62,6 +62,7 @@ packages = ["src/reponpc"]
 "src/reponpc/scene/color_schemes.yml" = "reponpc/scene/color_schemes.yml"
 "src/reponpc/providers/builtin_embedding_manifest.yml" = "reponpc/providers/builtin_embedding_manifest.yml"
 "src/reponpc/admin/model_catalog.yml" = "reponpc/admin/model_catalog.yml"
+"src/reponpc/i18n/languages.json" = "reponpc/i18n/languages.json"
 
 [tool.hatch.build.targets.sdist]
 include = [

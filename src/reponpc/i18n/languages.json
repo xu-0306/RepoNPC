@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "languages": [
+    {
+      "tag": "zh-TW",
+      "endonym": "繁體中文",
+      "scripts": ["BOPOMOFO", "CJK", "LATIN"],
+      "direction": "ltr",
+      "match": ["zh", "zh-hant", "zh-hk", "zh-mo", "zh-tw"]
+    },
+    {
+      "tag": "en",
+      "endonym": "English",
+      "scripts": ["LATIN"],
+      "direction": "ltr",
+      "match": ["en"]
+    }
+  ]
+}
