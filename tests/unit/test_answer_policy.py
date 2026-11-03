@@ -16,9 +16,11 @@ def test_inflation_policy_is_cross_locale_and_has_no_duplicate_variants() -> Non
     assert groups
     for terms_by_locale in groups.values():
         assert set(terms_by_locale) >= {"en", "zh-TW"}
-        terms = [term for values in terms_by_locale.values() for term in values]
-        assert terms
-        assert len(terms) == len({term.casefold() for term in terms})
+        assert any(terms_by_locale.values())
+        # Generated zh-CN legitimately repeats zh-TW words that have no variant; the loader
+        # merges every language into one set, so uniqueness is required within each language.
+        for terms in terms_by_locale.values():
+            assert len(terms) == len({term.casefold() for term in terms})
 
 
 def test_person_reference_policy_preserves_cjk_project_phrases() -> None:

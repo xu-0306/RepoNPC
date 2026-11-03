@@ -4,11 +4,15 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  chromeLocale,
+  deriveConverter,
   endonym,
+  englishName,
   isLanguageTag,
   languageByTag,
   LANGUAGES,
   matchLocale,
+  titleMax,
 } from "./languages";
 
 const REGISTRY = JSON.parse(
@@ -44,6 +48,27 @@ describe("language registry mirror", () => {
     expect(isLanguageTag("xx")).toBe(false);
     expect(languageByTag(TAGS[0])?.tag).toBe(TAGS[0]);
   });
+
+  it("reads chrome, English names, title limits and derivations from every entry", () => {
+    for (const language of LANGUAGES) {
+      expect(chromeLocale(language.tag)).toBe(language.chrome);
+      expect(["zh-TW", "en"]).toContain(language.chrome);
+      expect(englishName(language.tag)).toBe(language.english_name);
+      expect(titleMax(language.tag)).toBe(language.title_max);
+      expect(titleMax(language.tag)).toBeGreaterThan(0);
+      for (const source of LANGUAGES) {
+        expect(deriveConverter(source.tag, language.tag)).toBe(
+          language.derive?.from === source.tag
+            ? language.derive.converter
+            : undefined,
+        );
+      }
+    }
+    expect(chromeLocale("xx")).toBe("en");
+    expect(englishName("xx")).toBe("xx");
+    expect(titleMax("xx")).toBeUndefined();
+    expect(deriveConverter(TAGS[0], "xx")).toBeUndefined();
+  });
 });
 
 describe("matchLocale", () => {
@@ -63,7 +88,20 @@ describe("matchLocale", () => {
     expect(matchLocale(["fr", "en-GB"], TAGS, "zh-TW")).toBe("en");
     expect(matchLocale(["zh-HK", "en"], TAGS, "zh-TW")).toBe("zh-TW");
     expect(matchLocale(["en-US", "zh-TW"], TAGS, "zh-TW")).toBe("en");
-    expect(matchLocale(["zh-CN"], TAGS, "en")).toBe("zh-TW");
+    expect(matchLocale(["zh-CN"], ["zh-TW", "en"], "en")).toBe("zh-TW");
+    expect(matchLocale(["zh-CN"], ["zh-TW", "zh-CN", "en"], "en")).toBe(
+      "zh-CN",
+    );
+  });
+
+  it.each([
+    ["es", "es"],
+    ["es-MX", "es"],
+    ["zh-SG", "zh-CN"],
+    ["zh-Hans-CN", "zh-CN"],
+    ["zh-Hant-TW", "zh-TW"],
+  ])("%s follows the longest supported prefix", (browserTag, expected) => {
+    expect(matchLocale([browserTag], TAGS, "en")).toBe(expected);
   });
 
   it("normalises case, spaces and underscores", () => {

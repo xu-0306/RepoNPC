@@ -99,6 +99,9 @@ from reponpc.sharing.export import build_visitor_site_export
 from reponpc.sharing.manifest import SiteExportError
 from reponpc.sharing.pages import PagesSharingService
 
+# Keep phase-A API acceptance until the admin API worker updates its boundary.
+_ApiLocale = Literal["zh-TW", "en"]
+
 
 class _StrictRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -362,7 +365,7 @@ class OnboardingDraftRequest(_StrictRequest):
 
 
 class FaqQueueRequest(_StrictRequest):
-    locale: Literal["zh-TW", "en"]
+    locale: _ApiLocale
 
 
 class FaqGenerateRequest(_StrictRequest):
@@ -2006,7 +2009,7 @@ def create_admin_router(
     @router.get("/portfolio/faq/export")
     async def read_faq(
         request: Request,
-        locale: Literal["zh-TW", "en"] = "zh-TW",
+        locale: _ApiLocale = "zh-TW",
         session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
     ) -> Response:
         faq = faq_boundary(request, session_token)
@@ -2148,7 +2151,7 @@ def create_admin_router(
     @router.get("/sharing/readme")
     async def export_profile_readme(
         request: Request,
-        locale: Literal["zh-TW", "en"] = "zh-TW",
+        locale: _ApiLocale = "zh-TW",
         session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
     ) -> Response:
         faq = faq_boundary(request, session_token)

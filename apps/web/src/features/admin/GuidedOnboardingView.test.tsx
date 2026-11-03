@@ -6,7 +6,7 @@ import {
 } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { messages } from "../../i18n/messages";
-import { LANGUAGES, endonym } from "../../i18n/languages";
+import { LEGACY_LANGUAGES, endonym } from "../../i18n/languages";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -139,7 +139,7 @@ function profileView(input: GuidedOnboardingViewProps) {
 }
 
 describe("ADR-078 profile UI", () => {
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "localizes source guidance and pending status in $tag",
     async ({ tag }) => {
       directHooks.values = [];
@@ -169,11 +169,12 @@ describe("ADR-078 profile UI", () => {
         const items: ProfileTranslationItem[] = [
           {
             field: "headline",
-            source_locale: LANGUAGES.find((language) => language.tag !== tag)!
-              .tag,
+            source_locale: LEGACY_LANGUAGES.find(
+              (language) => language.tag !== tag,
+            )!.tag,
             target_locale: tag,
             text: profile.headline[
-              LANGUAGES.find((language) => language.tag !== tag)!.tag
+              LEGACY_LANGUAGES.find((language) => language.tag !== tag)!.tag
             ],
           },
         ];
@@ -211,7 +212,7 @@ describe("ADR-078 profile UI", () => {
     },
   );
 
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "lists the $tag profile first in the review step",
     ({ tag }) => {
       const markup = renderToStaticMarkup(
@@ -226,12 +227,12 @@ describe("ADR-078 profile UI", () => {
         (match) => match[1],
       );
       const perLanguage = PROFILE_FIELDS.length;
-      expect(labels).toHaveLength(perLanguage * LANGUAGES.length);
+      expect(labels).toHaveLength(perLanguage * LEGACY_LANGUAGES.length);
       expect(labels.slice(0, perLanguage)).toEqual(
         Array(perLanguage).fill(endonym(tag)),
       );
       expect(new Set(labels)).toEqual(
-        new Set(LANGUAGES.map((language) => endonym(language.tag))),
+        new Set(LEGACY_LANGUAGES.map((language) => endonym(language.tag))),
       );
     },
   );
@@ -262,7 +263,7 @@ describe("ADR-078 profile UI", () => {
     }
   });
 
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "uses endonyms and orders the $tag profile column first",
     ({ tag }) => {
       const markup = renderToStaticMarkup(
@@ -275,7 +276,7 @@ describe("ADR-078 profile UI", () => {
       );
       const expected = [
         tag,
-        ...LANGUAGES.filter((language) => language.tag !== tag).map(
+        ...LEGACY_LANGUAGES.filter((language) => language.tag !== tag).map(
           (language) => language.tag,
         ),
       ];
@@ -289,7 +290,7 @@ describe("ADR-078 profile UI", () => {
           ),
         ].map((match) => match[1]);
         expect(ids).toEqual(expected);
-        for (const language of LANGUAGES) {
+        for (const language of LEGACY_LANGUAGES) {
           expect(markup).toContain(
             `<label for="guided-profile-${field}-${language.tag}">${endonym(language.tag)}</label>`,
           );
@@ -311,13 +312,13 @@ describe("ADR-078 profile UI", () => {
           })}
         />,
       );
-      for (const language of LANGUAGES)
+      for (const language of LEGACY_LANGUAGES)
         expect(contributions).toContain(`(${endonym(language.tag)})`);
       expect(contributions).not.toContain("Traditional Chinese)");
     },
   );
 
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "shows translate guidance and blocks incomplete confirmation in $tag",
     ({ tag }) => {
       const partial = { ...profile, bio: { ...profile.bio, [tag]: "" } };
@@ -348,7 +349,7 @@ describe("ADR-078 profile UI", () => {
     },
   );
 
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "has visible model and no-work reasons and sends no blocked requests in $tag",
     ({ tag }) => {
       directHooks.values = [];
@@ -395,7 +396,7 @@ describe("ADR-078 profile UI", () => {
     },
   );
 
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "keeps every translation action, marker, status and review count localized in $tag",
     async ({ tag }) => {
       directHooks.values = [];
@@ -452,7 +453,7 @@ describe("ADR-078 profile UI", () => {
         );
         for (const field of PROFILE_FIELDS)
           expect(Object.keys(sent.profile[field]).sort()).toEqual(
-            LANGUAGES.map((language) => language.tag).sort(),
+            LEGACY_LANGUAGES.map((language) => language.tag).sort(),
           );
 
         (
@@ -485,11 +486,12 @@ describe("ADR-078 profile UI", () => {
         const items = [
           {
             field: "bio",
-            source_locale: LANGUAGES.find((language) => language.tag !== tag)!
-              .tag,
+            source_locale: LEGACY_LANGUAGES.find(
+              (language) => language.tag !== tag,
+            )!.tag,
             target_locale: tag,
             text: profile.bio[
-              LANGUAGES.find((language) => language.tag !== tag)!.tag
+              LEGACY_LANGUAGES.find((language) => language.tag !== tag)!.tag
             ],
           },
         ] as ProfileTranslationItem[];
@@ -531,7 +533,7 @@ describe("ADR-078 profile UI", () => {
     },
   );
 
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "asks the existing confirm dialog before replacing text and cancel keeps it in $tag",
     ({ tag }) => {
       directHooks.values = [];
@@ -582,7 +584,7 @@ describe("ADR-078 profile UI", () => {
     },
   );
 
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "uses the existing error copy in a polite region without moving focus in $tag",
     async ({ tag }) => {
       directHooks.values = [];
@@ -600,11 +602,12 @@ describe("ADR-078 profile UI", () => {
         await view.translation.run([
           {
             field: "headline",
-            source_locale: LANGUAGES.find((language) => language.tag !== tag)!
-              .tag,
+            source_locale: LEGACY_LANGUAGES.find(
+              (language) => language.tag !== tag,
+            )!.tag,
             target_locale: tag,
             text: profile.headline[
-              LANGUAGES.find((language) => language.tag !== tag)!.tag
+              LEGACY_LANGUAGES.find((language) => language.tag !== tag)!.tag
             ],
           },
         ]);

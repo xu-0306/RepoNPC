@@ -184,6 +184,31 @@ def test_shipped_supplements_are_pinned_and_match_recorded_source_bytes() -> Non
         )
 
 
+def test_opencc_license_and_dictionary_notice_match_the_installed_pinned_distribution() -> None:
+    distribution = metadata.distribution("opencc-python-reimplemented")
+    assert distribution.version == "0.1.7"
+    directory = notices.ROOT / "packaging/windows/licenses"
+    combined = (notices.ROOT / "packaging/windows/THIRD_PARTY_NOTICES.txt").read_text(
+        encoding="utf-8"
+    )
+    for relative, kind in (
+        ("opencc_python_reimplemented-0.1.7.dist-info/LICENSE.txt", "LICENSE"),
+        ("opencc/NOTICE.txt", "NOTICE"),
+    ):
+        installed = Path(distribution.locate_file(relative))
+        shipped = directory / f"opencc-python-reimplemented-0.1.7-{kind}.txt"
+        assert shipped.read_text(encoding="utf-8") == installed.read_text(encoding="utf-8")
+        assert b"\r" not in shipped.read_bytes()
+        assert not shipped.read_bytes().startswith(b"\xef\xbb\xbf")
+        normalized = notices._text(installed)
+        assert normalized in combined
+        assert hashlib.sha256(normalized.encode()).hexdigest() in combined
+        assert f"opencc-python-reimplemented 0.1.7 / {relative}" in combined
+    assert "Apache License" in (
+        directory / "opencc-python-reimplemented-0.1.7-LICENSE.txt"
+    ).read_text(encoding="utf-8")
+
+
 def test_web_uses_installed_production_dependencies_and_pinned_supplement(tmp_path: Path) -> None:
     record = _record("@fixture/icons", "4.2")
     record["ecosystem"] = "web"

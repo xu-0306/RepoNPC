@@ -1,0 +1,23 @@
+# zh-CN generated from zh-TW by scripts/generate_zh_cn_policy.py; do not edit.
+# DRAFT: es needs review by a Spanish speaker before relying on it (ADR-079, SECURITY.md).
+messages:
+  no_match:
+    zh-TW: "這個問題我在作品集裡找不到相關內容，可以試試下面這些問題。"
+    zh-CN: "这个问题我在作品集里找不到相关内容，可以试试下面这些问题。"
+    en: "I couldn't find anything about that in this portfolio. Try one of these questions."
+    es: "No encontré contenido relacionado con esa pregunta en este portafolio. Prueba una de estas preguntas."
+  no_match_without_suggestions:
+    zh-TW: "這個問題我在作品集裡找不到相關內容。"
+    zh-CN: "这个问题我在作品集里找不到相关内容。"
+    en: "I couldn't find anything about that in this portfolio."
+    es: "No encontré contenido relacionado con esa pregunta en este portafolio."
+  temporary_no_match:
+    zh-TW: "這次沒能整理出可靠的回答，請再問一次。"
+    zh-CN: "这次没能整理出可靠的回答，请再问一次。"
+    en: "I couldn't put together a reliable answer this time. Please ask again."
+    es: "Esta vez no pude preparar una respuesta fiable. Vuelve a preguntar."
+  owner_prefix:
+    zh-TW: "{owner} 自述：{text}"
+    zh-CN: "{owner} 自述：{text}"
+    en: "In {owner}'s own words: {text}"
+    es: "En palabras de {owner}: {text}"

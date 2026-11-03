@@ -43,6 +43,8 @@ if TYPE_CHECKING:
     from reponpc.api.visitor_ingress import VisitorChatWorkers
 
 DEFAULT_LOCALE = "zh-TW"
+# Keep phase-A API acceptance until the public API worker updates its boundary.
+_ApiLocale = Literal["zh-TW", "en"]
 _PUBLIC_INDEX_VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
 _PUBLIC_MODEL_PROVIDERS = frozenset({"ollama", "openai_compatible"})
 SVG_ASSET_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
@@ -122,7 +124,7 @@ class PublicChatHistory(StrictResponseModel):
 
 class PublicChatRequest(StrictResponseModel):
     message: str = Field(min_length=1, max_length=4000)
-    locale: Literal["zh-TW", "en"]
+    locale: _ApiLocale
     history: tuple[PublicChatHistory, ...] = Field(default=(), max_length=10)
 
     @model_validator(mode="after")
@@ -297,7 +299,7 @@ def create_public_router(
         return {"status": "alive"}
 
     @router.get("/api/public/faq")
-    async def approved_faq(request: Request, locale: Literal["zh-TW", "en"] = "zh-TW") -> Response:
+    async def approved_faq(request: Request, locale: _ApiLocale = "zh-TW") -> Response:
         faq = faq_supplier()
         if faq is None:
             return unavailable(request, locale)

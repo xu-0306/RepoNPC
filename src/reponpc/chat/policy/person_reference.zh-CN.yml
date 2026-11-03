@@ -1,0 +1,18 @@
+# zh-CN generated from zh-TW by scripts/generate_zh_cn_policy.py; do not edit.
+references:
+  - "我"
+  - "我的"
+  - "本人"
+  - "作者"
+  - "拥有者"
+  - "维护者"
+  - "工程师"
+  - "员工"
+  - "他"
+  - "她"
+exclusions:
+  - "其他"
+  - "其它"
+  - "他人"
+  - "我们"
+  - "他们"

@@ -16,10 +16,10 @@ from reponpc.admin.faq_registry import STANDARD_QUESTIONS
 from reponpc.bundles.manager import BundleManager
 from reponpc.chat.answers import NoMatchReason
 from reponpc.chat.service import GroundedChatService
+from reponpc.i18n.languages import Locale
 from reponpc.indexing.public_profile import parse_public_profile_bytes
 from reponpc.runtime.database import RuntimeDatabase
 
-Locale = Literal["zh-TW", "en"]
 ClaimKind = Literal["role", "responsibility", "achievement", "context"]
 _PUBLIC_CITATION_FIELDS = (
     "id",

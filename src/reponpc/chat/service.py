@@ -23,6 +23,7 @@ from reponpc.chat.answers import (
     validate_v2_answer,
 )
 from reponpc.chat.limits import ChatLimits, ProviderLane
+from reponpc.i18n.languages import Locale
 from reponpc.indexing.public_profile import PublicProfileError, parse_public_profile_bytes
 from reponpc.observability import get_safe_logger
 from reponpc.providers import ProviderError, ProviderFailureCode, ProviderMessage, ProviderUsage
@@ -42,7 +43,7 @@ class ChatHistoryMessage:
 @dataclass(frozen=True, slots=True)
 class ChatDelivery:
     index_version: str
-    locale: Literal["zh-TW", "en"]
+    locale: Locale
     evidence_count: int
     answer_markdown: str
     citations: tuple[Citation, ...]
@@ -86,7 +87,7 @@ class GroundedChatService:
         self,
         *,
         message: str,
-        locale: Literal["zh-TW", "en"],
+        locale: Locale,
         history: tuple[ChatHistoryMessage, ...],
         client_ip: str | None,
         cancel_requested: threading.Event | None = None,
@@ -114,7 +115,7 @@ class GroundedChatService:
         self,
         *,
         message: str,
-        locale: Literal["zh-TW", "en"],
+        locale: Locale,
     ) -> ChatDelivery:
         """Use the normal validator and retrieval under owner provider admission."""
 
@@ -131,7 +132,7 @@ class GroundedChatService:
         self,
         *,
         message: str,
-        locale: Literal["zh-TW", "en"],
+        locale: Locale,
         history: tuple[ChatHistoryMessage, ...],
         client_ip: str | None,
         cancel_requested: threading.Event | None,
@@ -309,7 +310,7 @@ class GroundedChatService:
             )
 
     def _answer_profile(
-        self, index: Any, locale: Literal["zh-TW", "en"], *, directory: Path | None = None
+        self, index: Any, locale: Locale, *, directory: Path | None = None
     ) -> tuple[str | None, tuple[str, ...], tuple[str, str] | None]:
         directory_for = getattr(self._bundles, "public_directory_for", None)
         if directory is None:
@@ -440,7 +441,7 @@ def delivery_events(
 
 def _provider_messages(
     message: str,
-    locale: Literal["zh-TW", "en"],
+    locale: Locale,
     history: tuple[ChatHistoryMessage, ...],
     context: str,
     *,

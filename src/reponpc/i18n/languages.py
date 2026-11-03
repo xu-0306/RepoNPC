@@ -9,9 +9,19 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Final, Literal
+from typing import Annotated, Final, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
+
+CONVERTERS: Final = frozenset({"tw2sp", "s2twp"})
 
 # Unicode script names as `admin.onboarding._letter_script` reports them (the first word of a
 # letter's Unicode name, with every CJK ideograph folded into "CJK").
@@ -40,12 +50,29 @@ class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class LanguageDerivation(_Strict):
+    source: str = Field(alias="from")
+    converter: str
+
+    @field_validator("converter")
+    @classmethod
+    def _known_converter(cls, value: str) -> str:
+        if value not in CONVERTERS:
+            raise ValueError(f"unknown converter {value}")
+        return value
+
+
 class Language(_Strict):
     tag: str
     endonym: str = Field(min_length=1, max_length=40)
+    english_name: str = Field(min_length=1, max_length=40)
     scripts: tuple[str, ...] = Field(min_length=1)
     direction: Literal["ltr", "rtl"]
     match: tuple[str, ...] = Field(min_length=1)
+    title_max: int = Field(ge=1, le=200)
+    # Closed set of hand-written admin catalogs, independent of content languages.
+    chrome: Literal["zh-TW", "en"]
+    derive: LanguageDerivation | None = None
 
     @field_validator("tag")
     @classmethod
@@ -91,6 +118,11 @@ class LanguageRegistry(_Strict):
             raise ValueError("language tags must be unique")
         owner: dict[str, str] = {}
         for language in self.languages:
+            if language.derive is not None:
+                if language.derive.source not in tags:
+                    raise ValueError(f"unknown derive source {language.derive.source}")
+                if language.derive.source == language.tag:
+                    raise ValueError("language must not derive from itself")
             for prefix in language.match:
                 if prefix in owner:
                     raise ValueError(
@@ -127,3 +159,33 @@ def allowed_scripts(tag: str) -> frozenset[str]:
     """Writing systems whose words belong in text written in this language."""
 
     return frozenset(get_language(tag).scripts)
+
+
+def english_name(tag: str) -> str:
+    return get_language(tag).english_name
+
+
+def title_max(tag: str) -> int:
+    return get_language(tag).title_max
+
+
+def chrome_locale(tag: str) -> Literal["zh-TW", "en"]:
+    return get_language(tag).chrome
+
+
+def converter_for(source: str, target: str) -> str | None:
+    derive = get_language(target).derive
+    return derive.converter if derive is not None and derive.source == source else None
+
+
+def is_language_tag(value: object) -> bool:
+    return isinstance(value, str) and any(language.tag == value for language in LANGUAGES)
+
+
+def _require_language_tag(value: str) -> str:
+    if not is_language_tag(value):
+        raise ValueError(f"unknown language tag {value}")
+    return value
+
+
+Locale = Annotated[str, AfterValidator(_require_language_tag)]

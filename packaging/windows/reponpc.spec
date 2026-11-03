@@ -72,6 +72,7 @@ datas += collect_data_files(
         "cards/fonts/*OFL.txt",
     ],
 )
+datas += collect_data_files("opencc", includes=["config/*.json", "dictionary/*.txt"])
 datas += copy_metadata("reponpc")
 datas.append((str(NOTICES), "."))
 if (ROOT / "LICENSE").is_file():

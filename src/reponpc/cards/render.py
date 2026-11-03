@@ -13,9 +13,9 @@ from urllib.parse import quote, urlsplit
 from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 from reponpc.cards.assets import FRAME_SIZE, CanonicalSprite
+from reponpc.i18n.languages import Locale
 
 Theme = Literal["light", "dark"]
-Locale = Literal["zh-TW", "en"]
 Extension = Literal["svg", "gif", "png"]
 CARD_SIZE: Final = (600, 180)
 CARD_CHARACTER_SIZE: Final = 128

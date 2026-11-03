@@ -79,6 +79,7 @@ from reponpc.api.visitor_gateway import VisitorGateway
 from reponpc.api.visitor_ingress import VisitorChatWorkers
 from reponpc.bundles.manager import BundleActivationError, BundleManager
 from reponpc.chat.limits import ChatLimits
+from reponpc.chat.policy_data import validate_policy_data
 from reponpc.chat.service import GroundedChatService
 from reponpc.config.environment import (
     EnvironmentIssue,
@@ -273,6 +274,7 @@ def create_app(
 ) -> FastAPI:
     """Construct the real application and its optional immutable-bundle lifecycle."""
 
+    validate_policy_data()
     default_scene_registry()
     if analysis_cleanup_seconds <= 0:
         raise ValueError("analysis cleanup interval must be positive")

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { LANGUAGES, type LanguageTag } from "../../i18n/languages";
+import { LEGACY_LANGUAGES, type PairTag } from "../../i18n/languages";
 import type { GuidedProfile } from "./guidedOnboarding";
 
 export const PROFILE_FIELDS = ["headline", "bio", "greeting"] as const;
@@ -8,14 +8,14 @@ export type ProfileField = (typeof PROFILE_FIELDS)[number];
 
 export interface ProfileTranslationItem {
   field: ProfileField;
-  source_locale: LanguageTag;
-  target_locale: LanguageTag;
+  source_locale: PairTag;
+  target_locale: PairTag;
   text: string;
 }
 
 export interface ProfileTranslationResult {
   field: ProfileField;
-  target_locale: LanguageTag;
+  target_locale: PairTag;
   text: string;
   method: "model";
   confirmed: false;
@@ -50,7 +50,7 @@ export function fitHeight(element: HTMLTextAreaElement | null) {
 }
 
 export function profileLanguages(locale: string) {
-  return [...LANGUAGES].sort(
+  return [...LEGACY_LANGUAGES].sort(
     (left, right) => Number(right.tag === locale) - Number(left.tag === locale),
   );
 }
@@ -58,9 +58,9 @@ export function profileLanguages(locale: string) {
 export function profileTranslationSource(
   profile: GuidedProfile,
   field: ProfileField,
-  target: LanguageTag,
+  target: PairTag,
 ): ProfileTranslationItem | undefined {
-  const source = LANGUAGES.find(
+  const source = LEGACY_LANGUAGES.find(
     ({ tag }) => tag !== target && profile[field][tag].trim(),
   );
   return (
@@ -75,7 +75,7 @@ export function profileTranslationSource(
 
 export function emptyProfileTranslationItems(profile: GuidedProfile) {
   return PROFILE_FIELDS.flatMap((field) =>
-    LANGUAGES.flatMap(({ tag }) => {
+    LEGACY_LANGUAGES.flatMap(({ tag }) => {
       if (profile[field][tag].trim()) return [];
       const item = profileTranslationSource(profile, field, tag);
       return item ? [item] : [];
@@ -117,7 +117,7 @@ export function profileTranslationBody(
   return items;
 }
 
-type FieldKey = `${ProfileField}:${LanguageTag}`;
+type FieldKey = `${ProfileField}:${PairTag}`;
 interface TranslationReview {
   previousText: string;
   translatedText: string;
@@ -171,14 +171,14 @@ export function useProfileTranslation({
     };
   }, [active, modelGeneration, reset]);
 
-  function setField(field: ProfileField, locale: LanguageTag, text: string) {
+  function setField(field: ProfileField, locale: PairTag, text: string) {
     const current = latestProfile.current;
     const next = { ...current, [field]: { ...current[field], [locale]: text } };
     latestProfile.current = next;
     onChange(next);
   }
 
-  function markReviewed(field: ProfileField, locale: LanguageTag) {
+  function markReviewed(field: ProfileField, locale: PairTag) {
     const key: FieldKey = `${field}:${locale}`;
     setReviews((current) => {
       const review = current[key];
@@ -270,12 +270,12 @@ export function useProfileTranslation({
     status,
     errorCode,
     run,
-    review: (field: ProfileField, locale: LanguageTag) =>
+    review: (field: ProfileField, locale: PairTag) =>
       reviews[`${field}:${locale}`],
     unreviewedCount: PROFILE_FIELDS.reduce(
       (count, field) =>
         count +
-        LANGUAGES.filter(({ tag }) => {
+        LEGACY_LANGUAGES.filter(({ tag }) => {
           const review = reviews[`${field}:${tag}`];
           return (
             review &&
@@ -285,17 +285,17 @@ export function useProfileTranslation({
         }).length,
       0,
     ),
-    edit(field: ProfileField, locale: LanguageTag, text: string) {
+    edit(field: ProfileField, locale: PairTag, text: string) {
       const key: FieldKey = `${field}:${locale}`;
       editVersions.current[key] = (editVersions.current[key] ?? 0) + 1;
       markReviewed(field, locale);
       setField(field, locale, text);
     },
-    markReviewed(field: ProfileField, locale: LanguageTag) {
+    markReviewed(field: ProfileField, locale: PairTag) {
       markReviewed(field, locale);
       setStatus({ kind: "reviewed" });
     },
-    restore(field: ProfileField, locale: LanguageTag) {
+    restore(field: ProfileField, locale: PairTag) {
       const review = reviews[`${field}:${locale}`];
       if (!review) return;
       const key: FieldKey = `${field}:${locale}`;

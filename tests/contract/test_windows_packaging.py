@@ -12,6 +12,8 @@ from typing import Any
 
 import pytest
 
+from reponpc.i18n.languages import CONVERTERS
+
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = ROOT / "packaging" / "windows" / "reponpc.spec"
 SCRIPT = ROOT / "scripts" / "build_windows.ps1"
@@ -44,6 +46,9 @@ def execute_recipe(
         "src/reponpc/cards/fonts/OFL.txt": "synthetic font notice",
         "src/reponpc/cards/fonts/PressStart2P-OFL.txt": "synthetic pixel font notice",
         "reponpc-2.7.9.dist-info/METADATA": "Name: reponpc\nVersion: 2.7.9\n",
+        **{f"opencc/config/{name}.json": "{}" for name in CONVERTERS},
+        "opencc/dictionary/STCharacters.txt": "synthetic dictionary",
+        "opencc/dictionary/TWPhrasesRev.txt": "another synthetic dictionary",
         "secrets/private-key": "must not be collected",
         "runtime-data/runtime.sqlite": "must not be collected",
         ".env": "SECRET_CANARY=must_not_be_collected",
@@ -59,11 +64,14 @@ def execute_recipe(
     calls: dict[str, Any] = {"native": []}
 
     def collect_data_files(name: str, *, includes: list[str]) -> list[tuple[str, str]]:
-        if name != "reponpc":
+        if name not in {"reponpc", "opencc"}:
             return []
-        paths = {path for pattern in includes for path in package.glob(pattern) if path.is_file()}
+        resource_root = package if name == "reponpc" else tmp_path / name
+        paths = {
+            path for pattern in includes for path in resource_root.glob(pattern) if path.is_file()
+        }
         return [
-            (str(path), str(Path("reponpc") / path.relative_to(package).parent))
+            (str(path), str(Path(name) / path.relative_to(resource_root).parent))
             for path in sorted(paths)
         ]
 
@@ -186,6 +194,38 @@ def test_recipe_includes_an_existing_root_license_without_generating_one(
     assert (str(license_path), ".") in calls["analysis"]["datas"]
     assert license_path.read_text(encoding="utf-8") == (
         "Synthetic test license; not a repository license"
+    )
+
+
+def test_recipe_collects_opencc_configs_and_dictionaries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = execute_recipe(tmp_path, monkeypatch)
+    collected = {
+        (Path(source).relative_to(tmp_path).as_posix(), Path(destination).as_posix())
+        for source, destination in calls["analysis"]["datas"]
+    }
+    for name in CONVERTERS:
+        assert (f"opencc/config/{name}.json", "opencc/config") in collected
+    for name in ("STCharacters.txt", "TWPhrasesRev.txt"):
+        assert (f"opencc/dictionary/{name}", "opencc/dictionary") in collected
+
+
+def test_installed_opencc_data_is_complete_for_freezing() -> None:
+    from PyInstaller.utils.hooks import collect_data_files
+
+    spec = importlib.util.find_spec("opencc")
+    assert spec is not None and spec.origin is not None
+    package = Path(spec.origin).parent
+    configs = set(package.glob("config/*.json"))
+    dictionaries = set(package.glob("dictionary/*.txt"))
+    assert configs and dictionaries
+    assert {path.stem for path in configs} >= CONVERTERS
+    collected = collect_data_files("opencc", includes=["config/*.json", "dictionary/*.txt"])
+    assert {Path(source) for source, _destination in collected} == configs | dictionaries
+    assert all(
+        Path(destination).as_posix() == f"opencc/{Path(source).parent.name}"
+        for source, destination in collected
     )
 
 

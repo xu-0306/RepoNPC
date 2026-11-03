@@ -4,16 +4,44 @@
     {
       "tag": "zh-TW",
       "endonym": "繁體中文",
+      "english_name": "Traditional Chinese",
       "scripts": ["BOPOMOFO", "CJK", "LATIN"],
       "direction": "ltr",
-      "match": ["zh", "zh-hant", "zh-hk", "zh-mo", "zh-tw"]
+      "match": ["zh", "zh-hant", "zh-hk", "zh-mo", "zh-tw"],
+      "title_max": 24,
+      "chrome": "zh-TW",
+      "derive": { "from": "zh-CN", "converter": "s2twp" }
+    },
+    {
+      "tag": "zh-CN",
+      "endonym": "简体中文",
+      "english_name": "Simplified Chinese",
+      "scripts": ["CJK", "LATIN"],
+      "direction": "ltr",
+      "match": ["zh-cn", "zh-hans", "zh-sg"],
+      "title_max": 24,
+      "chrome": "zh-TW",
+      "derive": { "from": "zh-TW", "converter": "tw2sp" }
     },
     {
       "tag": "en",
       "endonym": "English",
+      "english_name": "English",
       "scripts": ["LATIN"],
       "direction": "ltr",
-      "match": ["en"]
+      "match": ["en"],
+      "title_max": 80,
+      "chrome": "en"
+    },
+    {
+      "tag": "es",
+      "endonym": "Español",
+      "english_name": "Spanish",
+      "scripts": ["LATIN"],
+      "direction": "ltr",
+      "match": ["es"],
+      "title_max": 80,
+      "chrome": "en"
     }
   ]
 }

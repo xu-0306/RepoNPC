@@ -6,31 +6,31 @@ import re
 import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from functools import lru_cache
 from json import JSONDecodeError
-from pathlib import Path
 from typing import Any, Literal
 
-import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from reponpc.bundles.index_reader import IndexedEvidence
+from reponpc.chat.policy_data import (
+    PersonPolicy,
+    inflation_groups,
+    person_policy,
+    visitor_message,
+)
+from reponpc.i18n.languages import LANGUAGES, Locale
 
 _SOURCE_MARKER_RE = re.compile(r"\[(S[1-9][0-9]*)\]")
 _SOURCE_ID_RE = re.compile(r"S[1-9][0-9]*")
 _LINK_RE = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
 _URL_RE = re.compile(r"(?i)(?:https?|ftp|file|javascript):\S+|(?:www\.)\S+")
 _HTML_RE = re.compile(r"<[^>]*>")
-_NO_MATCH = {
-    "zh-TW": "這個問題我在作品集裡找不到相關內容，可以試試下面這些問題。",  # noqa: RUF001
-    "en": "I couldn't find anything about that in this portfolio. Try one of these questions.",
-}
+_NO_MATCH = {language.tag: visitor_message(language.tag, "no_match") for language in LANGUAGES}
 _NO_MATCH_WITHOUT_SUGGESTIONS = {
-    "zh-TW": "這個問題我在作品集裡找不到相關內容。",
-    "en": "I couldn't find anything about that in this portfolio.",
+    language.tag: visitor_message(language.tag, "no_match_without_suggestions")
+    for language in LANGUAGES
 }
 _OWNER_PLACEHOLDER = "{{owner}}"
-_POLICY_DIR = Path(__file__).with_name("policy")
 _CJK_NUMERAL_RE = re.compile(r"[零\u3007一二兩三四五六七八九十百千万萬億]+")
 _ASCII_NUMERAL_RE = re.compile(r"(?<![A-Za-z0-9_])\d+(?:[.,]\d+)*%?")
 _DATE_RE = re.compile(
@@ -64,8 +64,7 @@ _NO_MATCH_KINDS: dict[NoMatchReason, NoMatchKind] = {
     "VALIDATION_UNEXPECTED": "temporary",
 }
 _TEMPORARY_NO_MATCH = {
-    "zh-TW": "這次沒能整理出可靠的回答，請再問一次。",  # noqa: RUF001
-    "en": "I couldn't put together a reliable answer this time. Please ask again.",
+    language.tag: visitor_message(language.tag, "temporary_no_match") for language in LANGUAGES
 }
 
 
@@ -139,7 +138,7 @@ class ValidatedAnswer:
 def validate_v2_answer(
     raw: str | dict[str, Any],
     selected_evidence: dict[str, IndexedEvidence],
-    locale: Literal["zh-TW", "en"],
+    locale: Locale,
     *,
     owner_name: str | None = None,
     owner_aliases: Sequence[str] = (),
@@ -173,7 +172,7 @@ def validate_v2_answer(
 def _validate_v2_envelope(
     envelope: AnswerEnvelope,
     selected: dict[str, IndexedEvidence],
-    locale: Literal["zh-TW", "en"],
+    locale: Locale,
     *,
     owner_name: str | None,
     owner_aliases: Sequence[str],
@@ -308,23 +307,16 @@ def _render_v2_segment(
     kind: str,
     text: str,
     source_ids: tuple[str, ...],
-    locale: Literal["zh-TW", "en"],
+    locale: Locale,
     owner_name: str | None,
 ) -> str:
     rendered_text = text.replace(_OWNER_PLACEHOLDER, owner_name or "")
     if kind == "person":
-        if locale == "zh-TW":
-            rendered_text = f"{owner_name} 自述：{rendered_text}"  # noqa: RUF001
-        else:
-            rendered_text = f"In {owner_name}'s own words: {rendered_text}"
+        rendered_text = visitor_message(locale, "owner_prefix").format(
+            owner=owner_name, text=rendered_text
+        )
     markers = " ".join(f"[{source_id}]" for source_id in source_ids)
     return f"{rendered_text.strip()} {markers}".strip()
-
-
-@dataclass(frozen=True, slots=True)
-class _LocalePolicy:
-    references: tuple[str, ...]
-    exclusions: tuple[str, ...]
 
 
 def _safe_suggestions(values: Sequence[str]) -> tuple[str, ...]:
@@ -352,7 +344,7 @@ def _safe_suggestions(values: Sequence[str]) -> tuple[str, ...]:
 
 
 def no_match_answer(
-    locale: Literal["zh-TW", "en"],
+    locale: Locale,
     suggestions: tuple[str, ...] = (),
     *,
     reason: NoMatchReason,
@@ -409,57 +401,12 @@ def _identity_terms(owner_name: str | None, owner_aliases: Sequence[str]) -> tup
     return tuple(sorted(values, key=len, reverse=True))
 
 
-@lru_cache(maxsize=2)
-def _load_locale_policy(locale: Literal["zh-TW", "en"]) -> _LocalePolicy:
-    path = _POLICY_DIR / f"person_reference.{locale}.yml"
-    try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            raise ValueError("person reference policy must be a mapping")
-        references = tuple(
-            item.strip()
-            for item in raw.get("references", ())
-            if isinstance(item, str) and item.strip()
-        )
-        exclusions = tuple(
-            item.strip()
-            for item in raw.get("exclusions", ())
-            if isinstance(item, str) and item.strip()
-        )
-        if not references:
-            raise ValueError("person reference policy is empty")
-        return _LocalePolicy(references, exclusions)
-    except OSError, TypeError, ValueError, yaml.YAMLError:
-        return _LocalePolicy((), ())
+def _load_locale_policy(locale: Locale) -> PersonPolicy:
+    return person_policy(locale)
 
 
-@lru_cache(maxsize=1)
 def _load_inflation_terms() -> dict[str, tuple[str, ...]]:
-    """Load the cross-locale escalation registry; an invalid file fails closed."""
-
-    path = _POLICY_DIR / "inflation_terms.yml"
-    try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-        groups = raw.get("groups") if isinstance(raw, dict) else None
-        if not isinstance(groups, dict):
-            return {}
-        result: dict[str, tuple[str, ...]] = {}
-        for group, locales in groups.items():
-            if not isinstance(group, str) or not isinstance(locales, dict):
-                return {}
-            terms = {
-                unicodedata.normalize("NFKC", term).casefold()
-                for values in locales.values()
-                if isinstance(values, (list, tuple))
-                for term in values
-                if isinstance(term, str) and term.strip()
-            }
-            if not terms:
-                return {}
-            result[group] = tuple(sorted(terms, key=len, reverse=True))
-        return result
-    except OSError, TypeError, ValueError, yaml.YAMLError:
-        return {}
+    return inflation_groups()
 
 
 def _term_present(text: str, term: str) -> bool:
@@ -475,7 +422,7 @@ def _term_present(text: str, term: str) -> bool:
 
 def _contains_person_reference(
     text: str,
-    locale: Literal["zh-TW", "en"],
+    locale: Locale,
     identities: tuple[str, ...],
 ) -> bool:
     if _OWNER_PLACEHOLDER in text:
@@ -490,8 +437,8 @@ def _contains_person_reference(
     )
 
 
-def _policy_locales(locale: Literal["zh-TW", "en"]) -> tuple[Literal["zh-TW", "en"], ...]:
-    alternate: Literal["zh-TW", "en"] = "en" if locale == "zh-TW" else "zh-TW"
+def _policy_locales(locale: Locale) -> tuple[Locale, ...]:
+    alternate: Locale = "en" if locale == "zh-TW" else "zh-TW"
     return (locale, alternate)
 
 

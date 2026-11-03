@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LANGUAGES } from "../../i18n/languages";
+import { LEGACY_LANGUAGES } from "../../i18n/languages";
 import {
   initialGuidedOnboardingState,
   serializeGuidedOnboarding,
@@ -125,19 +125,19 @@ function harness(initial: GuidedProfile, translate: TranslateProfile) {
 }
 
 describe("profile translation contract", () => {
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "orders $tag first and keeps registry order for the rest",
     ({ tag }) => {
       expect(profileLanguages(tag).map((language) => language.tag)).toEqual([
         tag,
-        ...LANGUAGES.filter((language) => language.tag !== tag).map(
+        ...LEGACY_LANGUAGES.filter((language) => language.tag !== tag).map(
           (language) => language.tag,
         ),
       ]);
     },
   );
 
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "sends column $tag as the source regardless of its writing system",
     async ({ tag }) => {
       for (const text of [
@@ -149,7 +149,7 @@ describe("profile translation contract", () => {
         const items = emptyProfileTranslationItems(current);
         expect(items).toEqual(
           PROFILE_FIELDS.flatMap((field) =>
-            LANGUAGES.filter((language) => language.tag !== tag).map(
+            LEGACY_LANGUAGES.filter((language) => language.tag !== tag).map(
               (target) => ({
                 field,
                 source_locale: tag,
@@ -178,7 +178,7 @@ describe("profile translation contract", () => {
     const current = profile();
     expect(emptyProfileTranslationItems(current)).toEqual([]);
     PROFILE_FIELDS.forEach((field, index) => {
-      current[field][LANGUAGES[index % LANGUAGES.length].tag] =
+      current[field][LEGACY_LANGUAGES[index % LEGACY_LANGUAGES.length].tag] =
         `Source ${field}`;
     });
     current.greeting = {
@@ -193,7 +193,7 @@ describe("profile translation contract", () => {
       expect(item.source_locale).not.toBe(item.target_locale);
     }
     expect(items.map((item) => item.source_locale)).toEqual(
-      LANGUAGES.map(({ tag }) => tag),
+      LEGACY_LANGUAGES.map(({ tag }) => tag),
     );
   });
 
@@ -210,7 +210,7 @@ describe("profile translation contract", () => {
   ])("rejects a %s response before applying any field", (mutation) => {
     const current = profile();
     for (const field of PROFILE_FIELDS)
-      current[field][LANGUAGES[0].tag] = field;
+      current[field][LEGACY_LANGUAGES[0].tag] = field;
     const items = emptyProfileTranslationItems(current);
     const response = translated(items);
     switch (mutation) {
@@ -299,7 +299,7 @@ describe("profile translation lifecycle", () => {
     expect(view.render().unreviewedCount).toBe(1);
   });
 
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "fills only empty targets from $tag in one request and restores an empty previous value",
     async ({ tag }) => {
       const current = profile();
@@ -317,7 +317,9 @@ describe("profile translation lifecycle", () => {
       expect(translate).toHaveBeenCalledTimes(1);
       expect(translate.mock.calls[0][0]).toHaveLength(2);
       expect(view.options.profile.greeting).toEqual(current.greeting);
-      const target = LANGUAGES.find((language) => language.tag !== tag)!.tag;
+      const target = LEGACY_LANGUAGES.find(
+        (language) => language.tag !== tag,
+      )!.tag;
       expect(view.render().unreviewedCount).toBe(2);
       expect(view.render().review("headline", target)?.previousText).toBe("");
       view.render().restore("headline", target);
@@ -351,7 +353,7 @@ describe("profile translation lifecycle", () => {
       );
       for (const field of PROFILE_FIELDS)
         expect(Object.keys(saved.profile[field]).sort()).toEqual(
-          LANGUAGES.map(({ tag }) => tag).sort(),
+          LEGACY_LANGUAGES.map(({ tag }) => tag).sort(),
         );
       expect(JSON.stringify(saved.profile)).not.toMatch(
         /previousText|translatedText|reviewed|method|confirmed/,
@@ -365,7 +367,7 @@ describe("profile translation lifecycle", () => {
     const item = profileTranslationSource(
       current,
       "headline",
-      LANGUAGES[0].tag,
+      LEGACY_LANGUAGES[0].tag,
     )!;
     const view = harness(current, async (items) => translated(items));
     await view.render().run([item]);

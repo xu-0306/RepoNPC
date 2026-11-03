@@ -22,7 +22,8 @@ from pydantic import (
     model_validator,
 )
 
-Locale = Literal["zh-TW", "en"]
+from reponpc.i18n.languages import Locale as Locale
+
 LocalizedText = dict[str, str]
 CLAIM_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
 HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -120,10 +121,10 @@ class LocalesConfig(StrictModel):
 
     @model_validator(mode="after")
     def validate_supported(self) -> LocalesConfig:
+        if not self.supported:
+            raise ValueError("supported locales must not be empty")
         if len(self.supported) != len(set(self.supported)):
             raise ValueError("supported locales must be unique")
-        if set(self.supported) != {"zh-TW", "en"}:
-            raise ValueError("v1 supported locales must be exactly zh-TW and en")
         if self.default not in self.supported:
             raise ValueError("default locale must be supported")
         return self

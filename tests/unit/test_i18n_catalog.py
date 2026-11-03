@@ -5,6 +5,7 @@ from string import Formatter
 import pytest
 
 from reponpc.i18n.catalog import MESSAGES, SUPPORTED_LOCALES, translate
+from reponpc.i18n.languages import LANGUAGES
 
 
 def _placeholders(template: str) -> set[str]:
@@ -65,3 +66,14 @@ def test_translate_rejects_missing_or_undeclared_placeholders() -> None:
 
     with pytest.raises(ValueError, match="Unexpected placeholders"):
         translate("en", "index_unavailable", service="chat")
+
+
+@pytest.mark.parametrize("language", LANGUAGES, ids=lambda language: language.tag)
+def test_every_registry_language_uses_its_chrome_catalog(language) -> None:
+    assert (
+        translate(language.tag, "index_unavailable")
+        == MESSAGES[language.chrome]["index_unavailable"]
+    )
+    assert translate(language.tag, "service_not_ready", service="embedding") == translate(
+        language.chrome, "service_not_ready", service="embedding"
+    )

@@ -1,3 +1,5 @@
+# zh-CN generated from zh-TW by scripts/generate_zh_cn_policy.py; do not edit.
+# DRAFT: es needs review by a Spanish speaker before relying on it (ADR-079, SECURITY.md).
 groups:
   role:
     en:
@@ -12,6 +14,23 @@ groups:
       - 維護者
       - 作者
       - 員工
+    zh-CN:
+      - "工程师"
+      - "开发者"
+      - "维护者"
+      - "作者"
+      - "员工"
+    es:
+      - ingeniero
+      - ingeniera
+      - desarrollador
+      - desarrolladora
+      - mantenedor
+      - mantenedora
+      - autor
+      - autora
+      - empleado
+      - empleada
   lead:
     en:
       - lead
@@ -26,6 +45,20 @@ groups:
       - 帶領
       - 領導
       - 領導者
+    zh-CN:
+      - "主导"
+      - "带领"
+      - "领导"
+      - "领导者"
+    es:
+      - lidera
+      - lideró
+      - liderar
+      - líder
+      - líderes
+      - liderazgo
+      - dirige
+      - dirigió
   founder:
     en:
       - founder
@@ -36,6 +69,17 @@ groups:
       - 創辦
       - 創辦人
       - 共同創辦
+    zh-CN:
+      - "创办"
+      - "创办人"
+      - "共同创办"
+    es:
+      - fundador
+      - fundadora
+      - fundó
+      - cofundador
+      - cofundadora
+      - cofundó
   senior:
     en:
       - senior
@@ -44,6 +88,13 @@ groups:
     zh-TW:
       - 資深
       - 首席
+    zh-CN:
+      - "资深"
+      - "首席"
+    es:
+      - sénior
+      - principal
+      - de plantilla
   sole:
     en:
       - sole
@@ -54,6 +105,16 @@ groups:
       - 獨立完成
       - 一手
       - 唯一
+    zh-CN:
+      - "独立完成"
+      - "一手"
+      - "唯一"
+    es:
+      - único
+      - única
+      - exclusivamente
+      - sin ayuda
+      - de forma independiente
   architect:
     en:
       - architect
@@ -61,6 +122,13 @@ groups:
     zh-TW:
       - 架構師
       - 架構設計
+    zh-CN:
+      - "架构师"
+      - "架构设计"
+    es:
+      - arquitecto
+      - arquitecta
+      - líder de arquitectura
   manager:
     en:
       - manager
@@ -71,6 +139,16 @@ groups:
       - 管理
       - 管理者
       - 主管
+    zh-CN:
+      - "管理"
+      - "管理者"
+      - "主管"
+    es:
+      - gerente
+      - gerenta
+      - gestionó
+      - gestiona
+      - gestión
   responsibility:
     en:
       - responsible
@@ -97,3 +175,28 @@ groups:
       - 建立
       - 撰寫
       - 維護
+    zh-CN:
+      - "负责"
+      - "实作"
+      - "实现"
+      - "开发"
+      - "创建"
+      - "撰写"
+      - "维护"
+    es:
+      - responsable
+      - responsabilidad
+      - implementó
+      - implementa
+      - construyó
+      - construye
+      - desarrolló
+      - desarrolla
+      - redactó
+      - redacta
+      - creó
+      - crea
+      - mantuvo
+      - mantiene
+      - escribió
+      - escribe

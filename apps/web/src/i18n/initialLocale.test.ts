@@ -3,8 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../app/App";
 import { VisitorApp } from "../app/VisitorApp";
-import { resolveInitialLocale, storeLocale } from "./initialLocale";
-import { LANGUAGES, type LanguageTag } from "./languages";
+import {
+  resolveInitialLocale,
+  resolveLocaleIn,
+  storeLocale,
+} from "./initialLocale";
+import { LEGACY_LANGUAGES, type PairTag } from "./languages";
 
 // Exercise the real state owners with the existing Node hook-harness pattern.
 const hooks = vi.hoisted(() => ({
@@ -79,23 +83,29 @@ afterEach(() => {
 });
 
 describe("initial locale", () => {
-  it.each(LANGUAGES)("prefers the stored $tag to the browser", ({ tag }) => {
-    stored.set("reponpc.locale", tag);
-    vi.stubGlobal("navigator", {
-      languages: LANGUAGES.filter((entry) => entry.tag !== tag).map(
-        (entry) => entry.tag,
-      ),
-    });
-    expect(resolveInitialLocale()).toBe(tag);
-  });
+  it.each(LEGACY_LANGUAGES)(
+    "prefers the stored $tag to the browser",
+    ({ tag }) => {
+      stored.set("reponpc.locale", tag);
+      vi.stubGlobal("navigator", {
+        languages: LEGACY_LANGUAGES.filter((entry) => entry.tag !== tag).map(
+          (entry) => entry.tag,
+        ),
+      });
+      expect(resolveInitialLocale()).toBe(tag);
+    },
+  );
 
   it.each(
     [
       "",
       "null",
       "__proto__",
-      ...LANGUAGES.flatMap(({ tag }) => [tag.toUpperCase(), `${tag}-x-stored`]),
-    ].flatMap((value) => LANGUAGES.map(({ tag }) => ({ value, tag }))),
+      ...LEGACY_LANGUAGES.flatMap(({ tag }) => [
+        tag.toUpperCase(),
+        `${tag}-x-stored`,
+      ]),
+    ].flatMap((value) => LEGACY_LANGUAGES.map(({ tag }) => ({ value, tag }))),
   )("ignores invalid stored $value with browser $tag", ({ value, tag }) => {
     stored.set("reponpc.locale", value);
     vi.stubGlobal("navigator", { languages: [tag] });
@@ -113,7 +123,7 @@ describe("initial locale", () => {
   });
 
   it.each(
-    LANGUAGES.flatMap(({ tag, match }) =>
+    LEGACY_LANGUAGES.flatMap(({ tag, match }) =>
       match.map((prefix) => ({ tag, prefix })),
     ),
   )("matches registry prefix $prefix to $tag", ({ tag, prefix }) => {
@@ -123,7 +133,7 @@ describe("initial locale", () => {
     }
   });
 
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "uses navigator.language for $tag when languages is empty",
     ({ tag }) => {
       vi.stubGlobal("navigator", { languages: [], language: tag });
@@ -146,16 +156,59 @@ describe("initial locale", () => {
     expect(() => storeLocale("zh-TW")).not.toThrow();
   });
 
-  it.each(LANGUAGES)("stores the exact registry tag $tag", ({ tag }) => {
+  it.each(LEGACY_LANGUAGES)("stores the exact registry tag $tag", ({ tag }) => {
     storeLocale(tag);
     expect(storage.setItem).toHaveBeenCalledWith("reponpc.locale", tag);
     expect(stored.get("reponpc.locale")).toBe(tag);
   });
 });
 
+describe("resolveLocaleIn", () => {
+  const SET = ["zh-TW", "zh-CN", "en", "es"];
+
+  it.each([
+    { languages: ["zh-CN"], supported: SET, expected: "zh-CN" },
+    { languages: ["zh-SG", "en"], supported: SET, expected: "zh-CN" },
+    { languages: ["es-MX"], supported: SET, expected: "es" },
+    { languages: ["zh-CN"], supported: ["zh-TW", "en"], expected: "zh-TW" },
+    { languages: ["es"], supported: ["en"], expected: "en" },
+    { languages: ["fr", "es"], supported: ["en", "es"], expected: "es" },
+    { languages: ["fr"], supported: ["es"], expected: "es" },
+  ])(
+    "matches $languages against $supported",
+    ({ languages, supported, expected }) => {
+      vi.stubGlobal("navigator", { languages });
+      expect(resolveLocaleIn(supported, supported[0]!)).toBe(expected);
+    },
+  );
+
+  it("uses the stored choice only while the set still offers it", () => {
+    stored.set("reponpc.locale", "es");
+    vi.stubGlobal("navigator", { languages: ["zh-CN"] });
+    expect(resolveLocaleIn(SET, "en")).toBe("es");
+    expect(resolveLocaleIn(["zh-CN", "en"], "en")).toBe("zh-CN");
+  });
+
+  it("returns the fallback when nothing matches and storage is unusable", () => {
+    Object.defineProperty(window, "localStorage", {
+      get() {
+        throw new Error("Storage disabled");
+      },
+    });
+    vi.stubGlobal("navigator", { languages: ["de"] });
+    expect(resolveLocaleIn(["en", "es"], "es")).toBe("es");
+  });
+
+  it("keeps the legacy pair wrapper on the two phase A languages", () => {
+    stored.set("reponpc.locale", "es");
+    vi.stubGlobal("navigator", { languages: ["es"] });
+    expect(resolveInitialLocale()).toBe("zh-TW");
+  });
+});
+
 interface LocaleProps {
-  locale: LanguageTag;
-  onLocaleChange: (locale: LanguageTag) => void;
+  locale: PairTag;
+  onLocaleChange: (locale: PairTag) => void;
 }
 
 function render(app: "admin" | "visitor"): LocaleProps {
@@ -178,10 +231,10 @@ function render(app: "admin" | "visitor"): LocaleProps {
 }
 
 describe.each(["admin", "visitor"] as const)("%s locale owner", (app) => {
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "persists a manual switch to $tag across remounts and syncs html lang",
     ({ tag }) => {
-      const other = LANGUAGES.find((entry) => entry.tag !== tag)!;
+      const other = LEGACY_LANGUAGES.find((entry) => entry.tag !== tag)!;
       vi.stubGlobal("navigator", { languages: [other.tag] });
       expect(render(app).locale).toBe(other.tag);
       expect(document.documentElement.lang).toBe(other.tag);

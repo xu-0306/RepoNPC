@@ -7,6 +7,8 @@ from string import Formatter
 from types import MappingProxyType
 from typing import Final
 
+from reponpc.i18n.languages import chrome_locale, is_language_tag
+
 SUPPORTED_LOCALES: Final[tuple[str, str]] = ("zh-TW", "en")
 
 _MESSAGE_CATALOG: Final[dict[str, dict[str, str]]] = {
@@ -42,10 +44,10 @@ def _placeholders(template: str) -> frozenset[str]:
 def translate(locale: str, key: str, /, **placeholders: object) -> str:
     """Format a localized catalog message using its declared placeholders only."""
 
-    if locale not in SUPPORTED_LOCALES:
+    if not is_language_tag(locale):
         raise ValueError(f"Unsupported locale: {locale!r}")
 
-    messages = MESSAGES[locale]
+    messages = MESSAGES[chrome_locale(locale)]
     if key not in messages:
         raise ValueError(f"Unknown message key: {key!r}")
 

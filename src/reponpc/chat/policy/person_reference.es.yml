@@ -1,0 +1,32 @@
+# DRAFT: needs review by a Spanish speaker before relying on it (ADR-079, SECURITY.md).
+references:
+  - yo
+  - mi
+  - mis
+  - mí
+  - mío
+  - mía
+  - míos
+  - mías
+  - me
+  - él
+  - ella
+  - su
+  - sus
+  - suyo
+  - suya
+  - suyos
+  - suyas
+  - propietario
+  - propietaria
+  - mantenedor
+  - mantenedora
+  - autor
+  - autora
+  - creador
+  - creadora
+  - ingeniero
+  - ingeniera
+  - empleado
+  - empleada
+exclusions: []

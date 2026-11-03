@@ -4,7 +4,8 @@
 
 from typing import Literal
 
-Locale = Literal["zh-TW", "en"]
+from reponpc.i18n.languages import Locale
+
 ClaimKind = Literal["role", "responsibility", "achievement", "context"]
 
 # This finite product registry is shared by queue creation and claim shortcuts.

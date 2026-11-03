@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LANGUAGES } from "../../i18n/languages";
+import { LEGACY_LANGUAGES } from "../../i18n/languages";
 import { PROFILE_FIELDS } from "./profileTranslation";
 
 import {
@@ -281,7 +281,7 @@ const profile = {
 };
 
 describe("profile editing and confirmation", () => {
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "uses profile-specific validation guidance in $tag",
     ({ tag }) => {
       const error = guidedErrorMessage(tag, "VALIDATION_ERROR", "profile");
@@ -297,7 +297,7 @@ describe("profile editing and confirmation", () => {
       ).toContain("GitHub");
     },
   );
-  it.each(LANGUAGES)(
+  it.each(LEGACY_LANGUAGES)(
     "allows a blank $tag while editing and requires every localized value before confirmation",
     ({ tag }) => {
       expect(profileIsComplete(profile)).toBe(true);
