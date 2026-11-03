@@ -1,13 +1,18 @@
+import type { CSSProperties } from "react";
+
 import type { Locale } from "../../i18n/messages";
 import { endonym } from "../../i18n/languages";
 import type { GuidedProfile } from "./guidedOnboarding";
 import { ConfirmButton } from "./ConfirmDialog";
 import {
   PROFILE_FIELDS,
+  fitHeight,
   profileLanguages,
   profileTranslationSource,
   type useProfileTranslation,
 } from "./profileTranslation";
+
+const FIELD_ROWS = { headline: 1, bio: 4, greeting: 3 } as const;
 
 export function ProfileTranslationFields({
   locale,
@@ -84,7 +89,9 @@ export function ProfileTranslationFields({
               onChange={(event) =>
                 translation.edit(field, tag, event.target.value)
               }
-              rows={field === "headline" ? 1 : field === "bio" ? 4 : 3}
+              rows={FIELD_ROWS[field]}
+              style={{ "--profile-rows": FIELD_ROWS[field] } as CSSProperties}
+              ref={(element) => fitHeight(element)}
               value={value}
             />
             {!value.trim() && (

@@ -5,6 +5,13 @@
   gap: 8px;
   min-width: 0;
 }
+/* Grow with the text so the owner never has to drag the corner.
+   Browsers without field-sizing are fitted by ProfileTranslationFields. */
+/* Beats pixel.css `.px-field.px-field { min-height: 44px }`; 24px = padding + border. */
+.profile-translation__field textarea.px-field.px-field {
+  field-sizing: content;
+  min-height: calc(var(--profile-rows, 1) * 1lh + 24px);
+}
 .profile-translation__actions {
   display: flex;
   flex-wrap: wrap;

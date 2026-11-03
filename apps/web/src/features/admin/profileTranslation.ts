@@ -38,6 +38,17 @@ export function requestProfileTranslation(
   });
 }
 
+// Browsers without `field-sizing: content` get the height fitted after each render.
+export function fitHeight(element: HTMLTextAreaElement | null) {
+  if (
+    !element ||
+    (typeof CSS !== "undefined" && CSS.supports("field-sizing", "content"))
+  )
+    return;
+  element.style.height = "auto";
+  element.style.height = `${element.scrollHeight + element.offsetHeight - element.clientHeight}px`;
+}
+
 export function profileLanguages(locale: string) {
   return [...LANGUAGES].sort(
     (left, right) => Number(right.tag === locale) - Number(left.tag === locale),
