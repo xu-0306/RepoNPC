@@ -1278,6 +1278,13 @@ function cloneProposal(proposal: ContributionProposal): ContributionProposal {
   };
 }
 
+// Committed starter greetings. A language without one starts empty; the owner writes it or fills
+// it with the translate or convert action.
+const STARTER_GREETING: Readonly<Record<string, string>> = {
+  "zh-TW": "嗨，我是你的 RepoNPC。想先了解哪一個專案？",
+  en: "Hi, I am your RepoNPC. Which project would you like to explore?",
+};
+
 function emptyGuidedProfile(supported: readonly Locale[]): GuidedProfile {
   return {
     displayName: "",
@@ -1285,7 +1292,9 @@ function emptyGuidedProfile(supported: readonly Locale[]): GuidedProfile {
     aliasesText: "",
     headline: localizedFor(supported),
     bio: localizedFor(supported),
-    greeting: localizedFor(supported),
+    greeting: Object.fromEntries(
+      supported.map((tag) => [tag, STARTER_GREETING[tag] ?? ""]),
+    ) as LocalizedText,
   };
 }
 

@@ -120,6 +120,7 @@ class AdminOperations:
                             if config.card.show_repository_count
                             else None
                         ),
+                        locale=locale,
                     ),
                     palette=CardPalette(**selected.model_dump()),
                     sprite=sprite,

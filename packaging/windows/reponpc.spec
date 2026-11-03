@@ -67,6 +67,8 @@ datas += collect_data_files(
         "**/*.yml",
         "**/*.yaml",
         "i18n/languages.json",
+        "cards/copy.json",
+        "sharing/readme_copy.json",
         "cards/fonts/*.otf",
         "cards/fonts/press-start-2p-latin-400-normal.woff2",
         "cards/fonts/*OFL.txt",

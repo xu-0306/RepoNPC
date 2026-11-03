@@ -387,6 +387,32 @@ function selectedState() {
   return state;
 }
 
+describe("new profile starter text", () => {
+  const STARTER = {
+    "zh-TW": "嗨，我是你的 RepoNPC。想先了解哪一個專案？",
+    en: "Hi, I am your RepoNPC. Which project would you like to explore?",
+  };
+
+  it("keeps the committed greeting of each language that has one", () => {
+    expect(
+      initialGuidedOnboardingState(false, "zh-TW").profile.greeting,
+    ).toEqual(STARTER);
+    expect(initialGuidedOnboardingState(false, "en").profile.greeting).toEqual({
+      en: STARTER.en,
+    });
+  });
+
+  it.each(["es", "zh-CN"] as const)(
+    "starts %s empty beside the English greeting",
+    (tag) => {
+      const { profile } = initialGuidedOnboardingState(false, tag);
+      expect(profile.greeting).toEqual({ [tag]: "", en: STARTER.en });
+      expect(profile.headline).toEqual({ [tag]: "", en: "" });
+      expect(profile.bio).toEqual({ [tag]: "", en: "" });
+    },
+  );
+});
+
 describe("guidedOnboardingReducer", () => {
   it.each(["octocat/demo", "somebody/different-project"])(
     "refuses archived repository toggles using metadata for %s",
