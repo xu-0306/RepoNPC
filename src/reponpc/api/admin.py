@@ -64,6 +64,7 @@ from reponpc.admin.onboarding import (
     GuidedOnboardingError,
     GuidedProfileDraft,
     GuidedRepositoryDraft,
+    ProfileTranslateRequest,
 )
 from reponpc.admin.operations import AdminOperations
 from reponpc.admin.preview_assets import PreviewAssetError, PreviewAssetStore
@@ -3107,6 +3108,29 @@ def create_admin_router(
                 session_hash=session_hash,
                 slug=body.slug,
                 owner_statement=body.owner_statement,
+            )
+        except GuidedOnboardingError as exc:
+            return _onboarding_error(request, exc)
+        return JSONResponse(result)
+
+    @router.post("/onboarding/profile/translate")
+    async def translate_profile(
+        request: Request,
+        body: ProfileTranslateRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        configured, session_hash = boundary
+        try:
+            if configured.onboarding is None:
+                raise GuidedOnboardingError("SERVICE_NOT_READY")
+            result = await asyncio.to_thread(
+                configured.onboarding.translate_profile,
+                session_hash=session_hash,
+                items=body.items,
             )
         except GuidedOnboardingError as exc:
             return _onboarding_error(request, exc)
