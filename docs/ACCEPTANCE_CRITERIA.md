@@ -259,7 +259,7 @@ Edge-spill regression: source grids of more than one previously unseen cell size
 
 - **Given** light/dark and both locale variants, including hostile profile text,
 - **When** SVG/GIF/PNG endpoints are fetched,
-- **Then** outputs are valid `600x180` assets, first/static frames convey complete content, user text is safely escaped/truncated, SVG has required headers and no scripts/handlers/foreign objects/remote references, and ETags change with bundle/variant/revision.
+- **Then** outputs are valid `600x180` assets, first/static frames convey complete content, user text is safely escaped/truncated, SVG has required headers and no scripts/handlers/foreign objects/remote references, and ETags change with bundle/variant/revision; (0.4.19, ADR-077) PNG and GIF frames contain only the five theme colours, the fixed derived colours and character colours with no anti-aliased text, SVG draws the same first frame as pixel rectangles with no text or font dependency, and the default light and dark themes keep text and call-to-action pairs at least 4.5:1.
 
 ### AC-022 — Real GitHub rendering remains useful
 
@@ -1011,7 +1011,9 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
   - no page scrolls horizontally, and the primary action (send, 「確認配對並繼續」, 「套用角色」) is visible without scrolling at 1440×900;
   - the NPC uses the idle/talk, think and offline rows for the three visitor states, and reduced motion shows static frames;
   - the pixel font appears only on the brand, Latin headings, numbers and buttons, and the minimum sizes of §16 hold;
-  - project cards in the 「專案」 drawer show name, description, language, stars and forks when present.
+  - project cards in the 「專案」 drawer show name, description, language, stars and forks when present;
+  - (ADR-077) the README card assets are the hard-edged pixel Scene template described by AC-021;
+  - (ADR-077 §6) no owner page renders a rounded corner, soft shadow, gradient or non-`--px-*` colour: the static guard `apps/web/src/legacyStyles.test.js` and a computed-style scan of the model panels, the access states and the admin page report none.
 - **And** no source file holds a literal colour or scheme id outside the registry and the generated fallback block, no code branches on a scheme id, the CSP is unchanged, and no external font, stylesheet or script is requested.
 - **Verification:** registry contrast tests; source and style guards; Playwright screenshots and computed-style checks over scheme × variant × width × state, live and exported; keyboard and screen-reader checks in both locales; an export manifest check.
 

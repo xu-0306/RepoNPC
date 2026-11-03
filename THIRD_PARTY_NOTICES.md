@@ -17,12 +17,14 @@ are used only to identify configured model providers or model families.
 
 RepoNPC ships the unmodified Latin subset from
 `@fontsource/press-start-2p` 5.3.0 in
-`apps/web/src/assets/fonts/press-start-2p-latin-400-normal.woff2`.
+`apps/web/src/assets/fonts/press-start-2p-latin-400-normal.woff2` and
+`src/reponpc/cards/fonts/press-start-2p-latin-400-normal.woff2` for README cards.
 
 Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with
 Reserved Font Name "Press Start 2P".
 
 Licensed under the SIL Open Font License 1.1. The full license text is shipped
-in [OFL.txt](apps/web/src/assets/fonts/OFL.txt).
+in [OFL.txt](apps/web/src/assets/fonts/OFL.txt) and
+[PressStart2P-OFL.txt](src/reponpc/cards/fonts/PressStart2P-OFL.txt).
 
 Source: [@fontsource/press-start-2p 5.3.0](https://www.npmjs.com/package/@fontsource/press-start-2p/v/5.3.0).

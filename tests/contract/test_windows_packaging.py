@@ -39,7 +39,9 @@ def execute_recipe(
         "src/reponpc/chat/policy/person_reference.en.yml": "registry: fixture",
         "src/reponpc/admin/model_catalog.yml": "catalog: []",
         "src/reponpc/cards/fonts/NotoSansCJKtc-Regular.otf": "synthetic font",
+        "src/reponpc/cards/fonts/press-start-2p-latin-400-normal.woff2": "synthetic pixel font",
         "src/reponpc/cards/fonts/OFL.txt": "synthetic font notice",
+        "src/reponpc/cards/fonts/PressStart2P-OFL.txt": "synthetic pixel font notice",
         "reponpc-2.7.9.dist-info/METADATA": "Name: reponpc\nVersion: 2.7.9\n",
         "secrets/private-key": "must not be collected",
         "runtime-data/runtime.sqlite": "must not be collected",
@@ -144,7 +146,9 @@ def test_recipe_preserves_approved_resources_native_runtime_and_metadata_without
         "person_reference.en.yml",
         "model_catalog.yml",
         "NotoSansCJKtc-Regular.otf",
+        "press-start-2p-latin-400-normal.woff2",
         "OFL.txt",
+        "PressStart2P-OFL.txt",
         "THIRD_PARTY_NOTICES.txt",
     ]:
         assert any(source.name == expected for source, _destination in inputs)

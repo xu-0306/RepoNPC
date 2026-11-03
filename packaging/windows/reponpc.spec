@@ -62,7 +62,14 @@ datas = [
 ]
 # Resource classes, rather than a duplicate registry of every YAML filename.
 datas += collect_data_files(
-    "reponpc", includes=["**/*.yml", "**/*.yaml", "cards/fonts/*.otf", "cards/fonts/OFL.txt"]
+    "reponpc",
+    includes=[
+        "**/*.yml",
+        "**/*.yaml",
+        "cards/fonts/*.otf",
+        "cards/fonts/press-start-2p-latin-400-normal.woff2",
+        "cards/fonts/*OFL.txt",
+    ],
 )
 datas += copy_metadata("reponpc")
 datas.append((str(NOTICES), "."))

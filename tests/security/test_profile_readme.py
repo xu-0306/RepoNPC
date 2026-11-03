@@ -8,6 +8,7 @@ import socket
 import zipfile
 
 import pytest
+from PIL import Image
 
 from reponpc.indexing.public_profile import LocalizedPublicProfile
 from reponpc.providers.http_transport import ProviderHttpResponse
@@ -16,6 +17,7 @@ from reponpc.sharing.readme import render_profile_readme
 from tests.browser.a5_server import build_application
 from tests.security.test_a5_pages_api_review import _login
 from tests.security.test_a5_sharing_review import _visitor_build
+from tests.unit.test_card_pixel import svg_to_image
 
 
 @pytest.fixture
@@ -105,6 +107,14 @@ def test_download_uses_verified_public_snapshot_and_actual_card(readme_site, loc
     assert "PRIVATE_KEY_CANARY" not in result.text
     assert "Unapplied Draft Canary" not in result.text
     assert fetched == [f"{pages_url}card-light-{locale}.gif"]
+    with (
+        Image.open(io.BytesIO(documents[f"card-light-{locale}.gif"])) as gif,
+        Image.open(io.BytesIO(documents[f"card-light-{locale}.png"])) as png,
+    ):
+        assert gif.size == png.size == (600, 180)
+        assert gif.n_frames == 4 and gif.info["loop"] == 0
+        assert gif.convert("RGB").tobytes() == png.convert("RGB").tobytes()
+        assert svg_to_image(documents[f"card-light-{locale}.svg"]).tobytes() == png.tobytes()
     assert client.get("/api/admin/sharing/state").json() == state_before
     assert client.get("/api/admin/portfolio").json() == draft_before
     assert manager.status().active_bundle_id == bundle_before

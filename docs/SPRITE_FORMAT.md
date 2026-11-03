@@ -140,6 +140,7 @@ The card scales a chosen frame/state with integer nearest-neighbor scaling. It m
 - Static PNG uses the first `idle` frame.
 - SVG first frame uses the same pose and remains complete if CSS animation is stripped.
 - GIF may use a curated subset of idle frames to avoid distracting motion and size growth.
+- (ADR-077) The card places each frame at 128 px by integer nearest-neighbour scaling and thresholds alpha at 128, so no card pixel is a blend of the character and the scene.
 - Character/card revision participates in ETag and README cache-busting URLs.
 
 ## 8. Template and licensing

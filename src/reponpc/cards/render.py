@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import html
 import io
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Final, Literal, cast
 from urllib.parse import quote, urlsplit
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 from reponpc.cards.assets import FRAME_SIZE, CanonicalSprite
 
@@ -18,8 +19,59 @@ Locale = Literal["zh-TW", "en"]
 Extension = Literal["svg", "gif", "png"]
 CARD_SIZE: Final = (600, 180)
 CARD_CHARACTER_SIZE: Final = 128
-CARD_CHARACTER_SCALE: Final = CARD_CHARACTER_SIZE // FRAME_SIZE
 _FONT_PATH: Final = Path(__file__).with_name("fonts") / "NotoSansCJKtc-Regular.otf"
+_PIXEL_FONT_PATH: Final = _FONT_PATH.with_name("press-start-2p-latin-400-normal.woff2")
+_RGB = tuple[int, int, int]
+_FAR: Final = (
+    30,
+    32,
+    36,
+    40,
+    42,
+    44,
+    44,
+    42,
+    40,
+    36,
+    34,
+    32,
+    30,
+    34,
+    38,
+    40,
+    38,
+    34,
+    30,
+    28,
+    26,
+    26,
+    28,
+)
+_NEAR: Final = (
+    18,
+    18,
+    20,
+    22,
+    24,
+    24,
+    22,
+    20,
+    18,
+    16,
+    16,
+    18,
+    20,
+    22,
+    22,
+    20,
+    18,
+    16,
+    14,
+    14,
+    16,
+    18,
+    18,
+)
 
 
 class CardRenderError(ValueError):
@@ -52,33 +104,6 @@ class CardAssets:
     png: bytes
 
 
-@dataclass(frozen=True, slots=True)
-class _TextRegion:
-    x: int
-    raster_y: int
-    svg_y: int
-    max_width: int
-    font_size: int
-
-
-@dataclass(frozen=True, slots=True)
-class _FittedText:
-    value: str
-    width: float
-
-
-@dataclass(frozen=True, slots=True)
-class _FittedCardCopy:
-    display_name: _FittedText
-    headline: _FittedText
-    call_to_action: _FittedText
-    repository_count: _FittedText | None
-
-
-_DISPLAY_NAME_REGION: Final = _TextRegion(178, 33, 48, 392, 18)
-_HEADLINE_REGION: Final = _TextRegion(178, 67, 80, 392, 13)
-_CALL_TO_ACTION_REGION: Final = _TextRegion(192, 125, 138, 214, 14)
-_REPOSITORY_COUNT_REGION: Final = _TextRegion(442, 126, 140, 128, 14)
 _ELLIPSIS: Final = "…"
 
 
@@ -95,24 +120,16 @@ def render_card_assets(
     if not 80 <= frame_duration_ms <= 1000:
         raise CardRenderError("INVALID_FRAME_DURATION")
     safe_copy = _bounded_copy(copy)
-    fitted_copy = _fit_copy(safe_copy)
-    first_frame, frames = _idle_frames(sprite)
-    png = _raster_card(fitted_copy, palette, first_frame)
-    gif = _gif_card(
-        fitted_copy,
-        palette,
-        frames if animation_enabled else (first_frame,),
-        frame_duration_ms,
+    frames = _idle_frames(sprite)
+    rendered = [
+        _scene_card(safe_copy, palette, frame, t)
+        for t, frame in enumerate(frames if animation_enabled else frames[:1])
+    ]
+    return CardAssets(
+        svg=_svg_bytes(rendered[0], safe_copy),
+        gif=_gif_bytes(rendered, frame_duration_ms),
+        png=_png_bytes(rendered[0]),
     )
-    svg = _svg_card(
-        safe_copy,
-        fitted_copy,
-        palette,
-        first_frame,
-        animation_enabled,
-        frame_duration_ms,
-    )
-    return CardAssets(svg=svg, gif=gif, png=png)
 
 
 def render_readme_snippet(
@@ -158,121 +175,157 @@ def _clean_text(value: str, maximum: int) -> str:
     return cleaned[:maximum]
 
 
-def _fit_copy(copy: CardCopy) -> _FittedCardCopy:
-    return _FittedCardCopy(
-        display_name=_fit_region(copy.display_name, _DISPLAY_NAME_REGION),
-        headline=_fit_region(copy.headline, _HEADLINE_REGION),
-        call_to_action=_fit_region(copy.call_to_action, _CALL_TO_ACTION_REGION),
-        repository_count=(
-            None
-            if copy.repository_count is None
-            else _fit_region(
-                f"{copy.repository_count} repos",
-                _REPOSITORY_COUNT_REGION,
-            )
-        ),
-    )
-
-
-def _fit_region(value: str, region: _TextRegion) -> _FittedText:
-    font = _card_font(region.font_size)
-    fitted = _fit_text(value, font, region.max_width)
-    return _FittedText(value=fitted, width=float(font.getlength(fitted)))
-
-
-def _fit_text(value: str, font: ImageFont.FreeTypeFont, max_width: int) -> str:
-    """Fit one already-clean string without wrapping or environment-dependent fonts."""
-
-    if font.getlength(value) <= max_width:
-        return value
-    for end in range(len(value) - 1, 0, -1):
-        candidate = f"{value[:end].rstrip()}{_ELLIPSIS}"
-        if font.getlength(candidate) <= max_width:
-            return candidate
-    if font.getlength(_ELLIPSIS) <= max_width:
-        return _ELLIPSIS
-    raise CardRenderError("TEXT_REGION_TOO_NARROW")
-
-
-def _idle_frames(sprite: CanonicalSprite) -> tuple[Image.Image, tuple[Image.Image, ...]]:
+def _idle_frames(sprite: CanonicalSprite) -> tuple[Image.Image, ...]:
     try:
         with Image.open(io.BytesIO(sprite.content)) as sheet:
             rgba = sheet.convert("RGBA")
     except OSError as exc:
         raise CardRenderError("INVALID_SPRITE") from exc
-    frames = tuple(
-        rgba.crop((column * FRAME_SIZE, 0, (column + 1) * FRAME_SIZE, FRAME_SIZE))
-        for column in range(4)
-    )
-    return frames[0], frames
+    frames = []
+    for column in range(4):
+        frame = rgba.crop((column * FRAME_SIZE, 0, (column + 1) * FRAME_SIZE, FRAME_SIZE))
+        frame = frame.resize((CARD_CHARACTER_SIZE, CARD_CHARACTER_SIZE), Image.Resampling.NEAREST)
+        frame.putalpha(frame.getchannel("A").point(lambda value: 255 if value >= 128 else 0))
+        frames.append(frame)
+    return tuple(frames)
 
 
-def _background(copy: _FittedCardCopy, palette: CardPalette, frame: Image.Image) -> Image.Image:
-    image = Image.new("RGBA", CARD_SIZE, palette.background)
-    draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle(
-        (12, 12, 587, 167),
-        radius=12,
-        fill=palette.panel,
-        outline=palette.border,
-        width=3,
-    )
-    enlarged = frame.resize((CARD_CHARACTER_SIZE, CARD_CHARACTER_SIZE), Image.Resampling.NEAREST)
-    image.alpha_composite(enlarged, (28, 26))
-    draw.text(
-        (_DISPLAY_NAME_REGION.x, _DISPLAY_NAME_REGION.raster_y),
-        copy.display_name.value,
-        fill=palette.text,
-        font=_card_font(_DISPLAY_NAME_REGION.font_size),
-    )
-    draw.text(
-        (_HEADLINE_REGION.x, _HEADLINE_REGION.raster_y),
-        copy.headline.value,
-        fill=palette.text,
-        font=_card_font(_HEADLINE_REGION.font_size),
-    )
-    draw.rounded_rectangle((178, 116, 420, 149), radius=7, fill=palette.accent)
-    draw.text(
-        (_CALL_TO_ACTION_REGION.x, _CALL_TO_ACTION_REGION.raster_y),
-        copy.call_to_action.value,
-        fill=palette.panel,
-        font=_card_font(_CALL_TO_ACTION_REGION.font_size),
-    )
-    if copy.repository_count is not None:
-        draw.text(
-            (_REPOSITORY_COUNT_REGION.x, _REPOSITORY_COUNT_REGION.raster_y),
-            copy.repository_count.value,
-            fill=palette.text,
-            font=_card_font(_REPOSITORY_COUNT_REGION.font_size),
-        )
-    return image
-
-
-def _card_font(size: int = 16) -> ImageFont.FreeTypeFont:
+@lru_cache
+def _card_font(size: int = 16, path: Path = _FONT_PATH) -> ImageFont.FreeTypeFont:
     try:
-        return ImageFont.truetype(_FONT_PATH, size)
+        return ImageFont.truetype(path, size)
     except OSError as exc:
         raise CardRenderError("FONT_UNAVAILABLE") from exc
 
 
-def _raster_card(copy: _FittedCardCopy, palette: CardPalette, frame: Image.Image) -> bytes:
+def _mix(a: _RGB, b: _RGB, amount: float) -> _RGB:
+    return cast(_RGB, tuple(round(a[i] + (b[i] - a[i]) * amount) for i in range(3)))
+
+
+class _Card:
+    def __init__(self, palette: CardPalette) -> None:
+        self.c = {
+            role: cast(_RGB, ImageColor.getrgb(color)[:3])
+            for role, color in asdict(palette).items()
+        }
+        c = self.c
+        c["shade"] = _mix(c["background"], c["border"], 0.25)
+        c["soft"] = _mix(c["panel"], c["background"], 0.5)
+        c["tint"] = _mix(c["panel"], c["accent"], 0.18)
+        c["hill_far"] = _mix(c["border"], c["tint"], 0.6)
+        c["hill_near"] = _mix(c["border"], c["tint"], 0.35)
+        self.im = Image.new("RGB", CARD_SIZE, c["background"])
+        self.d = ImageDraw.Draw(self.im)
+        self.d.fontmode = "1"
+
+    def rect(self, x: int, y: int, w: int, h: int, color: str) -> None:
+        self.d.rectangle((x, y, x + w - 1, y + h - 1), fill=self.c[color])
+
+    def cut(self, x: int, y: int, w: int, h: int, color: str, n: int) -> None:
+        self.rect(x + n, y, w - 2 * n, h, color)
+        self.rect(x, y + n, w, h - 2 * n, color)
+
+    def notched(
+        self, x: int, y: int, w: int, h: int, line: str, fill: str, bw: int = 4, n: int = 4
+    ) -> None:
+        self.cut(x, y, w, h, line, n)
+        self.cut(x + bw, y + bw, w - 2 * bw, h - 2 * bw, fill, max(n - bw, 0))
+
+    def sprite(self, sprite: Image.Image, x: int, y: int) -> None:
+        self.im.paste(sprite, (x, y), sprite)
+
+    def pick(self, value: str, role: str) -> ImageFont.FreeTypeFont:
+        if role == "display" and all(ord(character) < 0x2000 for character in value):
+            return _card_font(16, _PIXEL_FONT_PATH)
+        return _card_font(16 if role == "display" else 14)
+
+    def fit(self, value: str, font: ImageFont.FreeTypeFont, max_width: int) -> str:
+        if font.getlength(value) <= max_width:
+            return value
+        ellipsis = _ELLIPSIS
+        if font.path == _PIXEL_FONT_PATH and bytes(font.getmask(ellipsis)) == bytes(
+            font.getmask("\ue000")
+        ):
+            ellipsis = "..."
+        for end in range(len(value) - 1, 0, -1):
+            candidate = f"{value[:end].rstrip()}{ellipsis}"
+            if font.getlength(candidate) <= max_width:
+                return candidate
+        if font.getlength(ellipsis) <= max_width:
+            return ellipsis
+        raise CardRenderError("TEXT_REGION_TOO_NARROW")
+
+    def text(
+        self,
+        x: int,
+        baseline: int,
+        value: str,
+        color: str,
+        role: str,
+        max_width: int,
+        *,
+        right: bool = False,
+    ) -> None:
+        font = self.pick(value, role)
+        value = self.fit(value, font, max_width)
+        self.d.text(
+            (x - font.getlength(value) if right else x, baseline),
+            value,
+            fill=self.c[color],
+            font=font,
+            anchor="ls",
+        )
+
+    def measure(self, value: str, role: str, max_width: int) -> int:
+        font = self.pick(value, role)
+        return int(font.getlength(self.fit(value, font, max_width)))
+
+    def cursor(self, x: int, y: int, color: str) -> None:
+        for i, width in enumerate((1, 2, 3, 4, 3, 2, 1)):
+            self.rect(x, y + i * 2, width * 2, 2, color)
+
+
+def _scene_card(copy: CardCopy, palette: CardPalette, frame: Image.Image, t: int) -> Image.Image:
+    card = _Card(palette)
+    card.notched(8, 6, 584, 168, "border", "panel")
+    card.rect(12, 10, 180, 160, "tint")
+    card.rect(150, 24, 12, 16, "accent")
+    card.rect(148, 26, 16, 12, "accent")
+    card.rect(34, 34, 28, 6, "panel")
+    card.rect(42, 28, 12, 6, "panel")
+    for i, (far, near) in enumerate(zip(_FAR, _NEAR, strict=True)):
+        x = 12 + i * 8
+        width = min(8, 192 - x)
+        card.rect(x, 146 - far, width, far, "hill_far")
+        card.rect(x, 146 - near, width, near, "hill_near")
+    card.rect(12, 146, 180, 24, "hill_near")
+    card.rect(12, 146, 180, 4, "border")
+    card.sprite(frame, 38, 28 + (2 if t % 2 else 0))
+    card.rect(192, 10, 4, 160, "border")
+    card.text(216, 56, copy.display_name, "shade", "display", 350)
+    card.text(214, 54, copy.display_name, "text", "display", 350)
+    card.text(214, 88, copy.headline, "text", "body", 360)
+    repos = None if copy.repository_count is None else f"{copy.repository_count} repos"
+    repo_width = 0 if repos is None else card.measure(repos, "body", 110)
+    label_max = 570 - repo_width - 20 - 242 - 24
+    label_width = card.measure(copy.call_to_action, "body", label_max)
+    card.rect(210, 106, label_width + 48, 32, "text")
+    if t % 2 == 0:
+        card.cursor(220, 114, "panel")
+    card.text(242, 128, copy.call_to_action, "panel", "body", label_max)
+    if repos is not None:
+        card.text(570, 128, repos, "text", "body", 110, right=True)
+    return card.im
+
+
+def _png_bytes(image: Image.Image) -> bytes:
     output = io.BytesIO()
-    _background(copy, palette, frame).convert("RGB").save(
-        output, "PNG", optimize=False, compress_level=9
-    )
+    image.save(output, "PNG", optimize=False, compress_level=9)
     return output.getvalue()
 
 
-def _gif_card(
-    copy: _FittedCardCopy,
-    palette: CardPalette,
-    frames: tuple[Image.Image, ...],
-    duration: int,
-) -> bytes:
-    rendered = [
-        _background(copy, palette, frame).convert("P", palette=Image.Palette.ADAPTIVE)
-        for frame in frames
-    ]
+def _gif_bytes(frames: list[Image.Image], duration: int) -> bytes:
+    rendered = [frame.convert("P", palette=Image.Palette.ADAPTIVE, colors=256) for frame in frames]
     output = io.BytesIO()
     rendered[0].save(
         output,
@@ -287,77 +340,39 @@ def _gif_card(
     return output.getvalue()
 
 
-def _svg_card(
-    copy: CardCopy,
-    fitted_copy: _FittedCardCopy,
-    palette: CardPalette,
-    frame: Image.Image,
-    animate: bool,
-    duration: int,
-) -> bytes:
-    rectangles: list[str] = []
-    for y in range(FRAME_SIZE):
-        for x in range(FRAME_SIZE):
-            red, green, blue, alpha = cast(tuple[int, int, int, int], frame.getpixel((x, y)))
-            if alpha:
-                opacity = "" if alpha == 255 else f' fill-opacity="{alpha / 255:.3f}"'
-                rectangles.append(
-                    f'<rect x="{28 + x * CARD_CHARACTER_SCALE}" '
-                    f'y="{26 + y * CARD_CHARACTER_SCALE}" '
-                    f'width="{CARD_CHARACTER_SCALE}" height="{CARD_CHARACTER_SCALE}" '
-                    f'fill="#{red:02x}{green:02x}{blue:02x}"{opacity}/>'
-                )
-    motion = ""
-    if animate:
-        motion = (
-            "@keyframes pulse{0%,100%{transform:translateY(0)}"
-            "50%{transform:translateY(-2px)}}"
-            f".npc{{animation:pulse {duration * 4}ms steps(1,end) infinite}}"
-        )
-    repo = ""
-    if fitted_copy.repository_count is not None:
-        repo = _svg_text(
-            fitted_copy.repository_count,
-            _REPOSITORY_COUNT_REGION,
-            css_class="repo-count",
-        )
+def _svg_bytes(image: Image.Image, copy: CardCopy) -> bytes:
+    width, height = CARD_SIZE
+    pixels = image.load()
+    assert pixels is not None
+    background = cast(_RGB, image.getpixel((0, 0)))
+    paths: dict[_RGB, list[str]] = {}
+    open_runs: dict[tuple[int, int, _RGB], int] = {}
+    for y in range(height + 1):
+        current: set[tuple[int, int, _RGB]] = set()
+        x = 0
+        while y < height and x < width:
+            color, end = cast(_RGB, pixels[x, y]), x
+            while end < width and pixels[end, y] == color:
+                end += 1
+            if color != background:
+                current.add((x, end - x, color))
+            x = end
+        for key in [key for key in open_runs if key not in current]:
+            y0 = open_runs.pop(key)
+            paths.setdefault(key[2], []).append(f"M{key[0]} {y0}h{key[1]}v{y - y0}h-{key[1]}z")
+        for key in current:
+            open_runs.setdefault(key, y)
+    body = "".join(
+        f'<path fill="#{color[0]:02x}{color[1]:02x}{color[2]:02x}" d="{"".join(rectangles)}"/>'
+        for color, rectangles in paths.items()
+    )
     xml = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="180" '
-        'viewBox="0 0 600 180" role="img" aria-labelledby="title desc">'
+        'viewBox="0 0 600 180" role="img" aria-labelledby="title desc" '
+        'shape-rendering="crispEdges">'
         f'<title id="title">{html.escape(copy.display_name)}</title>'
         f'<desc id="desc">{html.escape(copy.headline)}</desc>'
-        f"<style>text{{font-family:'Noto Sans CJK TC',sans-serif;fill:{palette.text}}}"
-        f".cta{{fill:{palette.panel}}}{motion}</style>"
-        f'<rect width="600" height="180" fill="{palette.background}"/>'
-        f'<rect x="12" y="12" width="575" height="155" rx="12" '
-        f'fill="{palette.panel}" stroke="{palette.border}" stroke-width="3"/>'
-        f'<g class="npc">{"".join(rectangles)}</g>'
-        f"{_svg_text(fitted_copy.display_name, _DISPLAY_NAME_REGION, font_weight='700')}"
-        f"{_svg_text(fitted_copy.headline, _HEADLINE_REGION)}"
-        f'<rect x="178" y="116" width="242" height="33" rx="7" fill="{palette.accent}"/>'
-        f"{_svg_text(fitted_copy.call_to_action, _CALL_TO_ACTION_REGION, css_class='cta')}"
-        f"{repo}"
-        "</svg>"
+        f'<rect width="600" height="180" '
+        f'fill="#{background[0]:02x}{background[1]:02x}{background[2]:02x}"/>{body}</svg>'
     )
     return xml.encode("utf-8")
-
-
-def _svg_text(
-    text: _FittedText,
-    region: _TextRegion,
-    *,
-    css_class: str | None = None,
-    font_weight: str | None = None,
-) -> str:
-    attributes = [
-        f'x="{region.x}"',
-        f'y="{region.svg_y}"',
-        f'font-size="{region.font_size}"',
-        f'textLength="{text.width:.3f}"',
-        'lengthAdjust="spacingAndGlyphs"',
-    ]
-    if css_class is not None:
-        attributes.append(f'class="{css_class}"')
-    if font_weight is not None:
-        attributes.append(f'font-weight="{font_weight}"')
-    return f"<text {' '.join(attributes)}>{html.escape(text.value)}</text>"

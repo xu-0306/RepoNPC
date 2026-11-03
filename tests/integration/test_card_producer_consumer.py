@@ -17,6 +17,7 @@ from tests.integration.test_index_build import (
     DeterministicEmbeddingProvider,
     _fixture_snapshot,
 )
+from tests.unit.test_card_pixel import svg_to_image
 
 
 class _Resolver:
@@ -105,21 +106,26 @@ def test_long_bilingual_copy_is_readable_across_every_card_variant(tmp_path: Pat
             namespace = {"svg": "http://www.w3.org/2000/svg"}
             visible = root.findall("svg:text", namespace)
             assert root.attrib["viewBox"] == "0 0 600 180"
-            assert len(visible) == 4
-            assert all(element.text for element in visible)
-            assert all(
-                float(element.attrib["textLength"])
-                <= (
-                    card_render._CALL_TO_ACTION_REGION.max_width
-                    if element.attrib.get("class") == "cta"
-                    else card_render._REPOSITORY_COUNT_REGION.max_width
-                    if element.attrib.get("class") == "repo-count"
-                    else card_render._DISPLAY_NAME_REGION.max_width
-                )
-                for element in visible
+            assert len(visible) == 0 and root.findall("svg:path", namespace)
+            assert root.find("svg:title", namespace).text == config.profile.display_name[:80]
+            assert root.find("svg:desc", namespace).text == config.profile.headline[locale][:160]
+            card = card_render._Card(
+                card_render.CardPalette(**getattr(config.card.themes, theme).model_dump())
             )
+            repos = f"{sum(repository.enabled for repository in config.repositories)} repos"
+            label_max = 570 - card.measure(repos, "body", 110) - 20 - 242 - 24
+            for value, role, width in (
+                (config.profile.display_name[:80], "display", 350),
+                (config.profile.headline[locale][:160], "body", 360),
+                (config.card.call_to_action[locale][:80], "body", label_max),
+                (repos, "body", 110),
+            ):
+                font = card.pick(value, role)
+                fitted = card.fit(value, font, width)
+                assert fitted and font.getlength(fitted) <= width
             for extension, expected_format in (("png", "PNG"), ("gif", "GIF")):
                 payload = first[f"public/card-{theme}-{locale}.{extension}"]
                 with Image.open(io.BytesIO(payload)) as image:
                     assert image.format == expected_format
                     assert image.size == (600, 180)
+                    assert svg_to_image(svg).tobytes() == image.convert("RGB").tobytes()

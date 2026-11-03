@@ -22,6 +22,7 @@ from reponpc.cards.render import (
     render_card_assets,
     render_readme_snippet,
 )
+from tests.unit.test_card_pixel import svg_to_image
 
 
 def _sprite() -> bytes:
@@ -153,33 +154,32 @@ def test_traditional_chinese_raster_text_is_real_and_deterministic() -> None:
 
 
 @pytest.mark.parametrize(
-    ("value", "region"),
+    ("value", "role", "max_width"),
     [
-        ("超長繁體中文角色名稱" * 8, card_render._DISPLAY_NAME_REGION),
-        ("以可驗證證據打造可靠又清楚的開源專案導覽" * 8, card_render._HEADLINE_REGION),
-        ("A very long English display name " * 8, card_render._DISPLAY_NAME_REGION),
-        ("https://example.invalid/" + "unbroken-path/" * 20, card_render._HEADLINE_REGION),
-        ("立即閱讀所有可驗證的專案內容" * 8, card_render._CALL_TO_ACTION_REGION),
-        ("RepoNPC混合CJKandLatinText" * 10, card_render._HEADLINE_REGION),
+        ("超長繁體中文角色名稱" * 8, "display", 350),
+        ("以可驗證證據打造可靠又清楚的開源專案導覽" * 8, "body", 360),
+        ("A very long English display name " * 8, "display", 350),
+        ("https://example.invalid/" + "unbroken-path/" * 20, "body", 360),
+        ("立即閱讀所有可驗證的專案內容" * 8, "body", 570 - 110 - 20 - 242 - 24),
+        ("RepoNPC混合CJKandLatinText" * 10, "body", 360),
     ],
 )
-def test_long_card_text_is_fitted_by_measured_width(
-    value: str, region: card_render._TextRegion
-) -> None:
-    font = card_render._card_font(region.font_size)
+def test_long_card_text_is_fitted_by_measured_width(value: str, role: str, max_width: int) -> None:
+    card = card_render._Card(CardPalette("#ffffff", "#eeeeee", "#111111", "#6633ff", "#222222"))
+    font = card.pick(value, role)
 
-    fitted = card_render._fit_text(value, font, region.max_width)
+    fitted = card.fit(value, font, max_width)
 
     assert fitted
     assert fitted.endswith("…")
-    assert font.getlength(fitted) <= region.max_width
+    assert font.getlength(fitted) <= max_width
 
 
 def test_short_card_text_is_not_changed_by_fitting() -> None:
-    region = card_render._DISPLAY_NAME_REGION
-    font = card_render._card_font(region.font_size)
+    card = card_render._Card(CardPalette("#ffffff", "#eeeeee", "#111111", "#6633ff", "#222222"))
+    font = card.pick("RepoNPC", "display")
 
-    assert card_render._fit_text("RepoNPC", font, region.max_width) == "RepoNPC"
+    assert card.fit("RepoNPC", font, 350) == "RepoNPC"
 
 
 def test_all_formats_reuse_the_same_fitted_strings_and_regions() -> None:
@@ -190,8 +190,10 @@ def test_all_formats_reuse_the_same_fitted_strings_and_regions() -> None:
         repository_count=int("9" * 80),
     )
     safe_copy = card_render._bounded_copy(copy)
-    fitted = card_render._fit_copy(safe_copy)
-    assert fitted.repository_count is not None
+    card = card_render._Card(CardPalette("#ffffff", "#eeeeee", "#111111", "#6633ff", "#222222"))
+    assert safe_copy.repository_count is not None
+    repos = f"{safe_copy.repository_count} repos"
+    label_max = 570 - card.measure(repos, "body", 110) - 20 - 242 - 24
     assets = render_card_assets(
         copy=copy,
         palette=CardPalette(
@@ -207,22 +209,17 @@ def test_all_formats_reuse_the_same_fitted_strings_and_regions() -> None:
     root = ET.fromstring(assets.svg)
     namespace = {"svg": "http://www.w3.org/2000/svg"}
     visible = [element.text for element in root.findall("svg:text", namespace)]
-    expected = [
-        fitted.display_name.value,
-        fitted.headline.value,
-        fitted.call_to_action.value,
-        fitted.repository_count.value,
+    regions = [
+        (safe_copy.display_name, "display", 350),
+        (safe_copy.headline, "body", 360),
+        (safe_copy.call_to_action, "body", label_max),
+        (repos, "body", 110),
     ]
-    assert visible == expected
+    expected = [card.fit(value, card.pick(value, role), width) for value, role, width in regions]
+    assert visible == [] and root.findall("svg:path", namespace)
     assert all(value and value.endswith("…") for value in expected)
-    regions = (
-        card_render._DISPLAY_NAME_REGION,
-        card_render._HEADLINE_REGION,
-        card_render._CALL_TO_ACTION_REGION,
-        card_render._REPOSITORY_COUNT_REGION,
-    )
-    for element, region in zip(root.findall("svg:text", namespace), regions, strict=True):
-        assert float(element.attrib["textLength"]) <= region.max_width
+    for fitted, (value, role, width) in zip(expected, regions, strict=True):
+        assert card.pick(value, role).getlength(fitted) <= width
     title = root.find("svg:title", namespace)
     description = root.find("svg:desc", namespace)
     assert title is not None
@@ -233,6 +230,7 @@ def test_all_formats_reuse_the_same_fitted_strings_and_regions() -> None:
         with Image.open(io.BytesIO(payload)) as image:
             assert image.format == expected_format
             assert image.size == (600, 180)
+            assert svg_to_image(assets.svg).tobytes() == image.convert("RGB").tobytes()
 
     repeated = render_card_assets(
         copy=copy,

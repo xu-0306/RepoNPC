@@ -80,17 +80,17 @@ card:
     frame_duration_ms: 240
   themes:
     light:
-      background: '#f7f4e9'
-      panel: '#fffdf7'
-      text: '#24202e'
-      accent: '#6d5dfc'
-      border: '#2f2842'
+      background: '#f2e9d9'
+      panel: '#fff9ed'
+      text: '#322b2b'
+      accent: '#9b3c21'
+      border: '#44362e'
     dark:
-      background: '#171521'
-      panel: '#211e2e'
-      text: '#f8f5ff'
-      accent: '#9b8cff'
-      border: '#c8bfff'
+      background: '#1d1814'
+      panel: '#2a221d'
+      text: '#f2e9d9'
+      accent: '#e9b452'
+      border: '#c9b48e'
 
 retrieval:
   enabled_sources: [owner_assertions, repository_metadata, documentation, source_code]

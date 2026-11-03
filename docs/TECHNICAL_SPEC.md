@@ -11,7 +11,7 @@
 
 Application implementation is authorized under this approved specification. The words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RECOMMENDED, MAY, and OPTIONAL are normative as described by RFC 2119.
 
-Current version: 0.4.18 (ADR-076 chat limits, approved 2026-11-01; previous 0.4.17, ADR-075 empty repositories, 2026-11-01; 0.4.16, ADR-074 chat probe deadline, 2026-10-30). See [technical specification history](../legacy/docs/TECHNICAL_SPEC_HISTORY.md).
+Current version: 0.4.19 (ADR-077 pixel-style README card, approved 2026-11-03; previous 0.4.18, ADR-076 chat limits, 2026-11-01; 0.4.17, ADR-075 empty repositories, 2026-11-01; 0.4.16, ADR-074 chat probe deadline, 2026-10-30). See [technical specification history](../legacy/docs/TECHNICAL_SPEC_HISTORY.md).
 
 The local Windows launcher is also required to reconcile its own runtime state at startup: when the recorded process is stale, it MUST verify the recorded PID and configured Python executable before stopping it, MAY fall back from process-tree termination to a direct stop of that same verified PID when Windows reports an elevation-context error, and MUST never terminate an unknown process occupying the port.
 
@@ -1181,10 +1181,11 @@ existing README. The existing snippet variants and manual upload path remain.
 
 - canonical view box/output size: `600 x 180` CSS pixels;
 - first frame includes character, display name, headline, call to action, and visible RepoNPC identity;
-- SVG animation uses allowlisted CSS only and remains understandable when animation is stripped;
+- (0.4.19, ADR-077) the card is the pixel Scene template: PNG and GIF frames are hard-edged, every pixel is one of the five card theme colours, the fixed derived colours or a character colour, and text is drawn without anti-aliasing (Press Start 2P for Latin-only names, Noto Sans CJK TC otherwise); `card.themes` stays five explicit colours;
+- SVG is the lossless static first frame drawn as pixel rectangles, with an accessible title and description, and has no text, font, style, animation, script, handler or remote reference;
 - GIF is generated from the canonical frames at build time and loops at a bounded rate;
 - PNG is the exact static first-frame rendering;
-- user text is length-bounded and XML-escaped; remote fonts/images are forbidden;
+- user text is length-bounded and XML-escaped in the SVG title and description, and is only drawn into the raster; remote fonts/images are forbidden;
 - card links are provided by Markdown around the image, never embedded executable behavior.
 
 ### 12.3 Visitor chat interface colours and character NPC (0.4.1 FR-050, revised 0.4.4 ADR-051 and 0.4.14 ADR-072)
