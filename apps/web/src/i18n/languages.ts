@@ -58,18 +58,6 @@ export const LANGUAGES = [
 
 export type LanguageTag = (typeof LANGUAGES)[number]["tag"];
 
-/**
- * Transitional (ADR-079 phase B): code that still handles exactly the two phase A languages
- * iterates these. Each consumer moves to the site set and stops using them.
- */
-export const LEGACY_LANGUAGES = LANGUAGES.filter(
-  (
-    language,
-  ): language is Extract<(typeof LANGUAGES)[number], { tag: "zh-TW" | "en" }> =>
-    language.tag === "zh-TW" || language.tag === "en",
-);
-export type PairTag = (typeof LEGACY_LANGUAGES)[number]["tag"];
-
 export function languageByTag(tag: string): Language | undefined {
   return LANGUAGES.find((language) => language.tag === tag);
 }

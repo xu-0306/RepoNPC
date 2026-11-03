@@ -3,18 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../app/App";
 import { VisitorApp } from "../app/VisitorApp";
-import {
-  resolveInitialLocale,
-  resolveLocaleIn,
-  storeLocale,
-} from "./initialLocale";
-import { LEGACY_LANGUAGES, type PairTag } from "./languages";
-import { LANGUAGES, matchLocale } from "./languages";
+import { resolveLocaleIn, storeLocale } from "./initialLocale";
+import { LANGUAGES, matchLocale, type LanguageTag } from "./languages";
 import {
   languageProfile,
   legacyTags,
   siteSets,
 } from "../app/siteLanguages.test-cases";
+
+// A legacy site offers the languages that have their own interface catalog.
+const PAIR = LANGUAGES.filter(({ tag }) => legacyTags.includes(tag));
+const resolveInitialLocale = () => resolveLocaleIn(legacyTags, "zh-TW");
 
 // Exercise the real state owners with the existing Node hook-harness pattern.
 const hooks = vi.hoisted(() => ({
@@ -61,7 +60,7 @@ vi.mock("react", async (importOriginal) => ({
 }));
 vi.mock("../app/visitorData", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../app/visitorData")>()),
-  fetchPublicProfile: async (locale?: PairTag) =>
+  fetchPublicProfile: async (locale?: LanguageTag) =>
     languageProfile(locale ?? legacyTags[0]!, legacyTags),
   fetchPublicFaq: () => new Promise(() => undefined),
   fetchPublicStatus: () => new Promise(() => undefined),
@@ -105,29 +104,23 @@ afterEach(() => {
 });
 
 describe("initial locale", () => {
-  it.each(LEGACY_LANGUAGES)(
-    "prefers the stored $tag to the browser",
-    ({ tag }) => {
-      stored.set("reponpc.locale", tag);
-      vi.stubGlobal("navigator", {
-        languages: LEGACY_LANGUAGES.filter((entry) => entry.tag !== tag).map(
-          (entry) => entry.tag,
-        ),
-      });
-      expect(resolveInitialLocale()).toBe(tag);
-    },
-  );
+  it.each(PAIR)("prefers the stored $tag to the browser", ({ tag }) => {
+    stored.set("reponpc.locale", tag);
+    vi.stubGlobal("navigator", {
+      languages: PAIR.filter((entry) => entry.tag !== tag).map(
+        (entry) => entry.tag,
+      ),
+    });
+    expect(resolveInitialLocale()).toBe(tag);
+  });
 
   it.each(
     [
       "",
       "null",
       "__proto__",
-      ...LEGACY_LANGUAGES.flatMap(({ tag }) => [
-        tag.toUpperCase(),
-        `${tag}-x-stored`,
-      ]),
-    ].flatMap((value) => LEGACY_LANGUAGES.map(({ tag }) => ({ value, tag }))),
+      ...PAIR.flatMap(({ tag }) => [tag.toUpperCase(), `${tag}-x-stored`]),
+    ].flatMap((value) => PAIR.map(({ tag }) => ({ value, tag }))),
   )("ignores invalid stored $value with browser $tag", ({ value, tag }) => {
     stored.set("reponpc.locale", value);
     vi.stubGlobal("navigator", { languages: [tag] });
@@ -145,9 +138,7 @@ describe("initial locale", () => {
   });
 
   it.each(
-    LEGACY_LANGUAGES.flatMap(({ tag, match }) =>
-      match.map((prefix) => ({ tag, prefix })),
-    ),
+    PAIR.flatMap(({ tag, match }) => match.map((prefix) => ({ tag, prefix }))),
   )("matches registry prefix $prefix to $tag", ({ tag, prefix }) => {
     for (const browserTag of [prefix, `${prefix.toUpperCase()}-x-browser`]) {
       vi.stubGlobal("navigator", { languages: [browserTag] });
@@ -155,7 +146,7 @@ describe("initial locale", () => {
     }
   });
 
-  it.each(LEGACY_LANGUAGES)(
+  it.each(PAIR)(
     "uses navigator.language for $tag when languages is empty",
     ({ tag }) => {
       vi.stubGlobal("navigator", { languages: [], language: tag });
@@ -178,7 +169,7 @@ describe("initial locale", () => {
     expect(() => storeLocale("zh-TW")).not.toThrow();
   });
 
-  it.each(LEGACY_LANGUAGES)("stores the exact registry tag $tag", ({ tag }) => {
+  it.each(PAIR)("stores the exact registry tag $tag", ({ tag }) => {
     storeLocale(tag);
     expect(storage.setItem).toHaveBeenCalledWith("reponpc.locale", tag);
     expect(stored.get("reponpc.locale")).toBe(tag);
@@ -261,8 +252,8 @@ describe("resolveLocaleIn", () => {
 });
 
 interface LocaleProps {
-  locale: PairTag;
-  onLocaleChange: (locale: PairTag) => void;
+  locale: LanguageTag;
+  onLocaleChange: (locale: LanguageTag) => void;
 }
 
 function render(app: "admin" | "visitor"): LocaleProps & { profile?: unknown } {
@@ -296,10 +287,10 @@ async function settled(app: "admin" | "visitor"): Promise<LocaleProps> {
 }
 
 describe.each(["admin", "visitor"] as const)("%s locale owner", (app) => {
-  it.each(LEGACY_LANGUAGES)(
+  it.each(PAIR)(
     "persists a manual switch to $tag across remounts and syncs html lang",
     async ({ tag }) => {
-      const other = LEGACY_LANGUAGES.find((entry) => entry.tag !== tag)!;
+      const other = PAIR.find((entry) => entry.tag !== tag)!;
       vi.stubGlobal("navigator", { languages: [other.tag] });
       expect((await settled(app)).locale).toBe(other.tag);
       expect(document.documentElement.lang).toBe(other.tag);

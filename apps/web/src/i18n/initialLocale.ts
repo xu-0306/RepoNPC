@@ -1,13 +1,4 @@
-import {
-  LEGACY_LANGUAGES,
-  matchLocale,
-  type LanguageTag,
-  type PairTag,
-} from "./languages";
-
-const LEGACY_TAGS: readonly string[] = LEGACY_LANGUAGES.map(
-  (language) => language.tag,
-);
+import { matchLocale, type LanguageTag } from "./languages";
 
 /**
  * The stored manual choice wins when the set still offers it; otherwise the first browser
@@ -34,11 +25,6 @@ export function resolveLocaleIn<Fallback extends string>(
     supported,
     fallback,
   );
-}
-
-/** Transitional (ADR-079 phase B): the two phase A languages; callers move to `resolveLocaleIn`. */
-export function resolveInitialLocale(): PairTag {
-  return resolveLocaleIn(LEGACY_TAGS, "zh-TW") as PairTag;
 }
 
 export function storeLocale(tag: string): void {
