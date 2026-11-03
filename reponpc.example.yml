@@ -12,6 +12,8 @@
 schema_version: 1
 
 locales:
+  # One or more registry languages (zh-TW, zh-CN, en, es) in display order. The default must be
+  # one of them, and every localized value below needs exactly these keys.
   default: zh-TW
   supported:
     - zh-TW

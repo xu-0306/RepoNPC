@@ -1053,6 +1053,78 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **Then** a valid stored tag wins; otherwise the first browser tag with a registry match wins (`["fr","en-GB"]` gives `en`, `["zh-HK","en"]` gives `zh-TW`); an empty list falls back to the single browser language and then to `zh-TW`; an invalid stored value is ignored; a storage failure never stops rendering; a manual switch persists across a reload; `<html lang>` follows the locale; nothing is sent to a server or placed in a cookie.
 - **Verification:** table-driven web tests over every registry entry, storage-failure tests, a visitor bundle guard run, and browser checks that now set the browser language explicitly.
 
+### AC-087 - The site language set is the owner's choice of one or more registry languages
+
+**Maps to:** FR-022, FR-055, NFR-011 (ADR-079)
+
+- **Given** configuration files with one to four registry languages in different orders, the existing `zh-TW` + `en` file, and invalid files (empty list, duplicate tag, a tag not in the registry, a default outside the set, a localized value with a missing or extra key),
+- **When** configuration is loaded,
+- **Then** valid files load and keep their order, a single-language file loads, the existing file loads unchanged with `schema_version` 1, and every invalid file fails naming the offending field; every localized value has exactly the keys of the set.
+- **Verification:** configuration contract tests derived from the registry (every non-empty subset and a rotated order), the existing fixture unchanged, and `reponpc.example.yml` validated.
+
+### AC-088 - Registry growth and deterministic conversion
+
+**Maps to:** FR-054, FR-055, NFR-001, NFR-011 (ADR-079)
+
+- **Given** the registry with `zh-TW`, `zh-CN`, `en` and `es`, their `english_name`, `title_max`, `chrome` and `derive` fields, and the converter `reponpc.i18n.convert`,
+- **When** Python and the web mirror load it and text is converted,
+- **Then** both sides hold equal entries including the new fields; loading fails naming the entry for a `derive` source outside the registry, a language deriving from itself, an unknown converter or an unknown `chrome`; every derive pair converts (`zh-TW` to `zh-CN` with `tw2sp`, `zh-CN` to `zh-TW` with `s2twp`), leaves ASCII, URLs with query and fragment, code spans, `@handle` and `owner/repo` unchanged, and a pair without a converter raises; `opencc` is imported only by `reponpc.i18n.convert`; the Windows build contains its dictionary data; serving and export never convert.
+- **Verification:** registry, parity and converter tests with a fixed sample in both directions, an import guard, a packaging contract test, and a serving and export test that fails when a conversion call happens.
+
+### AC-089 - Derived translation needs no model and stays an unconfirmed proposal
+
+**Maps to:** FR-028, FR-054, FR-055, NFR-003 (ADR-079)
+
+- **Given** an authenticated owner session with and without an accepted chat model,
+- **When** the owner requests `profile/translate` for `zh-TW` to `zh-CN`, `zh-CN` to `zh-TW`, `zh-TW` to `en`, and a mix,
+- **Then** derive pairs return `method: "converted"` and `confirmed: false` without a provider call, also when no model is accepted; every other pair behaves exactly as in AC-084; a mixed request makes one provider call only for the non-derived items and keeps request order; the profile form labels converted fields 「自動轉換，尚未檢視」 / "Converted automatically, not reviewed yet" until they are edited or marked reviewed, and the review step counts them without blocking confirmation.
+- **Verification:** unit, integration and security tests with a fake provider that fails when called, a mixed-order test, and component tests in both admin locales.
+
+### AC-090 - A language is served only with its chat trust data
+
+**Maps to:** FR-043, FR-044, FR-055, NFR-001 (ADR-079)
+
+- **Given** every registry language,
+- **When** the application starts and answers are validated,
+- **Then** startup fails with a safe message naming the language when `person_reference.<tag>.yml` is missing, invalid or has no references, when a group of `inflation_terms.yml` has no list for the tag, or when the English fixed visitor messages are missing; a language without its own fixed visitor messages answers with the English ones; the person-reference check covers the visitor's language, English and every other site language; the `zh-CN` data equals the converter's output for the `zh-TW` data; the `es` data carries its draft-review notice until the owner records the review; AC-063 and AC-064 hold unchanged for `zh-CN` and `es`.
+- **Verification:** a contract test over every registry tag, mutation tests on a temporary policy directory, drift and idempotence tests for the generator, and validator tests per language including ordinary project wording that must not be reclassified.
+
+### AC-091 - Bundles carry the site language set and old bundles keep working
+
+**Maps to:** FR-016, FR-055, NFR-003, NFR-011 (ADR-079)
+
+- **Given** builds for one, two and four languages and a version 1 bundle built before this change,
+- **When** bundles are built, verified and activated,
+- **Then** `public/profile.json` is `schema_version` 2 with `locales` keyed by exactly the set and `index.sqlite` is `index_schema_version` 2 with `repository_summaries`, and the reader returns the right summary per language; card variants exist for every theme and language and a missing one fails verification; non-localized fields and repository count agree across languages; a version 1 bundle still verifies and activates unchanged and is never rewritten; a failed verification keeps the last known-good bundle; the manifest key set is unchanged.
+- **Verification:** build, verify and activate tests for one, two and four languages, a stored version 1 fixture, negative tests for a missing locale, an extra locale and a missing card, and a checksum test.
+
+### AC-092 - The runtime store and APIs follow the active set
+
+**Maps to:** FR-041, FR-042, FR-055, NFR-001 (ADR-079)
+
+- **Given** a runtime database at migration 37 holding FAQ rows, and public and admin endpoints with a `locale` parameter,
+- **When** migration 38 runs and requests are made,
+- **Then** rows, `UNIQUE(locale, question_key)` and order survive; a FAQ row for a registry language outside the active set is not served; a public `locale` outside the active bundle's set and an admin `locale` outside the draft's set return the existing validation error; an omitted locale uses the site default; the public profile response carries `available_locales` in site order with endonyms; the static export writes `profile-<tag>.json` and `faq-<tag>.json` for every language and `<html lang>` equals the default; fixed error text uses the chrome catalog of the language.
+- **Verification:** a migration test with prior rows, API tests across site sets, an export test for one and four languages, and a version 1 bundle served after the upgrade.
+
+### AC-093 - The owner authors the site languages
+
+**Maps to:** FR-028, FR-054, FR-055, NFR-009 (ADR-079)
+
+- **Given** the admin profile step and the later steps in both admin locales, at desktop and phone widths,
+- **When** the owner opens Site languages, selects, orders, picks a default, removes a language that holds text, fills and confirms,
+- **Then** there is one checkbox per registry language labelled by its endonym; at least one stays selected and the default is always selected; move up and move down change the column and review order; removing a language that holds text asks the existing confirm dialog and drops that text only after yes; the profile, contribution, claim editor, FAQ and review steps show exactly the set; model output is requested only for languages that cannot be derived; confirmation requires every value in every selected language; every control has a label and keyboard access.
+- **Verification:** component tests in both admin locales, a fake provider that records the requested languages, layout measurements at 1280 and 375 px, and keyboard tests.
+
+### AC-094 - The visitor sees only the site's languages
+
+**Maps to:** FR-022, FR-054, FR-055, NFR-009, NFR-011 (ADR-079)
+
+- **Given** visitor pages for sites with one, two and four languages, browser language lists, and storage that works, is empty, holds an invalid value or throws,
+- **When** a page loads and the person switches language,
+- **Then** the toggle lists exactly `available_locales` by endonym and is hidden for one language; the initial language is the first browser language that matches the set, else the site default; a stored choice wins only while it is in the set; a language without a hand-written catalog uses the English chrome with `lang` set on its content; the chat request carries the selected language; `<html lang>` follows the selection.
+- **Verification:** table-driven web tests over site sets and browser lists, storage-failure tests, the visitor bundle guard, and browser checks with a four-language fixture.
+
 **0.4.0–0.4.5 traceability additions:**
 
 | Requirement | Acceptance criteria            |
@@ -1083,6 +1155,24 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 | NFR-009     | AC-085                         |
 | NFR-011     | AC-085, AC-086                 |
 | NFR-012     | AC-084                         |
+
+**0.5.0 traceability additions (ADR-079):**
+
+| Requirement | Acceptance criteria                                                        |
+| ----------- | -------------------------------------------------------------------------- |
+| FR-016      | AC-091                                                                     |
+| FR-022      | AC-087, AC-094                                                             |
+| FR-028      | AC-089, AC-093                                                             |
+| FR-041      | AC-092                                                                     |
+| FR-042      | AC-092                                                                     |
+| FR-043      | AC-090                                                                     |
+| FR-044      | AC-090                                                                     |
+| FR-054      | AC-088, AC-089, AC-093, AC-094                                             |
+| FR-055      | AC-087, AC-088, AC-089, AC-090, AC-091, AC-092, AC-093, AC-094             |
+| NFR-001     | AC-088, AC-090, AC-092                                                     |
+| NFR-003     | AC-089, AC-091                                                             |
+| NFR-009     | AC-093, AC-094                                                             |
+| NFR-011     | AC-087, AC-088, AC-091, AC-094                                             |
 
 **AC-057 extension (0.4.0):** the device check, `model_catalog.yml` guidance (適合 / 勉強可用 / 不建議), canirun.ai link, Ollama explicit pull, plain-language error mapping, one-line status and cloud data disclosure are owner-only admin surfaces; none of them appear in visitor pages or responses.
 
