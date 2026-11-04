@@ -112,4 +112,14 @@ describe("P6 pixel UI contracts", () => {
       /@media \(max-width: 900px\) \{\s*\.admin-workspace__header \{\s*grid-template-columns: minmax\(0, 1fr\) auto;\s*\}\s*\.admin-workspace__scene \{\s*display: none;/,
     );
   });
+
+  it("never wraps the RepoNPC title inside the header brand column", () => {
+    // The pixel title needs about 188px; a fixed 180px column floor pushed the
+    // last "C" onto a second line once the language buttons grew.
+    expect(styles).not.toMatch(/\.admin-workspace__header[^}]*minmax\(180px/);
+    expect(styles.match(/minmax\(min-content, 1fr\)/g)).toHaveLength(2);
+    expect(styles).toMatch(
+      /\.admin-workspace__title\s*\{[^}]*white-space:\s*nowrap/,
+    );
+  });
 });

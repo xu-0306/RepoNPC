@@ -1346,7 +1346,7 @@ form button {
   border-bottom: 4px solid var(--px-line);
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(180px, 1fr) minmax(160px, 360px) auto;
+  grid-template-columns: minmax(min-content, 1fr) minmax(160px, 360px) auto;
   padding: 14px max(24px, calc((100% - 1320px) / 2));
 }
 .admin-workspace__brand {
@@ -1377,6 +1377,7 @@ form button {
   font-weight: 400;
   line-height: 1.8;
   margin: 0;
+  white-space: nowrap;
 }
 .admin-workspace__subtitle {
   color: var(--px-muted);
@@ -2230,7 +2231,7 @@ form button {
 }
 @media (max-width: 1100px) {
   .admin-workspace__header {
-    grid-template-columns: minmax(180px, 1fr) minmax(140px, 220px) auto;
+    grid-template-columns: minmax(min-content, 1fr) minmax(140px, 220px) auto;
   }
   .admin-display-settings span {
     display: none;
