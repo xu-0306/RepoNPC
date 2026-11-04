@@ -16,6 +16,12 @@ const pagesShare = source("features/admin/PagesSharePanel.tsx");
 const githubShare = source("features/admin/GitHubShareGuide.tsx");
 
 describe("P6 pixel UI contracts", () => {
+  it("makes a disabled pixel button look disabled, not merely flat", () => {
+    expect(pixel).toMatch(
+      /\.px-button\.px-button:disabled,\s*\.px-button\.px-button\[aria-disabled="true"\]\s*\{[^}]*background:\s*var\(--px-surface-alt\)[^}]*border-style:\s*dashed[^}]*color:\s*var\(--px-muted\)/,
+    );
+  });
+
   it("uses one shared info disclosure primitive", () => {
     expect(pixel).toMatch(/\.px-info > summary\s*\{[\s\S]*list-style:\s*none/);
     expect(pixel).toContain(".px-info > summary::-webkit-details-marker");

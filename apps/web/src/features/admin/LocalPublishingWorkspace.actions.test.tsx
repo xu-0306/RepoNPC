@@ -701,3 +701,67 @@ it.each(["zh-TW", "en"] as const)(
     }
   },
 );
+
+it.each(["zh-TW", "en"] as const)(
+  "says what to do next after saving a draft, differently in production and local trial mode in %s",
+  async (locale) => {
+    const zh = locale === "zh-TW";
+    const saved = async () => ({
+      content: "Public draft",
+      revision: "saved",
+      sprite_base64: null,
+    });
+    const savedNotice = async (publicSharingAvailable: boolean) => {
+      hooks.values = [];
+      const input = {
+        locale,
+        content: "Public draft",
+        spriteBase64: null,
+        revision: null,
+        initialAccount: "fixture",
+        selection: null,
+        request: saved as <T>(
+          path: string,
+          options?: RequestInit,
+        ) => Promise<T>,
+        onStored: vi.fn(),
+        onCreateDraft: vi.fn(),
+        repositories: [],
+        onAddClaim: vi.fn(),
+        publicSharingAvailable,
+      };
+      const render = () => {
+        hooks.cursor = 0;
+        return elements(LocalPublishingWorkspace(input));
+      };
+      const button = render().find(
+        (node) =>
+          node.type === "button" &&
+          node.props.children === (zh ? "儲存本機草稿" : "Save local draft"),
+      )!;
+      (button.props.onClick as () => void)();
+      let message = "";
+      await vi.waitFor(() => {
+        const status = render().find(
+          (node) =>
+            node.props.role === "status" &&
+            typeof node.props.children === "string" &&
+            node.props.children.startsWith(
+              zh ? "已儲存在本機" : "Saved locally",
+            ),
+        );
+        expect(status).toBeDefined();
+        message = status!.props.children as string;
+      });
+      return message;
+    };
+    const production = await savedNotice(true);
+    expect(production).toContain(zh ? "第 3 段（Pages）" : "section 3 (Pages)");
+    expect(production).not.toMatch(/正式模式|production mode/);
+    const trial = await savedNotice(false);
+    expect(trial).toContain(
+      zh ? "請改用正式模式" : "start RepoNPC in production mode",
+    );
+    expect(trial).not.toMatch(/第 3 段|section 3/);
+  },
+);

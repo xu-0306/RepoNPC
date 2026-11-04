@@ -280,6 +280,8 @@ export interface GuidedOnboardingViewProps {
   analysisSelection: AnalysisSelectionView | null;
   analysisSelectionPending: boolean;
   onAction: (action: GuidedOnboardingAction) => void;
+  /** False in local trial mode, where Pages, README and GitHub card sharing are unavailable. */
+  publicSharingAvailable?: boolean;
   onDiscover: (account: string, page: number) => void;
   onResolve: (repository: string, ref: string | null) => void;
   onAnalyze: (slug: string) => void;

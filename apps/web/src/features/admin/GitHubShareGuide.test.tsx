@@ -72,11 +72,49 @@ describe("Verified Pages README route", () => {
       );
       expect(unavailable).toContain(
         locale === "zh-TW"
-          ? "先到第 3 段上傳並核對"
-          : "Upload and check your Pages site in section 3",
+          ? "README.md 要等 Pages 網站上傳並核對後才能下載"
+          : "README.md can be downloaded only after your Pages site is uploaded and checked",
       );
       expect(unavailable).not.toContain('id="github-share-markdown"');
       expect(input.onDownloadReadme).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["zh-TW", "en"] as const)(
+    "shows the visible reason the README is unavailable, per state, in %s",
+    (locale) => {
+      const zh = locale === "zh-TW";
+      const status = (
+        extra: Partial<GitHubShareGuideProps>,
+        url: string | null = null,
+      ) => {
+        const markup = renderToStaticMarkup(
+          <GitHubShareGuide {...props(locale, url)} {...extra} />,
+        );
+        return (
+          /id="github-share-readme-download-status" role="status">([^<]*)</.exec(
+            markup,
+          )?.[1] ?? ""
+        );
+      };
+      // Production mode, no Pages URL saved yet: name the whole chain.
+      expect(status({})).toContain(
+        zh ? "請先完成第 3 段：儲存 Pages 網址" : "Finish section 3 first",
+      );
+      // Saved but unverified: say what to do next.
+      expect(status({ pagesConfigured: true })).toContain(
+        zh ? "Pages 網址已儲存，但還沒核對" : "saved but not checked yet",
+      );
+      // Local trial mode wins over every production state.
+      for (const pagesConfigured of [false, true]) {
+        expect(
+          status({ publicSharingAvailable: false, pagesConfigured }),
+        ).toContain(zh ? "本機試用模式無法產生 README" : "local trial mode");
+      }
+      // Verified Pages: the status reads as verified, whatever else is set.
+      expect(
+        status({ publicSharingAvailable: false }, "https://fixture.github.io/"),
+      ).toBe(zh ? "已核對" : "Verified");
     },
   );
 

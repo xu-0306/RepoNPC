@@ -143,6 +143,13 @@
 }
 
 .px-button.px-button:disabled,
+.px-button.px-button[aria-disabled="true"] {
+  background: var(--px-surface-alt);
+  border-style: dashed;
+  color: var(--px-muted);
+}
+
+.px-button.px-button:disabled,
 .px-button.px-button[aria-disabled="true"],
 .px-chip.px-chip:disabled,
 .px-chip.px-chip[aria-disabled="true"] {

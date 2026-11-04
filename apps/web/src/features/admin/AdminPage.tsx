@@ -3785,6 +3785,7 @@ export function AdminPage({
         embeddingProfileView={modelPanels}
         guidedView={
           <GuidedOnboardingView
+            publicSharingAvailable={accessState !== "local_launch"}
             workspaceStatus={workspaceStatus}
             batchAnalysisActive={
               batchSnapshot !== null && !isTerminalBatch(batchSnapshot.status)

@@ -24,6 +24,10 @@ export type GitHubShareGuideProps = {
   cardReady: boolean;
   busy: boolean;
   notice: string;
+  /** False in local trial mode, where Pages and README cannot be produced. */
+  publicSharingAvailable?: boolean;
+  /** True once a Pages URL has been saved (verified or not). */
+  pagesConfigured?: boolean;
   onAccountChange: (value: string) => void;
   onCheckProfile: () => void;
   onCheckImage: () => void;
@@ -47,6 +51,12 @@ type GuideCopy = {
   readmePlacement: string;
   readmeReady: string;
   readmeUnavailable: string;
+  readmeStatus: {
+    verified: string;
+    trial: string;
+    notSaved: string;
+    unverified: string;
+  };
   existingReadme: string;
   stageProfile: string;
   stageCard: string;
@@ -118,7 +128,16 @@ const COPY: Record<ReturnType<typeof chromeLocale>, GuideCopy> = {
     readmeReady:
       "下載時會再次核對目前內容與公開卡片。請確認瀏覽器完成下載，再手動上傳 README.md。",
     readmeUnavailable:
-      "先到第 3 段上傳並核對 Pages 網站，才能下載含公開卡片的 README.md。也可沿用下方的卡片下載、上傳與複製區塊。",
+      "README.md 要等 Pages 網站上傳並核對後才能下載，因為卡片圖片放在你的 Pages 上。卡片圖片可以先在下方下載；要貼進 README 的文字同樣要等 Pages 核對後才會出現。",
+    readmeStatus: {
+      verified: "已核對",
+      trial:
+        "本機試用模式無法產生 README：卡片要放在你公開的 GitHub Pages 上，需改用正式模式。卡片圖片仍可在下方下載。",
+      notSaved:
+        "還不能下載 README。請先完成第 3 段：儲存 Pages 網址 → 下載網站並上傳到 GitHub Pages → 按「核對 Pages 網站」。",
+      unverified:
+        "Pages 網址已儲存，但還沒核對。請把最新網站上傳到 Pages，等 Pages 更新後，到第 3 段按「核對 Pages 網站」。",
+    },
     existingReadme:
       "已有 README？請保留原文，使用下方「複製要貼進 README 的文字」追加名片。上傳完整檔案前先比較內容。RepoNPC 不會自動覆寫 GitHub README。",
     stageProfile: "同名 repository",
@@ -230,7 +249,16 @@ const COPY: Record<ReturnType<typeof chromeLocale>, GuideCopy> = {
     readmeReady:
       "Download rechecks the current content and public card. Confirm the browser download completes, then upload README.md manually.",
     readmeUnavailable:
-      "Upload and check your Pages site in section 3 before downloading a README.md with a public card. You can also use the card download, upload and copy steps below.",
+      "README.md can be downloaded only after your Pages site is uploaded and checked, because the card image is served from your Pages site. You can download the card image below now; the text to paste into a README also appears only after Pages is checked.",
+    readmeStatus: {
+      verified: "Verified",
+      trial:
+        "README.md can't be created in local trial mode: the card must live on your public GitHub Pages site, so use production mode. You can still download the card image below.",
+      notSaved:
+        "README.md isn't ready yet. Finish section 3 first: save your Pages URL → download the site and upload it to GitHub Pages → select Check Pages site.",
+      unverified:
+        "Your Pages URL is saved but not checked yet. Upload the latest site to Pages, wait for it to update, then select Check Pages site in section 3.",
+    },
     existingReadme:
       "Already have a README? Keep its text and use Copy text for README below to append the card. Compare content before uploading a complete file. RepoNPC never overwrites your GitHub README automatically.",
     stageProfile: "Matching repository",
@@ -348,6 +376,8 @@ export function GitHubShareGuide({
   cardReady,
   busy,
   notice,
+  publicSharingAvailable = true,
+  pagesConfigured = false,
   onAccountChange,
   onCheckProfile,
   onCheckImage,
@@ -468,12 +498,12 @@ export function GitHubShareGuide({
         </div>
         <p id="github-share-readme-download-status" role="status">
           {pagesReady
-            ? chromeLocale(locale) === "zh-TW"
-              ? "已核對"
-              : "Verified"
-            : chromeLocale(locale) === "zh-TW"
-              ? "未核對 Pages"
-              : "Pages unverified"}
+            ? copy.readmeStatus.verified
+            : !publicSharingAvailable
+              ? copy.readmeStatus.trial
+              : pagesConfigured
+                ? copy.readmeStatus.unverified
+                : copy.readmeStatus.notSaved}
         </p>
         {readmePreview !== null && (
           <>

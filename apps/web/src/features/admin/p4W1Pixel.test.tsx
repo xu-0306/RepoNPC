@@ -33,6 +33,38 @@ const props: GuidedOnboardingViewProps = {
 };
 
 it.each(["en", "zh-TW"] as const)(
+  "warns local trial users on the intro and draft screens that public sharing needs production mode in %s",
+  (locale) => {
+    const zh = locale === "zh-TW";
+    const render = (
+      step: "intro" | "draft",
+      publicSharingAvailable?: boolean,
+    ) =>
+      renderToStaticMarkup(
+        <GuidedOnboardingView
+          {...props}
+          locale={locale}
+          publicSharingAvailable={publicSharingAvailable}
+          state={{ ...props.state, step }}
+        />,
+      );
+    const introNote = zh
+      ? "本機試用模式可以完成內容、預覽與試聊，但公開分享（Pages、README、GitHub 卡片）需要正式模式。"
+      : "local trial mode lets you finish your content, preview and try chat, but public sharing (Pages, README, GitHub card) needs production mode.";
+    expect(render("intro", false)).toContain(introNote);
+    expect(render("intro")).not.toContain(introNote);
+    const trialDraft = zh
+      ? "公開分享與 GitHub 卡片需要正式模式"
+      : "Public sharing and the GitHub card need production mode";
+    const draft = zh ? "並取得 GitHub 卡片" : "get its GitHub card";
+    expect(render("draft", false)).toContain(trialDraft);
+    expect(render("draft", false)).not.toContain(draft);
+    expect(render("draft")).toContain(draft);
+    expect(render("draft")).not.toContain(trialDraft);
+  },
+);
+
+it.each(["en", "zh-TW"] as const)(
   "keeps w1 pixel panels, disclosures and accessible names in %s",
   (locale) => {
     const intro = renderToStaticMarkup(
