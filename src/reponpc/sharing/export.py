@@ -367,18 +367,29 @@ def _add_public_documents(
     with faq.database.connection() as connection:
         connection.execute("BEGIN")
         for locale in snapshot.document.locales:
-            _put_file(
-                files,
-                f"profile-{locale}.json",
-                localized_public_profile_bytes(snapshot.document, locale),
-            )
             try:
-                faq_payload = faq.public_payload_for_bundle(locale, bundle_id, connection)
-            except Exception:
-                faq_payload = {"bundle_id": bundle_id, "locale": locale, "entries": []}
+                profile = json.loads(localized_public_profile_bytes(snapshot.document, locale))
+            except TypeError, ValueError:
+                raise SiteExportError("SHARING_EXPORT_INVALID") from None
+            if not isinstance(profile, dict) or not isinstance(profile.get("character"), dict):
+                raise SiteExportError("SHARING_EXPORT_INVALID")
+            profile["character"]["asset_url"] = "./character.png"
+            scene = profile["character"].get("scene")
+            if isinstance(scene, dict):
+                scene["background_url"] = _static_background_path(snapshot)
+            _put_file(files, f"profile-{locale}.json", canonical_json_bytes(profile))
+            faq_payload = faq.public_payload_for_bundle(locale, bundle_id, connection)
             if len(canonical_json_bytes(faq_payload)) > _MAX_FAQ_BYTES:
                 raise SiteExportError("SHARING_EXPORT_TOO_LARGE")
             _put_file(files, f"faq-{locale}.json", canonical_json_bytes(faq_payload))
+
+
+def _static_background_path(snapshot: PublishedProfileSnapshot) -> str | None:
+    if snapshot.background_content is None:
+        return None
+    extension = "webp" if snapshot.background_content.startswith(b"RIFF") else "png"
+    digest = hashlib.sha256(snapshot.background_content).hexdigest()
+    return f"./scene/{digest}.{extension}"
 
 
 def _add_bundle_assets(

@@ -17,10 +17,11 @@ import yaml
 from fastapi.testclient import TestClient
 
 from reponpc import cli
+from reponpc.admin.faq import FaqError
 from reponpc.api.public import SetupState
 from reponpc.bundles.archive import BundleError, verify_bundle_archive
 from reponpc.bundles.manager import BundleManager
-from reponpc.i18n.languages import language_tags
+from reponpc.i18n.languages import get_language, language_tags
 from reponpc.i18n.plan import ANALYSIS_LOCALES, LocaleNotEnabledError
 from reponpc.indexing.pipeline import build_index_bundle
 from reponpc.indexing.public_profile import (
@@ -31,7 +32,7 @@ from reponpc.indexing.sources import ResolvedConfiguration
 from reponpc.main import create_app
 from reponpc.runtime.database import RuntimeDatabase
 from reponpc.sharing.export import build_site_files, build_visitor_site_export
-from reponpc.sharing.manifest import MANIFEST_NAME, canonical_json_bytes
+from reponpc.sharing.manifest import MANIFEST_NAME, SiteExportError, canonical_json_bytes
 from reponpc.sharing.pages import PagesSharingService
 from reponpc.sharing.readme import render_profile_readme
 from tests.fixtures.bundles.site_languages import site_data
@@ -316,7 +317,7 @@ class _Faq:
         assert connection.in_transaction
         self.calls.append(locale)
         if locale == self.failing_locale:
-            raise ValueError("fixture language has no FAQ")
+            raise FaqError("FAQ_STALE")
         return {
             "bundle_id": bundle_id,
             "locale": locale,
@@ -347,7 +348,7 @@ def test_readme_rejects_every_disabled_registry_language(tmp_path: Path, tag: st
 
 
 @pytest.mark.parametrize("tags", [(tag,) for tag in TAGS] + [TAGS, TAGS[1:] + TAGS[:1]])
-def test_export_uses_every_site_language_and_exact_public_profile_bytes(
+def test_export_uses_every_site_language_and_a_static_public_profile(
     tmp_path: Path, tags: tuple[str, ...]
 ) -> None:
     bundle = _build(tmp_path / "build", tags)
@@ -382,7 +383,14 @@ def test_export_uses_every_site_language_and_exact_public_profile_bytes(
     with manager.acquire_snapshot() as (_, bundle_id, public):
         document = parse_public_profile_bytes((public / "profile.json").read_bytes())
         for tag in tags:
-            assert files[f"profile-{tag}.json"] == localized_public_profile_bytes(document, tag)
+            # The static page resolves its assets relative to itself; nothing else differs.
+            expected = json.loads(localized_public_profile_bytes(document, tag))
+            expected["character"]["asset_url"] = "./character.png"
+            expected["character"]["scene"]["background_url"] = None
+            assert json.loads(files[f"profile-{tag}.json"]) == expected
+            assert json.loads(files[f"profile-{tag}.json"])["available_locales"] == [
+                {"tag": item, "endonym": get_language(item).endonym} for item in tags
+            ]
             assert json.loads(files[f"faq-{tag}.json"]) == {
                 "bundle_id": bundle_id,
                 "locale": tag,
@@ -412,23 +420,22 @@ def test_export_uses_every_site_language_and_exact_public_profile_bytes(
 
 
 @pytest.mark.parametrize("tag", TAGS)
-def test_export_writes_empty_public_faq_shape_when_service_raises(tmp_path: Path, tag: str) -> None:
+def test_export_reports_a_stale_faq_instead_of_publishing_an_empty_one(
+    tmp_path: Path, tag: str
+) -> None:
     bundle = _build(tmp_path / "build", (tag,))
     manager, runtime = _manager(tmp_path)
     manager.activate(_verify(bundle.archive_path, tmp_path / "stage"))
-    files, _ = build_site_files(
-        faq=_Faq(manager, runtime, failing_locale=tag),
-        scene_service=_scene_service(manager),
-        web_dist=_visitor_build(tmp_path),
-        pages_url="https://fixture.github.io/portfolio/",
-        gateway_origin="https://fixture.ts.net",
-        pages_origin="https://fixture.github.io",
-    )
-    assert json.loads(files[f"faq-{tag}.json"]) == {
-        "bundle_id": bundle.manifest.bundle_id,
-        "locale": tag,
-        "entries": [],
-    }
+    with pytest.raises(SiteExportError) as raised:
+        build_visitor_site_export(
+            faq=_Faq(manager, runtime, failing_locale=tag),
+            scene_service=_scene_service(manager),
+            web_dist=_visitor_build(tmp_path),
+            pages_url="https://fixture.github.io/portfolio/",
+            gateway_origin="https://fixture.ts.net",
+            pages_origin="https://fixture.github.io",
+        )
+    assert raised.value.code == "SHARING_CONFLICT"
 
 
 def test_serving_and_export_never_invoke_conversion(
