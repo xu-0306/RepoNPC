@@ -58,8 +58,8 @@ describe("Verified Pages README route", () => {
       );
       expect(markup).toContain(
         locale === "zh-TW"
-          ? "README.md 必須放在「與 GitHub 帳號同名的公開 repository」根目錄"
-          : "README.md must be at the root of a public repository with the same name as your GitHub account",
+          ? "在 GitHub 建立與帳號同名的公開專案"
+          : "Create a public repository with the same name as your GitHub account",
       );
       expect(markup).toContain(
         locale === "zh-TW" ? "不會自動覆寫" : "never overwrites",
@@ -72,8 +72,13 @@ describe("Verified Pages README route", () => {
       );
       expect(unavailable).toContain(
         locale === "zh-TW"
-          ? "README.md 要等 Pages 網站上傳並核對後才能下載"
-          : "README.md can be downloaded only after your Pages site is uploaded and checked",
+          ? "先上傳 Pages 網站。"
+          : "Upload your Pages site first.",
+      );
+      expect(unavailable).toContain(
+        locale === "zh-TW"
+          ? "再按「核對 Pages 網站」。"
+          : "Select Check Pages site.",
       );
       expect(unavailable).not.toContain('id="github-share-markdown"');
       expect(input.onDownloadReadme).not.toHaveBeenCalled();
@@ -97,24 +102,23 @@ describe("Verified Pages README route", () => {
           )?.[1] ?? ""
         );
       };
-      // Production mode, no Pages URL saved yet: name the whole chain.
+      // No Pages URL saved yet: name the whole chain.
       expect(status({})).toContain(
-        zh ? "請先完成第 3 段：儲存 Pages 網址" : "Finish section 3 first",
+        zh ? "請先完成第 2 段。儲存 Pages 網址" : "Finish section 2 first",
       );
       // Saved but unverified: say what to do next.
       expect(status({ pagesConfigured: true })).toContain(
         zh ? "Pages 網址已儲存，但還沒核對" : "saved but not checked yet",
       );
-      // Local trial mode wins over every production state.
+      // Verified Pages: the status reads as verified for either saved state.
       for (const pagesConfigured of [false, true]) {
-        expect(
-          status({ publicSharingAvailable: false, pagesConfigured }),
-        ).toContain(zh ? "本機試用模式無法產生 README" : "local trial mode");
+        expect(status({ pagesConfigured }, "https://fixture.github.io/")).toBe(
+          zh ? "已核對" : "Verified",
+        );
+        expect(status({ pagesConfigured })).not.toMatch(
+          /試用|trial|正式模式|production mode/i,
+        );
       }
-      // Verified Pages: the status reads as verified, whatever else is set.
-      expect(
-        status({ publicSharingAvailable: false }, "https://fixture.github.io/"),
-      ).toBe(zh ? "已核對" : "Verified");
     },
   );
 
@@ -235,6 +239,43 @@ it.each(["zh-TW", "en"] as const)(
       });
     } finally {
       vi.unstubAllGlobals();
+    }
+  },
+);
+
+it.each(["zh-TW", "en"] as const)(
+  "links to GitHub destinations using each public account in %s",
+  (locale) => {
+    for (const account of [
+      "fixture",
+      "another-owner",
+      "",
+      "owner/private?token=secret",
+    ]) {
+      const markup = renderToStaticMarkup(
+        <GitHubShareGuide
+          {...props(locale, null)}
+          account={account}
+          profileStatus="missing"
+        />,
+      );
+      const login = ["fixture", "another-owner"].includes(account)
+        ? account
+        : null;
+      const destinations = login
+        ? [
+            `https://github.com/${login}/${login}`,
+            `https://github.com/${login}/${login}/upload`,
+            "https://github.com/new",
+          ]
+        : ["https://github.com/new"];
+      for (const href of destinations) {
+        expect(markup).toContain(
+          `href="${href}" rel="noopener noreferrer" target="_blank"`,
+        );
+      }
+      expect(markup).not.toMatch(/試用|trial|正式模式|production mode/i);
+      expect(markup).not.toMatch(/href="[^"]*(?:token|private|secret)/);
     }
   },
 );

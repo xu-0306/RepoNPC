@@ -115,20 +115,17 @@ def test_shortcuts_target_launcher_with_optional_desktop_icon() -> None:
     assert set(tasks[0]["Flags"].split()) == {"unchecked"}
     assert {icon["Name"] for icon in icons} == {
         r"{group}\RepoNPC",
-        r"{group}\RepoNPC" "\uff08正式模式\uff09",
         r"{autodesktop}\RepoNPC",
     }
     for icon in icons:
         assert icon["Filename"] == r"{app}\RepoNPC.exe"
         assert icon["WorkingDir"] == "{app}"
-        if icon["Name"] == r"{group}\RepoNPC" "\uff08正式模式\uff09":
-            assert icon["Parameters"] == "--profile production"
-        else:
-            assert "Parameters" not in icon
+        assert "Parameters" not in icon
         if icon["Name"].startswith("{autodesktop}"):
             assert icon["Tasks"] == "desktopicon"
         else:
             assert "Tasks" not in icon
+    assert "--profile production" not in _recipe()
 
 
 def test_launch_is_opt_in_and_never_runs_in_silent_install() -> None:

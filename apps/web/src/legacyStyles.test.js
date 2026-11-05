@@ -150,3 +150,17 @@ it("accepts pixel tokens, hard shadows, hard grid/stripe stops and the progress 
   ).toEqual([]);
   expect(legacyTokens('style={{ "--admin-progress": progress }}')).toEqual([]);
 });
+
+it("does not resize the character sheet image from a page stylesheet", () => {
+  const sized = walk(SRC)
+    .filter((path) => path.endsWith(".css"))
+    .flatMap((path) => [
+      ...readFileSync(path, "utf8").matchAll(
+        /([^{}]*\bimg\b[^{}]*)\{([^}]*)\}/g,
+      ),
+    ])
+    .filter(([, , body]) => /\b(?:width|height)\s*:\s*(?!\s|100%)/.test(body))
+    .map(([, selector]) => selector.trim())
+    .filter((selector) => !selector.startsWith(".model-brand-icon"));
+  expect(sized).toEqual([]);
+});

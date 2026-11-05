@@ -143,10 +143,20 @@ it("composes a compact phone header and two-row navigation without squeezing des
   const phone = css.slice(css.lastIndexOf("@media (max-width: 760px)"));
   expect(phone).toMatch(/\.admin-workspace__scene\s*\{\s*display: none/);
   expect(phone).toMatch(
-    /\.admin-workspace__locale\s*\{[^}]*position: absolute/s,
+    /\.admin-workspace__header\s*\{[^}]*gap: 4px;[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*padding: 8px 12px/s,
   );
   expect(phone).toMatch(
-    /\.admin-workspace__utilities\s*\{[^}]*flex-wrap: nowrap/s,
+    /\.admin-workspace__brand\s*\{[^}]*gap: 8px;[^}]*min-height: 44px/s,
+  );
+  expect(phone).toMatch(/\.admin-workspace__locale\s*\{[^}]*flex-basis: 100%/s);
+  expect(phone).not.toMatch(
+    /\.admin-workspace__locale\s*\{[^}]*position:\s*(?:absolute|fixed)/s,
+  );
+  expect(css).toMatch(
+    /\.admin-workspace__locale\s*\{[^}]*display: flex;[^}]*flex-wrap: wrap/s,
+  );
+  expect(phone).toMatch(
+    /\.admin-workspace__utilities\s*\{[^}]*flex-wrap: wrap/s,
   );
   expect(phone).toMatch(
     /\.admin-workspace__modes\s*\{[^}]*repeat\(6, minmax\(0, 1fr\)\)/s,

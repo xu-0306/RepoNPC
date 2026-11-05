@@ -14,6 +14,20 @@ const styles = source("styles.css");
 const localPublishing = source("features/admin/LocalPublishingWorkspace.tsx");
 const pagesShare = source("features/admin/PagesSharePanel.tsx");
 const githubShare = source("features/admin/GitHubShareGuide.tsx");
+const rules = [...styles.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(
+  ([, selectors, body]) => ({
+    selectors: selectors.split(",").map((selector) => selector.trim()),
+    declarations: Object.fromEntries(
+      [...body.matchAll(/([\w-]+)\s*:\s*([^;]+);/g)].map(
+        ([, property, value]) => [property, value.trim()],
+      ),
+    ),
+  }),
+);
+const endingWith = (className) =>
+  rules.filter((rule) =>
+    rule.selectors.some((selector) => selector.endsWith(`.${className}`)),
+  );
 
 describe("P6 pixel UI contracts", () => {
   it("makes a disabled pixel button look disabled, not merely flat", () => {
@@ -115,7 +129,7 @@ describe("P6 pixel UI contracts", () => {
     // Below 900px the decorative scene gives its column to the utilities so
     // the log-out button never sits alone on a second row.
     expect(styles).toMatch(
-      /@media \(max-width: 900px\) \{\s*\.admin-workspace__header \{\s*grid-template-columns: minmax\(0, 1fr\) auto;\s*\}\s*\.admin-workspace__scene \{\s*display: none;/,
+      /@media \(max-width: 900px\) \{\s*\.admin-workspace__header \{\s*grid-template-columns: minmax\(min-content, 1fr\) minmax\(0, 2fr\);\s*\}\s*\.admin-workspace__scene \{\s*display: none;/,
     );
   });
 
@@ -123,9 +137,50 @@ describe("P6 pixel UI contracts", () => {
     // The pixel title needs about 188px; a fixed 180px column floor pushed the
     // last "C" onto a second line once the language buttons grew.
     expect(styles).not.toMatch(/\.admin-workspace__header[^}]*minmax\(180px/);
-    expect(styles.match(/minmax\(min-content, 1fr\)/g)).toHaveLength(2);
+    // The base, 1100px and 900px grids all keep the brand's min-content floor.
+    expect(
+      styles.match(
+        /\.admin-workspace__header\s*\{[^}]*grid-template-columns:\s*minmax\(min-content, 1fr\)/g,
+      ),
+    ).toHaveLength(3);
     expect(styles).toMatch(
       /\.admin-workspace__title\s*\{[^}]*white-space:\s*nowrap/,
     );
+  });
+
+  it("keeps language groups in normal flow with room to wrap at every breakpoint", () => {
+    const groups = endingWith("admin-workspace__locale");
+    expect(groups.length).toBeGreaterThan(0);
+    expect(
+      groups.some(({ declarations }) => declarations["flex-wrap"] === "wrap"),
+    ).toBe(true);
+    for (const { declarations } of groups) {
+      expect(["absolute", "fixed"]).not.toContain(declarations.position);
+      expect(declarations["flex-wrap"]).not.toBe("nowrap");
+    }
+    const utilities = endingWith("admin-workspace__utilities");
+    expect(utilities.length).toBeGreaterThan(0);
+    for (const { declarations } of utilities)
+      expect(declarations["flex-wrap"]).not.toBe("nowrap");
+  });
+
+  it("keeps each endonym on one line without shrinking its button", () => {
+    const buttons = rules.filter((rule) =>
+      rule.selectors.some((selector) =>
+        /\.admin-workspace__locale\b.*\.px-button\b/.test(selector),
+      ),
+    );
+    expect(buttons.length).toBeGreaterThan(0);
+    expect(
+      buttons.some(
+        ({ declarations }) =>
+          declarations["white-space"] === "nowrap" &&
+          declarations["flex-shrink"] === "0",
+      ),
+    ).toBe(true);
+    for (const { declarations } of buttons) {
+      if (declarations["white-space"])
+        expect(declarations["white-space"]).toBe("nowrap");
+    }
   });
 });

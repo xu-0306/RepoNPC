@@ -62,6 +62,19 @@ def test_local_launcher_builds_same_origin_app_and_checks_real_health_route() ->
     assert "-RedirectStandardError" in script
 
 
+def test_local_launcher_sets_host_allowlist_before_server_and_smoke_probe() -> None:
+    script = POWERSHELL_LAUNCHER.read_text(encoding="utf-8")
+    allowlist = 'Set-ProcessEnvironmentValue "REPONPC_TRUSTED_HOSTS" "localhost,127.0.0.1"'
+    assert script.count(allowlist) == 1
+    assert script.index(allowlist) < script.index(
+        '    if ($deploymentProfile -eq "loopback_evaluation") {'
+    )
+    assert script.index(allowlist) < script.index("$server = Start-Process -FilePath $pythonExe")
+    assert '$probeBaseUrl = "http://127.0.0.1:$Port"' in script
+    assert "Wait-RepoNpcHealth $probeBaseUrl $server" in script
+    assert 'Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/healthz"' in script
+
+
 def test_local_launcher_keeps_model_setup_provider_neutral() -> None:
     script = POWERSHELL_LAUNCHER.read_text(encoding="utf-8")
 
@@ -100,7 +113,7 @@ def test_local_launcher_selects_only_explicit_supported_profiles() -> None:
     assert "if ([string]::IsNullOrEmpty($deploymentProfile)) {" in script
     assert '$deploymentProfile = "loopback_evaluation"' in script
     assert '$deploymentProfile -cnotin @("loopback_evaluation", "production")' in script
-    assert 'throw "REPONPC_DEPLOYMENT_PROFILE must be loopback_evaluation or production."' in script
+    assert 'throw "REPONPC_DEPLOYMENT_PROFILE is not supported."' in script
     assert 'Set-ProcessEnvironmentValue "REPONPC_DEPLOYMENT_PROFILE" $deploymentProfile' in script
     assert (
         'Set-ProcessEnvironmentValue "REPONPC_DEPLOYMENT_PROFILE" "loopback_evaluation"'
@@ -121,7 +134,9 @@ def test_local_launcher_separates_trial_and_production_preparation() -> None:
     ):
         assert statement in trial and statement not in production
     assert 'Set-ProcessEnvironmentValue "REPONPC_ENV" "production"' in production
-    assert 'Set-ProcessEnvironmentValue "REPONPC_ADMIN_ORIGINS" $baseUrl' in production
+    origins = 'Set-ProcessEnvironmentValue "REPONPC_ADMIN_ORIGINS" $baseUrl'
+    assert script.count(origins) == 1
+    assert script.index(origins) < start
     for name in ("REPONPC_CHAT_API_KEY", "REPONPC_EMBEDDING_API_KEY", "REPONPC_IP_HASH_KEY"):
         assert f'"{name}"' in production
     assert "$configuredDirectSecrets = @($directSecretNames | Where-Object {" in production
@@ -137,16 +152,25 @@ def test_local_launcher_separates_trial_and_production_preparation() -> None:
 
 def test_local_launcher_production_uses_shared_helpers_after_python_sync() -> None:
     script = POWERSHELL_LAUNCHER.read_text(encoding="utf-8")
-    preparation_start = script.index('    if ($deploymentProfile -eq "production") {')
+    preparation_start = script.index('    $prepareDataDirectory = @"')
     preparation_end = script.index("    if (-not $SkipBuild", preparation_start)
     preparation = script[preparation_start:preparation_end]
     assert script.index("& $uv @syncArguments") < preparation_start
-    assert "prepare_data_directory(Path(sys.argv[1]), production=True)" in preparation
+    assert "Path(sys.argv[1])," in preparation
+    assert 'production=sys.argv[2] == "production"' in preparation
+    assert "default_directory=Path(sys.argv[3])" in preparation
     assert "except UnsafeDataDirectory as exc:" in preparation
     assert "print(owner_only_fix_command(exc.path, root=exc.root))" in preparation
     assert "sys.exit(3)" in preparation
     assert "$preparationExitCode -eq 3" in preparation
-    assert "$pythonExe -c $prepareDataDirectory $resolvedDataDir" in preparation
+    assert (
+        "$pythonExe -c $prepareDataDirectory $resolvedDataDir $deploymentProfile $defaultDataDir"
+        in preparation
+    )
+    assert (
+        '$defaultDataDir = [IO.Path]::GetFullPath((Join-Path $repoRoot "runtime-data\\local"))'
+        in script
+    )
     assert (
         'Set-ProcessEnvironmentValue "REPONPC_IP_HASH_KEY_FILE" ([string]$preparationOutput[0])'
         in preparation
@@ -161,7 +185,7 @@ def test_local_launcher_production_uses_shared_helpers_after_python_sync() -> No
     assert "run_owner_console(Path(sys.argv[1]), environ=os.environ)" in console
     assert "& $pythonExe -c $ownerConsole $resolvedDataDir\n" in console
     assert "2>&1" not in console and "RedirectStandard" not in console
-    assert "Production owner setup was not completed." in console
+    assert "Owner setup was not completed." in console
 
 
 def test_local_launcher_only_trial_issues_fragment_grants() -> None:
@@ -178,6 +202,50 @@ def test_local_launcher_only_trial_issues_fragment_grants() -> None:
     assert '$adminUrl = "$baseUrl/admin"' in production
     assert "Start-Process -FilePath $adminUrl" in script[end:]
     assert "Write-Host $adminUrl" in script[end:]
+
+
+@pytest.mark.parametrize(
+    "argument, configured, relative",
+    [
+        ("", "", "runtime-data/local"),
+        ("", "/var/lib/reponpc", "runtime-data/local"),
+        ("", "custom one", "custom one"),
+        ("custom two", "ignored folder", "custom two"),
+        ("runtime-data/local", "ignored folder", "runtime-data/local"),
+    ],
+)
+def test_source_default_folder_decision_uses_the_resolved_path(
+    tmp_path: Path, argument: str, configured: str, relative: str
+) -> None:
+    shell = shutil.which("pwsh") or shutil.which("powershell")
+    if shell is None:
+        pytest.skip("PowerShell is unavailable on this host")
+    script = POWERSHELL_LAUNCHER.read_text(encoding="utf-8")
+    start = script.index("    if ([string]::IsNullOrWhiteSpace($DataDir)) {")
+    end = script.index('    $baseUrl = "http://localhost:$Port"', start)
+
+    def quoted(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    command = (
+        "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop';\n"
+        f"$repoRoot = {quoted(str(tmp_path))}; $DataDir = {quoted(argument)};\n"
+        f"function Get-ProcessEnvironmentValue {{ return {quoted(configured)} }}\n"
+        + script[start:end]
+        + "\nWrite-Output $resolvedDataDir; Write-Output $defaultDataDir"
+    )
+    result = subprocess.run(
+        [shell, "-NoProfile", "-NonInteractive", "-Command", command],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert list(map(Path, result.stdout.splitlines())) == [
+        tmp_path / relative,
+        tmp_path / "runtime-data" / "local",
+    ]
 
 
 @pytest.mark.parametrize(

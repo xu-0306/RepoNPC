@@ -10,6 +10,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
@@ -68,6 +69,10 @@ class PagesSharingService:
         )
         return {
             "pages_url": pages_url,
+            "pages_origin": (
+                _validated_target(pages_url).origin if isinstance(pages_url, str) else None
+            ),
+            "live_chat_origin": self._gateway_origins()[0],
             "configured": pages_url is not None,
             "verified": verified,
             "verified_at": row["verified_at"] if verified else None,
@@ -75,7 +80,7 @@ class PagesSharingService:
         }
 
     def configure_pages(self, *, pages_url: str) -> dict[str, object]:
-        pages_origin = self._current_origins()[1]
+        pages_origin = self._current_origins(pages_url)[1]
         target = _validated_target(pages_url, pages_origin)
         try:
             with self.database.connection() as connection:
@@ -140,6 +145,8 @@ class PagesSharingService:
                 expected=expected_manifest,
             ):
                 raise SiteExportError("SHARING_VERIFICATION_FAILED")
+            if self.current_origins() != (gateway_origin, pages_origin):
+                raise SiteExportError("SHARING_CONFLICT")
         except SiteExportError:
             self._clear_verification()
             raise
@@ -166,7 +173,7 @@ class PagesSharingService:
             raise SiteExportError("SHARING_CONFLICT") from None
         return self.state()
 
-    def current_origins(self) -> tuple[str, str]:
+    def current_origins(self) -> tuple[str | None, str]:
         return self._current_origins()
 
     def readme(self, *, web_dist: Path, locale: Locale) -> bytes:
@@ -244,10 +251,20 @@ class PagesSharingService:
         except OSError, sqlite3.Error, RuntimeDatabaseError:
             raise SiteExportError("SHARING_EXPORT_UNAVAILABLE") from None
 
-    def _current_origins(self) -> tuple[str, str]:
+    def _current_origins(self, pages_url: str | None = None) -> tuple[str | None, str]:
+        pages_url = self._row()["pages_url"] if pages_url is None else pages_url
+        if not isinstance(pages_url, str):
+            raise SiteExportError("SHARING_CONFIGURATION_INVALID")
+        target = _validated_target(pages_url)
+        gateway_origin, configured_pages = self._gateway_origins()
+        if configured_pages is not None and configured_pages != target.origin:
+            raise SiteExportError("SHARING_CONFIGURATION_INVALID")
+        return gateway_origin, target.origin
+
+    def _gateway_origins(self) -> tuple[str | None, str | None]:
         gateway = self.gateway_supplier()
         if gateway is None:
-            raise SiteExportError("SHARING_CONFIGURATION_INVALID")
+            return None, None
         try:
             value = gateway.snapshot()
         except Exception:
@@ -263,18 +280,24 @@ class PagesSharingService:
         )
         normalized_pages = _pages_origin(pages_origin) if isinstance(pages_origin, str) else None
         if (
-            normalized_gateway is None
+            (gateway_origin is not None and normalized_gateway is None)
             or normalized_gateway != gateway_origin
-            or normalized_pages is None
+            or (pages_origin is not None and normalized_pages is None)
             or normalized_pages != pages_origin
         ):
             raise SiteExportError("SHARING_CONFIGURATION_INVALID")
         return normalized_gateway, normalized_pages
 
 
-def _validated_target(value: str, origin: str):
+def _validated_target(value: str, origin: str | None = None):
     if any(character.isspace() or ord(character) < 32 for character in value):
         raise SiteExportError("SHARING_CONFIGURATION_INVALID")
+    if origin is None:
+        try:
+            parsed = urlsplit(value)
+        except ValueError:
+            raise SiteExportError("SHARING_CONFIGURATION_INVALID") from None
+        origin = _pages_origin(f"{parsed.scheme}://{parsed.netloc}")
     return pages_target(value, origin)
 
 

@@ -102,6 +102,7 @@ async function app(
   suggestions: string[],
   faqQuestions: string[] = [],
   online = true,
+  liveChatConfigured = true,
 ) {
   const profile: PublicProfile = {
     schema_version: 1,
@@ -140,7 +141,10 @@ async function app(
   };
   data.profile.mockResolvedValue(profile);
   data.faq.mockResolvedValue(faq);
-  data.status.mockResolvedValue({ chat_available: online });
+  data.status.mockResolvedValue({
+    chat_available: online,
+    ...(liveChatConfigured ? {} : { live_chat_configured: false }),
+  });
   const render = () => {
     hooks.cursor = 0;
     hooks.effects = [];
@@ -352,6 +356,27 @@ describe("visitor no-match UX", () => {
 });
 
 describe("resting approved questions", () => {
+  it.each(["zh-TW", "en"] as const)(
+    "disables the gateway-free chat box but opens the static FAQ in %s",
+    async (locale) => {
+      const send = vi.fn();
+      vi.stubGlobal("fetch", send);
+      const approved =
+        locale === "en" ? "Approved question?" : "已核准的問題？";
+      const view = await app(locale, [], [approved], false, false);
+      expect(view.markup()).toContain(messages[locale].dialogueResting);
+      expect(view.markup()).toContain(messages[locale].restingBadge);
+      expect(view.markup()).toMatch(/<textarea\b[^>]*\bdisabled=""/);
+      expect(view.render().canAskSuggestion(approved)).toBe(true);
+      await view.submit("A free-form question");
+      expect(view.render().turns).toHaveLength(0);
+      view.render().onSelectSuggestion(approved);
+      expect(view.markup()).toContain("Approved answer");
+      expect(view.render().turns).toHaveLength(2);
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(["zh-TW", "en"] as const)(
     "shows an admitted FAQ question enabled in %s",
     async (locale) => {

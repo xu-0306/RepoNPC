@@ -19,14 +19,23 @@ describe("visitor gateway panel", () => {
         async <T,>(): Promise<T> => null as T,
       ) as VisitorGatewayRequest;
       const markup = renderToStaticMarkup(
-        <VisitorGatewayPanel locale={locale} request={request} />,
+        <VisitorGatewayPanel
+          locale={locale}
+          request={request}
+          pagesOrigin={null}
+        />,
       );
 
       expect(markup).toContain('aria-labelledby="visitor-gateway-heading"');
       expect(markup).toContain('for="visitor-gateway-origin"');
-      expect(markup).toContain('for="visitor-pages-origin"');
-      expect(markup).toContain('aria-describedby="visitor-pages-origin-help"');
-      expect(markup).toContain('id="visitor-pages-origin-help"');
+      // The Pages address is never typed here (ADR-081): it comes from the
+      // saved Pages URL, so there is no second Pages field or label.
+      expect(markup).not.toContain('for="visitor-pages-origin"');
+      expect(markup).not.toContain('id="visitor-pages-origin"');
+      expect(markup).not.toMatch(/Pages domain|Pages 網域/);
+      expect(markup.match(/<input[^>]*type="url"/g)).toHaveLength(1);
+      // Nothing is left that points at the removed field.
+      expect(markup).not.toContain("visitor-pages-origin");
       expect(markup).not.toContain("Listener");
       expect(markup).toContain('type="url"');
       // No origin is configured yet, so no Funnel port may be assumed.
@@ -45,30 +54,71 @@ describe("visitor gateway panel", () => {
   );
 
   it.each(["zh-TW", "en"] as const)(
-    "%s explains trial mode only when sharing is unavailable",
+    "%s offers sharing without a mode warning",
     (locale) => {
       const request = vi.fn(
         async <T,>(): Promise<T> => null as T,
       ) as VisitorGatewayRequest;
-      const trial = renderToStaticMarkup(
+      const markup = renderToStaticMarkup(
         <VisitorGatewayPanel
           locale={locale}
           request={request}
-          publicSharingAvailable={false}
+          pagesOrigin={null}
         />,
       );
-      const production = renderToStaticMarkup(
-        <VisitorGatewayPanel locale={locale} request={request} />,
-      );
-      const notice = locale === "zh-TW" ? "本機試用模式" : "local trial mode";
+      expect(markup).not.toMatch(/試用|trial|正式模式|production mode/i);
+      expect(markup).not.toContain('role="note"');
+      expect(markup).toContain('for="visitor-gateway-origin"');
+      expect(markup).toContain(locale === "zh-TW" ? "啟動" : "Start");
+      expect(request).not.toHaveBeenCalled();
+    },
+  );
 
-      expect(trial).toContain('role="note"');
-      expect(trial).toContain(notice);
-      expect(trial).toContain(
-        locale === "zh-TW" ? "正式模式" : "production mode",
+  it.each(["zh-TW", "en"] as const)(
+    "%s is the last, optional section and says what visitors get without it",
+    (locale) => {
+      const zh = locale === "zh-TW";
+      const request = vi.fn(
+        async <T,>(): Promise<T> => null as T,
+      ) as VisitorGatewayRequest;
+      const markup = renderToStaticMarkup(
+        <VisitorGatewayPanel
+          locale={locale}
+          request={request}
+          pagesOrigin="https://account.github.io"
+        />,
       );
-      expect(production).not.toContain(notice);
-      expect(production).not.toContain('role="note"');
+      const heading = /<h2 id="visitor-gateway-heading">([^<]*)<\/h2>/.exec(
+        markup,
+      )?.[1];
+      expect(heading).toBe(
+        zh ? "4. 即時聊天（選填）" : "4. Live chat (optional)",
+      );
+      expect(markup).toContain(zh ? "選填" : "Optional");
+      // What the visitor gets without it, and what it adds.
+      expect(markup).toContain(
+        zh
+          ? "不做這一段，訪客也能打開你的聊天頁，看到常見問答和「休息中」訊息。"
+          : "Skip this section and visitors can still open your chat page. They see the FAQ and a resting message.",
+      );
+      expect(markup).toContain(
+        zh
+          ? "訪客可在你的電腦開機時得到即時回答"
+          : "visitors get live answers while this computer is on",
+      );
+      // Collapsed until a Funnel URL is saved: no `open` attribute without status.
+      expect(markup).toMatch(/<details class="visitor-gateway__setup"[^>]*>/);
+      expect(markup).not.toMatch(
+        /<details class="visitor-gateway__setup"[^>]*\bopen=/,
+      );
+      // The fixed term stays exactly as agreed and no jargon is added.
+      expect(markup).toContain("Funnel URL");
+      // Visible text only: class names and ids keep their code names, and the
+      // Funnel command help still names its environment variable (known debt).
+      const visible = markup
+        .replace(/<[^>]*>/g, " ")
+        .replace(/REPONPC_VISITOR_GATEWAY_PORT/g, "");
+      expect(visible).not.toMatch(/gateway|manifest/i);
       expect(request).not.toHaveBeenCalled();
     },
   );
@@ -91,7 +141,11 @@ describe("visitor gateway panel", () => {
         async <T,>(): Promise<T> => null as T,
       ) as VisitorGatewayRequest;
       const markup = renderToStaticMarkup(
-        <VisitorGatewayPanel locale={locale} request={request} />,
+        <VisitorGatewayPanel
+          locale={locale}
+          request={request}
+          pagesOrigin={null}
+        />,
       );
       const funnelLabel = locale === "zh-TW" ? "公開連接埠" : "Public port";
       const localLabel = locale === "zh-TW" ? "本機連接埠" : "Local port";

@@ -584,7 +584,14 @@ def create_admin_router(
                 profile = getattr(request.app.state, "deployment_profile", None)
                 if profile is None and configured is not None:
                     profile = configured.deployment_profile
-                if profile == "production":
+                if (
+                    profile in {"production", "loopback_evaluation"}
+                    and origins_supplier()
+                    and (
+                        profile != "loopback_evaluation"
+                        or request.url.path != "/api/admin/session/local-launch"
+                    )
+                ):
                     rejected = same_origin(request)
                     if rejected is not None:
                         return rejected
@@ -1997,7 +2004,7 @@ def create_admin_router(
         configured_scene = scene_supplier()
         if isinstance(configured_operations, JSONResponse):
             return configured_operations
-        if configured_scene is None or gateway_supplier() is None:
+        if configured_scene is None:
             return error_response(
                 request,
                 status_code=503,

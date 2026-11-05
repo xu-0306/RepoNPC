@@ -9,6 +9,7 @@ import os
 import secrets
 import socket
 import stat
+import subprocess
 import sys
 import threading
 import time
@@ -42,7 +43,7 @@ class UnsafeDataDirectory(_LauncherError):
 
 
 def owner_only_fix_command(path: Path, *, root: bool) -> str:
-    """Return the owner-run repair (D5); RepoNPC never changes existing ACLs."""
+    """Return the owner-run repair for a custom data folder (ADR-080)."""
 
     if not root:
         # The root already passed, so inheriting from it is owner-only. Inheritance
@@ -80,13 +81,33 @@ def _check_directory(path: Path) -> None:
             raise _LauncherError
 
 
-def prepare_data_directory(data_dir: Path, *, production: bool) -> Path:
-    """Prepare new private paths, but never repair existing permissions implicitly."""
+def prepare_data_directory(
+    data_dir: Path, *, production: bool, default_directory: Path | None = None
+) -> Path:
+    """Repair only the launcher's exact default; refuse unsafe custom folders."""
 
     _check_directory(data_dir)
     if not data_dir.exists():
         data_dir.mkdir(parents=True, mode=0o700)
         restrict_owner_only(data_dir)
+    if sys.platform == "win32" and default_directory is not None:
+        if Path(os.path.abspath(data_dir)) == Path(os.path.abspath(default_directory)):
+            children = list(data_dir.rglob("*"))
+            for child in children:
+                if (
+                    child.is_symlink()
+                    or child.is_junction()
+                    or (not child.is_dir() and child.stat().st_nlink != 1)
+                ):
+                    raise _LauncherError
+            restrict_owner_only(data_dir)
+            if children:
+                subprocess.run(
+                    ["icacls", str(data_dir / "*"), "/reset", "/T", "/Q"],
+                    check=True,
+                    capture_output=True,
+                )
+        production = True  # Both launcher profiles require a private Windows data folder.
     if (
         production
         and sys.platform == "win32"
@@ -171,8 +192,8 @@ def run_owner_console(
     if state == "ready":
         return True
     write(
-        "正式模式登入前, 必須先設定至少 15 字元的密碼。\n"
-        "Set a password of at least 15 characters before production sign-in."
+        "登入前, 請先設定至少 15 字元的密碼。\n"
+        "Set a password of at least 15 characters before signing in."
     )
     for _ in range(3):
         try:
@@ -189,7 +210,7 @@ def run_owner_console(
             )
         except AdminAuthError:
             write(
-                "無法設定密碼, 請使用符合正式模式政策的密碼重試(15-128 字元, 避開常見密碼)。\n"
+                "無法設定密碼。請使用 15-128 字元。請避開常見密碼。\n"
                 "Password could not be set; retry with 15-128 characters "
                 "and avoid common passwords."
             )
@@ -347,7 +368,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         listener = _reserve_socket(options.port)
         port = listener.getsockname()[1]
         data_dir = _data_directory(options.data_dir)
-        key_file = prepare_data_directory(data_dir, production=options.profile == "production")
+        key_file = prepare_data_directory(
+            data_dir,
+            production=options.profile == "production",
+            default_directory=_data_directory(None) if sys.platform == "win32" else None,
+        )
         saved_environment = {
             key: value
             for key, value in os.environ.items()

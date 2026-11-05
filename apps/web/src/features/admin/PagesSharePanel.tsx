@@ -1,6 +1,8 @@
 import { chromeLocale, type LanguageTag } from "../../i18n/languages";
 import { InfoParagraphs } from "./InfoParagraphs";
 import { pagesShareErrorMessage } from "./pagesShareError";
+import { githubPagesRepository } from "./sharing";
+import { sectionTitle } from "./sharingSections";
 import "../../p4-w3.css";
 import { useEffect, useRef, useState } from "react";
 import sharingGuideUrl from "../../../../../docs/PAGES_SHARING_GUIDE.md?url&no-inline";
@@ -13,6 +15,10 @@ export interface PagesSharingState {
   verified: boolean;
   verified_at: string | null;
   verified_content_sha256: string | null;
+  /** Origin of the saved Pages URL. Missing from an older server. */
+  pages_origin?: string | null;
+  /** Where the next export sends live chat, or null when it is off. */
+  live_chat_origin?: string | null;
 }
 
 function pagesSourceIdentity(state: PagesSharingState | null): string {
@@ -30,14 +36,14 @@ export function PagesSharePanel({
   observedState,
   onStateChange,
   onOperationPendingChange,
-  publicSharingAvailable = true,
+  account = "",
 }: {
   locale: LanguageTag;
   request: Request;
   observedState: PagesSharingState | null;
   onStateChange: (state: PagesSharingState | null) => void;
   onOperationPendingChange: (pending: boolean) => void;
-  publicSharingAvailable?: boolean;
+  account?: string;
 }) {
   const zh = chromeLocale(locale) === "zh-TW";
   const [state, setState] = useState<PagesSharingState | null>(observedState);
@@ -154,8 +160,8 @@ export function PagesSharePanel({
     publishState(value);
     setNotice(
       zh
-        ? "Pages 網址已儲存；如需確認遠端內容，請重新核對。"
-        : "Pages URL saved. Check again if you need to confirm the remote content.",
+        ? "Pages 網址已儲存。上傳網站後，按「核對 Pages 網站」。"
+        : "Pages URL saved. After uploading the site, select Check Pages site.",
     );
   }
 
@@ -173,8 +179,8 @@ export function PagesSharePanel({
     setNotice(
       value.verified
         ? zh
-          ? "遠端 Pages 入口和 manifest 與目前本機內容相符。"
-          : "The Pages entry and manifest match the current local content."
+          ? "Pages 網站與這台電腦上的內容相符。"
+          : "Your Pages site matches the content on this computer."
         : zh
           ? "尚未核對 Pages 網站。"
           : "The Pages site has not been verified.",
@@ -182,58 +188,55 @@ export function PagesSharePanel({
   }
 
   const urlChanged = Boolean(state && pagesUrl.trim() !== state.pages_url);
+  const repositoryUrl = githubPagesRepository(account, pagesUrl);
   const copy = zh
     ? {
-        title: "3. GitHub Pages",
-        localMode:
-          "目前是本機試用模式，無法儲存 Pages 網址。要用 GitHub Pages 分享，請改用正式模式啟動 RepoNPC。",
+        title: sectionTitle("pages", "GitHub Pages"),
         intro:
-          "輸入與訪客入口設定相符的 GitHub Pages 網址。匯出不會啟用 Funnel、呼叫模型或修改 GitHub。",
+          "GitHub Pages 用來顯示你的網站。只需填入一個完整網站網址。下載網站後，開啟上方的 GitHub 網站上傳頁連結。這一段不需要 Funnel 或 Tailscale。",
         url: "Pages 網址",
         urlHelp:
-          "網域須與上一步的 Pages 網域相同。這裡需包含網站路徑，例如 https://account.github.io/project/。若網站在根目錄，填 https://account.github.io/。",
+          "填入完整網站網址，例如 https://account.github.io/project/。首頁網站可填 https://account.github.io/。其他網址不必另外填。",
         save: "儲存",
         export: "下載網站",
         verify: "核對 Pages 網站",
         refresh: "重新整理",
-        downloadReady: "下載網站封存檔",
+        downloadReady: "下載網站 ZIP 檔",
         uploadTitle: "上傳說明",
         uploadSteps: [
-          "下載封存檔，解壓縮後將所有檔案和資料夾放到同一個 Pages 發布來源。",
-          "保留根目錄中的 .nojekyll 與 index.html。也要保留 export-manifest.json。",
-          "等待 Pages 更新後，再按「核對 Pages 網站」。",
+          "按「下載網站」。解壓縮下載的 ZIP 檔。開啟上方的 GitHub 網站上傳頁連結。上傳所有檔案和資料夾。",
+          "將 .nojekyll、index.html 和 export-manifest.json 放在專案最外層。這些檔案用來顯示和核對網站。",
+          "開啟上方的 GitHub Pages 設定連結。選擇剛上傳的網站作為發布來源。等候 Pages 更新。回來按「核對 Pages 網站」。",
         ],
         configured: "已儲存",
         missing: "未設定",
         verified: "已核對",
         unverified: "未核對",
-        digest: "已核對內容識別碼",
+        digest: "網站核對編號",
       }
     : {
-        title: "3. GitHub Pages",
-        localMode:
-          "RepoNPC is running in local trial mode, so the Pages URL cannot be saved. To share with GitHub Pages, start RepoNPC in production mode.",
+        title: sectionTitle("pages", "GitHub Pages"),
         intro:
-          "Enter the GitHub Pages URL that matches the visitor-entry configuration. Export does not enable Funnel, call a model, or edit GitHub.",
+          "GitHub Pages displays your website. Enter one full website URL. Download the site. Open the GitHub website upload page link above. This section does not need Funnel or Tailscale.",
         url: "Pages URL",
         urlHelp:
-          "Use the same domain as the Pages domain in the previous step. Include the site path here, such as https://account.github.io/project/, or https://account.github.io/ for a root site.",
+          "Enter the full website URL, such as https://account.github.io/project/. For a homepage site, enter https://account.github.io/. You do not need to enter any other address.",
         save: "Save",
         export: "Download site",
         verify: "Check Pages site",
         refresh: "Refresh",
-        downloadReady: "Download site archive",
+        downloadReady: "Download website ZIP file",
         uploadTitle: "Upload help",
         uploadSteps: [
-          "Download and extract the archive, then place every file and folder in the same Pages publishing source.",
-          "Keep .nojekyll, index.html, and export-manifest.json at the root.",
-          "After Pages updates, select Check Pages site.",
+          "Select Download site. Extract the downloaded ZIP file. Open the GitHub website upload page link above. Upload every file and folder.",
+          "Place .nojekyll, index.html and export-manifest.json outside all folders. These files display and check your website.",
+          "Open the GitHub Pages settings link above. Choose your uploaded website as the publishing source. Wait for Pages to update. Return here and select Check Pages site.",
         ],
         configured: "Saved",
         missing: "Not configured",
         verified: "Verified",
         unverified: "Unverified",
-        digest: "Verified content identity",
+        digest: "Website check number",
       };
 
   return (
@@ -246,22 +249,46 @@ export function PagesSharePanel({
     >
       <p className="publication-kicker px-meta">Pages</p>
       <h2 id="pages-share-panel-heading">{copy.title}</h2>
-      {!publicSharingAvailable && (
-        <p role="note" id="pages-share-local-note">
-          {copy.localMode}
-        </p>
-      )}
+      <div className="publication-actions">
+        <a
+          href="https://github.com/new"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {zh
+            ? "在 GitHub 建立網站專案"
+            : "Create a website repository on GitHub"}
+        </a>
+        <a
+          href={
+            repositoryUrl
+              ? `${repositoryUrl}/settings/pages`
+              : "https://github.com/new"
+          }
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {zh ? "開啟 GitHub Pages 設定" : "Open GitHub Pages settings"}
+        </a>
+        <a
+          href={
+            repositoryUrl ? `${repositoryUrl}/upload` : "https://github.com/new"
+          }
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {zh
+            ? "開啟 GitHub 網站上傳頁"
+            : "Open the GitHub website upload page"}
+        </a>
+      </div>
       <label htmlFor="pages-share-url">
         {copy.url}
         <input
           className="px-field"
           autoComplete="url"
-          aria-describedby={
-            publicSharingAvailable
-              ? "pages-share-url-help"
-              : "pages-share-url-help pages-share-local-note"
-          }
-          disabled={pending || !publicSharingAvailable}
+          aria-describedby="pages-share-url-help"
+          disabled={pending}
           id="pages-share-url"
           inputMode="url"
           onChange={(event) => {
@@ -285,12 +312,7 @@ export function PagesSharePanel({
       <div className="publication-actions">
         <button
           className="px-button px-button--secondary"
-          disabled={
-            pending ||
-            !publicSharingAvailable ||
-            !pagesUrl.trim() ||
-            !urlChanged
-          }
+          disabled={pending || !pagesUrl.trim() || !urlChanged}
           onClick={() => void run(savePagesUrl)}
           type="button"
         >

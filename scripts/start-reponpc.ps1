@@ -412,7 +412,7 @@ function Invoke-RepoNpcLauncher {
         $deploymentProfile = "loopback_evaluation"
     }
     if ($deploymentProfile -cnotin @("loopback_evaluation", "production")) {
-        throw "REPONPC_DEPLOYMENT_PROFILE must be loopback_evaluation or production."
+        throw "REPONPC_DEPLOYMENT_PROFILE is not supported."
     }
     Set-ProcessEnvironmentValue "REPONPC_DEPLOYMENT_PROFILE" $deploymentProfile
 
@@ -445,9 +445,11 @@ function Invoke-RepoNpcLauncher {
         $resolvedDataDir = Join-Path $repoRoot $DataDir
     }
     $resolvedDataDir = [IO.Path]::GetFullPath($resolvedDataDir)
+    $defaultDataDir = [IO.Path]::GetFullPath((Join-Path $repoRoot "runtime-data\local"))
 
     $baseUrl = "http://localhost:$Port"
     Set-ProcessEnvironmentValue "REPONPC_PUBLIC_BASE_URL" $baseUrl
+    Set-ProcessEnvironmentValue "REPONPC_ADMIN_ORIGINS" $baseUrl
     Set-ProcessEnvironmentValue "REPONPC_HOST" "127.0.0.1"
     Set-ProcessEnvironmentValue "REPONPC_PORT" ([string]$Port)
     Set-ProcessEnvironmentValue "REPONPC_DATA_DIR" $resolvedDataDir
@@ -465,7 +467,6 @@ function Invoke-RepoNpcLauncher {
     }
     else {
         Set-ProcessEnvironmentValue "REPONPC_ENV" "production"
-        Set-ProcessEnvironmentValue "REPONPC_ADMIN_ORIGINS" $baseUrl
         $directSecretNames = @(
             "REPONPC_CHAT_API_KEY", "REPONPC_EMBEDDING_API_KEY", "REPONPC_IP_HASH_KEY"
         )
@@ -519,32 +520,34 @@ function Invoke-RepoNpcLauncher {
         }
     }
 
-    if ($deploymentProfile -eq "production") {
-        $prepareDataDirectory = @"
+    $prepareDataDirectory = @"
 import sys
 from pathlib import Path
 from reponpc.windows_launcher import UnsafeDataDirectory, owner_only_fix_command, prepare_data_directory
 
 try:
-    key_path = prepare_data_directory(Path(sys.argv[1]), production=True)
+    key_path = prepare_data_directory(
+        Path(sys.argv[1]),
+        production=sys.argv[2] == "production",
+        default_directory=Path(sys.argv[3]),
+    )
 except UnsafeDataDirectory as exc:
     print(f'\u79c1\u5bc6\u8def\u5f91\u6b0a\u9650\u904e\u5bec / Private path is not owner-only: {exc.path}')
     print(owner_only_fix_command(exc.path, root=exc.root))
     sys.exit(3)
 print(key_path)
 "@
-        $preparationOutput = @(& $pythonExe -c $prepareDataDirectory $resolvedDataDir)
-        $preparationExitCode = $LASTEXITCODE
-        if ($preparationExitCode -eq 3) {
-            $preparationOutput | ForEach-Object { Write-Host $_ }
-            throw "Production data directory preparation stopped."
-        }
-        if ($preparationExitCode -ne 0 -or $preparationOutput.Count -ne 1) {
-            throw "Unable to prepare the production data directory."
-        }
-        if ([string]::IsNullOrEmpty((Get-ProcessEnvironmentValue "REPONPC_IP_HASH_KEY_FILE"))) {
-            Set-ProcessEnvironmentValue "REPONPC_IP_HASH_KEY_FILE" ([string]$preparationOutput[0])
-        }
+    $preparationOutput = @(& $pythonExe -c $prepareDataDirectory $resolvedDataDir $deploymentProfile $defaultDataDir)
+    $preparationExitCode = $LASTEXITCODE
+    if ($preparationExitCode -eq 3) {
+        $preparationOutput | ForEach-Object { Write-Host $_ }
+        throw "Data folder preparation stopped."
+    }
+    if ($preparationExitCode -ne 0 -or $preparationOutput.Count -ne 1) {
+        throw "Unable to prepare the data folder."
+    }
+    if ($deploymentProfile -eq "production" -and [string]::IsNullOrEmpty((Get-ProcessEnvironmentValue "REPONPC_IP_HASH_KEY_FILE"))) {
+        Set-ProcessEnvironmentValue "REPONPC_IP_HASH_KEY_FILE" ([string]$preparationOutput[0])
     }
 
     if (-not $SkipBuild -and (Test-WebBuildRequired)) {
@@ -596,7 +599,7 @@ sys.exit(0 if run_owner_console(Path(sys.argv[1]), environ=os.environ) else 2)
 "@
         & $pythonExe -c $ownerConsole $resolvedDataDir
         if ($LASTEXITCODE -ne 0) {
-            throw "Production owner setup was not completed."
+            throw "Owner setup was not completed."
         }
     }
 

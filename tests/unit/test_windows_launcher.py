@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import socket
+import subprocess
 import sys
 import threading
 from datetime import datetime, timedelta
@@ -119,6 +120,7 @@ def test_isolated_environment_and_restore(
     assert harness.observed["REPONPC_ENV"] == "production"
     assert harness.observed["REPONPC_LOG_LEVEL"] == "INFO"
     assert harness.observed["REPONPC_TRUSTED_PROXY_CIDRS"] == ""
+    assert harness.observed["REPONPC_TRUSTED_HOSTS"] == "localhost,127.0.0.1"
     assert harness.observed["REPONPC_ADMIN_ORIGINS"] == harness.observed["REPONPC_PUBLIC_BASE_URL"]
     assert harness.observed["REPONPC_VISITOR_GATEWAY_PORT"] != harness.observed["REPONPC_PORT"]
     assert not harness.grants and not harness.urls
@@ -733,8 +735,10 @@ def test_unsafe_production_path_reports_exact_repair_and_does_not_load_app(
         ),
     )
 
-    def prepare(data_dir: Path, *, production: bool) -> Path:
+    def prepare(data_dir: Path, *, production: bool, default_directory: Path | None = None) -> Path:
         assert production
+        if sys.platform == "win32":
+            assert default_directory == Path(os.environ["LOCALAPPDATA"]) / "RepoNPC" / "data"
         raise launcher.UnsafeDataDirectory(unsafe_path, root=root)
 
     monkeypatch.setattr(launcher, "prepare_data_directory", prepare)
@@ -744,3 +748,125 @@ def test_unsafe_production_path_reports_exact_repair_and_does_not_load_app(
     assert str(unsafe_path) in output[0]
     assert output[1] == expected.format(path=unsafe_path)
     assert not harness.ports and not harness.server.sockets and not harness.urls
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows launcher DACL boundary")
+@pytest.mark.parametrize("profile", ["loopback_evaluation", "production"])
+@pytest.mark.parametrize("explicit", ["omitted", "exact", "normalized"])
+def test_default_folder_repairs_existing_children_before_loading(
+    harness: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    profile: str,
+    explicit: str,
+) -> None:
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local app data"))
+    directory = tmp_path / "local app data" / "RepoNPC" / "data"
+    nested = directory / "existing child"
+    nested.mkdir(parents=True)
+    canary = nested / "saved.txt"
+    canary.write_text("preserve existing data", encoding="utf-8")
+    for path in (directory, nested, canary):
+        subprocess.run(
+            ["icacls", str(path), "/grant", "*S-1-5-32-545:(R)"],
+            check=True,
+            capture_output=True,
+        )
+        assert not private_files.is_owner_only(path, posix_forbidden_mode=0)
+    load = launcher._load_application
+
+    def checked_load(data_dir: Path) -> Any:
+        for path in (directory, nested, canary):
+            assert private_files.is_owner_only(path, posix_forbidden_mode=0)
+        _owner, entries, present = private_files._read_windows_acl(directory)
+        assert present
+        assert {entry[2] for entry in entries} == {
+            private_files._current_user_sid(),
+            "S-1-5-18",
+            "S-1-5-32-544",
+        }
+        assert all(kind == 0 and not flags & 0x10 for kind, flags, _sid in entries)
+        escaped = str(directory).replace("'", "''")
+        protection = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                f"(Get-Acl -LiteralPath '{escaped}').AreAccessRulesProtected",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+        assert protection.stdout.strip() == "True"
+        return load(data_dir)
+
+    monkeypatch.setattr(launcher, "_load_application", checked_load)
+    options = ["--profile", profile, "--smoke-check"]
+    if explicit != "omitted":
+        configured = directory if explicit == "exact" else directory / ".." / "data"
+        options += ["--data-dir", str(configured)]
+    assert launcher.main(options) == 0
+    assert canary.read_text(encoding="utf-8") == "preserve existing data"
+    assert not harness.grants
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows launcher DACL boundary")
+@pytest.mark.parametrize("profile", ["loopback_evaluation", "production"])
+@pytest.mark.parametrize("relative", ["custom folder", "RepoNPC/data-backup"])
+def test_custom_folder_is_never_automatically_repaired(
+    harness: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: Any,
+    profile: str,
+    relative: str,
+) -> None:
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    directory = tmp_path / relative
+    directory.mkdir(parents=True)
+    subprocess.run(
+        ["icacls", str(directory), "/grant", "*S-1-5-11:(R)"],
+        check=True,
+        capture_output=True,
+    )
+    before = private_files._read_windows_acl(directory)
+    expected = launcher.owner_only_fix_command(directory, root=True)
+    assert launcher.main(["--data-dir", str(directory), "--profile", profile]) == 2
+    assert private_files._read_windows_acl(directory) == before
+    assert not (directory / "private").exists()
+    assert not harness.ports and not harness.server.sockets and not harness.grants
+    output = capsys.readouterr().out.splitlines()
+    assert len(output) == 2 and output[1] == expected
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows launcher DACL boundary")
+def test_default_folder_refuses_hardlinked_children_before_acl_changes(tmp_path: Path) -> None:
+    directory = tmp_path / "default"
+    directory.mkdir()
+    original = tmp_path / "outside"
+    original.write_text("preserve permissions", encoding="utf-8")
+    os.link(original, directory / "linked")
+    before = private_files._read_windows_acl(original)
+    with pytest.raises(launcher._LauncherError):
+        launcher.prepare_data_directory(directory, production=False, default_directory=directory)
+    assert private_files._read_windows_acl(original) == before
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows launcher DACL boundary")
+def test_default_folder_refuses_junction_children_before_acl_changes(tmp_path: Path) -> None:
+    directory = tmp_path / "default"
+    directory.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(directory / "linked"), str(outside)],
+        check=True,
+        capture_output=True,
+    )
+    before = private_files._read_windows_acl(outside)
+    with pytest.raises(launcher._LauncherError):
+        launcher.prepare_data_directory(directory, production=False, default_directory=directory)
+    assert private_files._read_windows_acl(outside) == before

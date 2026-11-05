@@ -306,20 +306,45 @@ For a repository checkout on Windows, double-click `start-reponpc.cmd`, or run:
 
 The launcher requires Python 3.14 or newer and runs `uv sync --frozen` when its Python or RepoNPC executable is missing, or when `pyvenv.cfg` is unreadable, unparseable, or reports an older Python version.
 
-The launcher reads existing `REPONPC_*` overrides from `.env` and uses `REPONPC_DEPLOYMENT_PROFILE` from there (empty means `loopback_evaluation`; only `loopback_evaluation` and `production` are accepted). The trial profile adapts container secret-file paths to ignored files below `secrets/`, validates `loopback_evaluation`, binds only `127.0.0.1`, uses same-origin `http://localhost:8090`, builds stale Web assets, starts the server in the background, and waits for `/healthz`. It then creates a fresh two-minute one-use launch grant and opens `/admin#local-launch=<grant>`; re-running replaces any prior unused grant. It never prints or creates a username/password and never requires GitHub configuration to enter settings. On startup it compares the managed process state with the latest backend/frontend inputs; a stale process is stopped through its recorded process tree and replaced. Before stopping, it verifies the recorded PID and configured RepoNPC Python executable. If Windows rejects tree termination because of an elevation-context mismatch, the launcher falls back to directly stopping that same verified PID. An unknown process occupying the port is never terminated automatically.
+The launcher reads existing `REPONPC_*` overrides from `.env` and uses `REPONPC_DEPLOYMENT_PROFILE` from there (empty means `loopback_evaluation`; only `loopback_evaluation` and `production` are accepted). The default profile adapts container secret-file paths to ignored files below `secrets/`, validates `loopback_evaluation`, binds only `127.0.0.1`, uses same-origin `http://localhost:8090`, builds stale Web assets, starts the server in the background, and waits for `/healthz`. It then creates a fresh two-minute one-use launch grant and opens `/admin#local-launch=<grant>`; re-running replaces any prior unused grant. It never prints or creates a username/password and never requires GitHub configuration to enter settings. On startup it compares the managed process state with the latest backend/frontend inputs; a stale process is stopped through its recorded process tree and replaced. Before stopping, it verifies the recorded PID and configured RepoNPC Python executable. If Windows rejects tree termination because of an elevation-context mismatch, the launcher falls back to directly stopping that same verified PID. An unknown process occupying the port is never terminated automatically.
 
 The launcher selects no chat model unless configured in `.env` or passed with `-ChatModel`. There is no silent model download: built-in bge-m3 downloads only after an explicit owner choice; external services remain available. It never fabricates a bundle or silently switches providers. Logs and mutable state are below ignored `runtime-data/local/`; terminal options include `-Port`, `-DataDir`, `-ChatModel`, `-SkipBuild`, `-NoBrowser` and `-NoPause`.
 
-Without an explicit production selection, both the Windows source launcher and installer are a local trial. Public visitor access, Pages and the README with a public card need production mode: Linux Compose below, or Windows production mode.
+ADR-080: both Windows launchers start the same default profile (`loopback_evaluation`) and that profile supports sharing. There is no mode to choose and no `.env` edit. Linux Compose below uses `production`.
+
+### Windows local sharing
+
+ADR-080 and ADR-081. This is the default Windows path: one Start menu entry (or `start-reponpc.cmd`), sign-in without a password, and sharing enabled.
+
+What each step needs:
+
+| Step | Needs | Does not need |
+| --- | --- | --- |
+| Download the site and upload it to GitHub Pages | A GitHub account and a Pages URL (for example `https://account.github.io/project/`) | Tailscale, a Funnel URL, a port, a mode switch |
+| Download README.md with the NPC card | The verified Pages site | Any live chat setup |
+| Live chat (optional, last step) | Tailscale and a Funnel URL | Anything before this step |
+
+Without live chat the published chat page shows the FAQ approved at export time and a resting message. Adding live chat later is one more export: set the Funnel URL, start the visitor connection, download the site again, upload it and check it.
+
+What protects the owner (the password is not the control here):
+
+- The application binds only `127.0.0.1`, uses the same-origin admin address `http://localhost:<port>`, and refuses any `Forwarded` or `X-Forwarded-*` header on the admin port.
+- A `Host` allowlist (`REPONPC_TRUSTED_HOSTS`, set by the launchers to `localhost` and `127.0.0.1`) refuses other host names on the admin port with a generic 400. A Funnel request arrives with a `*.ts.net` host and forwarding headers, so it cannot reach the admin pages; Funnel points only at the visitor port.
+- Sign-in uses the one-use launch grant (two minutes, shown only to the launcher).
+- On every start each launcher restricts its own default data folder to the current user, SYSTEM and Administrators (`icacls`, inheritance removed). If a folder you set with `REPONPC_DATA_DIR` is not owner-only, the launcher stops and prints one `icacls` command; it does not change that folder.
+
+Accepted limits: the visitor connection and the passwordless admin run in one process, and another program running as the same Windows user can read the data. If that is not acceptable, use the password-based mode in the next section.
+
+Funnel steps for the optional live chat are in [Windows production mode](#windows-production-mode) below (steps 1 to 5 there); they are the same in both profiles. RepoNPC never runs them. Real-host and external Funnel acceptance (AC-081) is still pending.
 
 ### Windows production mode
 
-ADR-070. Windows production is the normal `production` profile on the owner's own Windows 11 computer. Nothing switches automatically:
+ADR-070. This is the optional password-based `production` profile on the owner's own Windows 11 computer. Nothing switches automatically, and there is no Start menu shortcut for it:
 
 - source launcher: set `REPONPC_DEPLOYMENT_PROFILE=production` in `.env`, then run `start-reponpc.cmd`;
-- installer: open 「RepoNPC（正式模式）」 from the Start menu (`RepoNPC.exe --profile production`). The plain RepoNPC shortcut stays a trial. Both use the same data directory, `%LOCALAPPDATA%\RepoNPC\data`.
+- installed program: run `RepoNPC.exe --profile production` from PowerShell. Both profiles use the same data directory, `%LOCALAPPDATA%\RepoNPC\data`.
 
-What changes compared with the trial:
+What changes compared with the default profile:
 
 - The application still binds only `127.0.0.1`. The admin origin is set explicitly to `http://localhost:<port>`, and no local-launch grant is issued. The launcher opens `/admin`, where the owner signs in with a password.
 - The visitor gateway listens on `127.0.0.1:<visitor-port>` (`REPONPC_VISITOR_GATEWAY_PORT`, default `8001`) once the owner starts it from the sharing page.
@@ -328,9 +353,9 @@ What changes compared with the trial:
 First sign-in happens in the launcher console before the server starts:
 
 - **New data directory:** the console prints a one-time setup code, valid for 15 minutes and shown only there. Enter it in `/admin` with a username and a password of 15–128 characters; common passwords are rejected.
-- **Existing trial data with a passwordless owner:** the console asks for a new password (15–128 characters) and its confirmation, up to three attempts. RepoNPC does not start until a password is set.
+- **Existing data with a passwordless owner (default profile):** the console asks for a new password (15–128 characters) and its confirmation, up to three attempts. RepoNPC does not start until a password is set.
 
-Private files and the data directory must be owner-only: only the current user, SYSTEM (`S-1-5-18`) and Administrators (`S-1-5-32-544`) may have allow entries, explicit or inherited. Directories the launcher creates are protected that way in either profile. When an existing path allows any other account, production startup stops, prints the path and one `icacls` command, and changes nothing. Run that command in PowerShell yourself, then start again:
+Private files and the data directory must be owner-only: only the current user, SYSTEM (`S-1-5-18`) and Administrators (`S-1-5-32-544`) may have allow entries, explicit or inherited. Directories the launcher creates, and the launcher's own default data folder, are protected that way in either profile (ADR-080). When an existing path outside that default folder allows any other account, production startup stops, prints the path and one `icacls` command, and changes nothing. Run that command in PowerShell yourself, then start again:
 
 ```powershell
 # data directory root (the printed command contains your own SID)
@@ -339,7 +364,7 @@ icacls "<data directory>" /inheritance:r /grant:r "*<your SID>:(OI)(CI)F" "*S-1-
 icacls "<path>" /reset /T
 ```
 
-When the root also has explicit entries for other accounts, the printed command ends with `/remove:g "*<SID>"` for each of them. Check the result with `icacls "<data directory>"`. The source launcher's default `runtime-data\local` sits inside the checkout and usually inherits `Authenticated Users` from the drive, so expect this stop on its first production start; back up the data directory first. Administrators on the computer can always read the data.
+When the root also has explicit entries for other accounts, the printed command ends with `/remove:g "*<SID>"` for each of them. Check the result with `icacls "<data directory>"`. The source launcher's default `runtime-data\local` sits inside the checkout and usually inherits `Authenticated Users` from the drive; since ADR-080 the launcher restricts that default folder itself before the first start, so this stop appears only for a folder you chose with `REPONPC_DATA_DIR`. Back up the data directory first. Administrators on the computer can always read the data.
 
 Funnel (RepoNPC never runs these commands):
 
@@ -379,7 +404,7 @@ curl --fail https://portfolio.example.com/api/public/status
 
 ## 8. HTTPS reverse proxy
 
-**No-purchase visitor entry (ADR-047/053):** The A1 visitor-only gateway and [Linux host-network Compose recipe](../README.md#linux訪客-gateway-與主機-tailscale) are implemented locally. Configure explicit private `REPONPC_ADMIN_ORIGINS`; keep management private and point Funnel only at the visitor gateway. On Windows, use [Windows production mode](#windows-production-mode). Real external and release acceptance remain pending.
+**No-purchase visitor entry (ADR-047/053):** The A1 visitor-only gateway and [Linux host-network Compose recipe](../README.md#linux訪客-gateway-與主機-tailscale) are implemented locally. Configure explicit private `REPONPC_ADMIN_ORIGINS`; keep management private and point Funnel only at the visitor gateway. On Windows, use [Windows local sharing](#windows-local-sharing). Real external and release acceptance remain pending.
 
 - Forward the original HTTPS host/proto and client address only from a trusted proxy included in `REPONPC_TRUSTED_PROXY_CIDRS`.
 - Reject unknown hosts; redirect HTTP to HTTPS.
@@ -607,7 +632,7 @@ ADR-052 R12-B work-count tests show that a failed analysis and a restarted servi
 
 Stop the service before a full data-directory backup, which includes runtime database, secret encryption material and retained immutable bundles. Keep this backup private. A portable YAML backup must include the canonical custom PNG at its configured relative path. Do not run two writers against the same data directory.
 
-Both Windows launchers bind only loopback; Windows visitor access goes through the gateway and Funnel ([Windows production mode](#windows-production-mode)). On 2026-09-23 the owner had no public HTTPS destination; retain the sharing setup and complete local tests first. Public deployment later requires the existing visitor-only HTTPS reverse-proxy recipe; the admin API and direct model ports remain private. Creating or updating Profile README files is a separate explicit GitHub action by the owner.
+Both Windows launchers bind only loopback; Windows live chat goes through the visitor connection and Funnel ([Windows local sharing](#windows-local-sharing)); Pages and the README card need neither. On 2026-09-23 the owner had no public HTTPS destination; retain the sharing setup and complete local tests first. Public deployment later requires the existing visitor-only HTTPS reverse-proxy recipe; the admin API and direct model ports remain private. Creating or updating Profile README files is a separate explicit GitHub action by the owner.
 
 ## Visitor waiting experience — ADR-057 (2026-10-04), limits amended by ADR-076
 

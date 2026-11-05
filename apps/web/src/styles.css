@@ -1411,10 +1411,15 @@ form button {
 }
 .admin-workspace__locale {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
+  max-width: 100%;
+  min-width: 0;
 }
 .admin-workspace__locale .px-button {
+  flex-shrink: 0;
   padding-inline: 10px;
+  white-space: nowrap;
 }
 .admin-workspace__locale .px-button[aria-pressed="true"] {
   background: var(--px-accent);
@@ -2261,7 +2266,7 @@ form button {
 
 @media (max-width: 900px) {
   .admin-workspace__header {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(min-content, 1fr) minmax(0, 2fr);
   }
   .admin-workspace__scene {
     display: none;
@@ -2282,7 +2287,6 @@ form button {
   .admin-workspace__brand {
     gap: 8px;
     min-height: 44px;
-    padding-right: 100px;
   }
   .admin-workspace__logo {
     flex-basis: 32px;
@@ -2296,7 +2300,7 @@ form button {
     display: none;
   }
   .admin-workspace__utilities {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 6px;
     justify-content: space-between;
     max-width: none;
@@ -2325,9 +2329,7 @@ form button {
     width: 1px;
   }
   .admin-workspace__locale {
-    position: absolute;
-    right: 12px;
-    top: 8px;
+    flex-basis: 100%;
   }
   .admin-workspace__locale .px-button {
     min-width: 44px;
@@ -2481,11 +2483,12 @@ form button {
   }
   .admin-workspace__header {
     display: flex;
+    flex-wrap: wrap;
     gap: 12px;
     padding: 8px 12px;
   }
   .admin-workspace__brand {
-    flex: 1;
+    flex: 1 0 auto;
     min-width: 0;
     padding-right: 0;
   }
@@ -2498,7 +2501,7 @@ form button {
   }
   .admin-workspace__utilities {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 4px;
     width: auto;
   }

@@ -1,5 +1,6 @@
 import { chromeLocale } from "../../i18n/languages";
 import type { LanguageTag as Locale } from "../../i18n/languages";
+import { sectionRef } from "./sharingSections";
 
 type Message = readonly [string, string];
 
@@ -18,8 +19,8 @@ const MESSAGES: Record<string, Message> = {
     "The Pages site could not be reached, or the check timed out. Check that the URL is correct and the site is published, then select Check Pages site again later.",
   ],
   SHARING_CONFIGURATION_INVALID: [
-    "Pages 網址無效，或上一步的訪客入口設定還不完整。請確認網域與上一步的 Pages 網域相同、網址包含網站路徑，儲存後再核對。",
-    "The Pages URL is not valid, or the visitor-entry setup in the previous step is incomplete. Check that the domain matches the Pages domain in the previous step and that the URL includes the site path. Save it, then check again.",
+    `Pages 網址無效，或和已設定的即時聊天網站不同。請確認網址完整，例如 https://account.github.io/project/。若已開啟即時聊天，先到${sectionRef("zh-TW", "liveChat")}停止並清除 Funnel URL，再儲存新的 Pages 網址。`,
+    `The Pages URL is not valid, or it differs from the site set up for live chat. Check that the URL is complete, such as https://account.github.io/project/. If live chat is on, go to ${sectionRef("en", "liveChat")} first, stop it and clear the Funnel URL, then save the new Pages URL.`,
   ],
   SHARING_CONFLICT: [
     "核對期間網站內容有變動。請重新整理後，再按「核對 Pages 網站」。",

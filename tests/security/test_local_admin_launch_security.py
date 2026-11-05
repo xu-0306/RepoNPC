@@ -276,7 +276,7 @@ def test_local_auth_methods_contract_excludes_github_login(tmp_path: Path) -> No
     app, _database = _local_app(tmp_path)
 
     with TestClient(app, base_url=ORIGIN, client=("127.0.0.1", 54321)) as client:
-        response = client.get("/api/admin/auth/methods")
+        response = client.get("/api/admin/auth/methods", headers={"Origin": ORIGIN})
 
     assert response.status_code == 200
     assert response.json() == {

@@ -2,6 +2,14 @@
 
 Date: 2026-09-29. Status: implementation of approved A5 / R08 scope.
 
+> **Amendment 2026-11-05 (ADR-081, spec 0.5.1):** the visitor gateway is optional
+> for the export. With no gateway origin the exported HTML embeds none and
+> `export-manifest.json` uses `schema_version` 2 with `gateway_origin: null`; the
+> page shows the FAQ, the resting status and a disabled chat box, and sends no
+> request to any gateway. An export with a gateway origin keeps `schema_version`
+> 1 and is byte-identical to the export before this amendment. The statements
+> below about the manifest `gateway_origin` describe the gateway case.
+
 The owner requested ChatGPT planning followed by `gpt-6-luna` with `max`
 reasoning. The received plan is recorded in
 `A5_CHATGPT_PLAN_2026-09-29.md`. Approved specification 0.4.6, ADR-048–053,

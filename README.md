@@ -33,7 +33,7 @@ Set-Location RepoNPC
 
 啟動器會準備依賴與前端，開啟只供本機使用的管理頁。不必先設定模型、GitHub token、帳號或密碼。重新整理可延續有效登入；若工作階段過期，重新開啟 RepoNPC。既有 `.env` 設定會保留。
 
-第 4–6 步的訪客分享需要正式模式。Windows 上可明確切換：原始碼在 `.env` 設 `REPONPC_DEPLOYMENT_PROFILE=production`，安裝版改用開始功能表的「RepoNPC（正式模式）」，再依 [Windows 正式模式](docs/OPERATIONS.md#windows-production-mode) 設定 Funnel。沒有設定時維持本機試用。從 `.env.example` 複製的 `.env` 預設是 `production`；只想本機試用時改成 `loopback_evaluation`。
+第 4–6 步的分享不需要切換模式，也不必編輯 `.env`：Windows 上直接使用預設啟動器即可。第 4、5 步只需要 GitHub，不需要 Tailscale。第 6 步的即時聊天是選填，需要 Tailscale Funnel，見 [Windows 本機分享](docs/OPERATIONS.md#windows-local-sharing)。`.env.example` 供 Linux／Docker 部署使用；Windows 使用者不必複製它。想使用密碼登入的 `production` 模式仍可手動設定，見 [Windows 正式模式](docs/OPERATIONS.md#windows-production-mode)。
 
 Linux／自行管理 HTTPS 的部署與備份操作，請讀 [操作手冊](docs/OPERATIONS.md) 和下方進階整合。
 
@@ -42,11 +42,11 @@ Linux／自行管理 HTTPS 的部署與備份操作，請讀 [操作手冊](docs
 1. **建立內容：**選 AI 或手動路線，挑選公開專案，填寫並確認自己的貢獻與個人介紹；網站語言可選一種以上（繁體中文、简体中文、English、Español），繁簡之間可一鍵自動轉換，其他語言由你選用的聊天模型協助翻譯，內容都由你確認。不會從程式碼推定你的職位或成果。
 2. **本機預覽：**進入「預覽與分享」，預覽作品集與卡片、儲存草稿。角色可使用內建素材；自訂角色與外觀都是選填。
 3. **準備並試聊：**兩種模型都已測試且選用後，按「準備 NPC 並套用」。缺少模型時按「前往設定模型」，草稿會保留；完成後返回準備。成功後開啟目前版本試聊。
-4. **設定訪客連線（需正式模式）：**準備 Tailscale Funnel 聊天入口與 GitHub Pages 網域，儲存後明確啟動訪客連線，並在 Tailscale 完成 Funnel 設定。管理頁及模型服務保持私人連線。
-5. **上傳網站（需正式模式）：**填 Pages 完整網址（例如 `https://account.github.io/project/`），下載、解壓縮靜態網站，依 [雙語分享指南](docs/PAGES_SHARING_GUIDE.md)手動上傳。發布後返回「核對已上傳網站」。
-6. **下載 README.md（需正式模式）：**核對完整 README 內容預覽，再下載包含已確認公開介紹、作品、NPC 名片與對話連結的檔案。README.md 必須放在「與 GitHub 帳號同名的公開 repository」根目錄，才能顯示在個人首頁。卡片使用已核對 Pages 的公開圖片，不必另上傳；已有 README 時先保留原文，也可用原有圖片上傳與複製區塊追加名片。再從 GitHub 點開網站確認。外觀、涵蓋檢查及 FAQ 可在選填區調整。
+4. **上傳網站：**填 Pages 完整網址（例如 `https://account.github.io/project/`），下載、解壓縮靜態網站，依 [雙語分享指南](docs/PAGES_SHARING_GUIDE.md)手動上傳。發布後返回「核對已上傳網站」。不需要 Funnel：沒有即時聊天時，訪客看到的是常見問答與「休息中」訊息。
+5. **下載 README.md：**核對完整 README 內容預覽，再下載包含已確認公開介紹、作品、NPC 名片與對話連結的檔案。README.md 必須放在「與 GitHub 帳號同名的公開 repository」根目錄，才能顯示在個人首頁。卡片使用已核對 Pages 的公開圖片，不必另上傳；已有 README 時先保留原文，也可用原有圖片上傳與複製區塊追加名片。再從 GitHub 點開網站確認。外觀、涵蓋檢查及 FAQ 可在選填區調整。
+6. **（選填）開啟即時聊天：**準備 Tailscale Funnel，把 Funnel URL 填入「即時聊天」區，明確啟動訪客連線，並在 Tailscale 完成 Funnel 設定。之後重新下載網站、重新上傳並再核對一次，頁面才會連到即時聊天。管理頁及模型服務保持私人連線。
 
-**Pages 網域與完整網址不同：**訪客連線欄位只填 `https://account.github.io`；網站上傳欄位要包含 `/project/` 等路徑。Pages 核對與外網聊天檢查各自記錄；儲存網址或本機準備成功，都不代表已經公開上線。
+**只填一個 Pages 網址：**網址要包含 `/project/` 等路徑；RepoNPC 會自己從網址取得網域。Pages 核對與外網聊天檢查各自記錄；儲存網址或本機準備成功，都不代表已經公開上線。
 
 沒有公開網址仍能完成本機內容與試聊。主機和模型關閉時，已上傳的靜態網站可顯示公開內容及匯出時核准的 FAQ；即時問答需要主機、模型和公開連線可用。RepoNPC 不會自動上傳 GitHub。
 
@@ -64,11 +64,11 @@ Set-Location RepoNPC
 .\start-reponpc.cmd
 ```
 
-The launcher prepares dependencies and the frontend, then opens local administration. No model, GitHub token, account or password is needed to enter; existing `.env` settings are preserved. Refresh resumes a valid session; reopen RepoNPC after it expires. Visitor access, Pages sharing and the README with a public card (steps 4–6 above) require production mode. On Windows, select it explicitly: set `REPONPC_DEPLOYMENT_PROFILE=production` in `.env` for the source launcher, or use the 「RepoNPC（正式模式）」 Start menu shortcut, then follow [Windows production mode](docs/OPERATIONS.md#windows-production-mode) for Funnel. Without that setting, RepoNPC stays a local trial. A `.env` copied from `.env.example` defaults to `production`; change it to `loopback_evaluation` for a local trial only.
+The launcher prepares dependencies and the frontend, then opens local administration. No model, GitHub token, account or password is needed to enter; existing `.env` settings are preserved. Refresh resumes a valid session; reopen RepoNPC after it expires. Pages sharing and the README with a public card (steps 4–5 above) work with the default launcher: no mode switch, no `.env` edit and no Tailscale. Live chat (step 6, optional) needs Tailscale Funnel; follow [Windows local sharing](docs/OPERATIONS.md#windows-local-sharing). `.env.example` is for Linux and Docker; Windows users do not need to copy it. The password-based `production` mode remains available by manual setting: see [Windows production mode](docs/OPERATIONS.md#windows-production-mode).
 
 Open RepoNPC and choose **Build manually first** to write, preview, save and back up content without a model. For AI analysis or live chat, bring your own Ollama or compatible API service, test both the answer and content finder models, then confirm the selection. The verified answer-model catalog is currently empty; the optional built-in bge-m3 content finder requires an explicit download.
 
-In **Preview & share**, prepare and try locally, configure visitor access, download and manually upload the Pages site, verify it, then preview and **Download README.md**. The complete file uses the verified site's public card image. Upload README.md to the root of a public repository with the same name as your GitHub account to display it on your profile. Preserve existing README text or append the copied card block with the manual image-upload path. Use the domain without a path for visitor access and the full project URL for Pages. Follow the [bilingual sharing guide](docs/PAGES_SHARING_GUIDE.md). This is an evaluation candidate, not an accepted v1 release; no public connection or GitHub upload happens automatically.
+In **Preview & share**, prepare and try locally, enter one Pages URL, download and manually upload the Pages site, verify it, then preview and **Download README.md**. Live chat is the last, optional step. The complete file uses the verified site's public card image. Upload README.md to the root of a public repository with the same name as your GitHub account to display it on your profile. Preserve existing README text or append the copied card block with the manual image-upload path. Enter the full Pages URL, including any project path; RepoNPC takes the domain from it. Follow the [bilingual sharing guide](docs/PAGES_SHARING_GUIDE.md). This is an evaluation candidate, not an accepted v1 release; no public connection or GitHub upload happens automatically.
 
 To move public content to production, download `reponpc.yml`, keep custom character PNGs, paste and validate the YAML in the production admin's advanced editor, then upload/apply the PNGs in Character & animation. Set up model connections and keys again on the new host. Maintenance restore is for the same version and original data directory only; see [backup instructions](docs/OPERATIONS.md#11-backup-and-recovery) for full-data moves.
 

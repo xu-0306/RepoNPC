@@ -906,8 +906,8 @@ export function AdminAccessPanel({
           <p className="admin-auth__intro">
             {copyFor(
               locale,
-              "這個資料目錄已有管理員，但沒有可用的正式環境密碼。請在部署主機執行下方命令設定新密碼，再重新檢查。",
-              "This data directory has an administrator, but no production password is available. Run the command below on the deployment host to set a new password, then check again.",
+              "這個資料目錄已有管理員，但沒有可用的密碼。請在部署主機執行下方命令設定新密碼，再重新檢查。",
+              "This data directory has an administrator, but no password is available. Run the command below on the deployment host to set a new password, then check again.",
             )}
           </p>
           <code>reponpc admin set-password --data-dir &lt;dir&gt;</code>
@@ -1009,8 +1009,8 @@ export function AdminAccessPanel({
               >
                 {copyFor(
                   locale,
-                  "本機試用模式只允許這台電腦連線。此模式的密碼須為 4–128 個字元。正式運作模式須為 15–128 個字元。不限制大小寫、數字或符號。RepoNPC 拒絕常見密碼。",
-                  "Local trial mode permits connections only from this computer. Passwords in this mode must contain 4–128 characters. Production mode requires 15–128 characters. You can use any character types. RepoNPC blocks common passwords.",
+                  "密碼須為 15–128 個字元。可使用任何字元。請避開常見密碼。",
+                  "Use 15–128 characters for your password. You can use any characters. Avoid common passwords.",
                 )}
               </small>
             </div>
@@ -2460,7 +2460,6 @@ export function AdminPage({
     try {
       const invalidatesBatch =
         action.type === "CONFIRM_SELECTION" ||
-        action.type === "EDIT_SELECTION" ||
         action.type === "RESET" ||
         (action.type === "GO_BACK" && guidedState.step === "analysis");
       if (
@@ -3661,7 +3660,6 @@ export function AdminPage({
               applyGuidedAction({ type: "OPEN_PUBLICATION_MODEL_SETUP" })
             }
             onCreateDraft={() => void createGuidedDraft()}
-            publicSharingAvailable={accessState !== "local_launch"}
             repositories={selectedRepositories(guidedState).map(
               (repository) => repository.metadata.slug,
             )}
@@ -3785,7 +3783,6 @@ export function AdminPage({
         embeddingProfileView={modelPanels}
         guidedView={
           <GuidedOnboardingView
-            publicSharingAvailable={accessState !== "local_launch"}
             workspaceStatus={workspaceStatus}
             batchAnalysisActive={
               batchSnapshot !== null && !isTerminalBatch(batchSnapshot.status)

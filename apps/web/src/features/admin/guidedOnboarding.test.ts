@@ -817,7 +817,8 @@ describe("guidedOnboardingReducer", () => {
       });
     }
 
-    state = guidedOnboardingReducer(state, { type: "EDIT_SELECTION" });
+    state = guidedOnboardingReducer(state, { type: "GO_BACK" });
+    state = guidedOnboardingReducer(state, { type: "GO_BACK" });
     state = guidedOnboardingReducer(state, {
       type: "SET_REPOSITORY_OPTIONS",
       slug: other.slug,
@@ -871,13 +872,14 @@ describe("guidedOnboardingReducer", () => {
       contribution: proposal,
     });
 
-    state = guidedOnboardingReducer(state, { type: "EDIT_SELECTION" });
+    state = guidedOnboardingReducer(state, { type: "GO_BACK" });
+    state = guidedOnboardingReducer(state, { type: "GO_BACK" });
     state = guidedOnboardingReducer(state, {
       type: "TOGGLE_REPOSITORY",
       slug: other.slug,
     });
     state = guidedOnboardingReducer(state, { type: "CONFIRM_SELECTION" });
-    state = guidedOnboardingReducer(state, { type: "EDIT_SELECTION" });
+    state = guidedOnboardingReducer(state, { type: "GO_BACK" });
     state = guidedOnboardingReducer(state, {
       type: "TOGGLE_REPOSITORY",
       slug: other.slug,

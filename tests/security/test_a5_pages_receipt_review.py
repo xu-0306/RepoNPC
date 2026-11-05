@@ -15,11 +15,15 @@ def test_pages_state_has_no_export_receipt_or_cas_fields(configured_service) -> 
     service, database, _entrance, _manifest, _expected, _web_dist = configured_service
     assert set(service.state()) == {
         "pages_url",
+        "pages_origin",
+        "live_chat_origin",
         "configured",
         "verified",
         "verified_at",
         "verified_content_sha256",
     }
+    assert service.state()["pages_origin"] == "https://fixture.github.io"
+    assert service.state()["live_chat_origin"] == "https://chat.example.test"
     with database.connection() as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(pages_sharing_state)")}
     assert columns == {

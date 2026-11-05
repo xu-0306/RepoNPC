@@ -6,6 +6,7 @@ import hashlib
 import html
 import json
 import os
+import posixpath
 import re
 import stat
 import tempfile
@@ -72,9 +73,9 @@ def build_visitor_site_export(
     scene_service: AdminSceneService,
     web_dist: Path,
     pages_url: str | None,
-    gateway_origin: str,
+    gateway_origin: str | None,
     pages_origin: str,
-    origins_supplier: Callable[[], tuple[str, str]] | None = None,
+    origins_supplier: Callable[[], tuple[str | None, str]] | None = None,
 ) -> SiteExportArtifact:
     """Capture, recheck, and package one coherent public visitor snapshot."""
 
@@ -116,9 +117,9 @@ def build_site_files(
     scene_service: AdminSceneService,
     web_dist: Path,
     pages_url: str | None,
-    gateway_origin: str,
+    gateway_origin: str | None,
     pages_origin: str,
-    origins_supplier: Callable[[], tuple[str, str]] | None = None,
+    origins_supplier: Callable[[], tuple[str | None, str]] | None = None,
 ) -> tuple[dict[str, bytes], dict[str, Any]]:
     """Build the deterministic public files and manifest without writing a ZIP."""
 
@@ -290,7 +291,7 @@ def _visitor_dependencies(web_dist: Path) -> dict[str, bytes]:
 def _rewrite_entry_html(
     files: dict[str, bytes],
     snapshot: PublishedProfileSnapshot,
-    gateway_origin: str,
+    gateway_origin: str | None,
     default_locale: str,
 ) -> None:
     content = files.get("index.html")
@@ -326,8 +327,8 @@ def _rewrite_entry_html(
     document = re.sub(r"(<html\s[^>]*)(>)", r'\1 data-static-export="true"\2', document, count=1)
     document = document.replace('="/assets/', '="./assets/')
     csp = (
-        "default-src 'none'; base-uri 'none'; connect-src 'self' "
-        + gateway_origin
+        "default-src 'none'; base-uri 'none'; connect-src 'self'"
+        + (f" {gateway_origin}" if gateway_origin is not None else "")
         + "; font-src 'self'; img-src 'self'; script-src 'self'; style-src 'self'; "
         "form-action 'self'; object-src 'none'"
     )
@@ -341,6 +342,11 @@ def _rewrite_entry_html(
         raise SiteExportError("SHARING_EXPORT_INVALID")
     _put_file(files, "index.html", document.encode("utf-8"))
     for path, payload in tuple(files.items()):
+        if gateway_origin is None and path.endswith(".css"):
+            # Root asset URLs miss the exported font on project Pages paths.
+            assets = posixpath.relpath("assets", posixpath.dirname(path)).encode("ascii")
+            payload = re.sub(rb"url\(([\"']?)/assets/", rb"url(\g<1>" + assets + b"/", payload)
+            _put_file(files, path, payload)
         if not path.endswith(".html"):
             continue
         try:

@@ -41,6 +41,7 @@ export function VisitorApp() {
   const [exchanges, setExchanges] = useState<SuccessfulExchange[]>([]);
   const [chatAvailable, setChatAvailable] = useState(false);
   const [statusBundleMismatch, setStatusBundleMismatch] = useState(false);
+  const [liveChatConfigured, setLiveChatConfigured] = useState(true);
   const observedFaq = useRef<Partial<Record<LanguageTag, PublicFaq | null>>>(
     {},
   );
@@ -147,6 +148,7 @@ export function VisitorApp() {
       .then((status) => {
         if (statusController.current !== controller) return;
         setChatAvailable(status.chat_available);
+        setLiveChatConfigured(status.live_chat_configured !== false);
         setStatusBundleMismatch(status.bundle_mismatch === true);
         if (!requestController.current) {
           transitionCharacter(status.chat_available ? "idle" : "offline");
@@ -240,7 +242,7 @@ export function VisitorApp() {
     const trimmed = questionText.trim();
     if (!trimmed || pending || requestController.current) return;
     if (!chatAvailable) {
-      if (!offlineFaqAvailable || !faq) return;
+      if (!offlineFaqAvailable || !faq || !liveChatConfigured) return;
       const matched = matchOfflineFaq(trimmed, faq);
       const requestId = createRequestId();
       setTurns((current) => [
@@ -554,7 +556,7 @@ export function VisitorApp() {
     <VisitorPage
       canAskSuggestion={canAskSuggestion}
       chatAvailable={chatAvailable}
-      offlineFaqAvailable={offlineFaqAvailable}
+      offlineFaqAvailable={offlineFaqAvailable && liveChatConfigured}
       chatStatusRef={chatStatus}
       characterState={characterState}
       locale={locale}

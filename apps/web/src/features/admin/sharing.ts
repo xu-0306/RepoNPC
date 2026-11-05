@@ -78,3 +78,35 @@ export function verifiedPagesMarkdown(
     return "";
   }
 }
+
+/**
+ * The origin of a saved Pages URL (`https://account.github.io`), or null when
+ * the value is empty or not an HTTPS URL. Live chat settings take their Pages
+ * address from here, so the owner enters a Pages URL once (ADR-081).
+ */
+export function pagesUrlOrigin(
+  value: string | null | undefined,
+): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+export function githubPagesRepository(
+  account: string,
+  pagesUrl: string,
+): string | null {
+  const login = githubAccount(account);
+  if (!login || !verifiedPagesMarkdown(pagesUrl, "en")) return null;
+  const url = new URL(pagesUrl);
+  if (url.hostname.toLowerCase() !== `${login.toLowerCase()}.github.io`)
+    return null;
+  const parts = url.pathname.split("/").filter(Boolean);
+  if (parts.length > 1) return null;
+  const repository = parts[0] ?? `${login}.github.io`;
+  return `https://github.com/${login}/${repository}`;
+}

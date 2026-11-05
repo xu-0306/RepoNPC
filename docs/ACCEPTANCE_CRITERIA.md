@@ -798,6 +798,7 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **When** the owner downloads the installer, verifies the published SHA-256, follows the SmartScreen guidance, installs per-user, launches, upgrades and uninstalls,
 - **Then** the launcher starts the service and opens the loopback admin; upgrade and uninstall preserve the data directory unless the owner explicitly removes it; no administrator rights are required.
 - **Verification:** dated clean-VM walkthrough with installer hash, plus a build pipeline check that the onedir bundle starts its health endpoint.
+- **0.5.1 amendment (ADR-080):** the installer creates one Start menu shortcut (`RepoNPC.exe`); there is no separate production shortcut and no text that names a trial or a production mode. On a clean account the owner reaches Pages sharing and the README card with no `.env` edit, command, password or mode choice. `tests/contract/test_windows_installer.py` checks the recipe; the clean-account walk stays a dated real-host item.
 
 ### AC-070 - Built-in embedding download requires consent and never happens silently
 
@@ -817,6 +818,7 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **When** requests arrive from that origin, from other origins, with credentials, and to admin, model or unknown paths,
 - **Then** CORS allows only the configured origin for visitor read/chat APIs without `Access-Control-Allow-Credentials`; other origins receive no CORS grant; admin, model and unknown paths return 404 through the gateway; visitor rate limits and budgets still apply.
 - **Verification:** gateway contract tests and an external Funnel check recorded with date and hostname redacted from public evidence.
+- **0.5.1 amendment (ADR-080):** the gateway accepts `loopback_evaluation` as well as `production`, with the same requirements (explicit loopback admin origins, an HTTPS gateway origin, a Pages origin, three distinct hosts). `tests/security/test_loopback_sharing.py` and `tests/contract/test_launcher_sharing.py` run this through the real applications; every `production` assertion is unchanged.
 - **Approved F0 realization (2026-09-28, OR-027 / ADR-053):** [A1/F0](A1_FUNNEL_GATEWAY_CONTRACT.md) defines exact manifest-selected visitor assets/API routes, credential rejection, configured github.io CORS, private admin scheme/Host/Origin and hostname isolation, aggregate budgets/in-flight protection or verified per-IP proxy identity, bounded intake/SSE/cancellation, runtime migration 30 and independent state facts. Check encoded/case/slash/unknown-method variants, forged/duplicate identity, stale revisions, bind/start/stop/restart/backup failures and public diagnostic canaries. Local contract/transport/Compose/browser checks and real external Funnel acceptance must remain separately reported; external acceptance is still not-run.
 
 ### AC-072 - The NPC follows any character on every colour scheme with accessible contrast
@@ -997,6 +999,7 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **When** RepoNPC starts, the owner signs in, starts the visitor gateway and enables Funnel with the official Tailscale commands,
 - **Then** a new directory requires a host setup code and a 15-character password; a trial owner must set a password through the host before sign-in; no local-launch grant is issued; secret files, `model-secrets/master.key` and the data directory are rejected while any account other than the current user, SYSTEM or Administrators has an allow entry, and accepted after the documented fix; and through Funnel only visitor routes respond while `/admin` and `/api/admin/*` return 404.
 - **Verification:** Windows unit tests with real files and ACLs (created, broadened, inherited and wrong-owner cases); launcher contract tests; a dated real-host walkthrough with `icacls` listings; the external Funnel check is recorded under A12.
+- **0.5.1 amendment (ADR-080):** this criterion keeps its `production` scope. The default profile is covered by AC-096. The owner-only checks, the setup code and the 15-character password are unchanged; the installer no longer has a production shortcut, so the walk starts it with `RepoNPC.exe --profile production` or `.env`.
 
 ### AC-082 - The pixel interface is accessible, consistent and visitor-adjustable
 
@@ -1125,6 +1128,26 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **Then** the toggle lists exactly `available_locales` by endonym and is hidden for one language; the initial language is the first browser language that matches the set, else the site default; a stored choice wins only while it is in the set; a language without a hand-written catalog uses the English chrome with `lang` set on its content; the chat request carries the selected language; `<html lang>` follows the selection.
 - **Verification:** table-driven web tests over site sets and browser lists, storage-failure tests, the visitor bundle guard, and browser checks with a four-language fixture.
 
+### AC-095 - The owner reaches the README card with only a Pages URL
+
+**Maps to:** FR-047, FR-048, NFR-001, NFR-014 (ADR-081)
+
+- **Given** a prepared bundle, a saved GitHub Pages URL for a project site and for a root site, and no visitor gateway (absent, or a gateway row with no gateway origin),
+- **When** the owner downloads the site, uploads it, checks it and downloads README.md,
+- **Then** each step succeeds with no Funnel URL, port or Tailscale step; the exported `export-manifest.json` has `schema_version` 2 and `gateway_origin: null`; the exported files contain no gateway URL; the visitor page shows the FAQ, the resting status and a disabled chat box with the resting message, makes no request to any gateway and writes no console error; a gateway-free project-site export loads its fonts and assets under the project path; a gateway mismatch between the settings and the Pages URL, or origins that change during export or verification, fail with `SHARING_CONFIGURATION_INVALID` or `SHARING_CONFLICT`.
+- **And** an export with a gateway origin keeps `schema_version` 1 and is byte-identical to the export before ADR-081; the admin shows one Pages URL input, no second Pages domain field, and live chat as the last optional step with one status line.
+- **Verification:** `tests/unit/test_sharing_optional_gateway.py`, `tests/security/test_sharing_optional_gateway_api.py`, the visitor web tests in `VisitorApp.test.tsx` and `visitorData.test.ts`, the admin web tests for the single input, the order and the numbering, and a real-browser walk of the exported site at a root and a project path in both languages. The external GitHub Pages and README-card click check stays a dated real-host item.
+- **Open (owner decision):** the strict exported-file host scan finds the inert React diagnostic text `https://react.dev/errors/` (see SECURITY.md section 25). Until the owner decides, this criterion holds the scan result as "one listed non-self host", not as zero.
+
+### AC-096 - The default Windows profile shares without a password and keeps administration local
+
+**Maps to:** FR-017, FR-029, FR-048, NFR-002, NFR-003 (ADR-080)
+
+- **Given** the Windows launcher with its default profile, a default data folder that another local account can read, and a request that arrives through Funnel (a `*.ts.net` `Host`, `X-Forwarded-*` headers),
+- **When** the launcher starts, the owner signs in with the one-use launch grant, and the owner starts the visitor connection,
+- **Then** the launcher restricts its default data folder to the current user, SYSTEM and Administrators before the server starts; the visitor connection accepts the profile; every admin route refuses the Funnel-shaped request (a generic 400 for the Host, a refusal for the forwarding headers) and neither the launch exchange nor the session resume succeeds through it; the same-origin check applies to every admin request when admin origins are configured; a data folder chosen with `REPONPC_DATA_DIR` that is not owner-only stops the launcher with one printed `icacls` command and is not changed; `production` behaves as before.
+- **Verification:** `tests/security/test_loopback_sharing.py`, `tests/contract/test_launcher_sharing.py`, `tests/contract/test_local_launcher.py`, `tests/unit/test_windows_launcher.py`, `tests/security/test_local_admin_launch_security.py`; a dated real-host walk with `icacls` listings and a request through Funnel is the open AC-081 item.
+
 **0.4.0–0.4.5 traceability additions:**
 
 | Requirement | Acceptance criteria            |
@@ -1155,6 +1178,19 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 | NFR-009     | AC-085                         |
 | NFR-011     | AC-085, AC-086                 |
 | NFR-012     | AC-084                         |
+
+**0.5.1 traceability additions (ADR-080, ADR-081):**
+
+| Requirement | Acceptance criteria                         |
+| ----------- | ------------------------------------------- |
+| FR-017      | AC-081, AC-096                              |
+| FR-029      | AC-081, AC-096                              |
+| FR-047      | AC-068, AC-071, AC-072, AC-074, AC-082, AC-095 |
+| FR-048      | AC-069, AC-081, AC-095, AC-096              |
+| NFR-001     | AC-071, AC-073, AC-075, AC-095              |
+| NFR-002     | AC-081, AC-096                              |
+| NFR-003     | AC-081, AC-096                              |
+| NFR-014     | AC-071, AC-095                              |
 
 **0.5.0 traceability additions (ADR-079):**
 

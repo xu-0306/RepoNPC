@@ -6,6 +6,7 @@ import { AdminWorkspace, type AdminWorkspaceProps } from "./AdminWorkspace";
 import { OnboardingStepper } from "./OnboardingStepper";
 import { GUIDED_PROGRESS_COPY } from "./GuidedOnboardingView";
 import { initialGuidedOnboardingState } from "./guidedOnboarding";
+import { LANGUAGES } from "../../i18n/languages";
 
 // Node omits overlay portals. Expose authored popover content for the existing
 // markup assertions; browser focus and dismissal still need browser checks.
@@ -58,6 +59,31 @@ function props(
 }
 
 describe("AdminWorkspace", () => {
+  it.each(LANGUAGES)(
+    "preserves registry order, endonyms and the pressed state for $tag",
+    ({ tag }) => {
+      const markup = renderToStaticMarkup(
+        <AdminWorkspace {...props({ locale: tag, onLocaleChange: vi.fn() })} />,
+      );
+      const group = markup.match(
+        /<div\b(?=[^>]*class="admin-workspace__locale")(?=[^>]*role="group")(?=[^>]*aria-label="[^"]+")[^>]*>(.*?)<\/div>/,
+      )?.[1];
+      expect(group).toBeDefined();
+      const buttons = [
+        ...group!.matchAll(
+          /<button\b[^>]*aria-label="([^"]+)"[^>]*aria-pressed="(true|false)"[^>]*>(.*?)<\/button>/g,
+        ),
+      ].map(([, label, pressed, text]) => ({ label, pressed, text }));
+      expect(buttons).toEqual(
+        LANGUAGES.map((language) => ({
+          label: language.endonym,
+          pressed: String(language.tag === tag),
+          text: language.endonym,
+        })),
+      );
+    },
+  );
+
   it.each([
     ["zh-TW", "RepoNPC 管理工作區"],
     ["en", "RepoNPC admin workspace"],

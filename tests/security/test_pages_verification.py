@@ -176,7 +176,12 @@ def test_local_changes_preserve_last_successful_verification(
         service.faq.content = "Changed approved answer"
     else:
         monkeypatch.setattr(_Gateway, "gateway_origin", "https://changed.ts.net")
-    assert service.state() == verified
+    assert service.state() == {
+        **verified,
+        "live_chat_origin": (
+            "https://changed.ts.net" if source == "gateway" else verified["live_chat_origin"]
+        ),
+    }
 
 
 def test_saving_same_normalized_pages_url_preserves_verification(
@@ -225,6 +230,8 @@ def test_pages_url_change_clears_verification(configured_service, monkeypatch) -
     updated = service.configure_pages(pages_url="https://fixture.github.io/other")
     assert updated == {
         "pages_url": "https://fixture.github.io/other/",
+        "pages_origin": "https://fixture.github.io",
+        "live_chat_origin": "https://chat.example.test",
         "configured": True,
         "verified": False,
         "verified_at": None,

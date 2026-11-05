@@ -17,7 +17,7 @@ class PublicReadTimeoutError extends Error {
 export async function fetchPublicStatus(
   signal: AbortSignal,
   send: Fetcher = fetch,
-): Promise<PublicStatus> {
+): Promise<PublicStatus & { live_chat_configured?: boolean }> {
   let url = "/api/public/status";
   let credentials: RequestCredentials | undefined;
   let staticBundleId: string | undefined;
@@ -25,6 +25,8 @@ export async function fetchPublicStatus(
     const manifest = await withPublicReadDeadline(signal, (readSignal) =>
       readStaticManifest(readSignal, send),
     );
+    if (manifest.gateway_origin === null)
+      return { chat_available: false, live_chat_configured: false };
     url = `${manifest.gateway_origin}/api/public/status`;
     credentials = "omit";
     staticBundleId = manifest.bundle_id;
@@ -117,6 +119,8 @@ export async function fetchPublicFaq(
     const manifest = await withPublicReadDeadline(signal, (readSignal) =>
       readStaticManifest(readSignal, send),
     );
+    if (manifest.gateway_origin === null)
+      return readStaticFaq(locale, signal, send, manifest);
     let live: PublicFaq | null = null;
     try {
       const result = await withPublicReadDeadline(
@@ -156,21 +160,7 @@ export async function fetchPublicFaq(
           ? staticFaqCitations(observedFaq, manifest, true)
           : null;
       }
-      try {
-        const fallback = parsePublicFaq(
-          await withPublicReadDeadline(signal, (readSignal) =>
-            readStaticJson(`faq-${locale}.json`, readSignal, send),
-          ),
-          locale,
-        );
-        return fallback?.bundle_id === manifest.bundle_id
-          ? staticFaqCitations(fallback, manifest, true)
-          : null;
-      } catch (fallbackError) {
-        if (signal.aborted) throw abortSignalReason(signal);
-        if (isTransientPublicReadFailure(fallbackError)) return null;
-        return null;
-      }
+      return readStaticFaq(locale, signal, send, manifest);
     }
   }
   return withPublicReadDeadline(signal, async (readSignal) => {
@@ -191,6 +181,28 @@ export async function fetchPublicFaq(
       return null;
     }
   });
+}
+
+async function readStaticFaq(
+  locale: LanguageTag,
+  signal: AbortSignal,
+  send: Fetcher,
+  manifest: StaticExportManifest,
+): Promise<PublicFaq | null> {
+  try {
+    const fallback = parsePublicFaq(
+      await withPublicReadDeadline(signal, (readSignal) =>
+        readStaticJson(`faq-${locale}.json`, readSignal, send),
+      ),
+      locale,
+    );
+    return fallback?.bundle_id === manifest.bundle_id
+      ? staticFaqCitations(fallback, manifest, true)
+      : null;
+  } catch {
+    if (signal.aborted) throw abortSignalReason(signal);
+    return null;
+  }
 }
 
 export function parsePublicFaq(
@@ -268,9 +280,11 @@ function staticFaqCitations(
       const citations = entry.citations.map((citation) => {
         if (citation.evidence_class !== "OWNER_ASSERTION") return citation;
         if (citation.url.startsWith("https://github.com/")) return citation;
-        const route = citation.url.startsWith(manifest.gateway_origin + "/")
-          ? citation.url.slice(manifest.gateway_origin.length)
-          : citation.url;
+        const route =
+          manifest.gateway_origin !== null &&
+          citation.url.startsWith(manifest.gateway_origin + "/")
+            ? citation.url.slice(manifest.gateway_origin.length)
+            : citation.url;
         const evidenceId = (
           citation as typeof citation & { evidence_id?: string }
         ).evidence_id;
@@ -639,13 +653,13 @@ interface StaticManifestFile {
 }
 
 interface StaticExportManifest {
-  schema_version: 1;
+  schema_version: 1 | 2;
   bundle_id: string;
   character_revision: number;
   pages_url: string;
   base_path: string;
   pages_origin: string;
-  gateway_origin: string;
+  gateway_origin: string | null;
   content_sha256: string;
   files: StaticManifestFile[];
 }
@@ -665,6 +679,7 @@ export async function staticChatGateway(
   const manifest = await withPublicReadDeadline(signal, (readSignal) =>
     readStaticManifest(readSignal, send),
   );
+  if (manifest.gateway_origin === null) throw new Error("chat unavailable");
   const route = "/api/public/owner-statements/";
   return {
     origin: manifest.gateway_origin,
@@ -831,7 +846,11 @@ function validateStaticManifest(value: unknown): StaticExportManifest | null {
     !isRecord(value) ||
     Object.keys(value).sort().join(",") !==
       "base_path,bundle_id,character_revision,content_sha256,files,gateway_origin,pages_origin,pages_url,schema_version" ||
-    value.schema_version !== 1 ||
+    !(
+      (value.schema_version === 1 &&
+        typeof value.gateway_origin === "string") ||
+      (value.schema_version === 2 && value.gateway_origin === null)
+    ) ||
     typeof value.bundle_id !== "string" ||
     !/^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/.test(value.bundle_id) ||
     typeof value.character_revision !== "number" ||
@@ -840,7 +859,6 @@ function validateStaticManifest(value: unknown): StaticExportManifest | null {
     typeof value.pages_url !== "string" ||
     typeof value.base_path !== "string" ||
     typeof value.pages_origin !== "string" ||
-    typeof value.gateway_origin !== "string" ||
     typeof value.content_sha256 !== "string" ||
     !/^[0-9a-f]{64}$/.test(value.content_sha256) ||
     !Array.isArray(value.files) ||
@@ -849,7 +867,10 @@ function validateStaticManifest(value: unknown): StaticExportManifest | null {
     return null;
   }
   const pages = validOrigin(value.pages_origin, true);
-  const gateway = validOrigin(value.gateway_origin, false);
+  const gateway =
+    value.gateway_origin === null ||
+    (typeof value.gateway_origin === "string" &&
+      validOrigin(value.gateway_origin, false));
   if (!pages || !gateway) return null;
   try {
     const pagesUrl = new URL(value.pages_url);
@@ -903,13 +924,13 @@ function validateStaticManifest(value: unknown): StaticExportManifest | null {
     });
   }
   return {
-    schema_version: 1,
+    schema_version: value.schema_version as 1 | 2,
     bundle_id: value.bundle_id,
     character_revision: value.character_revision,
     pages_url: value.pages_url,
     base_path: value.base_path,
     pages_origin: value.pages_origin,
-    gateway_origin: value.gateway_origin,
+    gateway_origin: value.gateway_origin as string | null,
     content_sha256: value.content_sha256,
     files,
   };
@@ -1010,7 +1031,7 @@ function validOrigin(value: string, pages: boolean): boolean {
   }
 }
 
-function matchesStaticGatewayPolicy(gatewayOrigin: string): boolean {
+function matchesStaticGatewayPolicy(gatewayOrigin: string | null): boolean {
   const policy = document
     .querySelector('meta[http-equiv="Content-Security-Policy"]')
     ?.getAttribute("content");
@@ -1021,6 +1042,8 @@ function matchesStaticGatewayPolicy(gatewayOrigin: string): boolean {
     .find((directive) => directive.startsWith("connect-src "));
   if (!connectDirective) return false;
   const sources = connectDirective.slice("connect-src ".length).split(/\s+/u);
+  if (gatewayOrigin === null)
+    return sources.length === 1 && sources[0] === "'self'";
   return (
     sources.length === 2 &&
     sources.includes("'self'") &&

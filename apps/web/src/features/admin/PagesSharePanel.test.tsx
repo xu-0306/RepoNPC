@@ -19,54 +19,42 @@ const unconfiguredState: PagesSharingState = {
 };
 
 describe("PagesSharePanel", () => {
-  it.each([
-    [
-      "zh-TW",
-      "目前是本機試用模式，無法儲存 Pages 網址。要用 GitHub Pages 分享，請改用正式模式啟動 RepoNPC。",
-      "儲存",
-    ],
-    [
-      "en",
-      "RepoNPC is running in local trial mode, so the Pages URL cannot be saved. To share with GitHub Pages, start RepoNPC in production mode.",
-      "Save",
-    ],
-  ] as const)(
-    "%s explains and locks Pages saving in local trial mode",
-    (locale, note, save) => {
+  it.each(["zh-TW", "en"] as const)(
+    "%s allows Pages editing and keeps the empty URL save guard",
+    (locale) => {
       const request = vi.fn(async () => {
         throw new Error("Unexpected Pages request");
       });
-      const markup = renderToStaticMarkup(
-        <PagesSharePanel
-          locale={locale}
-          request={request}
-          observedState={unconfiguredState}
-          onStateChange={vi.fn()}
-          onOperationPendingChange={vi.fn()}
-          publicSharingAvailable={false}
-        />,
-      );
-
-      expect(markup).toContain(
-        `</h2><p role="note" id="pages-share-local-note">${note}</p>`,
-      );
-      const input = markup.match(
-        /<input\b[^>]*\bid="pages-share-url"[^>]*>/,
-      )?.[0];
-      expect(input).toContain('disabled=""');
-      expect(input).toContain(
-        'aria-describedby="pages-share-url-help pages-share-local-note"',
-      );
-      const saveButton = markup.match(
-        new RegExp(`<button\\b[^>]*>${save}</button>`),
-      )?.[0];
-      expect(saveButton).toContain('disabled=""');
+      for (const observedState of [unconfiguredState, configuredState]) {
+        const markup = renderToStaticMarkup(
+          <PagesSharePanel
+            locale={locale}
+            request={request}
+            observedState={observedState}
+            onStateChange={vi.fn()}
+            onOperationPendingChange={vi.fn()}
+          />,
+        );
+        const input = markup.match(
+          /<input\b[^>]*\bid="pages-share-url"[^>]*>/,
+        )?.[0];
+        expect(input).toBeDefined();
+        expect(input).not.toContain("disabled");
+        expect(input).toContain('aria-describedby="pages-share-url-help"');
+        expect(markup).not.toMatch(/試用|trial|正式模式|production mode/i);
+        expect(markup).not.toContain("pages-share-local-note");
+        const save = locale === "zh-TW" ? "儲存" : "Save";
+        const saveButton = markup.match(
+          new RegExp(`<button\\b[^>]*>${save}</button>`),
+        )?.[0];
+        expect(saveButton).toContain('disabled=""');
+      }
       expect(request).not.toHaveBeenCalled();
     },
   );
 
   it.each(["zh-TW", "en"] as const)(
-    "%s keeps Pages editing unchanged when sharing is omitted or available",
+    "%s keeps Pages editable without a public GitHub account",
     (locale) => {
       const request = vi.fn(async () => {
         throw new Error("Unexpected Pages request");
@@ -82,17 +70,11 @@ describe("PagesSharePanel", () => {
         <PagesSharePanel {...props} />,
       );
       const availableMarkup = renderToStaticMarkup(
-        <PagesSharePanel {...props} publicSharingAvailable={true} />,
+        <PagesSharePanel {...props} account="" />,
       );
-
       expect(availableMarkup).toBe(defaultMarkup);
       for (const markup of [defaultMarkup, availableMarkup]) {
-        expect(markup).not.toContain(
-          "目前是本機試用模式，無法儲存 Pages 網址。要用 GitHub Pages 分享，請改用正式模式啟動 RepoNPC。",
-        );
-        expect(markup).not.toContain(
-          "RepoNPC is running in local trial mode, so the Pages URL cannot be saved. To share with GitHub Pages, start RepoNPC in production mode.",
-        );
+        expect(markup).not.toMatch(/試用|trial|正式模式|production mode/i);
         expect(markup).not.toContain("pages-share-local-note");
         const input = markup.match(
           /<input\b[^>]*\bid="pages-share-url"[^>]*>/,
@@ -105,7 +87,7 @@ describe("PagesSharePanel", () => {
     },
   );
 
-  it("keeps the saved site download and local trial note together", () => {
+  it("keeps the saved site download available without a mode warning", () => {
     const markup = renderToStaticMarkup(
       <PagesSharePanel
         locale="en"
@@ -115,16 +97,14 @@ describe("PagesSharePanel", () => {
         observedState={configuredState}
         onStateChange={vi.fn()}
         onOperationPendingChange={vi.fn()}
-        publicSharingAvailable={false}
       />,
     );
 
     expect(markup).toContain(
-      '<a data-testid="pages-site-download" download="reponpc-site.zip" href="/api/admin/sharing/export">Download site archive</a>',
+      '<a data-testid="pages-site-download" download="reponpc-site.zip" href="/api/admin/sharing/export">Download website ZIP file</a>',
     );
-    expect(markup).toContain(
-      '<p role="note" id="pages-share-local-note">RepoNPC is running in local trial mode, so the Pages URL cannot be saved. To share with GitHub Pages, start RepoNPC in production mode.</p>',
-    );
+    expect(markup).not.toMatch(/試用|trial|正式模式|production mode/i);
+    expect(markup).not.toContain("pages-share-local-note");
   });
 
   it.each(["zh-TW", "en"] as const)(
@@ -183,3 +163,46 @@ describe("PagesSharePanel", () => {
     expect(markup).not.toContain('href="/api/admin/sharing/export"');
   });
 });
+
+it.each(["zh-TW", "en"] as const)(
+  "links to the website repository controls in %s",
+  (locale) => {
+    for (const [account, pagesUrl, repository] of [
+      [
+        "fixture",
+        "https://fixture.github.io/project/",
+        "https://github.com/fixture/project",
+      ],
+      [
+        "another-owner",
+        "https://another-owner.github.io/",
+        "https://github.com/another-owner/another-owner.github.io",
+      ],
+      ["", "https://fixture.github.io/project/", null],
+      ["fixture", "https://other.github.io/project/", null],
+    ] as const) {
+      const markup = renderToStaticMarkup(
+        <PagesSharePanel
+          locale={locale}
+          account={account}
+          observedState={{ ...configuredState, pages_url: pagesUrl }}
+          request={async <T,>() => null as T}
+          onStateChange={vi.fn()}
+          onOperationPendingChange={vi.fn()}
+        />,
+      );
+      const links = markup.match(/<a[^>]*target="_blank"[^>]*>/g) ?? [];
+      expect(links).toHaveLength(3);
+      for (const [index, suffix] of [
+        "",
+        "/settings/pages",
+        "/upload",
+      ].entries()) {
+        expect(links[index]).toContain(
+          `href="${index && repository ? repository + suffix : "https://github.com/new"}"`,
+        );
+        expect(links[index]).toContain('rel="noopener noreferrer"');
+      }
+    }
+  },
+);

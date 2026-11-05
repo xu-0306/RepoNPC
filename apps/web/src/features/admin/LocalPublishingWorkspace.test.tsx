@@ -68,10 +68,10 @@ describe("publication setup guidance", () => {
   );
 
   it.each(["zh-TW", "en"] as const)(
-    "explains local trial mode at the top and numbers the steps like the sections in %s",
+    "offers sharing and numbers the steps like the sections in %s",
     (locale) => {
       const zh = locale === "zh-TW";
-      const render = (publicSharingAvailable?: boolean) =>
+      const render = () =>
         renderToStaticMarkup(
           <LocalPublishingWorkspace
             locale={locale}
@@ -85,19 +85,17 @@ describe("publication setup guidance", () => {
             onCreateDraft={vi.fn()}
             repositories={[]}
             onAddClaim={vi.fn()}
-            publicSharingAvailable={publicSharingAvailable}
           />,
         );
-      const trial = render(false);
-      const production = render();
-      const banner = zh
-        ? "目前是本機試用模式：可以預覽、儲存草稿並在這台電腦試聊，但不能公開分享，也無法產生 README。"
-        : "Local trial mode: you can preview, save a draft and try chat on this computer, but you can&#x27;t share publicly or create a README.";
-      expect(trial).toContain(banner);
-      expect(trial).toContain("REPONPC_DEPLOYMENT_PROFILE=production");
-      expect(production).not.toContain(banner);
-      expect(production).not.toContain("REPONPC_DEPLOYMENT_PROFILE");
-      for (const markup of [trial, production]) {
+      const markup = render();
+      expect(markup).not.toMatch(/試用|trial|正式模式|production mode/i);
+      expect(markup).not.toContain("REPONPC_DEPLOYMENT_PROFILE");
+      expect(markup).not.toContain("pages-share-local-note");
+      expect(markup).toMatch(/<input[^>]*id="pages-share-url"[^>]*>/);
+      expect(
+        markup.match(/<input[^>]*id="pages-share-url"[^>]*>/)?.[0],
+      ).not.toContain("disabled");
+      {
         // Chips use the same numbers as the section headings and reach every section.
         for (const target of [
           "#local-publication-heading",
@@ -107,10 +105,33 @@ describe("publication setup guidance", () => {
           "#github-share-guide-heading",
         ])
           expect(markup).toContain(`href="${target}"`);
-        expect(markup).toContain(zh ? "2 訪客連線" : "2 Visitor connection");
-        expect(markup).toContain("3 Pages");
-        expect(markup).toContain("4 README");
+        expect(markup).toContain("2 Pages");
+        expect(markup).toContain("3 README");
+        expect(markup).toContain(
+          zh ? "4 即時聊天（選填）" : "4 Live chat (optional)",
+        );
+        expect(markup).not.toContain(zh ? "訪客連線" : "Visitor connection");
         expect(markup).not.toMatch(/01 預覽|01 Preview|03 分享|03 Share/);
+        // One Pages input, no second Pages field, and the optional live chat
+        // section comes last, after Pages and README (ADR-081).
+        expect(markup.match(/id="pages-share-url"/g)).toHaveLength(1);
+        expect(markup).not.toContain("visitor-pages-origin");
+        expect(markup).not.toMatch(/Pages domain|Pages 網域/);
+        const positions = [
+          "pages-share-panel-heading",
+          "github-share-guide-heading",
+          "visitor-gateway-heading",
+        ].map((id) => markup.indexOf(`<h2 id="${id}"`));
+        expect(positions.every((position) => position > 0)).toBe(true);
+        expect(positions).toEqual([...positions].sort((a, b) => a - b));
+        expect(markup.lastIndexOf("</section>")).toBeGreaterThan(positions[2]);
+        // Visible text only. The uploaded file name and the Funnel command
+        // help (a known debt) keep their technical names.
+        const visible = markup
+          .replace(/<[^>]*>/g, " ")
+          .replace(/export-manifest\.json/g, "")
+          .replace(/REPONPC_VISITOR_GATEWAY_PORT/g, "");
+        expect(visible).not.toMatch(/gateway|manifest/i);
       }
     },
   );

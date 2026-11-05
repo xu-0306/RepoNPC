@@ -227,7 +227,13 @@ def test_prepared_public_no_match_reaches_json_stream_once(
         max_output_tokens=100,
         timeout_seconds=5,
     )  # type: ignore[arg-type]
-    with TestClient(application, client=("203.0.113.17", 54321)) as client:
+    # The loopback profile only accepts its own Host names (ADR-080), so the
+    # client must call the app by the address the launcher configured.
+    with TestClient(
+        application,
+        base_url="http://127.0.0.1:18240",
+        client=("203.0.113.17", 54321),
+    ) as client:
         application.state.reponpc = SetupState(index_ready=True, model_ready=True)
         application.state.chat_service = service
         response = client.post(

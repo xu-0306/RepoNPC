@@ -33,7 +33,10 @@ function faqJson() {
   });
 }
 
-async function staticManifest(files: Record<string, string>) {
+async function staticManifest(
+  files: Record<string, string>,
+  origin: string | null = gatewayOrigin,
+) {
   const records = await Promise.all(
     Object.entries(files)
       .sort(([left], [right]) => left.localeCompare(right))
@@ -47,13 +50,13 @@ async function staticManifest(files: Record<string, string>) {
     records.map(({ path, size, sha256 }) => ({ path, sha256, size })),
   );
   return JSON.stringify({
-    schema_version: 1,
+    schema_version: origin === null ? 2 : 1,
     bundle_id: "fixture-bundle",
     character_revision: 0,
     pages_url: "https://fixture.github.io/portfolio/",
     base_path: "/portfolio/",
     pages_origin: "https://fixture.github.io",
-    gateway_origin: gatewayOrigin,
+    gateway_origin: origin,
     content_sha256: await digest(identity),
     files: records,
   });
@@ -69,12 +72,12 @@ async function digest(value: string): Promise<string> {
   ).join("");
 }
 
-function enableStaticExport() {
+function enableStaticExport(origin: string | null = gatewayOrigin) {
   vi.stubGlobal("document", {
     documentElement: { dataset: { staticExport: "true" } },
     querySelector: () => ({
       getAttribute: () =>
-        `default-src 'none'; connect-src 'self' ${gatewayOrigin}; img-src 'self'`,
+        `default-src 'none'; connect-src 'self'${origin === null ? "" : ` ${origin}`}; img-src 'self'`,
     }),
   });
 }
@@ -996,4 +999,151 @@ describe("static visitor data verification", () => {
     ).rejects.toThrow("static manifest gateway policy mismatch");
     expect(send).toHaveBeenCalledTimes(1);
   });
+});
+
+describe("gateway-free static visitor", () => {
+  it.each([true, false])(
+    "keeps owner citations only when the statement is exported: %s",
+    async (copied) => {
+      enableStaticExport(null);
+      const revision = "c".repeat(40);
+      const evidenceId = "E_" + "d".repeat(24);
+      const path = `owner-statements/${revision}/${evidenceId}.txt`;
+      const payload = JSON.parse(faqJson());
+      payload.entries[0].citations = [
+        {
+          id: "S1",
+          evidence_class: "OWNER_ASSERTION",
+          evidence_id: evidenceId,
+          repository: "local/portfolio",
+          commit_sha: revision,
+          path: "portfolio.yml",
+          start_line: 1,
+          end_line: 1,
+          title: "Owner statement",
+          excerpt: "Reviewed statement",
+          url: `/api/public/owner-statements/${revision}/${evidenceId}`,
+        },
+      ];
+      const faq = JSON.stringify(payload);
+      const manifest = await staticManifest(
+        {
+          "faq-en.json": faq,
+          ...(copied ? { [path]: "Reviewed statement" } : {}),
+        },
+        null,
+      );
+      const send = vi.fn(async (input: RequestInfo | URL) => {
+        if (urlOf(input) === "./export-manifest.json")
+          return new Response(manifest);
+        expect(urlOf(input)).toBe("./faq-en.json");
+        return new Response(faq);
+      });
+      const result = await fetchPublicFaq(
+        "en",
+        new AbortController().signal,
+        send,
+      );
+      expect(result?.entries).toHaveLength(copied ? 1 : 0);
+      if (copied) expect(result?.entries[0].citations[0].url).toBe(`./${path}`);
+      expect(
+        send.mock.calls.every(([input]) => urlOf(input).startsWith("./")),
+      ).toBe(true);
+    },
+  );
+
+  it.each(LANGUAGES)("loads only exported files for $tag", async ({ tag }) => {
+    enableStaticExport(null);
+    document.documentElement.lang = tag;
+    const payload = {
+      ...profileValue(),
+      locale: tag,
+      available_locales: availableLocales(LANGUAGES.map(({ tag }) => tag)),
+      character: { ...profileValue().character, asset_url: "./character.png" },
+    };
+    const faq = { ...JSON.parse(faqJson()), locale: tag };
+    const files: Record<string, string> = {
+      "character.png": "fixture sprite",
+      [`profile-${tag}.json`]: JSON.stringify(payload),
+      [`faq-${tag}.json`]: JSON.stringify(faq),
+    };
+    const manifest = await staticManifest(files, null);
+    const send = vi.fn(async (input: RequestInfo | URL) => {
+      const url = urlOf(input);
+      if (url === "./export-manifest.json") return new Response(manifest);
+      expect(url).toMatch(/^\.\/(profile|faq)-[^/]+\.json$/);
+      expect(files[url.slice(2)]).toBeDefined();
+      return new Response(files[url.slice(2)]);
+    });
+    const signal = new AbortController().signal;
+    await expect(fetchPublicStatus(signal, send)).resolves.toEqual({
+      chat_available: false,
+      live_chat_configured: false,
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((await fetchPublicProfile(tag, signal, send)).locale).toBe(tag);
+    expect(await fetchPublicFaq(tag, signal, send)).toEqual(faq);
+    await expect(staticChatGateway(signal, send)).rejects.toThrow(
+      "chat unavailable",
+    );
+    expect(
+      send.mock.calls.every(([input]) => urlOf(input).startsWith("./")),
+    ).toBe(true);
+    expect(
+      send.mock.calls.some(([input]) => urlOf(input) === `./faq-${tag}.json`),
+    ).toBe(true);
+  });
+
+  it.each([
+    { schema_version: 1, gateway_origin: null },
+    { schema_version: 2, gateway_origin: gatewayOrigin },
+    { schema_version: 3, gateway_origin: null },
+    { schema_version: true, gateway_origin: null },
+  ])("rejects invalid version/origin pairing %#", async (invalid) => {
+    enableStaticExport(null);
+    const manifest = {
+      ...JSON.parse(await staticManifest({}, null)),
+      ...invalid,
+    };
+    const send = vi.fn(async () => Response.json(manifest));
+    await expect(
+      fetchPublicStatus(new AbortController().signal, send),
+    ).rejects.toThrow("static manifest invalid");
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a null gateway when the HTML still permits an external origin", async () => {
+    enableStaticExport();
+    const manifest = await staticManifest({}, null);
+    const send = vi.fn(async () => new Response(manifest));
+    await expect(
+      fetchPublicStatus(new AbortController().signal, send),
+    ).rejects.toThrow("static manifest gateway policy mismatch");
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["tampered", "other-bundle"])(
+    "rejects %s static FAQ without a gateway request",
+    async (failure) => {
+      enableStaticExport(null);
+      const faq = {
+        ...JSON.parse(faqJson()),
+        ...(failure === "other-bundle" ? { bundle_id: "other-bundle" } : {}),
+      };
+      const body = JSON.stringify(faq);
+      const manifest = await staticManifest({ "faq-en.json": body }, null);
+      const send = vi.fn(async (input: RequestInfo | URL) => {
+        if (urlOf(input) === "./export-manifest.json")
+          return new Response(manifest);
+        expect(urlOf(input)).toBe("./faq-en.json");
+        return new Response(failure === "tampered" ? body + " " : body);
+      });
+      await expect(
+        fetchPublicFaq("en", new AbortController().signal, send),
+      ).resolves.toBeNull();
+      expect(
+        send.mock.calls.every(([input]) => urlOf(input).startsWith("./")),
+      ).toBe(true);
+    },
+  );
 });

@@ -98,12 +98,16 @@ public visitor gateway or automatically select, download or call a model.
 `--no-browser` suppresses browser opening; `--smoke-check` checks health and stops
 without entering the interactive console.
 
-`--profile production` (the 「RepoNPC（正式模式）」 Start menu shortcut) starts the
-same data directory in Windows production mode (ADR-070): no local-launch grant,
-a console setup code or password step before the server starts, and owner-only
-permission checks that stop with an `icacls` repair command. The default profile
-remains `loopback_evaluation`. See
-[Windows production mode](../../docs/OPERATIONS.md#windows-production-mode).
+The default profile is `loopback_evaluation` and is the only mode a normal user
+sees (ADR-080): sign-in without a password, Pages sharing and the README card
+enabled, no `.env` edit, no second shortcut. On every start the launcher limits
+its own default data folder to the current Windows user (`icacls`) and stops with
+a repair command if it cannot. `--profile production` is a manual option for
+password sign-in (ADR-070): no local-launch grant, a console setup code or
+password step before the server starts, and strict owner-only permission checks.
+There is no Start menu shortcut for it. See
+[Windows production mode](../../docs/OPERATIONS.md#windows-production-mode) and
+[Windows local sharing](../../docs/OPERATIONS.md#windows-local-sharing).
 
 For a bounded smoke against fresh disposable data, use an explicit directory:
 
@@ -125,8 +129,7 @@ The per-user recipe requires Windows 11 x64, requests no administrator elevation
 and uses the stable AppId `{9B5F80E7-BE26-49B4-9939-9F85D69FF4EC}`. Program files
 default to `%LOCALAPPDATA%\Programs\RepoNPC`. The launcher independently owns
 `%LOCALAPPDATA%\RepoNPC\data`; model artifacts and secret stores remain there.
-The start-menu shortcuts launch `RepoNPC.exe` (trial) and `RepoNPC.exe --profile production`
-(「RepoNPC（正式模式）」); the desktop shortcut and
+The single start-menu shortcut launches `RepoNPC.exe`; the desktop shortcut and
 post-install launch are optional and unchecked. Silent installation does not
 launch the application.
 

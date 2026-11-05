@@ -10,6 +10,13 @@ This document freezes the remaining F0 contracts for ADR-047 / ADR-048,
 FR-047 and AC-071 (the live transport part of AC-068). Local implementation and
 verification are complete locally (2026-09-29); external acceptance remains not-run.
 
+> **Amendment 2026-11-05 (ADR-080, spec 0.5.1):** the gateway also accepts the
+> `loopback_evaluation` profile, with every other requirement unchanged
+> (explicit loopback admin origins, an HTTPS gateway origin, a Pages origin, three
+> distinct hosts). The `production`-only statements below describe `production`
+> and remain true for it. Pages export no longer requires a gateway origin
+> (ADR-081); a gateway is needed only for live chat.
+
 ## 1. Approved decisions and scope
 
 Already approved: a visitor-only Funnel gateway; manually uploaded GitHub Pages

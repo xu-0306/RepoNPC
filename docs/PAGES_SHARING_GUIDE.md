@@ -5,9 +5,9 @@ no site has been uploaded or externally verified by this task.
 
 ## RepoNPC
 
-1. 在私人管理頁設定 HTTPS Pages 完整網址，例如
+1. 在私人管理頁填入一個 HTTPS Pages 完整網址，例如
    `https://example.github.io/` 或 `https://example.github.io/portfolio/`。
-   網域必須與 gateway 設定中的 Pages origin 相同。
+   不需要 Funnel、Tailscale 或其他網址；RepoNPC 會自己從這個網址取得網域。
 2. 檢查公開內容與 FAQ 核准，再按「下載靜態網站」原生下載連結，
    下載 `reponpc-site.zip`，確認下載完成並解壓縮。
    把匯出內容交給自己的專用 repository；包含 `.nojekyll`。
@@ -19,8 +19,12 @@ no site has been uploaded or externally verified by this task.
    README.md 必須放在「與 GitHub 帳號同名的公開 repository」根目錄，
    才能顯示在個人首頁。已有 README 時先比較並保留原文，也可使用
    原有卡片 GIF 下載／上傳與複製區塊，追加名片。RepoNPC 不會自動覆寫。
+5. （選填，最後一步）要讓訪客取得即時回答，才需要準備 Tailscale Funnel：
+   把 Funnel URL 填入「即時聊天」區並啟動，然後重新下載網站、重新上傳並
+   再核對一次。沒有這一步時，頁面仍可使用，訪客看到常見問答與「休息中」訊息。
 
-Enter the full HTTPS Pages URL matching the gateway's Pages origin. Review the
+Enter one full HTTPS Pages URL. No Funnel, Tailscale or second address is needed;
+RepoNPC takes the domain from the URL. Review the
 public content and approved FAQ, select the native Download static site link
 for `reponpc-site.zip`. Confirm the download completed and extract
 it. Upload the export to your dedicated repository, including `.nojekyll`. After
@@ -33,12 +37,16 @@ image upload is needed. README.md must be at the root of a public repository
 with the same name as the GitHub account to appear on the profile. Compare and
 preserve existing README content first, or append the existing copied card block
 with the manual GIF upload path. RepoNPC never overwrites README automatically.
+Live chat is optional and last: only if visitors should get live answers, set up
+Tailscale Funnel, enter the Funnel URL in the Live chat section, start it, then
+download, upload and verify the site again. Without it the page still works and
+shows the FAQ and a resting message.
 
-核對內容與 gateway 外網檢查是不同紀錄。已匯出的 FAQ 是匯出時的核准快照；
+核對內容與即時聊天（Funnel）的外網檢查是不同紀錄。已匯出的 FAQ 是匯出時的核准快照；
 之後在主機撤回核准，無法立即撤回已下載的副本。更新後由擁有者決定是否
 重新匯出、上傳、核對；本機內容變更不會自動清除既有的 Pages 核對狀態。
 
-Content verification and the gateway's external check are separate records.
+Content verification and the live chat (Funnel) external check are separate records.
 Exported FAQ is approved at export time; later withdrawal cannot revoke a
 downloaded copy. After a content change, the owner decides when to export,
 upload and verify again; local changes do not automatically clear an existing

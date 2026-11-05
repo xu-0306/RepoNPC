@@ -14,7 +14,7 @@ if __name__ == "__main__":
         version = subprocess.check_output(
             ["docker", "compose", "version", "--short"], text=True, timeout=15
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError):  # fmt: skip
         raise SystemExit("Docker Compose version could not be checked.") from None
     if not supported(version):
         raise SystemExit("Docker Compose 2.24.4 or later is required.")

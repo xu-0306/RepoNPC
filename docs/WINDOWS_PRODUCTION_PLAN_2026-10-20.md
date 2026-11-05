@@ -1,5 +1,7 @@
 # Windows 正式模式計劃（ADR-070 草案，2026-10-20）
 
+**2026-11-05 更新：** [ADR-080](DECISIONS.md#adr-080-one-windows-mode-local-sign-in-with-sharing-no-trialproduction-choice) 取代本計劃的「預設是試用、分享需切換正式模式」：Windows 只有一個預設模式且可分享，正式模式捷徑已移除，`production` 改為手動選項。以下內容保留為歷史紀錄。
+
 **狀態：** 擁有者在 2026-10-20 核准，第 4 節 D1–D7 全部採用建議選項（ADR-070 Accepted）。W1（378af5b）、W2（f2e1322）與 W3（2026-10-22）已完成；實測待完成。
 
 ## 1. 目標

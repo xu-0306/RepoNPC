@@ -229,7 +229,6 @@ export type GuidedOnboardingAction =
       exclude: string[];
     }
   | { type: "CONFIRM_SELECTION" }
-  | { type: "EDIT_SELECTION" }
   | { type: "GO_BACK" }
   | { type: "ANALYSIS_STARTED"; slug: string }
   | { type: "ANALYSIS_COMPLETED"; slug: string; analysis: RepositoryAnalysis }
@@ -280,8 +279,6 @@ export interface GuidedOnboardingViewProps {
   analysisSelection: AnalysisSelectionView | null;
   analysisSelectionPending: boolean;
   onAction: (action: GuidedOnboardingAction) => void;
-  /** False in local trial mode, where Pages, README and GitHub card sharing are unavailable. */
-  publicSharingAvailable?: boolean;
   onDiscover: (account: string, page: number) => void;
   onResolve: (repository: string, ref: string | null) => void;
   onAnalyze: (slug: string) => void;
@@ -588,16 +585,6 @@ export function guidedOnboardingReducer(
             confirmedContribution: null,
           };
         }),
-      };
-    case "EDIT_SELECTION":
-      if (state.step === "intro" || state.step === "repositories") {
-        throw new Error("ONBOARDING_ILLEGAL_TRANSITION");
-      }
-      return {
-        ...state,
-        step: "repositories",
-        mode: "guided",
-        selectionConfirmed: false,
       };
     case "GO_BACK":
       switch (state.step) {

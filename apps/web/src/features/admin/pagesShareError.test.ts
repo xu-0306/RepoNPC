@@ -23,6 +23,18 @@ describe.each(["zh-TW", "en"] as const)(
       expect(message).not.toContain(code);
     });
 
+    it("points an invalid Pages URL at live chat, not at a removed step", () => {
+      const message = pagesShareErrorMessage(
+        locale,
+        new Error("SHARING_CONFIGURATION_INVALID"),
+      );
+      expect(message).toContain(locale === "zh-TW" ? "第 4 段" : "section 4");
+      expect(message).toContain("Funnel URL");
+      expect(message).not.toMatch(
+        /Pages 網域|Pages domain|上一步|previous step/,
+      );
+    });
+
     it("falls back to a plain message for unknown or non-Error failures", () => {
       for (const error of [new TypeError("Failed to fetch"), "oops", null]) {
         expect(pagesShareErrorMessage(locale, error)).toBe(fallback);

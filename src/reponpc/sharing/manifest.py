@@ -118,14 +118,20 @@ def create_manifest(
     bundle_id: str,
     character_revision: int,
     pages: PagesTarget,
-    gateway_origin: str,
+    gateway_origin: str | None,
     pages_origin: str,
 ) -> dict[str, Any]:
     if not _BUNDLE_RE.fullmatch(bundle_id) or character_revision < 0:
         raise SiteExportError("SHARING_EXPORT_INVALID")
-    normalized_gateway = _canonical_origin(gateway_origin, https_only=True)
+    normalized_gateway = (
+        _canonical_origin(gateway_origin, https_only=True) if gateway_origin is not None else None
+    )
     normalized_pages = _pages_origin(pages_origin)
-    if normalized_gateway != gateway_origin or normalized_pages != pages_origin:
+    if (
+        normalized_gateway != gateway_origin
+        or normalized_pages is None
+        or normalized_pages != pages_origin
+    ):
         raise SiteExportError("SHARING_CONFIGURATION_INVALID")
     if MANIFEST_NAME in files:
         raise SiteExportError("SHARING_EXPORT_INVALID")
@@ -133,7 +139,7 @@ def create_manifest(
     records.sort(key=lambda record: record.path)
     identity_content = canonical_json_bytes([record.as_dict() for record in records])
     return {
-        "schema_version": 1,
+        "schema_version": 1 if gateway_origin is not None else 2,
         "bundle_id": bundle_id,
         "character_revision": character_revision,
         "pages_url": pages.url,
@@ -170,7 +176,9 @@ def parse_manifest(content: bytes) -> dict[str, Any]:
     if (
         not isinstance(value["schema_version"], int)
         or isinstance(value["schema_version"], bool)
-        or value["schema_version"] != 1
+        or value["schema_version"] not in {1, 2}
+        or (value["schema_version"] == 1 and not isinstance(value["gateway_origin"], str))
+        or (value["schema_version"] == 2 and value["gateway_origin"] is not None)
         or not isinstance(value["bundle_id"], str)
         or not _BUNDLE_RE.fullmatch(value["bundle_id"])
         or not isinstance(value["character_revision"], int)
@@ -179,7 +187,6 @@ def parse_manifest(content: bytes) -> dict[str, Any]:
         or not isinstance(value["pages_url"], str)
         or not isinstance(value["base_path"], str)
         or not isinstance(value["pages_origin"], str)
-        or not isinstance(value["gateway_origin"], str)
         or not isinstance(value["content_sha256"], str)
         or not _SHA256_RE.fullmatch(value["content_sha256"])
         or not isinstance(value["files"], list)
@@ -189,7 +196,10 @@ def parse_manifest(content: bytes) -> dict[str, Any]:
     pages = pages_target(value["pages_url"], value["pages_origin"])
     if pages.base_path != value["base_path"] or pages.url != value["pages_url"]:
         raise SiteExportError("SHARING_EXPORT_INVALID")
-    if _canonical_origin(value["gateway_origin"], https_only=True) != value["gateway_origin"]:
+    if (
+        value["gateway_origin"] is not None
+        and _canonical_origin(value["gateway_origin"], https_only=True) != value["gateway_origin"]
+    ):
         raise SiteExportError("SHARING_EXPORT_INVALID")
     expected_identity: list[dict[str, object]] = []
     previous_path = ""

@@ -449,7 +449,7 @@ class VisitorGateway:
         self, gateway_origin: str | None, pages_origin: str | None
     ) -> tuple[str, str]:
         if (
-            self._environment.deployment_profile != "production"
+            self._environment.deployment_profile not in {"production", "loopback_evaluation"}
             or not self._environment.admin_origins_explicit
             or gateway_origin is None
             or pages_origin is None

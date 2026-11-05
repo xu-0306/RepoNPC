@@ -234,7 +234,9 @@ describe("local publication operation feedback", () => {
         expect(append).toHaveBeenCalledWith(link);
         expect(link.remove).toHaveBeenCalledOnce();
         expect(guide().props.notice).toContain(
-          locale === "zh-TW" ? "請確認下載完成" : "Confirm it completed",
+          locale === "zh-TW"
+            ? "等候 README.md 下載完成"
+            : "Wait for README.md to finish downloading",
         );
         (sharing().props.onStateChange as (value: unknown) => void)({
           ...state,
@@ -703,7 +705,7 @@ it.each(["zh-TW", "en"] as const)(
 );
 
 it.each(["zh-TW", "en"] as const)(
-  "says what to do next after saving a draft, differently in production and local trial mode in %s",
+  "leads from saving a draft to Pages and README in %s",
   async (locale) => {
     const zh = locale === "zh-TW";
     const saved = async () => ({
@@ -711,7 +713,7 @@ it.each(["zh-TW", "en"] as const)(
       revision: "saved",
       sprite_base64: null,
     });
-    const savedNotice = async (publicSharingAvailable: boolean) => {
+    const savedNotice = async () => {
       hooks.values = [];
       const input = {
         locale,
@@ -728,7 +730,6 @@ it.each(["zh-TW", "en"] as const)(
         onCreateDraft: vi.fn(),
         repositories: [],
         onAddClaim: vi.fn(),
-        publicSharingAvailable,
       };
       const render = () => {
         hooks.cursor = 0;
@@ -755,13 +756,12 @@ it.each(["zh-TW", "en"] as const)(
       });
       return message;
     };
-    const production = await savedNotice(true);
-    expect(production).toContain(zh ? "第 3 段（Pages）" : "section 3 (Pages)");
-    expect(production).not.toMatch(/正式模式|production mode/);
-    const trial = await savedNotice(false);
-    expect(trial).toContain(
-      zh ? "請改用正式模式" : "start RepoNPC in production mode",
+    const notice = await savedNotice();
+    expect(notice).toContain(zh ? "第 2 段（Pages）" : "section 2 (Pages)");
+    expect(notice).toContain(zh ? "第 3 段（README）" : "section 3 (README)");
+    expect(notice).toContain(
+      zh ? "訪客內容尚未變更" : "Visitor content has not changed",
     );
-    expect(trial).not.toMatch(/第 3 段|section 3/);
+    expect(notice).not.toMatch(/試用|trial|正式模式|production mode/i);
   },
 );

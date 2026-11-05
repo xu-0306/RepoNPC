@@ -404,12 +404,6 @@
   padding: 0.5rem;
 }
 
-.scene-preview__sprites figure canvas,
-.scene-preview__sprites figure img {
-  max-height: 5rem;
-  max-width: 5rem;
-}
-
 .scene-preview__sprites figcaption {
   color: var(--px-muted);
   font-size: 13px;

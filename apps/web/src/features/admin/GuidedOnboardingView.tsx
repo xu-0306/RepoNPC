@@ -76,7 +76,6 @@ type Copy = {
   startManual: string;
   startAiHelp: string;
   startManualHelp: string;
-  trialSharingNote: string;
   modelsHeading: string;
   modelsDescription: string;
   returnWithoutSetup: string;
@@ -260,8 +259,6 @@ const COPY: Record<ReturnType<typeof chromeLocale>, Copy> = {
       "先設定、測試並確認選用回答／分析模型與資料查找模型，再選專案讓 AI 分析。進入設定不會自動下載或呼叫模型，也不會發布作品集。",
     startManualHelp:
       "不需模型即可手動填寫、確認、預覽、儲存及備份草稿。準備 NPC 與即時聊天仍需模型；建立草稿不等於公開分享。",
-    trialSharingNote:
-      "提醒：本機試用模式可以完成內容、預覽與試聊，但公開分享（Pages、README、GitHub 卡片）需要正式模式。",
     modelsHeading: "設定 AI 模型",
     modelsDescription: "設定並測試兩種模型，或先手動填寫、預覽及儲存內容。",
     returnWithoutSetup: "返回準備 NPC",
@@ -482,8 +479,6 @@ const COPY: Record<ReturnType<typeof chromeLocale>, Copy> = {
       "Before choosing projects for AI analysis, set up, test and explicitly select both answer/analysis and content finder models. Entering setup does not download, call a model or publish your portfolio.",
     startManualHelp:
       "You can write, confirm, preview, save or back up a draft manually without a model. Preparing the NPC and live chat still need models later. Creating a draft does not publish it.",
-    trialSharingNote:
-      "Note: local trial mode lets you finish your content, preview and try chat, but public sharing (Pages, README, GitHub card) needs production mode.",
     modelsHeading: "Set up AI models",
     modelsDescription:
       "Set up and test both model roles, or write, preview and save your content manually.",
@@ -1587,13 +1582,11 @@ function IntroStep({
   state,
   copy,
   busy,
-  publicSharingAvailable,
   onAction,
 }: {
   state: GuidedOnboardingState;
   copy: Copy;
   busy: boolean;
-  publicSharingAvailable: boolean;
   onAction: GuidedOnboardingViewProps["onAction"];
 }) {
   return (
@@ -1627,7 +1620,6 @@ function IntroStep({
         </button>
         <p id="guided-start-manual-help">{copy.startManualHelp}</p>
       </div>
-      {!publicSharingAvailable && <p role="note">{copy.trialSharingNote}</p>}
       {disabledReason(busy ? copy.disabledBusy : null, "guided-start-reason")}
       <details>
         <summary>{copy.outcome}</summary>
@@ -2709,12 +2701,10 @@ function DraftStep({
   copy,
   locale,
   busy,
-  publicSharingAvailable,
   onAction,
   onCopyDraft,
   onDownloadDraft,
 }: {
-  publicSharingAvailable: boolean;
   draft: GuidedOnboardingViewProps["draft"];
   validation: GuidedOnboardingViewProps["validation"];
   onOpenPublication: GuidedOnboardingViewProps["onOpenPublication"];
@@ -2746,13 +2736,9 @@ function DraftStep({
           </summary>
           <p>{copy.draftDescription}</p>
           <p>
-            {publicSharingAvailable
-              ? chinese
-                ? "內容草稿已完成，尚未套用。前往「預覽與分享」預覽、準備 NPC 並取得 GitHub 卡片。下方設定檔僅供備份／搬移，不是已上線網站。"
-                : "Content is complete but not applied. Open Preview & share to preview, prepare your NPC and get its GitHub card. The settings file below is for backup or transfer, not a deployed website."
-              : chinese
-                ? "內容草稿已完成，尚未套用。前往「預覽與分享」預覽並試聊。公開分享與 GitHub 卡片需要正式模式。下方設定檔僅供備份／搬移，不是已上線網站。"
-                : "Content is complete but not applied. Open Preview & share to preview and try chat. Public sharing and the GitHub card need production mode. The settings file below is for backup or transfer, not a deployed website."}
+            {chinese
+              ? "草稿已完成。按「預覽與分享」。預覽內容。準備 NPC。再取得 GitHub 卡片。下方設定檔可供備份或搬移。這份設定檔不是已上線網站。"
+              : "Your draft is ready. Select Preview & share. Preview the content. Prepare your NPC. Then get your GitHub card. Use the settings file below for backup or transfer. This file is not a deployed website."}
           </p>
           <p className="px-badge" role="status">
             {copy.draftReady}
@@ -2860,7 +2846,6 @@ export function GuidedOnboardingView({
   state,
   busy,
   errorCode,
-  publicSharingAvailable = true,
   batchAnalysisView,
   batchAnalysisTerminal,
   batchAnalysisActive,
@@ -3050,7 +3035,6 @@ export function GuidedOnboardingView({
             <IntroStep
               busy={busy}
               copy={copy}
-              publicSharingAvailable={publicSharingAvailable}
               onAction={onAction}
               state={state}
             />
@@ -3132,7 +3116,6 @@ export function GuidedOnboardingView({
               busy={busy}
               copy={copy}
               locale={locale}
-              publicSharingAvailable={publicSharingAvailable}
               onAction={onAction}
               onCopyDraft={onCopyDraft}
               onDownloadDraft={onDownloadDraft}

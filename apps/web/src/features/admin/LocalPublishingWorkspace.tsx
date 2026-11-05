@@ -24,9 +24,11 @@ import {
 import {
   CARD_FILENAME,
   githubAccount,
+  pagesUrlOrigin,
   previewInputsMatch,
   safeShareFields,
 } from "./sharing";
+import { sectionNumber, sectionRef, sectionTitle } from "./sharingSections";
 import { VisitorGatewayPanel } from "./VisitorGatewayPanel";
 import { AppearancePanel, type SceneAppearanceState } from "./AppearancePanel";
 import { PagesSharePanel, type PagesSharingState } from "./PagesSharePanel";
@@ -118,8 +120,8 @@ function publicationErrorMessage(
     case "SHARING_VERIFICATION_FAILED":
     case "SHARING_VERIFICATION_UNAVAILABLE":
       return zh
-        ? "README 尚未取得。請到第 3 段確認 Pages 網址，重新上傳目前網站並核對；也可沿用卡片下載、上傳與複製區塊。原有 README 不會被改動。"
-        : "README could not be retrieved. Check the Pages URL in section 3, upload the current site and verify it again. You can also use the card download, upload and copy steps. Your existing README is unchanged.";
+        ? `README 尚未取得。請到${sectionRef("zh-TW", "pages")}確認 Pages 網址，重新上傳目前網站並核對；也可沿用卡片下載、上傳與複製區塊。原有 README 不會被改動。`
+        : `README could not be retrieved. Check the Pages URL in ${sectionRef("en", "pages")}, upload the current site and verify it again. You can also use the card download, upload and copy steps. Your existing README is unchanged.`;
     case "SHARING_EXPORT_TOO_LARGE":
       return zh
         ? "README 超過 GitHub 可顯示的 500 KiB 上限。請縮減公開介紹或作品文字，套用後重新匯出、上傳並核對 Pages 網站，再重試。原有 README 不會被改動。"
@@ -194,7 +196,6 @@ export function LocalPublishingWorkspace({
   onAddClaim,
   onActiveSceneChange,
   draftUnsaved = false,
-  publicSharingAvailable = true,
 }: {
   locale: AdminLocale;
   locales?: SiteLocales;
@@ -211,7 +212,6 @@ export function LocalPublishingWorkspace({
   onAddClaim: (repository: string, kind: ClaimKind) => void;
   onActiveSceneChange?: (state: SceneAppearanceState | null) => void;
   draftUnsaved?: boolean;
-  publicSharingAvailable?: boolean;
 }) {
   const zh = chromeLocale(locale) === "zh-TW";
   const [preview, setPreview] = useState<AdminPreview | null>(null);
@@ -420,13 +420,9 @@ export function LocalPublishingWorkspace({
     } else
       setNotice({
         scope: "local",
-        message: publicSharingAvailable
-          ? zh
-            ? `已儲存在本機；訪客內容尚未變更。要更新訪客版本，按「${prepareLabel}」；要分享到 GitHub，接著完成下方第 3 段（Pages）與第 4 段（README）。`
-            : `Saved locally. Visitor content has not changed. To update the visitor version, select ${prepareLabel}. To share on GitHub, continue with section 3 (Pages) and section 4 (README) below.`
-          : zh
-            ? "已儲存在本機；訪客內容尚未變更。本機試用模式只能在這台電腦預覽與試聊；要分享到 GitHub，請改用正式模式。"
-            : "Saved locally. Visitor content has not changed. Local trial mode is for previewing and trying chat on this computer only. To share on GitHub, start RepoNPC in production mode.",
+        message: zh
+          ? `已儲存在本機。訪客內容尚未變更。要更新訪客內容，按「${prepareLabel}」。接著完成${sectionRef("zh-TW", "pages")}（Pages）。再完成${sectionRef("zh-TW", "profile")}（README）。`
+          : `Saved locally. Visitor content has not changed. To update visitor content, select ${prepareLabel}. Then complete ${sectionRef("en", "pages")} (Pages). Next, complete ${sectionRef("en", "profile")} (README).`,
       });
   }
   async function checkProfile() {
@@ -534,8 +530,8 @@ export function LocalPublishingWorkspace({
     setNotice({
       scope: "share",
       message: zh
-        ? "已交給瀏覽器下載 README.md；請確認下載完成，再上傳到與帳號同名的公開 repository 根目錄。已有 README 時，先比較並保留原文。"
-        : "Browser download requested: README.md. Confirm it completed, then upload it to the root of your public matching-name repository. Compare and keep existing README text first.",
+        ? "等候 README.md 下載完成。開啟下方的 GitHub 個人頁專案連結。上傳到專案最外層。已有 README 時，先比較內容。保留原有介紹。"
+        : "Wait for README.md to finish downloading. Open the GitHub profile repository link below. Upload it outside all folders. Compare any existing README first. Keep your existing introduction.",
     });
   }
   const links = chosen
@@ -621,44 +617,22 @@ export function LocalPublishingWorkspace({
             className="px-chip"
             href="#local-publication-heading"
           >
-            {zh ? "1 預覽與試聊" : "1 Preview & try"}
+            {`${sectionNumber("prepare")} ${zh ? "預覽與試聊" : "Preview & try"}`}
           </a>
           <a className="px-chip" href="#publication-appearance">
             {zh ? "外觀（選填）" : "Appearance (optional)"}
           </a>
-          <a className="px-chip" href="#visitor-gateway-heading">
-            {zh ? "2 訪客連線" : "2 Visitor connection"}
-          </a>
           <a className="px-chip" href="#pages-share-panel-heading">
-            3 Pages
+            {`${sectionNumber("pages")} Pages`}
           </a>
           <a className="px-chip" href="#github-share-guide-heading">
-            4 README
+            {`${sectionNumber("profile")} README`}
+          </a>
+          <a className="px-chip" href="#visitor-gateway-heading">
+            {`${sectionNumber("liveChat")} ${zh ? "即時聊天（選填）" : "Live chat (optional)"}`}
           </a>
         </nav>
       </header>
-      {!publicSharingAvailable && (
-        <div
-          className="publication-status px-panel px-panel--inset"
-          role="note"
-        >
-          <p>
-            {zh
-              ? "目前是本機試用模式：可以預覽、儲存草稿並在這台電腦試聊，但不能公開分享，也無法產生 README。要分享到 GitHub，請改用正式模式啟動 RepoNPC。"
-              : "Local trial mode: you can preview, save a draft and try chat on this computer, but you can't share publicly or create a README. To share on GitHub, start RepoNPC in production mode."}
-          </p>
-          <details className="px-info">
-            <summary>
-              ⓘ {zh ? "如何切換到正式模式" : "How to switch to production mode"}
-            </summary>
-            <p>
-              {zh
-                ? "原始碼版：在 .env 設定 REPONPC_DEPLOYMENT_PROFILE=production，再執行 start-reponpc.cmd。安裝版：從開始選單開啟「RepoNPC（正式模式）」。首次登入的一次性設定碼會顯示在啟動器視窗。"
-                : 'Source checkout: set REPONPC_DEPLOYMENT_PROFILE=production in .env, then run start-reponpc.cmd. Installed app: open the "RepoNPC (production mode)" shortcut from the Start menu. The one-time setup code for first sign-in appears in the launcher window.'}
-            </p>
-          </details>
-        </div>
-      )}
       <label htmlFor="publication-content-language">
         {zh ? "內容語言" : "Content language"}
       </label>
@@ -681,12 +655,15 @@ export function LocalPublishingWorkspace({
         aria-labelledby="local-publication-heading"
       >
         <h2 id="local-publication-heading">
-          {zh ? "1. 本機準備與試聊" : "1. Prepare and try locally"}
+          {sectionTitle(
+            "prepare",
+            zh ? "本機準備與試聊" : "Prepare and try locally",
+          )}
         </h2>
         <p>
           {zh
-            ? "先預覽作品與卡片，再儲存草稿並準備 NPC。"
-            : "Preview your portfolio and card, then save the draft and prepare the NPC."}
+            ? "先預覽作品集與卡片。儲存草稿。再準備 NPC。"
+            : "Preview your portfolio and card. Save the draft. Then prepare the NPC."}
         </p>
         {!content && (
           <p>
@@ -947,15 +924,10 @@ export function LocalPublishingWorkspace({
           </section>
         )}
       </details>
-      <VisitorGatewayPanel
-        locale={locale}
-        request={request}
-        publicSharingAvailable={publicSharingAvailable}
-      />
       <PagesSharePanel
+        account={account}
         locale={locale}
         request={request}
-        publicSharingAvailable={publicSharingAvailable}
         observedState={pagesSharingState}
         onStateChange={(updated) => {
           pagesGeneration.current += 1;
@@ -978,8 +950,12 @@ export function LocalPublishingWorkspace({
         filename={CARD_FILENAME}
         cardReady={!!selectedCard?.gif_base64}
         busy={pending}
-        publicSharingAvailable={publicSharingAvailable}
         pagesConfigured={!!pagesSharingState?.configured}
+        liveChatOrigin={
+          pagesSharingState
+            ? (pagesSharingState.live_chat_origin ?? null)
+            : undefined
+        }
         notice={notice?.scope === "share" ? notice.message : ""}
         onAccountChange={(value) => {
           setAccount(value);
@@ -1000,8 +976,8 @@ export function LocalPublishingWorkspace({
             setNotice({
               scope: "share",
               message: zh
-                ? "已複製。請貼入 README、預覽並儲存，再從 GitHub 點擊測試。"
-                : "Copied. Paste into README, preview and save, then test the card from GitHub.",
+                ? "已複製。開啟 GitHub 個人頁 README 連結。按鉛筆按鈕。貼上文字。預覽後儲存。再點擊個人頁上的卡片，試問一個問題。"
+                : "Copied. Open the GitHub profile README link. Select the pencil button. Paste the text. Preview it. Save it. Select your profile card. Ask a question.",
             });
           })
         }
@@ -1022,6 +998,14 @@ export function LocalPublishingWorkspace({
           onAddClaim={onAddClaim}
         />
       </details>
+      <VisitorGatewayPanel
+        locale={locale}
+        request={request}
+        pagesOrigin={
+          pagesSharingState?.pages_origin ??
+          pagesUrlOrigin(pagesSharingState?.pages_url)
+        }
+      />
     </div>
   );
 }

@@ -120,7 +120,7 @@ from reponpc.scene.registry import default_scene_registry
 
 
 class PublicBoundaryMiddleware:
-    """Attach safe public response headers without buffering ASGI disconnects."""
+    """Check local hosts and attach safe headers without buffering ASGI disconnects."""
 
     def __init__(self, app: ASGIApp) -> None:
         self._app = app
@@ -144,6 +144,15 @@ class PublicBoundaryMiddleware:
                         response_headers[header] = value
             await send(message)
 
+        state = scope["app"].state
+        if getattr(state, "deployment_profile", None) == "loopback_evaluation" and getattr(
+            state, "trusted_hosts", ()
+        ):
+            hosts = request_headers.getlist("host")
+            if len(hosts) != 1 or hosts[0].split(":")[0].lower() not in state.trusted_hosts:
+                response = Response("Invalid host header", status_code=400, media_type="text/plain")
+                await response(scope, receive, send_with_headers)
+                return
         await self._app(scope, receive, send_with_headers)
 
 
@@ -479,6 +488,7 @@ def create_app(
     application.state.admin_session_service = admin_session_service
     application.state.admin_origins = admin_origins
     application.state.deployment_profile = None
+    application.state.trusted_hosts = ()
     application.state.visitor_gateway = None
     application.state.admin_operations = admin_operations
     application.state.scene_service = None
@@ -623,6 +633,7 @@ def prepare_application(
 
     configure_logging(settings.log_level, file_path=log_file_path)
     app.state.deployment_profile = settings.deployment_profile
+    app.state.trusted_hosts = tuple(host.lower() for host in getattr(settings, "trusted_hosts", ()))
     app.state.admin_origins = getattr(settings, "admin_origins", ())
     try:
         if sys.platform == "win32" and settings.deployment_profile == "production":

@@ -478,8 +478,8 @@ describe("AdminAccessPanel", () => {
     expect(markup).toContain('id="admin-setup-username"');
     expect(markup).toContain('id="admin-setup-password"');
     expect(markup).toContain('maxLength="128"');
-    expect(markup).toContain("正式運作模式須為 15–128 個字元。");
-    expect(markup).toContain("不限制大小寫、數字或符號");
+    expect(markup).toContain("密碼須為 15–128 個字元。");
+    expect(markup).toContain("可使用任何字元");
     expect(markup).toContain("建立我的管理員");
     expect(markup).toContain("不會寫入 GitHub");
     expect(markup).not.toContain("使用 GitHub 建立管理員");
@@ -516,7 +516,7 @@ describe("AdminAccessPanel", () => {
     expect(markup).not.toContain("/api/admin/session/github/start");
   });
 
-  it("shows the host recovery command instead of an unusable production login", () => {
+  it("shows the host recovery command instead of an unusable password login", () => {
     const markup = renderAccessPanel({
       locale: "en",
       passwordAvailable: false,
@@ -619,3 +619,18 @@ describe("admin error scopes", () => {
     });
   });
 });
+
+it.each(["zh-TW", "en"] as const)(
+  "keeps password setup wording free of mode choices in %s",
+  (locale) => {
+    const markup = renderAccessPanel({
+      locale,
+      setupStatus: { setup_required: true, setup_code_available: true },
+    });
+    expect(markup).not.toMatch(/試用|trial|正式模式|production mode/i);
+    expect(markup).toContain("15–128");
+    expect(renderToStaticMarkup(<AdminPage locale={locale} />)).not.toMatch(
+      /試用|trial|正式模式|production mode/i,
+    );
+  },
+);
