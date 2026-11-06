@@ -331,7 +331,7 @@ What protects the owner (the password is not the control here):
 - The application binds only `127.0.0.1`, uses the same-origin admin address `http://localhost:<port>`, and refuses any `Forwarded` or `X-Forwarded-*` header on the admin port.
 - A `Host` allowlist (`REPONPC_TRUSTED_HOSTS`, set by the launchers to `localhost` and `127.0.0.1`) refuses other host names on the admin port with a generic 400. A Funnel request arrives with a `*.ts.net` host and forwarding headers, so it cannot reach the admin pages; Funnel points only at the visitor port.
 - Sign-in uses the one-use launch grant (two minutes, shown only to the launcher).
-- On every start each launcher restricts its own default data folder to the current user, SYSTEM and Administrators (`icacls`, inheritance removed). If a folder you set with `REPONPC_DATA_DIR` is not owner-only, the launcher stops and prints one `icacls` command; it does not change that folder.
+- On every start each launcher restricts its own default data folder to the current user, SYSTEM and Administrators (`icacls`, inheritance removed). If a folder you set with `REPONPC_DATA_DIR` is not owner-only, the launcher stops and prints one `icacls` command; it does not change that folder. If its own default data folder contains a symbolic link, a junction or a file with more than one name, the launcher stops before changing any permission, prints the path of that entry and one `cmd /c rmdir` or `cmd /c del` command that removes only that entry, never what it points to.
 
 Accepted limits: the visitor connection and the passwordless admin run in one process, and another program running as the same Windows user can read the data. If that is not acceptable, use the password-based mode in the next section.
 

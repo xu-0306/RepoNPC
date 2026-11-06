@@ -42,6 +42,14 @@ class UnsafeDataDirectory(_LauncherError):
         super().__init__("runtime path is not owner-only")
 
 
+class UnsafeDataEntry(_LauncherError):
+    """The default data folder holds a link or multi-name file that is never followed."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        super().__init__("data folder entry is a link")
+
+
 def owner_only_fix_command(path: Path, *, root: bool) -> str:
     """Return the owner-run repair for a custom data folder (ADR-080)."""
 
@@ -50,6 +58,18 @@ def owner_only_fix_command(path: Path, *, root: bool) -> str:
         # flags on a file would drop the grants instead of applying them.
         return f'icacls "{path}" /reset /T'
     return windows_owner_only_repair(path)
+
+
+def unsafe_entry_lines(path: Path) -> tuple[str, str]:
+    """Return the console report for a refused entry and the command that removes only it."""
+
+    # rmdir and del remove the link entry itself; neither follows a link or empties a folder.
+    directory = getattr(path.lstat(), "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_DIRECTORY
+    return (
+        "資料夾內的連結 RepoNPC 不會跟隨; 下列指令只移除這一項, 不動原檔 / "
+        f"RepoNPC will not follow this link in its data folder; this removes only it: {path}",
+        f'cmd /c {"rmdir" if directory else "del"} "{path}"',
+    )
 
 
 def _port(value: str) -> int:
@@ -99,7 +119,7 @@ def prepare_data_directory(
                     or child.is_junction()
                     or (not child.is_dir() and child.stat().st_nlink != 1)
                 ):
-                    raise _LauncherError
+                    raise UnsafeDataEntry(child)
             restrict_owner_only(data_dir)
             if children:
                 subprocess.run(
@@ -425,6 +445,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except UnsafeDataDirectory as exc:
         print(f"私密路徑權限過寬 / Private path is not owner-only: {exc.path}")
         print(owner_only_fix_command(exc.path, root=exc.root))
+        result = 2
+    except UnsafeDataEntry as exc:
+        print(*unsafe_entry_lines(exc.path), sep="\n")
         result = 2
     except Exception:
         print("RepoNPC 無法啟動。 RepoNPC could not start.")

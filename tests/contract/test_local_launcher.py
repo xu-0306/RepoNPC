@@ -163,6 +163,10 @@ def test_local_launcher_production_uses_shared_helpers_after_python_sync() -> No
     assert "except UnsafeDataDirectory as exc:" in preparation
     assert "print(owner_only_fix_command(exc.path, root=exc.root))" in preparation
     assert "sys.exit(3)" in preparation
+    # A refused link or multi-name entry is reported and stops with exit 3, never a traceback.
+    assert "except UnsafeDataEntry as exc:" in preparation
+    assert "print(*unsafe_entry_lines(exc.path), sep='\\n')" in preparation
+    assert preparation.count("sys.exit(3)") == 2
     assert "$preparationExitCode -eq 3" in preparation
     assert (
         "$pythonExe -c $prepareDataDirectory $resolvedDataDir $deploymentProfile $defaultDataDir"

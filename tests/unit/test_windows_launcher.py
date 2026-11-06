@@ -870,3 +870,54 @@ def test_default_folder_refuses_junction_children_before_acl_changes(tmp_path: P
     with pytest.raises(launcher._LauncherError):
         launcher.prepare_data_directory(directory, production=False, default_directory=directory)
     assert private_files._read_windows_acl(outside) == before
+
+
+def test_unsafe_entry_report_names_the_entry_and_a_remove_only_command(tmp_path: Path) -> None:
+    entry = tmp_path / "linked.txt"
+    entry.write_text("content", encoding="utf-8")
+    report, command = launcher.unsafe_entry_lines(entry)
+    assert str(entry) in report and "RepoNPC" in report
+    assert command == f'cmd /c del "{entry}"'
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows launcher DACL boundary")
+def test_refused_junction_is_named_and_its_command_removes_only_the_link(
+    harness: SimpleNamespace, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: Any
+) -> None:
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    directory = tmp_path / "RepoNPC" / "data"
+    directory.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("keep", encoding="utf-8")
+    link = directory / "linked"
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(outside)], check=True, capture_output=True
+    )
+    assert launcher.main(["--profile", "loopback_evaluation", "--smoke-check"]) == 2
+    output = capsys.readouterr().out.splitlines()
+    assert len(output) == 2 and str(link) in output[0]
+    assert output[1] == f'cmd /c rmdir "{link}"'
+    subprocess.run(output[1], check=True, capture_output=True)
+    assert not link.exists()
+    assert (outside / "keep.txt").read_text(encoding="utf-8") == "keep"
+    assert not harness.ports and not harness.grants
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows launcher DACL boundary")
+def test_refused_hardlink_is_named_and_its_command_keeps_the_other_name(
+    harness: SimpleNamespace, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: Any
+) -> None:
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    directory = tmp_path / "RepoNPC" / "data"
+    directory.mkdir(parents=True)
+    original = tmp_path / "outside.txt"
+    original.write_text("keep", encoding="utf-8")
+    link = directory / "linked"
+    os.link(original, link)
+    assert launcher.main(["--profile", "loopback_evaluation", "--smoke-check"]) == 2
+    output = capsys.readouterr().out.splitlines()
+    assert len(output) == 2 and str(link) in output[0]
+    assert output[1] == f'cmd /c del "{link}"'
+    subprocess.run(output[1], check=True, capture_output=True)
+    assert not link.exists() and original.read_text(encoding="utf-8") == "keep"

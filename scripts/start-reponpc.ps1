@@ -523,7 +523,13 @@ function Invoke-RepoNpcLauncher {
     $prepareDataDirectory = @"
 import sys
 from pathlib import Path
-from reponpc.windows_launcher import UnsafeDataDirectory, owner_only_fix_command, prepare_data_directory
+from reponpc.windows_launcher import (
+    UnsafeDataDirectory,
+    UnsafeDataEntry,
+    owner_only_fix_command,
+    prepare_data_directory,
+    unsafe_entry_lines,
+)
 
 try:
     key_path = prepare_data_directory(
@@ -534,6 +540,9 @@ try:
 except UnsafeDataDirectory as exc:
     print(f'\u79c1\u5bc6\u8def\u5f91\u6b0a\u9650\u904e\u5bec / Private path is not owner-only: {exc.path}')
     print(owner_only_fix_command(exc.path, root=exc.root))
+    sys.exit(3)
+except UnsafeDataEntry as exc:
+    print(*unsafe_entry_lines(exc.path), sep='\n')
     sys.exit(3)
 print(key_path)
 "@
