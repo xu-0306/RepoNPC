@@ -27,6 +27,23 @@ describe("visitor gateway panel", () => {
       );
 
       expect(markup).toContain('aria-labelledby="visitor-gateway-heading"');
+      const advanced = markup.slice(
+        markup.indexOf('<details class="visitor-gateway__setup"'),
+      );
+      expect(advanced).toContain(
+        locale === "zh-TW"
+          ? "進階：手動設定 Funnel URL"
+          : "Advanced: set the Funnel URL by hand",
+      );
+      expect(advanced).toContain('id="visitor-gateway-origin"');
+      expect(advanced).toContain('class="visitor-gateway__commands"');
+      expect(advanced).toContain("tailscale funnel --bg");
+      expect(advanced).toContain(" off</code>");
+      expect(markup).toContain(
+        locale === "zh-TW"
+          ? "這一段需要 Tailscale，RepoNPC 會用一個按鈕幫你開啟。"
+          : `This section needs Tailscale, and RepoNPC turns it on with one button.`,
+      );
       expect(markup).toContain('for="visitor-gateway-origin"');
       // The Pages address is never typed here (ADR-081): it comes from the
       // saved Pages URL, so there is no second Pages field or label.

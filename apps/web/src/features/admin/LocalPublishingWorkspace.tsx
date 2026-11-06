@@ -487,6 +487,21 @@ export function LocalPublishingWorkspace({
   const readmeKey = `${contentLocale}|${verifiedPagesUrl ?? ""}|${pagesSharingState?.verified_content_sha256 ?? ""}|${status?.active_bundle_id ?? ""}`;
   const readmeKeyRef = useRef(readmeKey);
   readmeKeyRef.current = readmeKey;
+  async function refreshSharingState() {
+    const generation = ++pagesGeneration.current;
+    try {
+      const next = await request<PagesSharingState>("/api/admin/sharing/state");
+      if (mounted.current && pagesGeneration.current === generation) {
+        pagesGeneration.current += 1;
+        setPagesSharingState(next);
+      }
+    } catch {
+      if (mounted.current && pagesGeneration.current === generation) {
+        pagesGeneration.current += 1;
+        setPagesSharingState(null);
+      }
+    }
+  }
   async function loadReadme(previewOnly: boolean) {
     if (!verifiedPagesUrl) return;
     const requestedKey = readmeKey;
@@ -1001,6 +1016,7 @@ export function LocalPublishingWorkspace({
       <VisitorGatewayPanel
         locale={locale}
         request={request}
+        onSharingChanged={() => void refreshSharingState()}
         pagesOrigin={
           pagesSharingState?.pages_origin ??
           pagesUrlOrigin(pagesSharingState?.pages_url)

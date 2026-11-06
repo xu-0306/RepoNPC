@@ -51,6 +51,52 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+it.each(["zh-TW", "en"] as const)(
+  "refreshes the README live-chat status after the gateway changes in %s",
+  async (locale) => {
+    const liveOrigin = "https://host.example.ts.net:10000";
+    const state = {
+      pages_url: "https://another-owner.github.io/site/",
+      pages_origin: "https://another-owner.github.io",
+      configured: true,
+      verified: true,
+      verified_at: "2026-11-03T00:00:00Z",
+      verified_content_sha256: "a".repeat(64),
+      live_chat_origin: liveOrigin,
+    };
+    const request = vi.fn(async (path: string) =>
+      path === "/api/admin/sharing/state" ? state : {},
+    ) as unknown as <T>(path: string, options?: RequestInit) => Promise<T>;
+    const input = {
+      locale,
+      content: "Public draft",
+      spriteBase64: null,
+      revision: null,
+      initialAccount: "another-owner",
+      selection: null,
+      request,
+      onStored: vi.fn(),
+      onCreateDraft: vi.fn(),
+      repositories: [],
+      onAddClaim: vi.fn(),
+    };
+    const render = () => {
+      hooks.cursor = 0;
+      return elements(LocalPublishingWorkspace(input));
+    };
+    const gateway = () =>
+      render().find((node) => "onSharingChanged" in node.props)!;
+    const guide = () =>
+      render().find((node) => "liveChatOrigin" in node.props)!;
+
+    (gateway().props.onSharingChanged as () => void)();
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith("/api/admin/sharing/state"),
+    );
+    expect(guide().props.liveChatOrigin).toBe(liveOrigin);
+  },
+);
+
 it.each(
   ADMIN_CHROMES.flatMap((locale) =>
     SITE_SETS.map((supported) => ({ locale, supported })),

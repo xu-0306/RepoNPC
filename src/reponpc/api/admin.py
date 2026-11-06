@@ -106,6 +106,8 @@ from reponpc.scene.registry import DEFAULT_SCHEME_ID
 from reponpc.sharing.export import build_visitor_site_export
 from reponpc.sharing.manifest import SiteExportError
 from reponpc.sharing.pages import PagesSharingService
+from reponpc.tailscale.service import TailscaleFunnelError, TailscaleFunnelService
+from reponpc.tailscale.state import FunnelStatus
 
 
 class _StrictRequest(BaseModel):
@@ -450,6 +452,7 @@ def create_admin_router(
     operations_supplier: Callable[[], AdminOperations | None] = lambda: None,
     faq_supplier: Callable[[], ReviewedFaq | None] = lambda: None,
     gateway_supplier: Callable[[], VisitorGateway | None] = lambda: None,
+    tailscale_supplier: Callable[[], TailscaleFunnelService | None] = lambda: None,
     scene_supplier: Callable[[], AdminSceneService | None] = lambda: None,
     preview_assets_supplier: Callable[[], PreviewAssetStore] | None = None,
 ) -> APIRouter:
@@ -1934,6 +1937,97 @@ def create_admin_router(
             session_token,
             csrf_token or "",
             lambda gateway: gateway.verify(**body.model_dump()),
+        )
+
+    async def tailscale_operation(
+        request: Request,
+        session_token: str | None,
+        csrf_token: str | None,
+        action: str,
+        revision: int | None = None,
+    ) -> Response:
+        boundary = authenticated_session(request, session_token, csrf_token)
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        rejected = same_origin(request)
+        if rejected is not None:
+            return rejected
+        code = "TAILSCALE_FAILED"
+        try:
+            if getattr(request.app.state, "deployment_profile", None) != "loopback_evaluation":
+                if action == "status":
+                    return JSONResponse(
+                        FunnelStatus("unavailable_profile").payload(),
+                        headers={"Cache-Control": "no-store"},
+                    )
+                raise TailscaleFunnelError("TAILSCALE_NOT_READY")
+            configured = tailscale_supplier()
+            if configured is None:
+                raise TailscaleFunnelError("TAILSCALE_FAILED")
+            if action == "status":
+                payload = await configured.status()
+            else:
+                assert revision is not None
+                result = (
+                    await configured.start(revision)
+                    if action == "start"
+                    else await configured.stop(revision)
+                )
+                payload = {
+                    "tailscale": result["tailscale"],
+                    "gateway": GatewaySnapshot.model_validate(result["gateway"]).model_dump(
+                        mode="json"
+                    ),
+                }
+            return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+        except TailscaleFunnelError as exc:
+            if exc.code in {
+                "TAILSCALE_NOT_READY",
+                "TAILSCALE_FAILED",
+                "GATEWAY_CONFLICT",
+                "GATEWAY_CONFIGURATION_INVALID",
+            }:
+                code = exc.code
+        except Exception:  # Do not expose CLI, saved-configuration or gateway exception details.
+            code = "TAILSCALE_FAILED"
+        return error_response(
+            request,
+            status_code=409
+            if code in {"TAILSCALE_NOT_READY", "GATEWAY_CONFLICT"}
+            else 422
+            if code == "GATEWAY_CONFIGURATION_INVALID"
+            else 503,
+            code=code,
+            message="The Tailscale operation could not be completed.",
+        )
+
+    @router.get("/tailscale/status")
+    async def tailscale_status(
+        request: Request,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+    ) -> Response:
+        return await tailscale_operation(request, session_token, None, "status")
+
+    @router.post("/tailscale/funnel/start")
+    async def tailscale_start(
+        request: Request,
+        body: GatewayRevisionRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        return await tailscale_operation(
+            request, session_token, csrf_token or "", "start", body.revision
+        )
+
+    @router.post("/tailscale/funnel/stop")
+    async def tailscale_stop(
+        request: Request,
+        body: GatewayRevisionRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        return await tailscale_operation(
+            request, session_token, csrf_token or "", "stop", body.revision
         )
 
     def local_error(request: Request, exc: Exception) -> Response:

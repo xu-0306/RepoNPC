@@ -1,0 +1,15 @@
+{
+  "status": {
+    "Version": "1.104.4-tfixture-gfixture",
+    "BackendState": "Running",
+    "AuthURL": "",
+    "CertDomains": ["fixture-host.tailnet-fixture.ts.net"],
+    "Self": {
+      "DNSName": "fixture-host.tailnet-fixture.ts.net.",
+      "Online": true,
+      "Capabilities": ["funnel", "https", "https://tailscale.com/cap/funnel-ports?ports=443,8443,10000"],
+      "CapMap": {"fixture-null": null, "fixture-list": [{"fixture": true}]}
+    }
+  },
+  "serve": {"TCP": {}, "Web": {}, "AllowFunnel": {}}
+}

@@ -4,6 +4,7 @@ import "../../p4-w3.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AdminLocale } from "./AdminWorkspace";
 import { ModelSetupRequests } from "./modelSetupRequests";
+import { TailscaleLivePanel } from "./TailscaleLivePanel";
 import { sectionRef, sectionTitle } from "./sharingSections";
 import {
   type FunnelHttpsPort,
@@ -235,6 +236,7 @@ export function VisitorGatewayPanel({
   locale,
   request,
   pagesOrigin,
+  onSharingChanged,
 }: {
   locale: AdminLocale;
   request: Request;
@@ -243,6 +245,7 @@ export function VisitorGatewayPanel({
    * saved. The owner never types it here (ADR-081).
    */
   pagesOrigin: string | null;
+  onSharingChanged?: () => void;
 }) {
   const zh = chromeLocale(locale) === "zh-TW";
   const gateway = useVisitorGateway(request, locale);
@@ -420,410 +423,427 @@ export function VisitorGatewayPanel({
       </h2>
       <p id="visitor-gateway-purpose">
         {zh
-          ? "不做這一段，訪客也能打開你的聊天頁，看到常見問答和「休息中」訊息。做了這一段，訪客可在你的電腦開機時得到即時回答。這一段需要 Tailscale Funnel。"
-          : "Skip this section and visitors can still open your chat page. They see the FAQ and a resting message. Set it up and visitors get live answers while this computer is on. This section needs Tailscale Funnel."}
+          ? "不做這一段，訪客也能打開你的聊天頁，看到常見問答和「休息中」訊息。做了這一段，訪客可在你的電腦開機時得到即時回答。這一段需要 Tailscale，RepoNPC 會用一個按鈕幫你開啟。"
+          : `Skip this section and visitors can still open your chat page. They see the FAQ and a resting message. Set it up and visitors get live answers while this computer is on. This section needs Tailscale, and RepoNPC turns it on with one button.`}
       </p>
-      <details
-        className="visitor-gateway__setup"
-        open={Boolean(status?.gateway_origin)}
+      <TailscaleLivePanel
+        locale={locale}
+        request={request}
+        pagesOrigin={pagesOrigin}
+        gateway={status}
+        onChanged={() => {
+          void gateway.refresh();
+          onSharingChanged?.();
+        }}
       >
-        <summary>{zh ? "設定即時聊天" : "Set up live chat"}</summary>
-
-        {gateway.loading && !status && (
-          <p role="status">
-            {zh ? "正在載入即時聊天狀態…" : "Loading live chat status…"}
-          </p>
-        )}
-        {gateway.loadFailed && (
-          <p role="alert">
-            {zh
-              ? "無法讀取即時聊天狀態，請確認登入狀態後重新整理。"
-              : "RepoNPC could not read the live chat status. Check your sign-in status and refresh."}
-          </p>
-        )}
-        {gateway.notice && <p role="alert">{gateway.notice}</p>}
-
-        {status && (
-          <>
-            <dl className="visitor-gateway__facts">
-              <div>
-                <dt>{zh ? "NPC" : "NPC"}</dt>
-                <dd>{fact(status.local_ready)}</dd>
-              </div>
-              <div>
-                <dt>{zh ? "網址" : "URL"}</dt>
-                <dd>{fact(status.entry_configured)}</dd>
-              </div>
-              <div>
-                <dt>{zh ? "外網檢查" : "External check"}</dt>
-                <dd>{fact(status.external_verified)}</dd>
-              </div>
-              <div>
-                <dt>{zh ? "即時聊天" : "Live chat"}</dt>
-                <dd>
-                  {status.listener_ready
-                    ? zh
-                      ? "執行中"
-                      : "Running"
-                    : status.enabled
-                      ? zh
-                        ? "已要求啟動，但尚未就緒"
-                        : "Start requested, but not ready"
-                      : zh
-                        ? "已停止"
-                        : "Stopped"}
-                </dd>
-              </div>
-            </dl>
-
-            {status.error_code && (
-              <p role="alert">
-                {visitorGatewayErrorMessage(status.error_code, locale)}
-              </p>
-            )}
-          </>
-        )}
-
-        {(!status || gateway.pending) && (
-          <p className="visitor-gateway__lock px-badge">
-            <span aria-hidden="true">▣ </span>
-            {zh
-              ? "已鎖定：請等候狀態更新後再編輯"
-              : "Locked: wait for the status update before editing"}
-          </p>
-        )}
-        <fieldset
-          aria-disabled={!status || gateway.pending}
-          className="visitor-gateway__origins"
-          disabled={!status || gateway.pending}
+        <details
+          className="visitor-gateway__setup"
+          open={Boolean(status?.gateway_origin)}
         >
-          <legend>{zh ? "連線" : "Connection"}</legend>
-          <label htmlFor="visitor-gateway-origin">
-            {zh ? "Funnel URL" : "Funnel URL"}
-            <input
-              className="px-field"
-              autoCapitalize="none"
-              autoComplete="url"
-              id="visitor-gateway-origin"
-              maxLength={2048}
-              onChange={(event) => edit("gateway", event.target.value)}
-              spellCheck={false}
-              type="url"
-              value={gatewayValue}
-            />
-          </label>
-          <label htmlFor="visitor-funnel-port">
-            {zh ? "公開連接埠" : "Public port"}
-            <select
-              className="px-field"
-              id="visitor-funnel-port"
-              onChange={(event) =>
-                edit(
-                  "gateway",
-                  withFunnelPort(
-                    gatewayValue,
-                    event.target.value as FunnelHttpsPort,
-                  ),
-                )
-              }
-              value={funnelPort ?? "443"}
-            >
-              <option value="443">443</option>
-              <option value="8443">8443</option>
-              <option value="10000">10000</option>
-            </select>
-          </label>
-          <label htmlFor="visitor-local-port">
-            {zh ? "本機連接埠" : "Local port"}
-            <input
-              className="px-field"
-              id="visitor-local-port"
-              inputMode="numeric"
-              max={65535}
-              min={1024}
-              onChange={(event) => edit("port", event.target.value)}
-              pattern="[0-9]*"
-              spellCheck={false}
-              type="text"
-              value={portValue}
-            />
-          </label>
-          {status?.visitor_port_source === "environment" && (
-            <InfoParagraphs
-              locale={locale}
-              text={zh ? "目前使用預設值" : "Using the default"}
-            />
+          <summary>
+            {zh
+              ? "進階：手動設定 Funnel URL"
+              : "Advanced: set the Funnel URL by hand"}
+          </summary>
+
+          {gateway.loading && !status && (
+            <p role="status">
+              {zh ? "正在載入即時聊天狀態…" : "Loading live chat status…"}
+            </p>
           )}
-        </fieldset>
-        <details className="publication-info px-info">
-          <summary>ⓘ {zh ? "連線說明" : "Connection details"}</summary>
-          <InfoParagraphs
-            locale={locale}
-            text={
-              zh
-                ? "這裡只設定 RepoNPC 的訪客入口。主機與已選回答模型必須保持可用。停止分享不影響本機預覽、準備內容、FAQ 審核或一般編輯。"
-                : "Configure only the RepoNPC visitor entry here. The host and selected answer model must stay available. Stopping sharing does not affect local preview, preparation, FAQ review, or ordinary editing."
-            }
-          />
+          {gateway.loadFailed && (
+            <p role="alert">
+              {zh
+                ? "無法讀取即時聊天狀態，請確認登入狀態後重新整理。"
+                : "RepoNPC could not read the live chat status. Check your sign-in status and refresh."}
+            </p>
+          )}
+          {gateway.notice && <p role="alert">{gateway.notice}</p>}
 
           {status && (
             <>
-              {status.local_ready === false && (
-                <InfoParagraphs
-                  locale={locale}
-                  text={
-                    zh
-                      ? "先在本機準備可用版本，並確認已選回答模型可用，再啟動訪客入口。"
-                      : "Prepare a local version and make sure the selected answer model is available before starting the visitor entry."
-                  }
-                />
-              )}
+              <dl className="visitor-gateway__facts">
+                <div>
+                  <dt>{zh ? "NPC" : "NPC"}</dt>
+                  <dd>{fact(status.local_ready)}</dd>
+                </div>
+                <div>
+                  <dt>{zh ? "網址" : "URL"}</dt>
+                  <dd>{fact(status.entry_configured)}</dd>
+                </div>
+                <div>
+                  <dt>{zh ? "外網檢查" : "External check"}</dt>
+                  <dd>{fact(status.external_verified)}</dd>
+                </div>
+                <div>
+                  <dt>{zh ? "即時聊天" : "Live chat"}</dt>
+                  <dd>
+                    {status.listener_ready
+                      ? zh
+                        ? "執行中"
+                        : "Running"
+                      : status.enabled
+                        ? zh
+                          ? "已要求啟動，但尚未就緒"
+                          : "Start requested, but not ready"
+                        : zh
+                          ? "已停止"
+                          : "Stopped"}
+                  </dd>
+                </div>
+              </dl>
 
-              <p>
-                {status.client_identity_mode === "aggregate"
-                  ? zh
-                    ? "訪客保護模式：共用每日額度與同時工作上限；不採用轉送的訪客身分。"
-                    : "Visitor protection: shared daily and concurrency limits; forwarded visitor identity is ignored."
-                  : zh
-                    ? "訪客保護模式：使用已設定的 loopback proxy 身分限制。依賴該 proxy 的來源位址覆寫行為；未完成外網確認前請勿依賴個別 IP 保護。"
-                    : "Visitor protection: configured loopback-proxy identity limits. These depend on the proxy's source-address overwrite behavior; do not rely on per-IP protection until externally confirmed."}
-              </p>
+              {status.error_code && (
+                <p role="alert">
+                  {visitorGatewayErrorMessage(status.error_code, locale)}
+                </p>
+              )}
             </>
           )}
-          <InfoParagraphs
-            locale={locale}
-            text={
-              zh
-                ? `只需填 Funnel URL。Pages 位址取自${sectionRef("zh-TW", "pages")}已儲存的 Pages 網址，不必在這裡再填。儲存後啟動本機訪客服務，並依下方說明在 Tailscale 啟用 Funnel。`
-                : `Enter only the Funnel URL. The Pages address comes from the Pages URL you saved in ${sectionRef("en", "pages")}, so you do not enter it here. After saving, start the local visitor service and enable Funnel in Tailscale using the instructions below.`
-            }
-          />
-          <InfoParagraphs
-            locale={locale}
-            text={
-              zh
-                ? `開啟即時聊天前，先在${sectionRef("zh-TW", "pages")}儲存 Pages 網址。儲存不會驗證 Pages 託管狀態、GitHub 卡片或外網連線。即時聊天執行中時，須先停止才能變更網址。開啟或變更後，要重新下載網站、重新上傳並再核對一次。`
-                : `Save the Pages URL in ${sectionRef("en", "pages")} before you turn on live chat. Saving does not check Pages hosting, GitHub cards, or external reachability. Stop live chat before changing the URL while it is running. After you turn it on or change it, download the site again, upload it again and check it again.`
-            }
-          />
-        </details>
-        {changed && status?.external_verified && (
-          <p role="status">
-            {zh
-              ? "外網檢查狀態只適用於已儲存的網址；目前未儲存的編輯尚未檢查。"
-              : "The external-check status applies only to the saved URLs. These unsaved edits have not been checked."}
-          </p>
-        )}
-        {changed && !hasBothOrNeither && (
-          <p role="alert">
-            {zh
-              ? `請先在${sectionRef("zh-TW", "pages")}儲存 Pages 網址，再儲存 Funnel URL。`
-              : `Save your Pages URL in ${sectionRef("en", "pages")} before you save the Funnel URL.`}
-          </p>
-        )}
-        {!portValid && (
-          <p role="alert">
-            {zh
-              ? "連接埠必須是 1024 到 65535 之間的整數。"
-              : "The port must be a whole number from 1024 to 65535."}
-          </p>
-        )}
-        {changed && status?.enabled && (
-          <p role="status">
-            {zh
-              ? "請先停止即時聊天，再儲存網址變更。"
-              : "Stop live chat before saving URL changes."}
-          </p>
-        )}
 
-        <div className="publication-actions visitor-gateway__actions">
-          <button
-            className="px-button px-button--secondary"
-            disabled={
-              !status ||
-              !changed ||
-              !hasBothOrNeither ||
-              !portValid ||
-              localListenerActive ||
-              gateway.pending
-            }
-            onClick={() => void save()}
-            type="button"
-          >
-            {zh ? "儲存" : "Save"}
-          </button>
-          {changed && (
-            <button
-              className="px-button px-button--secondary"
-              disabled={gateway.pending}
-              onClick={() => {
-                setDraft(null);
-                void gateway.refresh();
-              }}
-              type="button"
-            >
+          {(!status || gateway.pending) && (
+            <p className="visitor-gateway__lock px-badge">
+              <span aria-hidden="true">▣ </span>
               {zh
-                ? "捨棄變更並載入最新設定"
-                : "Discard changes and load latest settings"}
-            </button>
-          )}
-          <button
-            className="px-button px-button--secondary"
-            disabled={!canStart}
-            onClick={() => void start()}
-            type="button"
-          >
-            {status?.enabled
-              ? zh
-                ? "重試啟動訪客連線"
-                : "Retry starting visitor access"
-              : zh
-                ? "啟動"
-                : "Start"}
-          </button>
-          <button
-            className="px-button px-button--secondary"
-            disabled={!canStop}
-            onClick={() => void stop()}
-            type="button"
-          >
-            {zh ? "停止" : "Stop"}
-          </button>
-          <button
-            className="px-button px-button--secondary"
-            disabled={!status || gateway.pending}
-            onClick={() => void gateway.refresh()}
-            type="button"
-          >
-            {zh ? "重新整理" : "Refresh"}
-          </button>
-        </div>
-
-        {status && (
-          <details className="visitor-gateway__verification">
-            <summary>
-              <h3 id="visitor-gateway-verification-heading">
-                {zh
-                  ? "由擁有者確認外網連線"
-                  : "Owner-confirmed external checks"}
-              </h3>
-            </summary>
-            <p>
-              {status.external_verified &&
-              status.verification_method === "owner_reported"
-                ? zh
-                  ? `目前訪客服務啟動期間已由擁有者回報檢查完成；時間：${status.verified_at ?? "未知"}。這是當時的觀察，不是持續連線監控。`
-                  : `The owner reported completing the checks during this visitor service start at ${status.verified_at ?? "an unknown time"}. This is a dated observation, not ongoing uptime monitoring.`
-                : status.verified_at &&
-                    status.verification_method === "owner_reported"
-                  ? zh
-                    ? `上次擁有者回報檢查時間：${status.verified_at}。目前檢查已失效，請重新完成清單。`
-                    : `Last owner-reported check: ${status.verified_at}. It is no longer current; complete the checklist again.`
-                  : zh
-                    ? "尚無擁有者回報的外網檢查。"
-                    : "No owner-reported external check is recorded."}
+                ? "已鎖定：請等候狀態更新後再編輯"
+                : "Locked: wait for the status update before editing"}
             </p>
-            {status.active_bundle_id && (
-              <p>
-                {zh ? "目前版本：" : "Active bundle: "}
-                <code>{status.active_bundle_id}</code>
-              </p>
+          )}
+          <fieldset
+            aria-disabled={!status || gateway.pending}
+            className="visitor-gateway__origins"
+            disabled={!status || gateway.pending}
+          >
+            <legend>{zh ? "連線" : "Connection"}</legend>
+            <label htmlFor="visitor-gateway-origin">
+              {zh ? "Funnel URL" : "Funnel URL"}
+              <input
+                className="px-field"
+                autoCapitalize="none"
+                autoComplete="url"
+                id="visitor-gateway-origin"
+                maxLength={2048}
+                onChange={(event) => edit("gateway", event.target.value)}
+                spellCheck={false}
+                type="url"
+                value={gatewayValue}
+              />
+            </label>
+            <label htmlFor="visitor-funnel-port">
+              {zh ? "公開連接埠" : "Public port"}
+              <select
+                className="px-field"
+                id="visitor-funnel-port"
+                onChange={(event) =>
+                  edit(
+                    "gateway",
+                    withFunnelPort(
+                      gatewayValue,
+                      event.target.value as FunnelHttpsPort,
+                    ),
+                  )
+                }
+                value={funnelPort ?? "443"}
+              >
+                <option value="443">443</option>
+                <option value="8443">8443</option>
+                <option value="10000">10000</option>
+              </select>
+            </label>
+            <label htmlFor="visitor-local-port">
+              {zh ? "本機連接埠" : "Local port"}
+              <input
+                className="px-field"
+                id="visitor-local-port"
+                inputMode="numeric"
+                max={65535}
+                min={1024}
+                onChange={(event) => edit("port", event.target.value)}
+                pattern="[0-9]*"
+                spellCheck={false}
+                type="text"
+                value={portValue}
+              />
+            </label>
+            {status?.visitor_port_source === "environment" && (
+              <InfoParagraphs
+                locale={locale}
+                text={zh ? "目前使用預設值" : "Using the default"}
+              />
             )}
-            <fieldset
-              className="visitor-gateway__checklist"
-              disabled={gateway.pending}
-            >
-              <legend>
-                {zh
-                  ? "只有完成所有獨立外網檢查後才勾選"
-                  : "Check each item only after completing the independent external test"}
-              </legend>
-              {checklist.map((item, index) => (
-                <label key={item}>
-                  <input
-                    className="px-field"
-                    checked={checks[index]}
-                    onChange={(event) =>
-                      setChecks(
-                        checks.map((checked, itemIndex) =>
-                          itemIndex === index ? event.target.checked : checked,
-                        ),
-                      )
-                    }
-                    type="checkbox"
-                  />
-                  <span>{item}</span>
-                </label>
-              ))}
-            </fieldset>
-            <button
-              className="px-button px-button--secondary"
-              disabled={!canVerify}
-              onClick={() => void verify()}
-              type="button"
-            >
-              {zh ? "記錄擁有者回報檢查" : "Record owner-reported check"}
-            </button>
+          </fieldset>
+          <details className="publication-info px-info">
+            <summary>ⓘ {zh ? "連線說明" : "Connection details"}</summary>
             <InfoParagraphs
               locale={locale}
               text={
                 zh
-                  ? "重新啟動、停止或來源變更會清除檢查；版本與本機就緒變更不會清除這筆當時的觀察；Funnel 或網際網路的未觀察中斷不會被偵測。這不會驗證 GitHub Pages 或卡片。"
-                  : "Restart, stop or origin changes clear the check. Bundle and local readiness changes do not clear this dated observation. Unobserved Funnel or internet outages are not detected. This does not verify GitHub Pages or cards."
+                  ? "這裡只設定 RepoNPC 的訪客入口。主機與已選回答模型必須保持可用。停止分享不影響本機預覽、準備內容、FAQ 審核或一般編輯。"
+                  : "Configure only the RepoNPC visitor entry here. The host and selected answer model must stay available. Stopping sharing does not affect local preview, preparation, FAQ review, or ordinary editing."
+              }
+            />
+
+            {status && (
+              <>
+                {status.local_ready === false && (
+                  <InfoParagraphs
+                    locale={locale}
+                    text={
+                      zh
+                        ? "先在本機準備可用版本，並確認已選回答模型可用，再啟動訪客入口。"
+                        : "Prepare a local version and make sure the selected answer model is available before starting the visitor entry."
+                    }
+                  />
+                )}
+
+                <p>
+                  {status.client_identity_mode === "aggregate"
+                    ? zh
+                      ? "訪客保護模式：共用每日額度與同時工作上限；不採用轉送的訪客身分。"
+                      : "Visitor protection: shared daily and concurrency limits; forwarded visitor identity is ignored."
+                    : zh
+                      ? "訪客保護模式：使用已設定的 loopback proxy 身分限制。依賴該 proxy 的來源位址覆寫行為；未完成外網確認前請勿依賴個別 IP 保護。"
+                      : "Visitor protection: configured loopback-proxy identity limits. These depend on the proxy's source-address overwrite behavior; do not rely on per-IP protection until externally confirmed."}
+                </p>
+              </>
+            )}
+            <InfoParagraphs
+              locale={locale}
+              text={
+                zh
+                  ? `只需填 Funnel URL。Pages 位址取自${sectionRef("zh-TW", "pages")}已儲存的 Pages 網址，不必在這裡再填。儲存後啟動本機訪客服務，並依下方說明在 Tailscale 啟用 Funnel。`
+                  : `Enter only the Funnel URL. The Pages address comes from the Pages URL you saved in ${sectionRef("en", "pages")}, so you do not enter it here. After saving, start the local visitor service and enable Funnel in Tailscale using the instructions below.`
+              }
+            />
+            <InfoParagraphs
+              locale={locale}
+              text={
+                zh
+                  ? `開啟即時聊天前，先在${sectionRef("zh-TW", "pages")}儲存 Pages 網址。儲存不會驗證 Pages 託管狀態、GitHub 卡片或外網連線。即時聊天執行中時，須先停止才能變更網址。開啟或變更後，要重新下載網站、重新上傳並再核對一次。`
+                  : `Save the Pages URL in ${sectionRef("en", "pages")} before you turn on live chat. Saving does not check Pages hosting, GitHub cards, or external reachability. Stop live chat before changing the URL while it is running. After you turn it on or change it, download the site again, upload it again and check it again.`
               }
             />
           </details>
-        )}
+          {changed && status?.external_verified && (
+            <p role="status">
+              {zh
+                ? "外網檢查狀態只適用於已儲存的網址；目前未儲存的編輯尚未檢查。"
+                : "The external-check status applies only to the saved URLs. These unsaved edits have not been checked."}
+            </p>
+          )}
+          {changed && !hasBothOrNeither && (
+            <p role="alert">
+              {zh
+                ? `請先在${sectionRef("zh-TW", "pages")}儲存 Pages 網址，再儲存 Funnel URL。`
+                : `Save your Pages URL in ${sectionRef("en", "pages")} before you save the Funnel URL.`}
+            </p>
+          )}
+          {!portValid && (
+            <p role="alert">
+              {zh
+                ? "連接埠必須是 1024 到 65535 之間的整數。"
+                : "The port must be a whole number from 1024 to 65535."}
+            </p>
+          )}
+          {changed && status?.enabled && (
+            <p role="status">
+              {zh
+                ? "請先停止即時聊天，再儲存網址變更。"
+                : "Stop live chat before saving URL changes."}
+            </p>
+          )}
 
-        <details className="visitor-gateway__commands">
-          <summary>{zh ? "Tailscale Funnel" : "Tailscale Funnel"}</summary>
-          <InfoParagraphs
-            locale={locale}
-            text={
-              zh
-                ? "請自行在 Tailscale 官方流程安裝、登入、授權並執行指令。RepoNPC 不會執行命令或管理 Tailscale。"
-                : "Install, sign in, authorize, and run these commands yourself through Tailscale's official flow. RepoNPC does not run commands or manage Tailscale."
-            }
-          />
-          <p>
-            {status && funnelPort
-              ? zh
-                ? "指令中的連接埠已依上方設定填入。"
-                : "The ports in these commands come from the settings above."
-              : status
+          <div className="publication-actions visitor-gateway__actions">
+            <button
+              className="px-button px-button--secondary"
+              disabled={
+                !status ||
+                !changed ||
+                !hasBothOrNeither ||
+                !portValid ||
+                localListenerActive ||
+                gateway.pending
+              }
+              onClick={() => void save()}
+              type="button"
+            >
+              {zh ? "儲存" : "Save"}
+            </button>
+            {changed && (
+              <button
+                className="px-button px-button--secondary"
+                disabled={gateway.pending}
+                onClick={() => {
+                  setDraft(null);
+                  void gateway.refresh();
+                }}
+                type="button"
+              >
+                {zh
+                  ? "捨棄變更並載入最新設定"
+                  : "Discard changes and load latest settings"}
+              </button>
+            )}
+            <button
+              className="px-button px-button--secondary"
+              disabled={!canStart}
+              onClick={() => void start()}
+              type="button"
+            >
+              {status?.enabled
                 ? zh
-                  ? "請將 <https-port> 替換為 Funnel URL 的連接埠（443、8443 或 10000）。"
-                  : "Replace <https-port> with the port of the Funnel URL (443, 8443, or 10000)."
+                  ? "重試啟動訪客連線"
+                  : "Retry starting visitor access"
                 : zh
-                  ? "請將 <https-port> 替換為訪客網址的連接埠（443、8443 或 10000），<visitor-port> 替換為 REPONPC_VISITOR_GATEWAY_PORT（預設 8001）。"
-                  : "Replace <https-port> with the visitor origin's port (443, 8443, or 10000) and <visitor-port> with REPONPC_VISITOR_GATEWAY_PORT (default 8001)."}
-          </p>
-          <pre>
-            <code>
-              {`tailscale funnel --bg --https=${funnelPortText} http://127.0.0.1:${visitorPortText}`}
-            </code>
-          </pre>
-          <InfoParagraphs
-            locale={locale}
-            text={
-              zh
-                ? "停用 Funnel 的官方指令："
-                : "Official command to turn Funnel off:"
-            }
-          />
-          <pre>
-            <code>{`tailscale funnel --https=${funnelPortText} off`}</code>
-          </pre>
-          <InfoParagraphs
-            locale={locale}
-            text={
-              zh
-                ? "停止本機即時聊天不代表 Funnel 已停用。Funnel 可能在測試階段，或有使用限制與方案資格條件。啟用前請確認 Tailscale 官方最新說明與你的方案。"
-                : "Stopping the local visitor service does not turn Funnel off. Funnel may have beta status, usage limits, or plan eligibility requirements. Check Tailscale's current official guidance and your plan before enabling it."
-            }
-          />
+                  ? "啟動"
+                  : "Start"}
+            </button>
+            <button
+              className="px-button px-button--secondary"
+              disabled={!canStop}
+              onClick={() => void stop()}
+              type="button"
+            >
+              {zh ? "停止" : "Stop"}
+            </button>
+            <button
+              className="px-button px-button--secondary"
+              disabled={!status || gateway.pending}
+              onClick={() => void gateway.refresh()}
+              type="button"
+            >
+              {zh ? "重新整理" : "Refresh"}
+            </button>
+          </div>
+
+          {status && (
+            <details className="visitor-gateway__verification">
+              <summary>
+                <h3 id="visitor-gateway-verification-heading">
+                  {zh
+                    ? "由擁有者確認外網連線"
+                    : "Owner-confirmed external checks"}
+                </h3>
+              </summary>
+              <p>
+                {status.external_verified &&
+                status.verification_method === "owner_reported"
+                  ? zh
+                    ? `目前訪客服務啟動期間已由擁有者回報檢查完成；時間：${status.verified_at ?? "未知"}。這是當時的觀察，不是持續連線監控。`
+                    : `The owner reported completing the checks during this visitor service start at ${status.verified_at ?? "an unknown time"}. This is a dated observation, not ongoing uptime monitoring.`
+                  : status.verified_at &&
+                      status.verification_method === "owner_reported"
+                    ? zh
+                      ? `上次擁有者回報檢查時間：${status.verified_at}。目前檢查已失效，請重新完成清單。`
+                      : `Last owner-reported check: ${status.verified_at}. It is no longer current; complete the checklist again.`
+                    : zh
+                      ? "尚無擁有者回報的外網檢查。"
+                      : "No owner-reported external check is recorded."}
+              </p>
+              {status.active_bundle_id && (
+                <p>
+                  {zh ? "目前版本：" : "Active bundle: "}
+                  <code>{status.active_bundle_id}</code>
+                </p>
+              )}
+              <fieldset
+                className="visitor-gateway__checklist"
+                disabled={gateway.pending}
+              >
+                <legend>
+                  {zh
+                    ? "只有完成所有獨立外網檢查後才勾選"
+                    : "Check each item only after completing the independent external test"}
+                </legend>
+                {checklist.map((item, index) => (
+                  <label key={item}>
+                    <input
+                      className="px-field"
+                      checked={checks[index]}
+                      onChange={(event) =>
+                        setChecks(
+                          checks.map((checked, itemIndex) =>
+                            itemIndex === index
+                              ? event.target.checked
+                              : checked,
+                          ),
+                        )
+                      }
+                      type="checkbox"
+                    />
+                    <span>{item}</span>
+                  </label>
+                ))}
+              </fieldset>
+              <button
+                className="px-button px-button--secondary"
+                disabled={!canVerify}
+                onClick={() => void verify()}
+                type="button"
+              >
+                {zh ? "記錄擁有者回報檢查" : "Record owner-reported check"}
+              </button>
+              <InfoParagraphs
+                locale={locale}
+                text={
+                  zh
+                    ? "重新啟動、停止或來源變更會清除檢查；版本與本機就緒變更不會清除這筆當時的觀察；Funnel 或網際網路的未觀察中斷不會被偵測。這不會驗證 GitHub Pages 或卡片。"
+                    : "Restart, stop or origin changes clear the check. Bundle and local readiness changes do not clear this dated observation. Unobserved Funnel or internet outages are not detected. This does not verify GitHub Pages or cards."
+                }
+              />
+            </details>
+          )}
+
+          <details className="visitor-gateway__commands">
+            <summary>{zh ? "Tailscale Funnel" : "Tailscale Funnel"}</summary>
+            <InfoParagraphs
+              locale={locale}
+              text={
+                zh
+                  ? "請自行在 Tailscale 官方流程安裝、登入、授權並執行指令。RepoNPC 不會執行命令或管理 Tailscale。"
+                  : "Install, sign in, authorize, and run these commands yourself through Tailscale's official flow. RepoNPC does not run commands or manage Tailscale."
+              }
+            />
+            <p>
+              {status && funnelPort
+                ? zh
+                  ? "指令中的連接埠已依上方設定填入。"
+                  : "The ports in these commands come from the settings above."
+                : status
+                  ? zh
+                    ? "請將 <https-port> 替換為 Funnel URL 的連接埠（443、8443 或 10000）。"
+                    : "Replace <https-port> with the port of the Funnel URL (443, 8443, or 10000)."
+                  : zh
+                    ? "請將 <https-port> 替換為訪客網址的連接埠（443、8443 或 10000），<visitor-port> 替換為 REPONPC_VISITOR_GATEWAY_PORT（預設 8001）。"
+                    : "Replace <https-port> with the visitor origin's port (443, 8443, or 10000) and <visitor-port> with REPONPC_VISITOR_GATEWAY_PORT (default 8001)."}
+            </p>
+            <pre>
+              <code>
+                {`tailscale funnel --bg --https=${funnelPortText} http://127.0.0.1:${visitorPortText}`}
+              </code>
+            </pre>
+            <InfoParagraphs
+              locale={locale}
+              text={
+                zh
+                  ? "停用 Funnel 的官方指令："
+                  : "Official command to turn Funnel off:"
+              }
+            />
+            <pre>
+              <code>{`tailscale funnel --https=${funnelPortText} off`}</code>
+            </pre>
+            <InfoParagraphs
+              locale={locale}
+              text={
+                zh
+                  ? "停止本機即時聊天不代表 Funnel 已停用。Funnel 可能在測試階段，或有使用限制與方案資格條件。啟用前請確認 Tailscale 官方最新說明與你的方案。"
+                  : "Stopping the local visitor service does not turn Funnel off. Funnel may have beta status, usage limits, or plan eligibility requirements. Check Tailscale's current official guidance and your plan before enabling it."
+              }
+            />
+          </details>
         </details>
-      </details>
+      </TailscaleLivePanel>
     </section>
   );
 }

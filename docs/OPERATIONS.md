@@ -322,9 +322,9 @@ What each step needs:
 | --- | --- | --- |
 | Download the site and upload it to GitHub Pages | A GitHub account and a Pages URL (for example `https://account.github.io/project/`) | Tailscale, a Funnel URL, a port, a mode switch |
 | Download README.md with the NPC card | The verified Pages site | Any live chat setup |
-| Live chat (optional, last step) | Tailscale and a Funnel URL | Anything before this step |
+| Live chat (optional, last step) | Tailscale installed and signed in on this computer, once | Anything before this step, a Funnel URL, a port, a command |
 
-Without live chat the published chat page shows the FAQ approved at export time and a resting message. Adding live chat later is one more export: set the Funnel URL, start the visitor connection, download the site again, upload it and check it.
+Without live chat the published chat page shows the FAQ approved at export time and a resting message. Adding live chat later is one more export: select Turn on live chat (below), download the site again, upload it and check it.
 
 What protects the owner (the password is not the control here):
 
@@ -335,7 +335,26 @@ What protects the owner (the password is not the control here):
 
 Accepted limits: the visitor connection and the passwordless admin run in one process, and another program running as the same Windows user can read the data. If that is not acceptable, use the password-based mode in the next section.
 
-Funnel steps for the optional live chat are in [Windows production mode](#windows-production-mode) below (steps 1 to 5 there); they are the same in both profiles. RepoNPC never runs them. Real-host and external Funnel acceptance (AC-081) is still pending.
+### One-button live chat (ADR-082, default profile only)
+
+Live chat is optional and the last step. In the default profile RepoNPC sets up Tailscale Funnel for you; there is no Funnel URL, port or command to enter.
+
+What you do once, in the official Tailscale pages: install Tailscale for Windows and sign in; turn on HTTPS certificates for your tailnet; allow Funnel for this device. RepoNPC never installs Tailscale, signs in, changes tailnet settings, or reads or stores Tailscale credentials.
+
+What the button does. In the sharing page section "Live chat (optional)" RepoNPC shows one plain instruction for the current Tailscale state. When Tailscale is ready, **Turn on live chat** (needs the Pages URL saved in the Pages section) runs, in order: read the Tailscale status, pick the first free Funnel port (443, then 8443, then 10000, then any other port your tailnet lists), run `tailscale funnel --bg --https=<port> http://127.0.0.1:<visitor-port>`, confirm the route, save the Funnel URL, and start the visitor connection. If a step after the route was created fails, RepoNPC switches off only that route. **Turn off live chat** stops the visitor connection, removes only the route RepoNPC itself created, and clears the saved Funnel URL, so the next export carries no live chat. After either button, download the site again, upload it and check it, because the exported pages carry the live chat address.
+
+RepoNPC starts exactly four Tailscale commands, as fixed argument lists without a shell: `tailscale status --json`, `tailscale serve status --json`, `tailscale funnel --bg --https=<port> http://127.0.0.1:<visitor-port>` and `tailscale funnel --https=<port> off`. It never runs `up`, `login`, `set`, `reset` or `serve` as a writer, and never changes a Funnel or tailnet route it did not create: a port that already has a route is skipped, and with every port taken nothing changes.
+
+| State shown | What it means | What to do |
+| --- | --- | --- |
+| not installed / too old | No Tailscale found, or older than 1.52 | Install or update from tailscale.com/download, then select Check again |
+| not signed in / turned off / offline | Tailscale needs sign-in, is off, or has no network | Sign in, turn it on or reconnect, then Check again |
+| HTTPS not on / Funnel not allowed | The tailnet has no HTTPS certificates, or this device may not use Funnel | Follow the linked official guide once, then Check again |
+| no free port | Every Funnel port already serves something else | RepoNPC does not touch those routes; turn one off yourself, then Check again |
+| could not read the status | A Tailscale command failed, timed out or answered unexpectedly | Make sure Tailscale is running, then Check again |
+| ready / on | Live chat can be turned on / is on | Use the button |
+
+Troubleshooting: RepoNPC looks for `tailscale` on `PATH` (absolute entries only), then `%ProgramFiles%\Tailscale\tailscale.exe`; it never searches the working folder. The status is read when the page opens, when the window regains focus and on Check again; it is not polled. The advanced disclosure still holds the manual Funnel URL form and commands. `production` keeps the manual steps in the section below, and the buttons do nothing there. A real `tailscale funnel` run on a real host is a dated, owner-approved check under AC-081 and is still pending.
 
 ### Windows production mode
 
@@ -366,7 +385,7 @@ icacls "<path>" /reset /T
 
 When the root also has explicit entries for other accounts, the printed command ends with `/remove:g "*<SID>"` for each of them. Check the result with `icacls "<data directory>"`. The source launcher's default `runtime-data\local` sits inside the checkout and usually inherits `Authenticated Users` from the drive; since ADR-080 the launcher restricts that default folder itself before the first start, so this stop appears only for a folder you chose with `REPONPC_DATA_DIR`. Back up the data directory first. Administrators on the computer can always read the data.
 
-Funnel (RepoNPC never runs these commands):
+Funnel in `production` (RepoNPC does not run these commands here; the default profile has the one-button flow above):
 
 1. Install Tailscale for Windows from the official site and sign in.
 2. In the tailnet admin console, enable HTTPS certificates and allow Funnel for this machine.
@@ -376,7 +395,7 @@ Funnel (RepoNPC never runs these commands):
 
 No inbound Windows Firewall rule is needed, because traffic reaches loopback through tailscaled. While the computer sleeps or RepoNPC is stopped, the published Pages site shows the resting state and the approved FAQ; turn off sleep in the power settings while sharing. Through Funnel only visitor routes respond; `/admin` and `/api/admin/*` return 404.
 
-Not supported on Windows: Docker Desktop production, running as a Windows service or at sign-in, non-loopback administration (for example on the LAN), multi-user hosts with untrusted administrators, and any Tailscale automation by RepoNPC. Real-host and external Funnel acceptance (AC-081, A12) is still pending.
+Not supported on Windows: Docker Desktop production, running as a Windows service or at sign-in, non-loopback administration (for example on the LAN), multi-user hosts with untrusted administrators, and Tailscale automation in `production` (the one-button live chat is limited to the default profile). Real-host and external Funnel acceptance (AC-081, A12) is still pending.
 
 ### Production Compose startup
 

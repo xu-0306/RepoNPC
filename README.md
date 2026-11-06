@@ -33,7 +33,7 @@ Set-Location RepoNPC
 
 啟動器會準備依賴與前端，開啟只供本機使用的管理頁。不必先設定模型、GitHub token、帳號或密碼。重新整理可延續有效登入；若工作階段過期，重新開啟 RepoNPC。既有 `.env` 設定會保留。
 
-第 4–6 步的分享不需要切換模式，也不必編輯 `.env`：Windows 上直接使用預設啟動器即可。第 4、5 步只需要 GitHub，不需要 Tailscale。第 6 步的即時聊天是選填，需要 Tailscale Funnel，見 [Windows 本機分享](docs/OPERATIONS.md#windows-local-sharing)。`.env.example` 供 Linux／Docker 部署使用；Windows 使用者不必複製它。想使用密碼登入的 `production` 模式仍可手動設定，見 [Windows 正式模式](docs/OPERATIONS.md#windows-production-mode)。
+第 4–6 步的分享不需要切換模式，也不必編輯 `.env`：Windows 上直接使用預設啟動器即可。第 4、5 步只需要 GitHub，不需要 Tailscale。第 6 步的即時聊天是選填：先在這台電腦安裝並登入 Tailscale（只需一次），之後在管理頁按一個按鈕即可開啟，見 [Windows 本機分享](docs/OPERATIONS.md#windows-local-sharing)。`.env.example` 供 Linux／Docker 部署使用；Windows 使用者不必複製它。想使用密碼登入的 `production` 模式仍可手動設定，見 [Windows 正式模式](docs/OPERATIONS.md#windows-production-mode)。
 
 Linux／自行管理 HTTPS 的部署與備份操作，請讀 [操作手冊](docs/OPERATIONS.md) 和下方進階整合。
 
@@ -44,7 +44,7 @@ Linux／自行管理 HTTPS 的部署與備份操作，請讀 [操作手冊](docs
 3. **準備並試聊：**兩種模型都已測試且選用後，按「準備 NPC 並套用」。缺少模型時按「前往設定模型」，草稿會保留；完成後返回準備。成功後開啟目前版本試聊。
 4. **上傳網站：**填 Pages 完整網址（例如 `https://account.github.io/project/`），下載、解壓縮靜態網站，依 [雙語分享指南](docs/PAGES_SHARING_GUIDE.md)手動上傳。發布後返回「核對已上傳網站」。不需要 Funnel：沒有即時聊天時，訪客看到的是常見問答與「休息中」訊息。
 5. **下載 README.md：**核對完整 README 內容預覽，再下載包含已確認公開介紹、作品、NPC 名片與對話連結的檔案。README.md 必須放在「與 GitHub 帳號同名的公開 repository」根目錄，才能顯示在個人首頁。卡片使用已核對 Pages 的公開圖片，不必另上傳；已有 README 時先保留原文，也可用原有圖片上傳與複製區塊追加名片。再從 GitHub 點開網站確認。外觀、涵蓋檢查及 FAQ 可在選填區調整。
-6. **（選填）開啟即時聊天：**準備 Tailscale Funnel，把 Funnel URL 填入「即時聊天」區，明確啟動訪客連線，並在 Tailscale 完成 Funnel 設定。之後重新下載網站、重新上傳並再核對一次，頁面才會連到即時聊天。管理頁及模型服務保持私人連線。
+6. **（選填）開啟即時聊天：**先在這台電腦安裝並登入 Tailscale，並依官方說明開啟 HTTPS 憑證與 Funnel（只需一次）。之後在「即時聊天」區按「開啟即時聊天」，RepoNPC 會自動完成 Funnel 設定並啟動訪客連線，不必填網址或輸入指令；每個狀態都會顯示下一步該做什麼。再重新下載網站、重新上傳並再核對一次，頁面才會連到即時聊天。管理頁及模型服務保持私人連線。
 
 **只填一個 Pages 網址：**網址要包含 `/project/` 等路徑；RepoNPC 會自己從網址取得網域。Pages 核對與外網聊天檢查各自記錄；儲存網址或本機準備成功，都不代表已經公開上線。
 

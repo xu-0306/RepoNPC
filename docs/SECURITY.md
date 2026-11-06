@@ -475,3 +475,26 @@ OR-032 / ADR-058 / Specification 0.4.10 adopts the [public summary contract](CHA
 - **Pages without a visitor gateway.** An export without a gateway origin embeds none: `export-manifest.json` uses `schema_version` 2 with `gateway_origin: null`, and the page makes no request to any gateway. The self-only CSP and zero external requests hold. A manifest with a gateway origin keeps `schema_version` 1 and stays byte-identical. Export and verify compare the origins they used and fail with `SHARING_CONFLICT` if they change.
 - **Owner decision (C3 host scan): option A, a documented exception (decided 2026-11-06).** The owner answered 「好，這些問題照你建議去做」 to the recommendation. The bundled React build contains the inert diagnostic text `https://react.dev/errors/`; the strict exported-file host scan finds it as the only non-self host (the pre-change build has it too). It is never requested by the page, and the self-only CSP blocks any request. The exported-file contract therefore reads "no external host except this one listed, inert string": a host scan must list exactly this host and must fail on any other. Option B (rewriting third-party bundle text in v2 exports) is not adopted.
 - **Known gap.** A v1 export (with a gateway origin) keeps root-relative asset URLs, so its fonts fail to load under a project subpath. v2 exports use relative asset URLs. The v1 bytes are unchanged on purpose.
+
+## 26. One-button live chat through Tailscale Funnel (0.5.2, ADR-082)
+
+RepoNPC now starts the Tailscale command line from the authenticated local admin.
+This is the first place where the backend starts an external program for the
+owner, so the controls below are required, not advisory.
+
+| Risk                                           | Control                                                                                                                                                                                                                                   |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Command or argument injection                  | Four fixed argument lists, no shell. The variable parts are two integers only: the port (from the Funnel ports of the tailnet) and the visitor port (1024-65535). No string from the browser, a repository, a model or the CLI output reaches an argument. |
+| A planted `tailscale` program                  | Lookup list in ADR-082 decision 9; absolute `PATH` entries only; the working folder is never searched; on Windows only `.exe`; the match must be a regular file.                                                                          |
+| Changing other Funnel routes of the owner      | Free-port rule, own-route rule, the scoped `off`, `reset` never started, and a re-read of `serve status --json` before and after a change (AC-098). On the maintainer machine ports 443 and 8443 already carry other routes.                  |
+| Exposing more than the visitor gateway         | The route targets only `http://127.0.0.1:<visitor-port>`, the default-deny gateway. The admin port is never a target, and the visitor port must differ from the application port (existing gateway rule).                                  |
+| A forged request from another site or a tunnel | Admin session, CSRF and same-origin on every route. The ADR-080 Host allowlist still refuses a `*.ts.net` Host on the admin port, so a Funnel visitor cannot call these routes.                                                            |
+| Leaking tailnet details                        | Output capped at 1 MiB and never returned or logged raw. Only the state code, the chosen port and the Funnel URL leave the backend. The Funnel URL is public by design once live.                                                          |
+| Hung or repeated commands                      | Timeouts of 10 s and 30 s; one Tailscale operation at a time per process; a failed step rolls back only what this call created.                                                                                                            |
+| Stale assumptions                              | Nothing is stored. `live` is read from the CLI every time, so a route that the owner changed by hand is respected.                                                                                                                         |
+| Wider use                                      | `production` starts no command (`unavailable_profile`). A real `tailscale funnel` on a real host is a dated, owner-approved check under AC-081, because it changes what the internet can reach.                                             |
+
+Accepted limits: RepoNPC cannot tell whether the owner wants the traffic beyond
+the owner click. A route that RepoNPC created with `--bg` survives a restart of
+RepoNPC or of the computer until the owner turns live chat off or removes the
+route in Tailscale.

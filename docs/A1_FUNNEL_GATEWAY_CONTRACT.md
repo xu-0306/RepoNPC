@@ -135,6 +135,11 @@ permit until its actual worker exits. Application shutdown closes the gateway
 before releasing shared resources. An explicit stop persists `enabled=0`;
 ordinary process exit preserves the last explicit enabled intent.
 
+> **Amended 2026-11-06 (ADR-082, 0.5.2).** In `loopback_evaluation` RepoNPC now
+> runs the four commands listed in "Tailscale automation (0.5.2, ADR-082)" at the
+> end of this document, from one button. The sentence below that RepoNPC does not
+> invoke Tailscale holds for `production` and for every other command.
+
 Tailscale remains external. Guidance uses current official CLI syntax, requires
 Tailscale 1.52 or later, and shows commands containing only the configured port:
 
@@ -482,3 +487,106 @@ Raw thinking stays private and requested thinking-text display remains pending.
 ## Approved public summary amendment (2026-10-04)
 
 OR-032 / ADR-058 / Specification 0.4.10 adopts the [public summary contract](CHAT_PUBLIC_SUMMARY_CONTRACT_2026-10-04.md). FR-040/043/044/047, NFR-005/009/014 and AC-019/023/057/062/063/064/068/071 retain their thresholds. Explicit Responses selection, legacy/revision compatibility, bounded untrusted plain text, prompt/secret negative tests, final-answer separation, cancellation and bilingual keyboard-accessible display require verification. No real provider invocation, publication, catalog admission or release acceptance is implied. Previous pending-summary notes are historical and superseded by this approval.
+
+## Tailscale automation (0.5.2, ADR-082)
+
+Applies only to `loopback_evaluation`. In `production`, `GET .../status` answers
+`unavailable_profile`, the other two routes answer `409 TAILSCALE_NOT_READY`,
+and no command is started.
+
+### Commands
+
+RepoNPC starts exactly these four, each as a fixed argument list with no shell,
+a sanitized environment, a 10 s timeout for the two `status` commands and 30 s
+for the two `funnel` commands, and at most 1 MiB of output:
+
+```text
+tailscale status --json
+tailscale serve status --json
+tailscale funnel --bg --https=<port> http://127.0.0.1:<visitor-port>
+tailscale funnel --https=<port> off
+```
+
+`<port>` is an integer from the Funnel ports of the tailnet: the number list in
+the capability `https://tailscale.com/cap/funnel-ports?ports=…` of
+`Self.Capabilities` or `Self.CapMap`, or 443, 8443 and 10000 when the capability
+`funnel` is present without that list. `<visitor-port>` is the effective visitor
+port from the gateway snapshot. No other subcommand (`up`, `login`, `set`,
+`serve` as a writer, `reset`) is ever started. Executable lookup follows ADR-082
+decision 9; on Windows only an `.exe` is accepted.
+
+### Routes
+
+All three need the admin session; the two `POST` routes also need CSRF. All
+require a same-origin request and answer with `Cache-Control: no-store`.
+
+`GET /api/admin/tailscale/status` returns `200`:
+
+```json
+{ "state": "ready", "funnel_url": "https://host.tailnet.ts.net:10000", "port": 10000, "version": "1.104.4" }
+```
+
+`state` is one of `unavailable_profile`, `not_installed`, `error`,
+`unsupported_version`, `needs_login`, `stopped`, `offline`, `https_disabled`,
+`funnel_not_allowed`, `live`, `no_free_port`, `ready`. The first matching row
+wins:
+
+| State                 | When                                                                                                                        |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `unavailable_profile` | the profile is not `loopback_evaluation`                                                                                    |
+| `not_installed`       | no executable is found                                                                                                      |
+| `error`               | a command fails, times out, exceeds 1 MiB, or returns invalid JSON                                                          |
+| `unsupported_version` | `Version` is older than 1.52                                                                                                |
+| `needs_login`         | `BackendState` is `NeedsLogin`, `NeedsMachineAuth` or `NoState`, or `AuthURL` is not empty                                  |
+| `stopped`             | `BackendState` is `Stopped`                                                                                                 |
+| `offline`             | `BackendState` is not `Running`, or `Self.Online` is false                                                                  |
+| `https_disabled`      | `CertDomains` is empty or the capability `https` is missing                                                                 |
+| `funnel_not_allowed`  | the capability `funnel` is missing                                                                                          |
+| `live`                | a route on a Funnel port proxies exactly `http://127.0.0.1:<visitor-port>` with `AllowFunnel` true for its `<host>:<port>` |
+| `no_free_port`        | every Funnel port has a `Web` or `TCP` entry                                                                                |
+| `ready`               | none of the above                                                                                                           |
+
+`funnel_url` is `https://<Self.DNSName without its trailing dot>` plus `:<port>`
+unless the port is 443. It and `port` are set for `ready` (the values start
+would use: the first free port in the order 443, 8443, 10000, then any other
+listed port) and for `live` (the live route); otherwise both are `null`.
+`version` is the numeric part of `Version`, or `null`.
+
+`POST /api/admin/tailscale/funnel/start` with `{ "revision": <integer> }`:
+
+0. Read the Pages origin of the saved Pages URL (ADR-081). With none saved,
+   return `422 GATEWAY_CONFIGURATION_INVALID` before any command runs.
+1. Read the status. `live` skips step 2. Any state other than `ready` or `live`
+   returns `409 TAILSCALE_NOT_READY`.
+2. Run `tailscale funnel --bg --https=<port> http://127.0.0.1:<visitor-port>`,
+   then re-read `serve status --json`. The route must exist with Funnel on,
+   otherwise `503 TAILSCALE_FAILED`.
+3. Configure the gateway with `gateway_origin` = `funnel_url` and `pages_origin`
+   from step 0, then start the visitor connection, through the existing gateway
+   service. `configure` raises the revision, so `start` uses the revision that
+   `configure` returned. When the gateway already runs with exactly this origin,
+   Pages origin and visitor port, step 3 changes nothing. When it runs with
+   other values, return `422 GATEWAY_CONFIGURATION_INVALID` and leave the route
+   as it was (the owner stops live chat first).
+4. If step 3 fails, a route created in step 2 is switched off with the scoped
+   `off`; a reused route stays.
+
+It returns `200` with `{ "tailscale": <status object>, "gateway": <gateway snapshot> }`.
+A revision mismatch returns `409 GATEWAY_CONFLICT`. A second start with the same
+revision after a success changes nothing.
+
+`POST /api/admin/tailscale/funnel/stop` with `{ "revision": <integer> }` stops
+the visitor connection through the gateway service, runs the scoped `off` only
+when the state was `live`, then clears the saved Funnel URL and Pages address
+(`configure` with both `null`, using the revision that `stop` returned; skipped
+when both are already `null`). The next export and the README step then read
+"live chat off" (owner decision 2026-11-06). It returns the same body as start,
+with `gateway_origin` and `pages_origin` `null`. With nothing live it still
+stops the connection and clears the saved addresses. If the scoped `off` or the
+re-read fails, `TAILSCALE_FAILED` is returned before anything is cleared, so
+the owner can retry.
+
+Errors use the existing error envelope with the existing `X-Request-ID`.
+Messages are fixed text. Neither a body, a message nor a log line holds raw
+command output, the other hostnames of the machine, or Tailscale credentials;
+log events carry the state code and port numbers only.

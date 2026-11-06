@@ -19,9 +19,11 @@ no site has been uploaded or externally verified by this task.
    README.md 必須放在「與 GitHub 帳號同名的公開 repository」根目錄，
    才能顯示在個人首頁。已有 README 時先比較並保留原文，也可使用
    原有卡片 GIF 下載／上傳與複製區塊，追加名片。RepoNPC 不會自動覆寫。
-5. （選填，最後一步）要讓訪客取得即時回答，才需要準備 Tailscale Funnel：
-   把 Funnel URL 填入「即時聊天」區並啟動，然後重新下載網站、重新上傳並
-   再核對一次。沒有這一步時，頁面仍可使用，訪客看到常見問答與「休息中」訊息。
+5. （選填，最後一步）要讓訪客取得即時回答，才需要 Tailscale：先在這台電腦
+   安裝並登入（並依官方說明開啟 HTTPS 憑證與 Funnel，只需一次），然後在
+   「即時聊天」區按「開啟即時聊天」，RepoNPC 會自動設定，不必填網址或輸入
+   指令。接著重新下載網站、重新上傳並再核對一次。沒有這一步時，頁面仍可
+   使用，訪客看到常見問答與「休息中」訊息。
 
 Enter one full HTTPS Pages URL. No Funnel, Tailscale or second address is needed;
 RepoNPC takes the domain from the URL. Review the
@@ -37,8 +39,10 @@ image upload is needed. README.md must be at the root of a public repository
 with the same name as the GitHub account to appear on the profile. Compare and
 preserve existing README content first, or append the existing copied card block
 with the manual GIF upload path. RepoNPC never overwrites README automatically.
-Live chat is optional and last: only if visitors should get live answers, set up
-Tailscale Funnel, enter the Funnel URL in the Live chat section, start it, then
+Live chat is optional and last: only if visitors should get live answers, install
+Tailscale and sign in on this computer (turn on HTTPS certificates and Funnel in
+the official Tailscale pages once), select Turn on live chat in the Live chat
+section (RepoNPC sets Funnel up for you; no URL or command is needed), then
 download, upload and verify the site again. Without it the page still works and
 shows the FAQ and a resting message.
 

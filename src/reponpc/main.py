@@ -117,6 +117,8 @@ from reponpc.providers.openai_responses import OpenAIResponsesChatProvider
 from reponpc.providers.runtime import ProviderRuntime
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 from reponpc.scene.registry import default_scene_registry
+from reponpc.sharing.pages import PagesSharingService
+from reponpc.tailscale.service import TailscaleFunnelService
 
 
 class PublicBoundaryMiddleware:
@@ -490,6 +492,7 @@ def create_app(
     application.state.deployment_profile = None
     application.state.trusted_hosts = ()
     application.state.visitor_gateway = None
+    application.state.tailscale_service = None
     application.state.admin_operations = admin_operations
     application.state.scene_service = None
     application.state.preview_asset_store = PreviewAssetStore()
@@ -545,6 +548,33 @@ def create_app(
 
     application.state.faq_supplier = faq_service
 
+    def pages_origin() -> str | None:
+        operations = application.state.admin_operations
+        faq = faq_service()
+        scene = scene_service_supplier()
+        if operations is None or faq is None or scene is None:
+            return None
+        saved = PagesSharingService(
+            database=operations.database,
+            faq=faq,
+            scene_service=scene,
+            gateway_supplier=lambda: application.state.visitor_gateway,
+        ).state()["pages_origin"]
+        return saved if isinstance(saved, str) else None
+
+    def tailscale_service_supplier() -> TailscaleFunnelService | None:
+        gateway = application.state.visitor_gateway
+        if gateway is None:
+            return None
+        current = application.state.tailscale_service
+        profile = application.state.deployment_profile
+        if current is None or current.gateway is not gateway or current.profile != profile:
+            current = TailscaleFunnelService(
+                profile=profile, gateway=gateway, pages_origin_supplier=pages_origin
+            )
+            application.state.tailscale_service = current
+        return current
+
     application.include_router(
         create_public_router(
             state,
@@ -574,6 +604,7 @@ def create_app(
             operations_supplier=lambda: application.state.admin_operations,
             faq_supplier=faq_service,
             gateway_supplier=lambda: application.state.visitor_gateway,
+            tailscale_supplier=tailscale_service_supplier,
             scene_supplier=scene_service_supplier,
             preview_assets_supplier=lambda: application.state.preview_asset_store,
         )

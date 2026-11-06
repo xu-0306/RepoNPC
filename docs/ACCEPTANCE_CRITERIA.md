@@ -1148,6 +1148,24 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **Then** the launcher restricts its default data folder to the current user, SYSTEM and Administrators before the server starts; the visitor connection accepts the profile; every admin route refuses the Funnel-shaped request (a generic 400 for the Host, a refusal for the forwarding headers) and neither the launch exchange nor the session resume succeeds through it; the same-origin check applies to every admin request when admin origins are configured; a data folder chosen with `REPONPC_DATA_DIR` that is not owner-only stops the launcher with one printed `icacls` command and is not changed; `production` behaves as before.
 - **Verification:** `tests/security/test_loopback_sharing.py`, `tests/contract/test_launcher_sharing.py`, `tests/contract/test_local_launcher.py`, `tests/unit/test_windows_launcher.py`, `tests/security/test_local_admin_launch_security.py`; a dated real-host walk with `icacls` listings and a request through Funnel is the open AC-081 item.
 
+### AC-097 - The owner turns live chat on and off with one button
+
+**Maps to:** FR-047, FR-048, NFR-001, NFR-014 (ADR-082)
+
+- **Given** `loopback_evaluation`, a fake Tailscale command runner that can report each state, and a saved Pages URL,
+- **When** the owner opens live chat (section 4),
+- **Then** each state from `GET /api/admin/tailscale/status` shows one plain instruction (install, sign in, turn on HTTPS, allow Funnel, update Tailscale, no free port) and asks for no command, `.env` entry or port; in `ready` one button turns live chat on: the listed commands run in order, the saved Funnel URL equals the chosen `https://<host>[:port]`, the visitor connection starts, and the README step reads "live chat on" without waiting for the next poll; one button turns it off, removes only RepoNPC's own route and clears the saved Funnel URL, so the README step reads "live chat off"; starting twice changes nothing the second time; if a step after `funnel --bg` fails, the route this call created is switched off; the manual Funnel URL form stays under an "advanced" disclosure.
+- **Verification:** `tests/unit/test_tailscale_service.py`, `tests/security/test_tailscale_admin_api.py`, the admin web tests for section 4, and a real-browser walk with the fake runner at 1440 and 375 in both languages. A real `tailscale funnel` on a real host is a dated, owner-approved item under AC-081.
+
+### AC-098 - RepoNPC runs only its listed Tailscale commands and never changes another route
+
+**Maps to:** FR-017, NFR-002, NFR-003 (ADR-082)
+
+- **Given** a fake command runner that records every call, a `serve status --json` that holds routes RepoNPC did not create (one on each Funnel port), and hostile values for the port, the visitor port and the command output,
+- **When** the status, start and stop routes run in `loopback_evaluation` and in `production`,
+- **Then** only the four listed commands are started, each as a fixed argument list with no shell; the port is one of the tailnet's Funnel ports; `reset`, `up`, `login`, `set` and `serve` (as a writer) are never started; a foreign route is never written, replaced or removed, and with every port taken start returns `TAILSCALE_NOT_READY` and changes nothing; `production` returns `unavailable_profile` and starts no command; every route needs the admin session, CSRF and a same-origin request; output over 1 MiB, a timeout and invalid JSON become `TAILSCALE_FAILED`; no response, log line or error message holds raw command output or the machine's other hostnames.
+- **Verification:** `tests/security/test_tailscale_admin_api.py`, `tests/unit/test_tailscale_cli.py`, `tests/contract/test_tailscale_contract.py`.
+
 **0.4.0–0.4.5 traceability additions:**
 
 | Requirement | Acceptance criteria            |
@@ -1178,6 +1196,18 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 | NFR-009     | AC-085                         |
 | NFR-011     | AC-085, AC-086                 |
 | NFR-012     | AC-084                         |
+
+**0.5.2 traceability additions (ADR-082):**
+
+| Requirement | Acceptance criteria |
+| ----------- | ------------------- |
+| FR-017      | AC-098              |
+| FR-047      | AC-097              |
+| FR-048      | AC-097              |
+| NFR-001     | AC-097              |
+| NFR-002     | AC-098              |
+| NFR-003     | AC-098              |
+| NFR-014     | AC-097              |
 
 **0.5.1 traceability additions (ADR-080, ADR-081):**
 
