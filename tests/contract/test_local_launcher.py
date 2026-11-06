@@ -1,3 +1,4 @@
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -157,7 +158,7 @@ def test_local_launcher_production_uses_shared_helpers_after_python_sync() -> No
     preparation = script[preparation_start:preparation_end]
     assert script.index("& $uv @syncArguments") < preparation_start
     assert "Path(sys.argv[1])," in preparation
-    assert 'production=sys.argv[2] == "production"' in preparation
+    assert "production=sys.argv[2] == 'production'" in preparation
     assert "default_directory=Path(sys.argv[3])" in preparation
     assert "except UnsafeDataDirectory as exc:" in preparation
     assert "print(owner_only_fix_command(exc.path, root=exc.root))" in preparation
@@ -186,6 +187,17 @@ def test_local_launcher_production_uses_shared_helpers_after_python_sync() -> No
     assert "& $pythonExe -c $ownerConsole $resolvedDataDir\n" in console
     assert "2>&1" not in console and "RedirectStandard" not in console
     assert "Owner setup was not completed." in console
+
+
+def test_local_launcher_python_here_strings_have_no_double_quotes() -> None:
+    # Windows PowerShell 5.1 drops double quotes when it passes a string to a
+    # native program, so Python code sent with -c must use single quotes. A real
+    # launcher run found `== "production"` reaching Python as a bare name.
+    script = POWERSHELL_LAUNCHER.read_text(encoding="utf-8")
+    blocks = re.findall(r'@"\r?\n(.*?)\r?\n"@', script, flags=re.DOTALL)
+    assert len(blocks) >= 3
+    for block in blocks:
+        assert '"' not in block, block
 
 
 def test_local_launcher_only_trial_issues_fragment_grants() -> None:

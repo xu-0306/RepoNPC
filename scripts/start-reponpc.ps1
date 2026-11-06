@@ -528,7 +528,7 @@ from reponpc.windows_launcher import UnsafeDataDirectory, owner_only_fix_command
 try:
     key_path = prepare_data_directory(
         Path(sys.argv[1]),
-        production=sys.argv[2] == "production",
+        production=sys.argv[2] == 'production',
         default_directory=Path(sys.argv[3]),
     )
 except UnsafeDataDirectory as exc:
