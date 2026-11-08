@@ -3560,8 +3560,8 @@ export function AdminPage({
       connection:
         displayedEmbedding?.provider === "builtin_onnx"
           ? chromeLocale(locale) === "zh-TW"
-            ? "這台主機（CPU）"
-            : "This host (CPU)"
+            ? `這台主機（${displayedEmbedding.compute_device === "gpu" ? "GPU" : "CPU"}）`
+            : `This host (${displayedEmbedding.compute_device === "gpu" ? "GPU" : "CPU"})`
           : connectionName(displayedEmbedding?.connection_reference),
       provider: displayedEmbedding?.provider ?? null,
       state: modelState(

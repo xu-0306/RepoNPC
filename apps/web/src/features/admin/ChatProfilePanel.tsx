@@ -357,7 +357,6 @@ export function ChatProfilePanel({
           error={error}
         >
           <form onSubmit={submit}>
-            <h3>{editingId ? copy.update : copy.add}</h3>
             {catalogChoice && (
               <>
                 <button

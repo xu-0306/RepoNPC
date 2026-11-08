@@ -123,6 +123,18 @@ const MESSAGES: Record<string, Message> = {
     "Repository 封存檔包含不安全的路徑或項目，請修正來源後重試。",
     "The repository archive contains unsafe paths or entries; correct the source and retry.",
   ],
+  BUILTIN_GPU_UNAVAILABLE: [
+    "這台主機目前無法使用 GPU，已保持使用 CPU。請在「運算裝置」下方查看原因，符合條件時可一鍵安裝 GPU 支援。",
+    "This host cannot use a GPU right now, so the model keeps using the CPU. See the reason under Compute device; when the requirements are met you can install GPU support in one step.",
+  ],
+  GPU_RUNTIME_UNAVAILABLE: [
+    "這台主機目前不符合安裝 GPU 支援的條件。請按「更新狀態」查看原因。",
+    "This host does not meet the requirements for GPU support right now. Refresh the status to see why.",
+  ],
+  BUILTIN_DEVICE_FAILED: [
+    "模型無法在 GPU 上載入，已保持使用 CPU。請確認顯示卡驅動程式與 CUDA 後再試。",
+    "The model could not load on the GPU, so it keeps using the CPU. Check the graphics driver and CUDA, then try again.",
+  ],
 };
 
 const FALLBACK: Message = [

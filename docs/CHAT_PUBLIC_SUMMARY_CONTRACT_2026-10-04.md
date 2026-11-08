@@ -3,6 +3,10 @@
 Owner approval 2026-10-04: OR-032 / ADR-058 / Approved 0.4.10.
 FR-040/043/044/047; NFR-005/009/014; AC-019/023/057/062/063/064/068/071.
 
+Amended 2026-11-07 (ADR-083, Approved 0.5.3): the owner no longer selects `chat_api` on the
+connection form. Testing a model detects it (Responses first, then Chat Completions) and
+saves it on the connection; the request and DTO field below are unchanged.
+
 The protected connection write request and safe DTO add `chat_api`, either
 `chat_completions` (legacy default) or `responses`. Omitted create input means
 the legacy interface; omitted update input retains the existing selection when

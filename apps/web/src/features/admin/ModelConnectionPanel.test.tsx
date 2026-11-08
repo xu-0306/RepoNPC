@@ -5,7 +5,7 @@ import { ModelConnectionPanel } from "./ModelConnectionPanel";
 
 describe("ModelConnectionPanel", () => {
   it.each(["zh-TW", "en"] as const)(
-    "shows the explicitly selected interface in %s",
+    "shows the detected interface in %s and offers no interface choice",
     (locale) => {
       const markup = renderToStaticMarkup(
         <ModelConnectionPanel
@@ -35,8 +35,30 @@ describe("ModelConnectionPanel", () => {
       expect(markup).toContain(
         locale === "en" ? "Chat API interface" : "聊天 API 接口",
       );
+      // The interface is detected when a model is tested, so there is no select.
+      expect(markup).not.toContain("model-connection-chat-api");
+      expect(markup).not.toContain('<option value="responses">');
     },
   );
+  it.each([
+    ["zh-TW", "新增 AI 服務"],
+    ["en", "Add an AI service"],
+  ] as const)("names the add form once in %s", (locale, title) => {
+    const markup = renderToStaticMarkup(
+      <ModelConnectionPanel
+        locale={locale}
+        pending={false}
+        error=""
+        connections={[]}
+        onRefresh={vi.fn()}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(markup.split(title)).toHaveLength(2);
+    expect(markup).not.toContain("<h3>");
+  });
   it("shows safe metadata and an explicit credential-removal path", () => {
     const markup = renderToStaticMarkup(
       <ModelConnectionPanel

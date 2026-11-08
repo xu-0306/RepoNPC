@@ -3,12 +3,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { LanguageTag as Locale } from "../../i18n/languages";
 import { BuiltinModelPanel } from "./BuiltinModelPanel";
+import type { BuiltinDevice } from "./BuiltinModelPanel";
+import { embeddingProfileErrorMessage } from "./embeddingProfileError";
 
 type Info = NonNullable<Parameters<typeof BuiltinModelPanel>[0]["info"]>;
 type Operation = NonNullable<
   Parameters<typeof BuiltinModelPanel>[0]["operation"]
 >;
 type Request = <T>(path: string, init?: RequestInit) => Promise<T>;
+
+function running(operation: Operation | null): boolean {
+  return operation?.status === "queued" || operation?.status === "running";
+}
 
 export function LocalModelSetup({
   locale,
@@ -23,12 +29,17 @@ export function LocalModelSetup({
 }) {
   const [info, setInfo] = useState<Info | null>(null);
   const [operation, setOperation] = useState<Operation | null>(null);
+  const [gpuOperation, setGpuOperation] = useState<Operation | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [deviceError, setDeviceError] = useState("");
   const lifetime = useRef(0);
-  const operationId = operation?.operation_id;
-  const active =
-    operation?.status === "queued" || operation?.status === "running";
+  // The model download and the GPU support install share one lane, so at most
+  // one of them runs; that one is polled and is what Cancel stops.
+  const tracked = [operation, gpuOperation].find(running) ?? null;
+  const trackedIsGpu = tracked !== null && tracked === gpuOperation;
+  const operationId = tracked?.operation_id;
+  const active = tracked !== null;
   const failure =
     chromeLocale(locale) === "zh-TW"
       ? "模型設定暫時無法完成。請重新整理或重試；手動編輯仍可使用。"
@@ -43,6 +54,7 @@ export function LocalModelSetup({
       if (generation !== lifetime.current) return;
       setInfo(value);
       setOperation(value.operation);
+      setGpuOperation(value.gpu_runtime.operation);
       setError("");
     } catch {
       if (generation === lifetime.current) setError(failure);
@@ -68,11 +80,10 @@ export function LocalModelSetup({
           { signal: controller.signal },
         );
         if (controller.signal.aborted) return;
-        setOperation(value);
-        if (value.status === "queued" || value.status === "running")
-          timer = setTimeout(() => void poll(), 1000);
+        (trackedIsGpu ? setGpuOperation : setOperation)(value);
+        if (running(value)) timer = setTimeout(() => void poll(), 1000);
         else {
-          await onProfilesChanged();
+          if (!trackedIsGpu) await onProfilesChanged();
           await refresh();
         }
       } catch {
@@ -84,7 +95,15 @@ export function LocalModelSetup({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [active, operationId, request, onProfilesChanged, refresh, failure]);
+  }, [
+    active,
+    operationId,
+    trackedIsGpu,
+    request,
+    onProfilesChanged,
+    refresh,
+    failure,
+  ]);
 
   async function download() {
     const generation = lifetime.current;
@@ -106,6 +125,48 @@ export function LocalModelSetup({
     }
   }
 
+  async function installGpu() {
+    const generation = lifetime.current;
+    setPending(true);
+    setDeviceError("");
+    try {
+      const value = await request<Operation>(
+        "/api/admin/embedding-models/builtin/gpu-runtime/install",
+        { method: "POST", body: JSON.stringify({ confirmed: true }) },
+      );
+      if (generation !== lifetime.current) return;
+      setGpuOperation(value);
+      await refresh();
+    } catch (cause) {
+      if (generation === lifetime.current)
+        setDeviceError(embeddingProfileErrorMessage(locale, cause));
+    } finally {
+      if (generation === lifetime.current) setPending(false);
+    }
+  }
+
+  async function changeDevice(device: BuiltinDevice) {
+    const generation = lifetime.current;
+    setPending(true);
+    setDeviceError("");
+    try {
+      const value = await request<Info & { operation: Operation | null }>(
+        "/api/admin/embedding-models/builtin/device",
+        { method: "PUT", body: JSON.stringify({ device }) },
+      );
+      if (generation !== lifetime.current) return;
+      setInfo(value);
+      setOperation(value.operation);
+      setGpuOperation(value.gpu_runtime.operation);
+      await onProfilesChanged();
+    } catch (cause) {
+      if (generation === lifetime.current)
+        setDeviceError(embeddingProfileErrorMessage(locale, cause));
+    } finally {
+      if (generation === lifetime.current) setPending(false);
+    }
+  }
+
   async function cancel() {
     if (!operationId) return;
     const generation = lifetime.current;
@@ -115,7 +176,8 @@ export function LocalModelSetup({
         `/api/admin/embedding-model-operations/${encodeURIComponent(operationId)}`,
         { method: "DELETE" },
       );
-      if (generation === lifetime.current) setOperation(value);
+      if (generation === lifetime.current)
+        (trackedIsGpu ? setGpuOperation : setOperation)(value);
     } catch {
       if (generation === lifetime.current) setError(failure);
     } finally {
@@ -129,9 +191,13 @@ export function LocalModelSetup({
         locale={locale}
         info={info}
         operation={operation}
+        gpuOperation={gpuOperation}
         pending={pending}
         error={error}
+        deviceError={deviceError}
+        onDevice={(device) => void changeDevice(device)}
         onDownload={() => void download()}
+        onInstallGpu={() => void installGpu()}
         onCancel={() => void cancel()}
         onRefresh={() => void refresh()}
         onExternal={() => {

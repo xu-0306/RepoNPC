@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, replace
+from pathlib import Path
 from typing import Any, cast
 
 from reponpc.admin.analysis_selection import (
@@ -76,6 +77,13 @@ from reponpc.config.models import (
 )
 from reponpc.i18n.plan import ANALYSIS_LOCALES, require_enabled
 from reponpc.providers.builtin_artifacts import builtin_embedding_identity, load_builtin_manifest
+from reponpc.providers.builtin_onnx import gpu_available
+from reponpc.providers.gpu_runtime import (
+    SPACE_FACTOR,
+    detect_gpu_cached,
+    installed_runtime,
+    load_gpu_runtime_manifest,
+)
 from reponpc.runtime.database import RuntimeDatabase
 
 
@@ -92,6 +100,8 @@ class AdminOperations:
     embedding_reindex: EmbeddingReindexCoordinator | None = None
     ollama_model_operations: OllamaModelOperationCoordinator | None = None
     connection_model_lister: Callable[[str], tuple[str, ...]] | None = None
+    builtin_device_check: Callable[[str], None] | None = None
+    data_directory: Path | None = None
     local_portfolio: LocalPortfolioStore | None = None
     local_publication: LocalPublication | None = None
 
@@ -381,8 +391,60 @@ class AdminOperations:
             "license": manifest.license,
             "source_url": manifest.source_url,
             "profile_id": profile.profile_id if profile is not None else None,
+            "compute_device": profile.compute_device if profile is not None else "cpu",
+            "gpu_available": gpu_available(),
+            "gpu_runtime": self.gpu_runtime_status(),
             "operation": asdict(operation) if operation is not None else None,
         }
+
+    def gpu_runtime_status(self) -> dict[str, object]:
+        """What the one-click GPU support (ADR-084) can do on this machine right now."""
+        manifest = load_gpu_runtime_manifest()
+        detection = detect_gpu_cached()
+        operation = (
+            self.ollama_model_operations.latest_gpu_runtime()
+            if self.ollama_model_operations is not None
+            else None
+        )
+        installed = (
+            self.data_directory is not None
+            and installed_runtime(self.data_directory, manifest) is not None
+        )
+        state: str = detection.state
+        if gpu_available():
+            state = "ready"
+        elif installed:
+            state = "restart_required"
+        return {
+            "state": state,
+            "gpu_name": detection.gpu_name,
+            "driver_version": detection.driver_version,
+            "minimum_driver": manifest.min_driver_major,
+            "download_bytes": manifest.total_bytes,
+            "required_free_bytes": manifest.total_bytes * SPACE_FACTOR,
+            "operation": asdict(operation) if operation is not None else None,
+        }
+
+    def start_gpu_runtime_install(self, *, confirmed: bool) -> OllamaModelOperation:
+        if self.ollama_model_operations is None:
+            raise EmbeddingProfileError("SERVICE_NOT_READY")
+        if detect_gpu_cached().state != "can_install":
+            raise EmbeddingProfileError("GPU_RUNTIME_UNAVAILABLE")
+        return self.ollama_model_operations.queue_gpu_runtime(confirmed=confirmed)
+
+    def set_builtin_device(self, device: str) -> dict[str, object]:
+        """Save CPU or GPU for the built-in model; GPU is proven to work first."""
+        profile = next(
+            (p for p in self._embedding_profiles().list() if p.provider == "builtin_onnx"), None
+        )
+        if profile is None:
+            raise EmbeddingProfileError("NOT_FOUND")
+        if device == "gpu":
+            if self.builtin_device_check is None:
+                raise EmbeddingProfileError("SERVICE_NOT_READY")
+            self.builtin_device_check(device)
+        self._embedding_profiles().set_compute_device(profile.profile_id, device)
+        return self.builtin_model_info()
 
     def start_builtin_download(self, *, confirmed: bool) -> OllamaModelOperation:
         if self.ollama_model_operations is None:

@@ -275,6 +275,72 @@ The model-list readiness check cannot prove that the chat model has a valid temp
 
 Official references: [vLLM OpenAI-compatible server](https://docs.vllm.ai/en/stable/serving/online_serving/openai_compatible_server/), [structured outputs](https://docs.vllm.ai/en/stable/features/structured_outputs/), [embedding/pooling models](https://docs.vllm.ai/en/stable/models/pooling_models/embed/), and [API server security](https://docs.vllm.ai/en/stable/usage/security/).
 
+### Built-in model on a GPU (0.5.3, ADR-083; one-click install 0.5.4, ADR-084)
+
+The built-in `bge-m3` model runs on the CPU by default. In the admin page, under
+the content finder model, the **Compute device** select offers GPU as well.
+The GPU option is disabled until the ONNX Runtime in use can run on an NVIDIA GPU.
+
+**One-click install (Windows, started from the launcher).** Download the built-in
+model first. The same panel then shows the detected NVIDIA card and driver. With an
+RTX 20 or GTX 16 series (or newer) card and driver 580 or newer, tick the consent
+and press **Download and install GPU support**. RepoNPC downloads the pinned
+`onnxruntime-gpu` and NVIDIA runtime wheels from PyPI (`files.pythonhosted.org`;
+8 files, about 1.33 GB; about 4 GB of free disk space is needed while installing),
+unpacks them into `<data_dir>\gpu-runtime\<runtime id>\`, proves a CUDA session in
+a separate process and only then publishes the folder. Close RepoNPC completely,
+including the launcher window, open it again, then choose GPU in the select; the
+model loads on the GPU first and the choice is stored only when that works.
+
+The install changes nothing else: not Windows, not `.venv`, not `uv.lock`, not the
+CPU `onnxruntime`. `uv sync` and a RepoNPC upgrade leave the folder alone. An
+upgrade that pins a different runtime ignores the old folder (the page offers the
+install again) and the next install removes older `ort-*` folders. To go back to the
+CPU runtime, stop RepoNPC and delete `<data_dir>\gpu-runtime`.
+
+When the page says it cannot install, the reason is shown: no NVIDIA card was
+detected, the driver is older than 580, the card is older than Turing, or this is
+not 64-bit Windows started from the launcher (a packaged installer build, Linux and
+macOS are not covered). An Ollama embedding service uses a GPU without any of this.
+
+| The install stops with | What to do |
+| ---------------------- | ---------- |
+| the GPU test did not pass (`GPU_RUNTIME_SELF_CHECK`) | Update the NVIDIA driver, then retry; the verified downloads are reused. |
+| not enough disk space (`BUILTIN_DOWNLOAD_DISK_SPACE`) | Free space on the drive that holds the data folder, then retry. |
+| the path is too long (`GPU_RUNTIME_PATH`) | Move RepoNPC to a shorter path (the data folder moves with it), then retry. |
+| any other code | Check the network, then retry; a cancelled or failed run keeps the verified files. |
+
+Real-hardware check (2026-11-08, Windows 11, RTX 3090, driver 610.88, Python 3.14,
+`onnxruntime-gpu` 1.30.0): the production install fetched and verified all 8 wheels
+(1,330,778,450 bytes) and passed the child-process CUDA test. The 1.9 GB folder it
+published was activated by the next app start (`gpu_available` true, state `ready`).
+The real bge-m3 model then ran on `CUDAExecutionProvider`: a warm 4-text batch took
+12 ms against 261 ms on the CPU, and the GPU and CPU vectors matched (smallest cosine
+0.9999998). The download took 51 minutes on a slow link (about 430 KB/s); unpacking
+and the CUDA test together took seconds. On a slow connection the progress bar is the
+only sign of life, so do not close RepoNPC while it moves.
+
+Maintainers: when the `onnxruntime==` pin in `pyproject.toml` changes, regenerate
+`src/reponpc/providers/gpu_runtime_manifest.yml` with
+`python scripts/generate_gpu_runtime_manifest.py` (needs the network and `uv`),
+review the diff, and confirm with `--check`. `tests/unit/test_gpu_runtime.py` fails
+when the pin and the manifest disagree. Where the one-click install does not apply,
+an operator may still provide a GPU-capable ONNX Runtime and its CUDA libraries in
+the Python environment themselves; RepoNPC then only checks that the CUDA provider is
+listed. That path is the operator's responsibility.
+
+Choosing GPU loads the model on the GPU first. If that fails, the model stays on the
+CPU and the page shows a fixed message; RepoNPC never switches between devices by
+itself. Changing the device does not rebuild the index. If you only want a GPU
+without installing these packages, use an Ollama embedding service instead; that is
+a different model identity and needs a reindex. Upgrading runs migration 39 (one
+added column); back up first as for any schema change (section 12).
+
+**Chat interface.** You no longer choose Chat Completions or Responses. "Test model"
+detects it for managed OpenAI-compatible services and saves it on the connection
+(the details show it). Re-test after the service changes. The active model keeps its
+interface; Ollama and vLLM are not detected.
+
 ## 6. Prepare the first local bundle
 
 The installed entrypoint is intentionally dual-purpose:
@@ -668,7 +734,7 @@ The thinking-text request remains unfinished; see the processing contract.
 
 ## Approved public summary amendment (2026-10-04)
 
-To enable public summaries, explicitly select Responses in the existing OpenAI-compatible service form, save, then probe/select the model through the existing workflow. Existing active/frozen profiles retain their previous connection revision. No startup variable changes are required. The provider/model must accept the summary option; no automatic parameter or protocol retry occurs. [Local verification](../release-evidence/a7/waiting-ux-20261004/PUBLIC_SUMMARY_RESULT.zh-TW.md) used a synthetic upstream, not a real service. Back up through the existing protected workflow before upgrading runtime schema 35; old encrypted payloads retain Chat Completions semantics.
+To enable public summaries, test the model through the existing workflow. Since 0.5.3 (ADR-083) the test tries Responses first, then Chat Completions, and saves the interface that answered on the connection; the service form has no interface choice. Existing active/frozen profiles retain their previous connection revision. No startup variable changes are required. The provider/model must accept the summary option; no automatic parameter or protocol retry occurs. [Local verification](../release-evidence/a7/waiting-ux-20261004/PUBLIC_SUMMARY_RESULT.zh-TW.md) used a synthetic upstream, not a real service. Back up through the existing protected workflow before upgrading runtime schema 35; old encrypted payloads retain Chat Completions semantics.
 
 OR-032 / ADR-058 / Specification 0.4.10 adopts the [public summary contract](CHAT_PUBLIC_SUMMARY_CONTRACT_2026-10-04.md). FR-040/043/044/047, NFR-005/009/014 and AC-019/023/057/062/063/064/068/071 retain their thresholds. Explicit Responses selection, legacy/revision compatibility, bounded untrusted plain text, prompt/secret negative tests, final-answer separation, cancellation and bilingual keyboard-accessible display require verification. No real provider invocation, publication, catalog admission or release acceptance is implied. Previous pending-summary notes are historical and superseded by this approval.
 

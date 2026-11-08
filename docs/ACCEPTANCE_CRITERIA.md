@@ -1166,6 +1166,42 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 - **Then** only the four listed commands are started, each as a fixed argument list with no shell; the port is one of the tailnet's Funnel ports; `reset`, `up`, `login`, `set` and `serve` (as a writer) are never started; a foreign route is never written, replaced or removed, and with every port taken start returns `TAILSCALE_NOT_READY` and changes nothing; `production` returns `unavailable_profile` and starts no command; every route needs the admin session, CSRF and a same-origin request; output over 1 MiB, a timeout and invalid JSON become `TAILSCALE_FAILED`; no response, log line or error message holds raw command output or the machine's other hostnames.
 - **Verification:** `tests/security/test_tailscale_admin_api.py`, `tests/unit/test_tailscale_cli.py`, `tests/contract/test_tailscale_contract.py`.
 
+### AC-099 - The owner chooses CPU or GPU for the built-in model, and a broken GPU never falls back
+
+**Maps to:** FR-049, FR-012 (ADR-083)
+
+- **Given** a built-in profile and a fake ONNX Runtime whose provider list and session behaviour the test controls,
+- **When** the owner chooses GPU or CPU in the built-in panel (or calls `PUT /api/admin/embedding-models/builtin/device`),
+- **Then** with a CUDA provider present and a model that loads and passes a health check, `gpu` is saved, the next embedding runs on a session whose first provider is CUDA, the embedding identity is unchanged and no reindex starts; with no CUDA provider the answer is `BUILTIN_GPU_UNAVAILABLE` (409), and with a load or health failure `BUILTIN_DEVICE_FAILED` (502), and the saved device stays `cpu` in both; choosing `cpu` always succeeds; a session that does not run on CUDA first is refused rather than served on the CPU; an unknown device is `VALIDATION_ERROR`; when `gpu_available` is false the panel disables the GPU option and says what is missing, in both languages, and the built-in card shows the saved device; migration 39 leaves existing profiles on `cpu`.
+- **Verification:** `tests/unit/test_builtin_onnx.py`, `tests/integration/test_builtin_model_setup.py`, `tests/integration/test_builtin_lifecycle.py`, `tests/unit/test_admin_error_codes.py`, `BuiltinModelPanel.test.tsx`, a real-browser walk at 1280 and 375 in both languages, and a real `PUT` against a running server on a machine without GPU support (409, saved device unchanged). A real GPU inference run needs an NVIDIA machine and is an open, owner-run item.
+
+### AC-100 - The chat interface is detected when a model is tested
+
+**Maps to:** FR-012 (ADR-083, ADR-058)
+
+- **Given** an `openai_compatible` connection, a fake service that can accept or refuse each interface, and the single 60-second probe deadline,
+- **When** the owner tests a model on that connection,
+- **Then** the probe tries Responses first and saves `responses` on the connection when it answers; when Responses is plainly refused it tries Chat Completions and saves that interface; authentication, rate limit, timeout, unavailable and output-limit failures stop with no second request; when both attempts fail the last failure is reported and the saved interface stays; the active profile, host-managed connections, Ollama and vLLM are not detected; the connection form has no interface choice and the connection details show the detected interface; answering still makes one call on the saved interface.
+- **Verification:** `tests/unit/test_chat_profiles.py`, `tests/integration/test_chat_probe_response_checks.py`, `tests/integration/test_model_connections_api.py`, `tests/integration/test_model_probe_diagnostics.py`, `ModelConnectionPanel.test.tsx`.
+
+### AC-101 - The GPU runtime installs only from pinned wheels, or changes nothing
+
+**Maps to:** FR-049, NFR-001 (ADR-084)
+
+- **Given** the generated manifest, a fake transport that serves small real wheels, and a fake self-check,
+- **When** the owner confirms the one-click GPU runtime install,
+- **Then** each wheel is downloaded into the data folder and checked against its pinned size and SHA-256; only `onnxruntime/**` and `nvidia/**/*.dll` are unpacked, into a staging folder; the self-check runs on the staged tree; only then a `READY.json` marker is written and the folder is published with one rename, and progress ends at the total; a checksum mismatch, a failed self-check, a cancel, too little free space, an unsafe archive member (`..`, drive, link, duplicate, over-long path, oversize, broken archive) or an unsupported platform publishes nothing, removes the staging folder and leaves any earlier state, while verified wheels are reused by the retry; a second run with a matching marker downloads nothing; older `ort-*` folders are removed and unrelated folders are kept; a marker for other wheels is not an install; the managed Python environment and `uv.lock` are never written; the download transport connects only to `files.pythonhosted.org`, refuses redirects, other hosts, unsafe URLs, unpinned files and bad offsets before any network access, and turns network failures into one safe code; the manifest equals the `onnxruntime==` pin, every URL is a direct `files.pythonhosted.org` link, and a foreign URL, bad hash or missing main wheel is rejected.
+- **Verification:** `tests/unit/test_gpu_runtime.py`, `tests/unit/test_builtin_http.py`, `python scripts/generate_gpu_runtime_manifest.py --check` (needs the network and `uv`), and a real install into a disposable data folder on an NVIDIA machine (owner-approved, about 1.33 GB).
+
+### AC-102 - The admin page offers the install only where it can work, and activation is safe
+
+**Maps to:** FR-049 (ADR-084)
+
+- **Given** each detection result (`can_install`, `no_nvidia_gpu`, `driver_too_old`, `gpu_too_old`, `unsupported_platform`), an installed runtime before and after a restart, and a fake installer,
+- **When** the owner opens the built-in panel and presses the install,
+- **Then** the panel shows the detected card and driver, the download size and the free space needed, the NVIDIA license link and an unticked consent checkbox, and enables the button only after consent, in both languages; each blocked state explains itself and offers no install; the request needs the admin session, CSRF, same origin and `{"confirmed":true}` (without consent a 4xx and no install call; with detection other than `can_install` `GPU_RUNTIME_UNAVAILABLE` 409 and no install call); it shares the one operation lane with the model download and an Ollama pull (`EMBEDDING_MODEL_OPERATION_ACTIVE`) and each locks the other's controls; progress, cancel and a retry that reuses verified files work; a failure shows the action to take by constant code (`GPU_RUNTIME_SELF_CHECK`, disk space, path length) and never a raw code or path; after success the state is `restart_required` and asks for a full restart; at the next start the runtime folder goes first on `sys.path` only when ONNX Runtime has not been imported, its marker matches the manifest and the platform is supported, its DLL folders are registered, `preload_dlls` runs once, and `gpu_available` is true; an unreadable, mismatched or foreign marker leaves the CPU runtime in use; installing never selects the GPU, which stays an explicit, proven choice (AC-099).
+- **Verification:** `tests/integration/test_builtin_model_setup.py`, `tests/unit/test_gpu_runtime.py`, `tests/unit/test_admin_error_codes.py`, `BuiltinModelPanel.test.tsx`, a real-browser walk at 1280 and 375 in both languages against a disposable data folder, and a real CUDA session on an NVIDIA machine after the owner approves the download (open, owner-run).
+
 **0.4.0–0.4.5 traceability additions:**
 
 | Requirement | Acceptance criteria            |
@@ -1196,6 +1232,20 @@ Version 0.2.5 extends AC-055/056/057/060 with ADR-032's connection-rebinding cor
 | NFR-009     | AC-085                         |
 | NFR-011     | AC-085, AC-086                 |
 | NFR-012     | AC-084                         |
+
+**0.5.4 traceability additions (ADR-084):**
+
+| Requirement | Acceptance criteria |
+| ----------- | ------------------- |
+| FR-049      | AC-101, AC-102      |
+| NFR-001     | AC-101              |
+
+**0.5.3 traceability additions (ADR-083):**
+
+| Requirement | Acceptance criteria |
+| ----------- | ------------------- |
+| FR-012      | AC-099, AC-100      |
+| FR-049      | AC-099              |
 
 **0.5.2 traceability additions (ADR-082):**
 

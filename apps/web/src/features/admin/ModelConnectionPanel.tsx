@@ -27,7 +27,6 @@ export interface ModelConnectionDraft {
   endpoint_action?: "retain" | "replace";
   api_key?: string;
   credential_action: "retain" | "replace" | "remove";
-  chat_api?: "chat_completions" | "responses";
 }
 
 interface Props {
@@ -69,7 +68,7 @@ const COPY = {
     editService: "編輯 AI 服務",
     name: "服務名稱（方便自己辨認）",
     provider: "連線方式",
-    chatInterface: "聊天 API 接口",
+    chatInterface: "聊天 API 接口（測試模型時自動偵測）",
     address: "服務網址（API 位址）",
     key: "服務金鑰（API key，可選）",
     create: "儲存服務",
@@ -110,7 +109,7 @@ const COPY = {
     editService: "Edit AI service",
     name: "Service name (for your reference)",
     provider: "Connection type",
-    chatInterface: "Chat API interface",
+    chatInterface: "Chat API interface (detected when a model is tested)",
     address: "Service URL (API address)",
     key: "Service key (API key, optional)",
     create: "Save service",
@@ -158,9 +157,6 @@ export function ModelConnectionPanel({
     "" | ModelConnectionView["provider"]
   >("");
   const [baseUrl, setBaseUrl] = useState("");
-  const [chatApi, setChatApi] = useState<"chat_completions" | "responses">(
-    "chat_completions",
-  );
   const [apiKey, setApiKey] = useState("");
   const [replaceAddress, setReplaceAddress] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -191,7 +187,6 @@ export function ModelConnectionPanel({
     setEditingId(null);
     setDisplayName("");
     setProvider("");
-    setChatApi("chat_completions");
     setBaseUrl("");
     setApiKey("");
     setReplaceAddress(true);
@@ -298,9 +293,6 @@ export function ModelConnectionPanel({
     const draft = {
       display_name: displayName.trim(),
       provider,
-      ...(chatApi === "responses" || editingConnection?.chat_api === "responses"
-        ? { chat_api: chatApi }
-        : {}),
       base_url: replaceAddress ? baseUrl.trim() : undefined,
       endpoint_action: replaceAddress ? "replace" : "retain",
       api_key: removeKey || !apiKey ? undefined : apiKey,
@@ -322,7 +314,6 @@ export function ModelConnectionPanel({
     setEditingId(connection.connection_id);
     setDisplayName(connection.display_name);
     setProvider(connection.provider);
-    setChatApi(connection.chat_api ?? "chat_completions");
     setBaseUrl("");
     setApiKey("");
     setReplaceAddress(connection.source === "host-managed");
@@ -346,7 +337,6 @@ export function ModelConnectionPanel({
         onOpen={() => setEditorOpen(true)}
       >
         <form className="model-connection-form" onSubmit={submit}>
-          <h3>{editingId ? copy.editService : copy.addService}</h3>
           <p>
             {chromeLocale(locale) === "zh-TW"
               ? "從服務商的設定頁複製服務網址與 API key。金鑰只用於連線。送出或離開表單後會清除輸入。重試時請重新填入。"
@@ -379,7 +369,6 @@ export function ModelConnectionPanel({
                 setProvider(
                   event.target.value as ModelConnectionView["provider"],
                 );
-                setChatApi("chat_completions");
               }}
               required
               value={provider}
@@ -390,29 +379,6 @@ export function ModelConnectionPanel({
               <option value="openai_compatible">OpenAI-compatible</option>
             </select>
           </label>
-          {provider === "openai_compatible" && purpose !== "embedding" && (
-            <label htmlFor={`model-connection-chat-api${idSuffix}`}>
-              {chromeLocale(locale) === "zh-TW"
-                ? "聊天 API 接口"
-                : "Chat API interface"}
-              <select
-                id={`model-connection-chat-api${idSuffix}`}
-                disabled={pending}
-                value={chatApi}
-                onChange={(event) =>
-                  setChatApi(event.target.value as typeof chatApi)
-                }
-              >
-                <option value="chat_completions">Chat Completions</option>
-                <option value="responses">Responses</option>
-              </select>
-              <span>
-                {chromeLocale(locale) === "zh-TW"
-                  ? "請依服務商支援選擇。Responses 可顯示服務商提供的公開摘要。模型不一定提供摘要。變更後需重新測試模型。"
-                  : "Choose the interface supported by your service. Responses can display provider public summaries when the model supplies them. Test the model again after a change."}
-              </span>
-            </label>
-          )}
           {editingId && !editingHostConnection && (
             <CheckboxField
               id={`model-connection-replace-address${idSuffix}`}

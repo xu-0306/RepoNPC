@@ -1507,6 +1507,14 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             "ALTER TABLE faq_entries_v38 RENAME TO faq_entries",
         ),
     ),
+    Migration(
+        version=39,
+        name="builtin_compute_device",
+        statements=(
+            "ALTER TABLE embedding_profiles ADD COLUMN compute_device TEXT NOT NULL "
+            "DEFAULT 'cpu' CHECK(compute_device IN ('cpu', 'gpu'))",
+        ),
+    ),
 )
 
 

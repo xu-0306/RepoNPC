@@ -158,6 +158,8 @@ class EmbeddingProfile:
     reindex_completed_at: str | None
     bundle_id: str | None
     last_error_message: str | None = field(default=None, repr=False)
+    # Only the built-in ONNX profile uses this; external services run elsewhere.
+    compute_device: str = "cpu"
 
     @property
     def identity(self) -> EmbeddingIdentity:
@@ -401,6 +403,19 @@ class EmbeddingProfileRegistry:
             raise EmbeddingProfileError("EMBEDDING_REINDEX_ACTIVE")
         with self._database.connection() as connection:
             connection.execute("DELETE FROM embedding_profiles WHERE profile_id = ?", (profile_id,))
+
+    def set_compute_device(self, profile_id: str, device: str) -> EmbeddingProfile:
+        """Store the built-in model's CPU or GPU choice; the caller checks it works."""
+        profile = self.get(profile_id)
+        if device not in ("cpu", "gpu") or profile.provider != "builtin_onnx":
+            raise EmbeddingProfileError("VALIDATION_ERROR")
+        with self._database.connection() as connection:
+            connection.execute(
+                "UPDATE embedding_profiles SET compute_device = ?, updated_at = ? "
+                "WHERE profile_id = ?",
+                (device, _time(self._now()), profile_id),
+            )
+        return self.get(profile_id)
 
     def probe(self, profile_id: str) -> EmbeddingProfile:
         profile = self.get(profile_id)
@@ -913,6 +928,9 @@ def _profile(row: sqlite3.Row) -> EmbeddingProfile:
             str(row["reindex_completed_at"]) if row["reindex_completed_at"] else None
         ),
         bundle_id=(str(row["bundle_id"]) if row["bundle_id"] else None),
+        compute_device=str(row["compute_device"])
+        if "compute_device" in row.keys()  # noqa: SIM118 - sqlite3.Row iterates values.
+        else "cpu",
     )
 
 

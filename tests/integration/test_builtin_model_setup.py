@@ -48,6 +48,8 @@ from reponpc.indexing.sources import EmbeddingIdentity
 from reponpc.main import create_app
 from reponpc.providers.builtin_artifacts import builtin_embedding_identity, load_builtin_manifest
 from reponpc.providers.builtin_download import BuiltinDownloadCancelled, BuiltinDownloadError
+from reponpc.providers.builtin_onnx import gpu_available
+from reponpc.providers.gpu_runtime import GpuDetection
 from reponpc.runtime.database import MIGRATIONS, RuntimeDatabase
 
 ORIGIN = "https://portfolio.example.com"
@@ -381,7 +383,10 @@ def application(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Sim
     registry.probe(active.profile_id)
     registry.activate(active.profile_id)
     downloader = DownloadFixture()
-    coordinator = OllamaModelOperationCoordinator(registry, builtin_download=downloader)
+    gpu_installer = DownloadFixture()
+    coordinator = OllamaModelOperationCoordinator(
+        registry, builtin_download=downloader, gpu_runtime_install=gpu_installer
+    )
     hardware = HardwareProfile(
         host_ram_bytes=16 * 1024**3, free_memory_bytes=8 * 1024**3, free_disk_bytes=10 * 1024**3
     )
@@ -392,11 +397,20 @@ def application(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Sim
         return hardware
 
     monkeypatch.setattr(operation_module, "collect_hardware_profile", collect)
+    device_checks: list[str] = []
+    device_failure: list[str] = []
+
+    def check_device(device: str) -> None:
+        device_checks.append(device)
+        if device_failure:
+            raise EmbeddingProfileError(device_failure[0])
+
     operations = AdminOperations(
         database=database,
         public_base_url=ORIGIN,
         embedding_profiles=registry,
         ollama_model_operations=coordinator,
+        builtin_device_check=check_device,
     )
     auth = AdminSessionService(
         database=database,
@@ -416,12 +430,16 @@ def application(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Sim
             providers=providers,
             coordinator=coordinator,
             download=downloader,
+            gpu_install=gpu_installer,
             hardware=hardware,
             device_calls=device_calls,
+            device_checks=device_checks,
+            device_failure=device_failure,
             active=active.profile_id,
         )
     finally:
         downloader.release.set()
+        gpu_installer.release.set()
         coordinator.shutdown()
 
 
@@ -450,8 +468,11 @@ def _terminal(client: TestClient, operation_id: str) -> dict[str, Any]:
 
 
 def test_builtin_metadata_read_is_authenticated_no_store_and_side_effect_free(
-    application: SimpleNamespace,
+    application: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(
+        "reponpc.admin.operations.detect_gpu_cached", lambda: GpuDetection("no_nvidia_gpu")
+    )
     with TestClient(cast(FastAPI, application.app), base_url=ORIGIN) as client:
         denied = client.get("/api/admin/embedding-models/builtin", headers={"Origin": ORIGIN})
         assert denied.status_code == 401
@@ -461,15 +482,23 @@ def test_builtin_metadata_read_is_authenticated_no_store_and_side_effect_free(
         response = client.get("/api/admin/embedding-models/builtin", headers={"Origin": ORIGIN})
         assert response.status_code == 200 and response.headers["Cache-Control"] == "no-store"
         manifest = load_builtin_manifest()
-        assert response.json() == {
+        body = response.json()
+        runtime = body.pop("gpu_runtime")
+        assert body == {
             "model_id": builtin_embedding_identity().model_id,
             "display_name": manifest.model_id,
             "total_bytes": manifest.total_bytes,
             "license": manifest.license,
             "source_url": manifest.source_url,
             "profile_id": None,
+            "compute_device": "cpu",
+            "gpu_available": gpu_available(),
             "operation": None,
         }
+        # A machine whose ONNX Runtime already lists CUDA reports "ready" instead.
+        assert runtime["state"] == ("ready" if gpu_available() else "no_nvidia_gpu")
+        assert runtime["operation"] is None
+        assert runtime["download_bytes"] > 0 and runtime["minimum_driver"] == 580
         assert _rows(application.database) == before
         assert sum(provider.calls for provider in application.providers.values()) == probes
         assert application.download.calls == 0 and application.device_calls == []
@@ -547,6 +576,70 @@ def test_builtin_download_progress_conflict_authenticated_cancel_and_no_auto_act
             ).status_code
             == 401
         )
+
+
+_GPU_INSTALL = "/api/admin/embedding-models/builtin/gpu-runtime/install"
+
+
+def test_gpu_runtime_install_needs_session_consent_and_a_supported_gpu(
+    application: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "reponpc.admin.operations.detect_gpu_cached", lambda: GpuDetection("no_nvidia_gpu")
+    )
+    with TestClient(cast(FastAPI, application.app), base_url=ORIGIN) as client:
+        anonymous = client.post(_GPU_INSTALL, headers={"Origin": ORIGIN}, json={"confirmed": True})
+        assert anonymous.status_code == 401
+        headers = _login(client)
+        no_csrf = client.post(_GPU_INSTALL, headers={"Origin": ORIGIN}, json={"confirmed": True})
+        assert no_csrf.status_code == 403
+        declined = client.post(_GPU_INSTALL, headers=headers, json={"confirmed": False})
+        assert 400 <= declined.status_code < 500
+        refused = client.post(_GPU_INSTALL, headers=headers, json={"confirmed": True})
+        assert refused.status_code == 409
+        assert refused.json()["error"]["code"] == "GPU_RUNTIME_UNAVAILABLE"
+        assert application.gpu_install.calls == 0
+
+
+def test_gpu_runtime_install_reports_through_the_operation_and_shares_one_lane(
+    application: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "reponpc.admin.operations.detect_gpu_cached",
+        lambda: GpuDetection("can_install", "NVIDIA GeForce RTX 3090", "610.88"),
+    )
+    with TestClient(cast(FastAPI, application.app), base_url=ORIGIN) as client:
+        headers = _login(client)
+        started = client.post(_GPU_INSTALL, headers=headers, json={"confirmed": True})
+        assert started.status_code == 202 and started.headers["Cache-Control"] == "no-store"
+        assert started.json()["model_id"] == "gpu-runtime"
+        operation_id = started.json()["operation_id"]
+        assert application.gpu_install.started.wait(timeout=1)
+        model_download = client.post(
+            "/api/admin/embedding-models/builtin/download",
+            headers=headers,
+            json={"confirmed": True},
+        )
+        assert model_download.status_code == 409
+        assert model_download.json()["error"]["code"] == "EMBEDDING_MODEL_OPERATION_ACTIVE"
+        running = client.get("/api/admin/embedding-models/builtin", headers={"Origin": ORIGIN})
+        runtime = running.json()["gpu_runtime"]
+        assert (
+            runtime["state"] == "can_install" and runtime["gpu_name"] == "NVIDIA GeForce RTX 3090"
+        )
+        assert runtime["operation"]["status"] == "running"
+        assert runtime["operation"]["completed"] == 3 and runtime["operation"]["total"] == 10
+        assert running.json()["operation"] is None
+        client.delete(f"/api/admin/embedding-model-operations/{operation_id}", headers=headers)
+        assert _terminal(client, operation_id)["status"] == "cancelled"
+        application.gpu_install.mode = "success"
+        retried = client.post(_GPU_INSTALL, headers=headers, json={"confirmed": True})
+        assert _terminal(client, retried.json()["operation_id"])["status"] == "succeeded"
+        assert application.gpu_install.calls == 2
+        assert application.download.calls == 0
+        # Installing files neither creates a built-in profile nor selects a device.
+        assert application.registry.active().profile_id == application.active
+        assert not [p for p in application.registry.list() if p.provider == "builtin_onnx"]
 
 
 def test_failed_builtin_download_requires_explicit_retry_and_retains_last_known_good(
@@ -705,3 +798,47 @@ def test_device_check_exposes_authored_model_card_facts_without_provider_work(
         assert _rows(application.database) == before
         assert application.download.calls == 0
         assert str(application.database.database_path.parent) not in response.text
+
+
+DEVICE_URL = "/api/admin/embedding-models/builtin/device"
+
+
+def test_builtin_device_needs_a_session_a_profile_and_a_known_value(
+    application: SimpleNamespace,
+) -> None:
+    with TestClient(cast(FastAPI, application.app), base_url=ORIGIN) as client:
+        denied = client.put(DEVICE_URL, headers={"Origin": ORIGIN}, json={"device": "cpu"})
+        assert denied.status_code == 401
+        headers = _login(client)
+        missing = client.put(DEVICE_URL, headers=headers, json={"device": "cpu"})
+        assert missing.status_code == 404
+        application.registry.create(_builtin_input())
+        for body in ({"device": "tpu"}, {"device": "gpu", "extra": 1}, {}):
+            assert client.put(DEVICE_URL, headers=headers, json=body).status_code in {400, 422}
+        assert application.device_checks == []
+
+
+def test_builtin_device_gpu_is_proven_before_it_is_saved(application: SimpleNamespace) -> None:
+    profile = application.registry.create(_builtin_input())
+    with TestClient(cast(FastAPI, application.app), base_url=ORIGIN) as client:
+        headers = _login(client)
+        for code, status in (("BUILTIN_GPU_UNAVAILABLE", 409), ("BUILTIN_DEVICE_FAILED", 502)):
+            application.device_failure[:] = [code]
+            failed = client.put(DEVICE_URL, headers=headers, json={"device": "gpu"})
+            assert failed.status_code == status
+            assert failed.json()["error"]["code"] == code
+            assert application.registry.get(profile.profile_id).compute_device == "cpu"
+        application.device_failure.clear()
+        saved = client.put(DEVICE_URL, headers=headers, json={"device": "gpu"})
+        assert saved.status_code == 200 and saved.headers["Cache-Control"] == "no-store"
+        assert saved.json()["compute_device"] == "gpu"
+        assert application.registry.get(profile.profile_id).compute_device == "gpu"
+        listed = client.get("/api/admin/embedding-profiles", headers={"Origin": ORIGIN}).json()
+        assert [
+            p["compute_device"] for p in listed["profiles"] if p["provider"] == "builtin_onnx"
+        ] == ["gpu"]
+        # Going back to CPU needs no proof and always works.
+        checks = len(application.device_checks)
+        back = client.put(DEVICE_URL, headers=headers, json={"device": "cpu"})
+        assert back.status_code == 200 and back.json()["compute_device"] == "cpu"
+        assert len(application.device_checks) == checks

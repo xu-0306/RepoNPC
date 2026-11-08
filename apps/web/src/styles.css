@@ -728,21 +728,37 @@ input {
 .model-guidance > .model-card-list {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
 }
+/* Flex, not a 3-column grid: a card without a brand icon (built-in model) has
+   fewer children, and a grid would put its badge in the stretchy column. */
 .model-card__heading {
   align-items: center;
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.65rem;
-  grid-template-columns: auto minmax(0, 1fr) auto;
   margin-bottom: 0.7rem;
   min-width: 0;
 }
 .model-card__heading > h3,
 .model-card__heading > strong {
+  flex: 1 1 8rem;
   margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.builtin-device {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.85rem 0;
+  min-width: 0;
+}
+.builtin-device select {
+  max-width: 100%;
+}
+.builtin-device p {
+  margin: 0;
+}
 .model-card__provider {
+  flex: 0 0 auto;
   background: var(--px-surface-alt);
   border: 2px solid var(--px-line);
   border-radius: 0;
@@ -838,10 +854,6 @@ input {
   .model-panel .model-connection-form__credential-option {
     padding-inline: 0.25rem;
   }
-  .model-card__heading {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .model-card__provider,
   .model-card__state {
     grid-column: 1 / -1;
     justify-self: start;
@@ -1160,13 +1172,6 @@ form button {
   }
   .admin-model-management > .model-panel:first-child {
     grid-column: auto;
-  }
-  .model-card__heading {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .model-card__provider {
-    grid-column: 2;
-    justify-self: start;
   }
 }
 @media (max-width: 42rem) {
@@ -1926,10 +1931,6 @@ form button {
   min-height: 44px;
   padding-block: 10px;
   font-size: max(14px, 0.875rem);
-}
-.model-setup-workspace .model-panel form {
-  border: 2px dashed var(--px-line);
-  border-radius: 0;
 }
 .character-converter {
   color: var(--px-ink);

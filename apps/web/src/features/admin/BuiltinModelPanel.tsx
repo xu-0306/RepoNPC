@@ -2,6 +2,7 @@ import { chromeLocale } from "../../i18n/languages";
 import { useId, useState } from "react";
 import type { LanguageTag as Locale } from "../../i18n/languages";
 import { CheckboxField } from "./CheckboxField";
+import { GpuRuntimeSupport } from "./GpuRuntimeSupport";
 
 export interface BuiltinModelInfo {
   model_id: string;
@@ -10,6 +11,30 @@ export interface BuiltinModelInfo {
   license: string;
   source_url: string;
   profile_id: string | null;
+  compute_device: BuiltinDevice;
+  gpu_available: boolean;
+  gpu_runtime: GpuRuntimeInfo;
+}
+
+export type BuiltinDevice = "cpu" | "gpu";
+
+export type GpuRuntimeState =
+  | "ready"
+  | "restart_required"
+  | "can_install"
+  | "no_nvidia_gpu"
+  | "driver_too_old"
+  | "gpu_too_old"
+  | "unsupported_platform";
+
+export interface GpuRuntimeInfo {
+  state: GpuRuntimeState;
+  gpu_name: string | null;
+  driver_version: string | null;
+  minimum_driver: number;
+  download_bytes: number;
+  required_free_bytes: number;
+  operation: BuiltinModelOperation | null;
 }
 
 export interface BuiltinModelOperation {
@@ -26,9 +51,14 @@ export interface BuiltinModelPanelProps {
   locale: Locale;
   info: BuiltinModelInfo | null;
   operation: BuiltinModelOperation | null;
+  // The one-click GPU support install; it shares the lane with the model download.
+  gpuOperation: BuiltinModelOperation | null;
   pending: boolean;
   error: string;
+  deviceError: string;
+  onDevice: (device: BuiltinDevice) => void;
   onDownload: () => void;
+  onInstallGpu: () => void;
   onCancel: () => void;
   onRefresh: () => void;
   onExternal: () => void;
@@ -45,6 +75,11 @@ const COPY = {
     size: "下載大小",
     license: "授權",
     source: "查看模型來源與授權條款",
+    device: "運算裝置",
+    deviceCpu: "CPU（預設，每台電腦都能用）",
+    deviceGpu: "GPU（NVIDIA 顯示卡，通常較快）",
+    deviceReady:
+      "選擇 GPU 前會先實際載入模型確認。失敗時會保持使用 CPU，不會自動切換。更換裝置不需要重建索引。",
     unavailable: "尚未取得下載資訊。請更新狀態後再確認下載。",
     consent: "我同意從上述來源下載模型至這台主機，並已確認授權條款與下載大小。",
     reindex:
@@ -80,6 +115,11 @@ const COPY = {
     size: "Download size",
     license: "License",
     source: "View the model source and license terms",
+    device: "Compute device",
+    deviceCpu: "CPU (default, works on every computer)",
+    deviceGpu: "GPU (NVIDIA graphics card, usually faster)",
+    deviceReady:
+      "Before choosing the GPU, RepoNPC loads the model on it to check. If that fails the model keeps using the CPU; nothing switches automatically. Changing the device does not rebuild the index.",
     unavailable:
       "Download information is unavailable. Refresh the status before confirming a download.",
     consent:
@@ -139,9 +179,13 @@ export function BuiltinModelPanel({
   locale,
   info,
   operation,
+  gpuOperation,
   pending,
   error,
+  deviceError,
+  onDevice,
   onDownload,
+  onInstallGpu,
   onCancel,
   onRefresh,
   onExternal,
@@ -156,6 +200,9 @@ export function BuiltinModelPanel({
   const consented = !!info && consentedModelId === info.model_id;
   const status = operation?.status;
   const active = status === "queued" || status === "running";
+  const gpuActive =
+    gpuOperation?.status === "queued" || gpuOperation?.status === "running";
+  const busy = active || gpuActive;
   const complete = status === "succeeded";
   const retryable = status === "cancelled" || status === "failed";
   const progress =
@@ -189,6 +236,45 @@ export function BuiltinModelPanel({
             <dd>{info.license}</dd>
           </dl>
           {source && <a href={source}>{copy.source}</a>}
+          {info.profile_id && (
+            <div className="builtin-device">
+              <label htmlFor={`${id}-device`}>{copy.device}</label>
+              <select
+                id={`${id}-device`}
+                aria-describedby={`${id}-device-help`}
+                disabled={pending || busy}
+                value={info.compute_device}
+                onChange={(event) =>
+                  onDevice(event.target.value as BuiltinDevice)
+                }
+              >
+                <option value="cpu">{copy.deviceCpu}</option>
+                <option
+                  value="gpu"
+                  disabled={
+                    !info.gpu_available && info.compute_device !== "gpu"
+                  }
+                >
+                  {copy.deviceGpu}
+                </option>
+              </select>
+              {info.gpu_available ? (
+                <p id={`${id}-device-help`}>{copy.deviceReady}</p>
+              ) : (
+                <GpuRuntimeSupport
+                  locale={locale}
+                  helpId={`${id}-device-help`}
+                  runtime={info.gpu_runtime}
+                  operation={gpuOperation}
+                  pending={pending}
+                  blocked={active}
+                  onInstall={onInstallGpu}
+                  onCancel={onCancel}
+                />
+              )}
+              {deviceError && <p role="alert">{deviceError}</p>}
+            </div>
+          )}
         </>
       )}
       <details open={retryable || undefined}>
@@ -197,7 +283,7 @@ export function BuiltinModelPanel({
         {!available && <p id={`${id}-unavailable`}>{copy.unavailable}</p>}
         <CheckboxField
           checked={consented}
-          disabled={pending || active || complete || !available}
+          disabled={pending || busy || complete || !available}
           aria-describedby={`${id}-reindex`}
           onChange={(event) =>
             setConsentedModelId(
@@ -209,7 +295,7 @@ export function BuiltinModelPanel({
         </CheckboxField>
         <button
           type="button"
-          disabled={!available || !consented || pending || active || complete}
+          disabled={!available || !consented || pending || busy || complete}
           aria-describedby={[
             `${id}-consent`,
             `${id}-reindex`,
@@ -217,7 +303,7 @@ export function BuiltinModelPanel({
             ...(operation ? [`${id}-status`] : []),
           ].join(" ")}
           onClick={() => {
-            if (available && consented && !pending && !active && !complete) {
+            if (available && consented && !pending && !busy && !complete) {
               setDeferred(false);
               onDownload();
             }

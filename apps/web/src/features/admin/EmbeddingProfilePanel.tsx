@@ -32,6 +32,7 @@ export interface EmbeddingProfileView {
   last_error_code: string | null;
   last_error_message?: string | null;
   last_probed_at: string | null;
+  compute_device?: "cpu" | "gpu";
 }
 
 export interface EmbeddingModelCatalogEntry {
@@ -410,9 +411,7 @@ export function EmbeddingProfilePanel({
                   {profile.provider === "openai_compatible"
                     ? "OpenAI-compatible"
                     : profile.provider === "builtin_onnx"
-                      ? chromeLocale(locale) === "zh-TW"
-                        ? "本機 ONNX · CPU"
-                        : "Local ONNX · CPU"
+                      ? `${chromeLocale(locale) === "zh-TW" ? "本機 ONNX" : "Local ONNX"} · ${profile.compute_device === "gpu" ? "GPU" : "CPU"}`
                       : profile.provider === "vllm"
                         ? "vLLM"
                         : "Ollama"}
@@ -593,8 +592,8 @@ export function EmbeddingProfilePanel({
       {connections.length === 0 ? (
         <p>
           {chromeLocale(locale) === "zh-TW"
-            ? "請先新增一個服務，再新增模型。"
-            : "Add a service before adding a model."}
+            ? "要新增外部模型，請先在上方新增一個服務。"
+            : "To add an external model, add a service above first."}
         </p>
       ) : (
         <ModelEditor

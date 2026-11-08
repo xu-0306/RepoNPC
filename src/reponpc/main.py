@@ -112,7 +112,9 @@ from reponpc.providers.builtin_artifacts import (
     verify_builtin_artifacts,
 )
 from reponpc.providers.builtin_download import download_builtin_model
-from reponpc.providers.builtin_http import PinnedBuiltinHttpTransport
+from reponpc.providers.builtin_http import PinnedBuiltinHttpTransport, PinnedGpuWheelTransport
+from reponpc.providers.builtin_onnx import BuiltinDevice, gpu_available
+from reponpc.providers.gpu_runtime import activate_gpu_runtime, install_gpu_runtime
 from reponpc.providers.openai_responses import OpenAIResponsesChatProvider
 from reponpc.providers.runtime import ProviderRuntime
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
@@ -663,6 +665,8 @@ def prepare_application(
     """Prepare the existing runtime for either ASGI or the owned desktop server."""
 
     configure_logging(settings.log_level, file_path=log_file_path)
+    # Before anything imports ONNX Runtime: an installed GPU runtime (ADR-084) goes first.
+    activate_gpu_runtime(settings.data_dir)
     app.state.deployment_profile = settings.deployment_profile
     app.state.trusted_hosts = tuple(host.lower() for host in getattr(settings, "trusted_hosts", ()))
     app.state.admin_origins = getattr(settings, "admin_origins", ())
@@ -912,19 +916,40 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
     app.state.builtin_embedding_provider = None
 
     def resolve_builtin(identity: EmbeddingIdentity) -> RuntimeEmbeddingProvider | None:
-        if identity != builtin_embedding_identity() or not any(
-            profile.provider == "builtin_onnx" and profile.identity == identity
-            for profile in embedding_profiles.list()
-        ):
+        profile = next(
+            (
+                item
+                for item in embedding_profiles.list()
+                if item.provider == "builtin_onnx" and item.identity == identity
+            ),
+            None,
+        )
+        if identity != builtin_embedding_identity() or profile is None:
             return None
+        device: BuiltinDevice = "gpu" if profile.compute_device == "gpu" else "cpu"
         # Creating the adapter does not load weights. Its first inference
         # verifies every artifact; a missing/corrupt installation fails closed.
         with builtin_lock:
-            if app.state.builtin_embedding_provider is None:
+            current = app.state.builtin_embedding_provider
+            if current is None or current.device != device:
+                # The old adapter is dropped, not closed: a running batch may still hold it.
                 app.state.builtin_embedding_provider = BuiltinOnnxEmbeddingProvider(
-                    builtin_directory
+                    builtin_directory, device=device
                 )
             return app.state.builtin_embedding_provider
+
+    def check_builtin_device(device: str) -> None:
+        """Prove the built-in model runs on a GPU before the choice is saved."""
+        if device != "gpu":
+            return
+        if not gpu_available():
+            raise EmbeddingProfileError("BUILTIN_GPU_UNAVAILABLE")
+        candidate = BuiltinOnnxEmbeddingProvider(builtin_directory, device="gpu")
+        try:
+            if not candidate.health().ready:
+                raise EmbeddingProfileError("BUILTIN_DEVICE_FAILED")
+        finally:
+            candidate.close()
 
     def install_builtin(
         *, cancelled: Callable[[], bool], on_progress: Callable[[int, int], None]
@@ -933,6 +958,16 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         download_builtin_model(
             builtin_directory,
             transport=PinnedBuiltinHttpTransport(),
+            cancelled=cancelled,
+            on_progress=on_progress,
+        )
+
+    def install_gpu_runtime_files(
+        *, cancelled: Callable[[], bool], on_progress: Callable[[int, int], None]
+    ) -> None:
+        install_gpu_runtime(
+            settings.data_dir,
+            transport=PinnedGpuWheelTransport(),
             cancelled=cancelled,
             on_progress=on_progress,
         )
@@ -1031,7 +1066,10 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
             connection_revision=environment_embedding_connection.revision,
         )
 
-    def resolve_chat_profile(profile: ChatProfile) -> ChatProvider | None:
+    def resolve_chat_profile(
+        profile: ChatProfile, chat_api: str | None = None
+    ) -> ChatProvider | None:
+        # chat_api names an interface to try; only the test-model step passes it.
         try:
             revision = model_connections.revision_for(
                 profile.connection_id, profile.connection_revision
@@ -1042,7 +1080,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
                 profile.model_id,
                 revision.secret.base_url,
                 revision.secret.api_key,
-                chat_api=revision.secret.chat_api,
+                chat_api=chat_api or revision.secret.chat_api,
             )
         except ModelConnectionError:
             return None
@@ -1090,6 +1128,7 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         model_connections,
         resolve_chat_profile,
         on_activated=lambda _profile, provider: _replace_runtime_chat(provider),
+        interface_resolver=resolve_chat_profile,
     )
     analysis_selection = AnalysisSelectionRegistry(
         runtime_database, chat_profiles, embedding_profiles, model_connections
@@ -1199,7 +1238,9 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
     app.state.embedding_profile_registry = embedding_profiles
     app.state.chat_profile_registry = chat_profiles
     model_operations = OllamaModelOperationCoordinator(
-        embedding_profiles, builtin_download=install_builtin
+        embedding_profiles,
+        builtin_download=install_builtin,
+        gpu_runtime_install=install_gpu_runtime_files,
     )
     app.state.ollama_model_operations = model_operations
 
@@ -1229,6 +1270,8 @@ def _configure_admin(settings: EnvironmentSettings, runtime_database: RuntimeDat
         analysis_selection=analysis_selection,
         ollama_model_operations=model_operations,
         connection_model_lister=list_connection_models,
+        builtin_device_check=check_builtin_device,
+        data_directory=settings.data_dir,
     )
 
 

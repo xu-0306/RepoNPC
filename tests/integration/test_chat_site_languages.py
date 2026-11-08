@@ -83,7 +83,7 @@ def test_migration_38_preserves_every_faq_column_rowid_and_constraint(tmp_path, 
             )
     database.initialize()
     database.initialize()
-    assert database.schema_version() == MIGRATIONS[-1].version == 38
+    assert database.schema_version() == MIGRATIONS[-1].version == 39
     with database.connection() as connection:
         assert [
             tuple(row)

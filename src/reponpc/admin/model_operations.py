@@ -17,7 +17,11 @@ from reponpc.admin.embedding_profiles import (
 )
 from reponpc.providers.builtin_artifacts import builtin_embedding_identity
 from reponpc.providers.builtin_download import BuiltinDownloadCancelled, BuiltinDownloadError
+from reponpc.providers.gpu_runtime import GpuRuntimeError
 from reponpc.providers.ollama_embeddings import OllamaPullCancelled
+
+# Marks the one-click GPU support install (ADR-084) among the owned operations.
+GPU_RUNTIME_MODEL_ID = "gpu-runtime"
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,9 +44,11 @@ class OllamaModelOperationCoordinator:
         registry: EmbeddingProfileRegistry,
         *,
         builtin_download: Callable[..., None] | None = None,
+        gpu_runtime_install: Callable[..., None] | None = None,
     ) -> None:
         self._registry = registry
         self._builtin_download = builtin_download
+        self._gpu_runtime_install = gpu_runtime_install
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ollama-pull")
         self._lock = threading.RLock()
         self._operations: dict[str, OllamaModelOperation] = {}
@@ -75,6 +81,22 @@ class OllamaModelOperationCoordinator:
                     )
                 )
             return self._queue(profile.profile_id, profile.model_id, self._builtin_download)
+
+    def queue_gpu_runtime(self, *, confirmed: bool) -> OllamaModelOperation:
+        if confirmed is not True or self._gpu_runtime_install is None:
+            raise EmbeddingProfileError("VALIDATION_ERROR")
+        return self._queue("", GPU_RUNTIME_MODEL_ID, self._gpu_runtime_install)
+
+    def latest_gpu_runtime(self) -> OllamaModelOperation | None:
+        with self._lock:
+            return next(
+                (
+                    op
+                    for op in reversed(tuple(self._operations.values()))
+                    if op.model_id == GPU_RUNTIME_MODEL_ID
+                ),
+                None,
+            )
 
     def latest_builtin(self) -> OllamaModelOperation | None:
         with self._lock:
@@ -172,13 +194,18 @@ class OllamaModelOperationCoordinator:
             snapshot = self.get(operation_id)
             # Installation does not load, select or activate a provider. Testing
             # and full reindex remain explicit existing profile actions.
-            if snapshot.model_id != builtin_embedding_identity().model_id:
+            if snapshot.model_id not in {
+                builtin_embedding_identity().model_id,
+                GPU_RUNTIME_MODEL_ID,
+            }:
                 self._registry.complete_ollama_model_action(
                     snapshot.profile_id, action="pull", succeeded=True
                 )
         except OllamaPullCancelled, BuiltinDownloadCancelled:
             self._set(operation_id, status="cancelled", error_code=None)
         except BuiltinDownloadError as exc:
+            self._set(operation_id, status="failed", error_code=exc.code.upper())
+        except GpuRuntimeError as exc:
             self._set(operation_id, status="failed", error_code=exc.code.upper())
         except Exception:
             self._set(

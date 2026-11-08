@@ -12,7 +12,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from reponpc.admin.model_connections import ModelConnectionRegistry
+from reponpc.admin.model_connections import ModelConnectionInput, ModelConnectionRegistry
 from reponpc.admin.model_probe_errors import provider_probe_error_code
 from reponpc.providers.contracts import (
     ChatProvider,
@@ -95,10 +95,13 @@ class ChatProfileRegistry:
         on_activated: (
             Callable[[ChatProfile, ChatProvider], Callable[[], None] | None] | None
         ) = None,
+        interface_resolver: Callable[[ChatProfile, str], ChatProvider | None] | None = None,
     ) -> None:
         self._database = database
         self._connections = connections
         self._provider_resolver = provider_resolver
+        # Builds the provider for one named interface; only the test-model step uses it.
+        self._interface_resolver = interface_resolver
         self._now = now or (lambda: datetime.now(UTC))
         self._on_activated = on_activated
 
@@ -182,38 +185,82 @@ class ChatProfileRegistry:
         with self._database.connection() as connection:
             connection.execute("DELETE FROM chat_profiles WHERE profile_id = ?", (profile_id,))
 
+    def _probe_once(self, profile: ChatProfile, interface: str | None, deadline: float) -> None:
+        resolver = self._interface_resolver
+        provider = (
+            resolver(profile, interface)
+            if interface is not None and resolver is not None
+            else self._provider_resolver(profile)
+        )
+        if provider is None:
+            raise ChatProfileError("CHAT_CONNECTION_REQUIRED")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ProviderError(ProviderFailureCode.TIMEOUT)
+        result = provider.generate(
+            (ProviderMessage("user", 'Reply only with JSON: {"ok":true}.'),),
+            {
+                "type": "object",
+                "properties": {"ok": {"type": "boolean"}},
+                "required": ["ok"],
+                "additionalProperties": False,
+            },
+            max_output_tokens=provider.capabilities().max_output_tokens,
+            # One 60-second deadline covers every attempt. A second request is
+            # sent only after the service refused the first without answering.
+            timeout=remaining,
+        )
+        if time.monotonic() >= deadline:
+            raise ProviderError(ProviderFailureCode.TIMEOUT)
+        if result.finish_reason == "length":
+            raise ProviderResponseError(ResponseIssue.OUTPUT_LIMIT)
+        payload = _result_object(result)
+        if payload.get("ok") is not True:
+            raise ChatProfileError("CHAT_PROBE_INVALID_RESPONSE")
+
     def probe(self, profile_id: str) -> ChatProfile:
         profile = self.get(profile_id)
         error_code: str | None = None
         error_message: str | None = None
         deadline = time.monotonic() + _PROBE_TIMEOUT_SECONDS
         try:
-            provider = self._provider_resolver(profile)
-            if provider is None:
-                raise ChatProfileError("CHAT_CONNECTION_REQUIRED")
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise ProviderError(ProviderFailureCode.TIMEOUT)
-            result = provider.generate(
-                (ProviderMessage("user", 'Reply only with JSON: {"ok":true}.'),),
-                {
-                    "type": "object",
-                    "properties": {"ok": {"type": "boolean"}},
-                    "required": ["ok"],
-                    "additionalProperties": False,
-                },
-                max_output_tokens=provider.capabilities().max_output_tokens,
-                # One request has one 60-second deadline; preparation consumes
-                # the same budget without issuing a second billable request.
-                timeout=remaining,
+            service = self._connections.get(profile.connection_id)
+            # Only a managed OpenAI-compatible service has two interfaces to choose from.
+            # An active profile keeps the interface it serves with.
+            detect = (
+                self._interface_resolver is not None
+                and service.provider == "openai_compatible"
+                and service.source == "managed"
+                and not profile.active
             )
-            if time.monotonic() >= deadline:
-                raise ProviderError(ProviderFailureCode.TIMEOUT)
-            if result.finish_reason == "length":
-                raise ProviderResponseError(ResponseIssue.OUTPUT_LIMIT)
-            payload = _result_object(result)
-            if payload.get("ok") is not True:
-                raise ChatProfileError("CHAT_PROBE_INVALID_RESPONSE")
+            detected: str | None = None
+            for interface in ("responses", "chat_completions") if detect else (None,):
+                try:
+                    self._probe_once(profile, interface, deadline)
+                except ProviderError as exc:
+                    # A plain invalid-response error means the service did not understand
+                    # the request (for example 404 on /responses); it never means an answer.
+                    if (
+                        interface == "responses"
+                        and type(exc) is ProviderError
+                        and exc.code is ProviderFailureCode.INVALID_RESPONSE
+                    ):
+                        continue
+                    raise
+                detected = interface
+                break
+            if detected is not None and detected != service.chat_api:
+                self._connections.update(
+                    service.connection_id,
+                    ModelConnectionInput(
+                        display_name=service.display_name,
+                        provider=service.provider,
+                        base_url=None,
+                        endpoint_action="retain",
+                        credential_action="retain",
+                        chat_api=detected,
+                    ),
+                )
         except ChatProfileError as exc:
             error_code = exc.code
         except ProviderError as exc:

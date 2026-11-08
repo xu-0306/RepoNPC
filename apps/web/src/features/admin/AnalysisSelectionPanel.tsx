@@ -198,7 +198,7 @@ export function AnalysisSelectionPanel({
         </p>
       </details>
       <label htmlFor="analysis-chat-profile">
-        <span>{chinese ? "分析與回答模型" : "Analysis and chat model"}</span>
+        <span>{chinese ? "分析與回答模型" : "Analysis and answer model"}</span>
         <select
           disabled={pending}
           id="analysis-chat-profile"

@@ -1,4 +1,7 @@
-"""Local-only, lazy CPU inference for the verified built-in bge-m3 graph.
+"""Local-only, lazy inference for the verified built-in bge-m3 graph.
+
+The owner picks the compute device: CPU (default) or GPU. GPU means ONNX
+Runtime's CUDA provider; a runtime without it never silently falls back to CPU.
 
 The pinned graph exposes ``sentence_embedding`` and ``token_embeddings``.
 Its pinned 1_Pooling/config.json specifies CLS pooling; a token-only graph must
@@ -12,7 +15,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -29,6 +32,7 @@ from reponpc.providers.contracts import (
     ProviderHealth,
     RuntimeEmbeddingProvider,
 )
+from reponpc.providers.gpu_runtime import gpu_runtime_active
 
 _MAX_TOKEN_ID = int(np.iinfo(np.int64).max)
 
@@ -39,18 +43,45 @@ def _load_tokenizer(path: Path) -> Any:
     return Tokenizer.from_file(str(path))
 
 
-def _load_session(path: Path) -> Any:
+BuiltinDevice = Literal["cpu", "gpu"]
+_GPU_PROVIDER = "CUDAExecutionProvider"
+
+
+_cuda_preloaded = False
+
+
+def _ort() -> Any:
+    """Import ONNX Runtime; the one-click GPU runtime (ADR-084) loads its CUDA DLLs first."""
+    global _cuda_preloaded
     import onnxruntime as ort  # type: ignore[import-untyped]
 
+    if gpu_runtime_active() and not _cuda_preloaded:
+        ort.preload_dlls()
+        _cuda_preloaded = True
+    return ort
+
+
+def gpu_available() -> bool:
+    """Report whether the installed ONNX Runtime can run on a GPU."""
+    try:
+        return _GPU_PROVIDER in _ort().get_available_providers() or gpu_runtime_active()
+    except Exception:
+        return False
+
+
+def _load_session(path: Path, device: BuiltinDevice = "cpu") -> Any:
+    ort = _ort()
     ort.disable_telemetry_events()
     options = ort.SessionOptions()
     options.intra_op_num_threads = 4
     options.inter_op_num_threads = 1
     options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
     options.log_severity_level = 4
-    session = ort.InferenceSession(
-        str(path), sess_options=options, providers=["CPUExecutionProvider"]
+    # ponytail: CUDA only; add DirectML when a wheel matching the pinned runtime exists.
+    providers = (
+        ["CPUExecutionProvider"] if device == "cpu" else [_GPU_PROVIDER, "CPUExecutionProvider"]
     )
+    session = ort.InferenceSession(str(path), sess_options=options, providers=providers)
     session.disable_fallback()
     return session
 
@@ -69,9 +100,12 @@ class BuiltinOnnxEmbeddingProvider(RuntimeEmbeddingProvider):
         *,
         verify_artifacts: Callable[[Path], Path] = verify_builtin_artifacts,
         tokenizer_factory: Callable[[Path], Any] = _load_tokenizer,
-        session_factory: Callable[[Path], Any] = _load_session,
+        session_factory: Callable[[Path], Any] | None = None,
         max_batch_size: int = 8,
+        device: BuiltinDevice = "cpu",
     ) -> None:
+        if device not in ("cpu", "gpu"):
+            raise ValueError("invalid built-in compute device")
         try:
             self._identity = builtin_embedding_identity()
             self._context_tokens = load_builtin_manifest().context_tokens
@@ -82,7 +116,8 @@ class BuiltinOnnxEmbeddingProvider(RuntimeEmbeddingProvider):
         self._model_dir = model_dir
         self._verify_artifacts = verify_artifacts
         self._tokenizer_factory = tokenizer_factory
-        self._session_factory = session_factory
+        self.device: BuiltinDevice = device
+        self._session_factory = session_factory or (lambda path: _load_session(path, device))
         self._max_batch_size = max_batch_size
         self._max_batch_tokens = self._context_tokens
         self._lock = Lock()
@@ -120,6 +155,12 @@ class BuiltinOnnxEmbeddingProvider(RuntimeEmbeddingProvider):
             return ProviderHealth(False, checked_at, error.code)
         return ProviderHealth(True, checked_at)
 
+    def _runs_on_device(self, providers: list[str]) -> bool:
+        if self.device == "cpu":
+            return providers == ["CPUExecutionProvider"]
+        # A failed CUDA load leaves only the CPU provider; that is not GPU inference.
+        return providers[:1] == [_GPU_PROVIDER]
+
     def _load(self) -> None:
         if self._closed:
             raise ProviderError(ProviderFailureCode.UNAVAILABLE)
@@ -140,7 +181,7 @@ class BuiltinOnnxEmbeddingProvider(RuntimeEmbeddingProvider):
             outputs = session.get_outputs()
             output_names = [node.name for node in outputs]
             if (
-                session.get_providers() != ["CPUExecutionProvider"]
+                not self._runs_on_device(session.get_providers())
                 or type(pad_id) is not int
                 or not 0 <= pad_id <= _MAX_TOKEN_ID
                 or len(names) != len(inputs)

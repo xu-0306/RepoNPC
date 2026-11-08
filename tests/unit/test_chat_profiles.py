@@ -18,7 +18,12 @@ from reponpc.admin.model_connections import (
     ModelConnectionRegistry,
     ProtectedModelSecretStore,
 )
-from reponpc.providers.contracts import ProviderCapabilities, ProviderResult
+from reponpc.providers.contracts import (
+    ProviderCapabilities,
+    ProviderError,
+    ProviderFailureCode,
+    ProviderResult,
+)
 from reponpc.runtime.database import RuntimeDatabase, RuntimeDatabaseError
 
 
@@ -284,3 +289,129 @@ def test_probe_wall_clock_can_exceed_budget_outside_provider_work(
     assert result.last_error_code is None
     assert budgets == [60.0]
     assert elapsed == 70.0
+
+
+class _Interfaces:
+    """Resolver double: each named interface either answers or fails the way a service would."""
+
+    def __init__(self, outcomes: dict[str, ProviderError | None]) -> None:
+        self.outcomes = outcomes
+        self.calls: list[str] = []
+
+    def __call__(self, _profile: ChatProfile, interface: str) -> object:
+        self.calls.append(interface)
+        outcome = self.outcomes[interface]
+
+        class Provider(_ProbeProvider):
+            def generate(self, *_args: object, **_kwargs: object) -> ProviderResult:
+                if outcome is not None:
+                    raise outcome
+                return super().generate()
+
+        return Provider()
+
+
+def _detecting(
+    tmp_path: Path, outcomes: dict[str, ProviderError | None]
+) -> tuple[ModelConnectionRegistry, ChatProfileRegistry, _Interfaces, ChatProfile]:
+    connections, profiles = _registries(tmp_path)
+    interfaces = _Interfaces(outcomes)
+    profiles._interface_resolver = interfaces  # type: ignore[assignment]
+    connection = connections.create(_connection_input())
+    profile = profiles.create(ChatProfileInput(connection.connection_id, "arbitrary-model"))
+    return connections, profiles, interfaces, profile
+
+
+def test_probe_detects_responses_and_saves_it_on_the_connection(tmp_path: Path) -> None:
+    connections, profiles, interfaces, profile = _detecting(
+        tmp_path, {"responses": None, "chat_completions": None}
+    )
+    result = profiles.probe(profile.profile_id)
+    assert result.status == "ready" and result.last_error_code is None
+    assert interfaces.calls == ["responses"]
+    connection = connections.get(profile.connection_id)
+    assert connection.chat_api == "responses"
+    # The new revision carries the profile, so the passed test stays usable.
+    assert result.connection_revision == connection.revision == 2
+    assert connections.secret_for(connection.connection_id).chat_api == "responses"
+
+
+def test_probe_uses_chat_completions_when_the_service_refuses_responses(tmp_path: Path) -> None:
+    connections, profiles, interfaces, profile = _detecting(
+        tmp_path,
+        {
+            "responses": ProviderError(ProviderFailureCode.INVALID_RESPONSE),
+            "chat_completions": None,
+        },
+    )
+    result = profiles.probe(profile.profile_id)
+    assert result.status == "ready"
+    assert interfaces.calls == ["responses", "chat_completions"]
+    connection = connections.get(profile.connection_id)
+    assert connection.chat_api == "chat_completions" and connection.revision == 1
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        ProviderFailureCode.AUTHENTICATION,
+        ProviderFailureCode.RATE_LIMIT,
+        ProviderFailureCode.TIMEOUT,
+        ProviderFailureCode.UNAVAILABLE,
+    ],
+)
+def test_probe_does_not_switch_interface_after_a_failure_that_is_not_about_the_interface(
+    tmp_path: Path, failure: ProviderFailureCode
+) -> None:
+    connections, profiles, interfaces, profile = _detecting(
+        tmp_path, {"responses": ProviderError(failure), "chat_completions": None}
+    )
+    result = profiles.probe(profile.profile_id)
+    assert result.status == "probe_failed" and result.last_error_code
+    assert interfaces.calls == ["responses"]
+    assert connections.get(profile.connection_id).chat_api == "chat_completions"
+
+
+def test_probe_reports_the_last_failure_when_neither_interface_works(tmp_path: Path) -> None:
+    connections, profiles, interfaces, profile = _detecting(
+        tmp_path,
+        {
+            "responses": ProviderError(ProviderFailureCode.INVALID_RESPONSE),
+            "chat_completions": ProviderError(ProviderFailureCode.AUTHENTICATION),
+        },
+    )
+    result = profiles.probe(profile.profile_id)
+    assert result.status == "probe_failed"
+    assert interfaces.calls == ["responses", "chat_completions"]
+    assert connections.get(profile.connection_id).revision == 1
+
+
+def test_probe_keeps_the_interface_of_an_active_profile(tmp_path: Path) -> None:
+    connections, profiles, interfaces, profile = _detecting(
+        tmp_path, {"responses": None, "chat_completions": None}
+    )
+    with profiles._database.connection() as database:
+        database.execute(
+            "UPDATE chat_profiles SET active = 1, status = 'ready' WHERE profile_id = ?",
+            (profile.profile_id,),
+        )
+    result = profiles.probe(profile.profile_id)
+    assert result.status == "ready"
+    assert interfaces.calls == []
+    assert connections.get(profile.connection_id).chat_api == "chat_completions"
+
+
+def test_probe_does_not_detect_for_services_without_two_interfaces(tmp_path: Path) -> None:
+    connections, profiles = _registries(tmp_path)
+    interfaces = _Interfaces({"responses": None, "chat_completions": None})
+    profiles._interface_resolver = interfaces  # type: ignore[assignment]
+    connection = connections.create(
+        ModelConnectionInput(
+            display_name="Local",
+            provider="ollama",
+            base_url="http://127.0.0.1:11434",
+        )
+    )
+    profile = profiles.create(ChatProfileInput(connection.connection_id, "arbitrary-model"))
+    assert profiles.probe(profile.profile_id).status == "ready"
+    assert interfaces.calls == []

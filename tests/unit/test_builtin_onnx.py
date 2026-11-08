@@ -506,3 +506,70 @@ def test_default_session_disables_telemetry_before_session_creation(
     )
     instance.embed_query(["hello"])
     assert calls == ["telemetry", "options", "session", "fallback"]
+
+
+def test_gpu_device_runs_only_when_cuda_is_the_first_provider(tmp_path: Path) -> None:
+    session = Session()
+    session.providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    instance = provider(tmp_path, session, device="gpu")
+    assert instance.device == "gpu"
+    assert instance.embed_query(["hello"]).shape == (1, 1024)
+
+
+def test_gpu_device_never_falls_back_to_cpu_silently(tmp_path: Path) -> None:
+    # ONNX Runtime keeps only the CPU provider when CUDA fails to load.
+    with pytest.raises(ProviderError) as caught:
+        provider(tmp_path, Session(), device="gpu").embed_query(["hello"])
+    assert_safe_failure(caught.value, ProviderFailureCode.INVALID_RESPONSE)
+
+
+def test_cpu_is_the_default_device_and_unknown_devices_are_rejected(tmp_path: Path) -> None:
+    assert provider(tmp_path, Session()).device == "cpu"
+    with pytest.raises(ValueError):
+        BuiltinOnnxEmbeddingProvider(tmp_path, device="tpu")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("device", "expected"),
+    [
+        ("cpu", ["CPUExecutionProvider"]),
+        ("gpu", ["CUDAExecutionProvider", "CPUExecutionProvider"]),
+    ],
+)
+def test_default_session_requests_the_chosen_providers(
+    tmp_path: Path, monkeypatch: Any, device: str, expected: list[str]
+) -> None:
+    import onnxruntime as ort  # type: ignore[import-untyped]
+
+    requested: list[list[str]] = []
+    session = Session()
+    monkeypatch.setattr(ort, "SessionOptions", lambda: SimpleNamespace())
+
+    def load(*_args: Any, providers: list[str], **_kwargs: Any) -> Session:
+        requested.append(providers)
+        session.providers = providers
+        return session
+
+    monkeypatch.setattr(ort, "InferenceSession", load)
+    monkeypatch.setattr(session, "disable_fallback", lambda: None, raising=False)
+    instance = BuiltinOnnxEmbeddingProvider(
+        tmp_path,
+        verify_artifacts=lambda root: root,
+        tokenizer_factory=lambda _: tokenizer(),
+        device=device,  # type: ignore[arg-type]
+    )
+    instance.embed_query(["hello"])
+    assert requested == [expected]
+
+
+def test_gpu_available_reflects_the_installed_runtime(monkeypatch: Any) -> None:
+    import onnxruntime as ort  # type: ignore[import-untyped]
+
+    from reponpc.providers.builtin_onnx import gpu_available
+
+    monkeypatch.setattr(ort, "get_available_providers", lambda: ["CPUExecutionProvider"])
+    assert gpu_available() is False
+    monkeypatch.setattr(
+        ort, "get_available_providers", lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    )
+    assert gpu_available() is True

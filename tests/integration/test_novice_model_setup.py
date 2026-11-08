@@ -531,8 +531,9 @@ def test_dimension_migration_preserves_active_selection_and_switch_intent(tmp_pa
         for table, values in before.items():
             rows = [tuple(row) for row in connection.execute(f"SELECT * FROM {table}")]
             if table == "embedding_profiles":
-                assert [row[:-1] for row in rows] == values
-                assert all(row[-1] is None for row in rows)
+                assert [row[:-2] for row in rows] == values
+                assert all(row[-2] is None for row in rows)
+                assert all(row[-1] == "cpu" for row in rows)
             else:
                 assert rows == values
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []

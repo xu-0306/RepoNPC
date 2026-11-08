@@ -169,6 +169,10 @@ class EmbeddingProfileRequest(_StrictRequest):
         return EmbeddingProfileInput(**self.model_dump())
 
 
+class BuiltinDeviceRequest(_StrictRequest):
+    device: Literal["cpu", "gpu"]
+
+
 class ConfirmedBuiltinDownloadRequest(_StrictRequest):
     confirmed: StrictBool
 
@@ -1409,6 +1413,26 @@ def create_admin_router(
             return _embedding_profile_error(request, exc)
         return _embedding_profile_response(info)
 
+    @router.put("/embedding-models/builtin/device")
+    async def set_builtin_model_device(
+        request: Request,
+        body: BuiltinDeviceRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            info = await asyncio.to_thread(configured.set_builtin_device, body.device)
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        return _embedding_profile_response(info)
+
     @router.post("/embedding-models/builtin/download")
     async def download_builtin_model(
         request: Request,
@@ -1426,6 +1450,30 @@ def create_admin_router(
         try:
             operation = await asyncio.to_thread(
                 configured.start_builtin_download, confirmed=body.confirmed
+            )
+        except EmbeddingProfileError as exc:
+            return _embedding_profile_error(request, exc)
+        return _embedding_profile_response(
+            _ollama_model_operation_payload(operation), status_code=202
+        )
+
+    @router.post("/embedding-models/builtin/gpu-runtime/install")
+    async def install_builtin_gpu_runtime(
+        request: Request,
+        body: ConfirmedBuiltinDownloadRequest,
+        session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+        csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+    ) -> Response:
+        boundary = protected(request, session_token, csrf_token or "")
+        if isinstance(boundary, JSONResponse):
+            return boundary
+        origin_error = same_origin(request)
+        if origin_error is not None:
+            return origin_error
+        configured, _session_hash = boundary
+        try:
+            operation = await asyncio.to_thread(
+                configured.start_gpu_runtime_install, confirmed=body.confirmed
             )
         except EmbeddingProfileError as exc:
             return _embedding_profile_error(request, exc)
@@ -3608,6 +3656,9 @@ def _embedding_profile_error(request: Request, error: EmbeddingProfileError) -> 
         "EMBEDDING_REINDEX_STALE": 409,
         "EMBEDDING_MODEL_OPERATION_ACTIVE": 409,
         "EMBEDDING_MODEL_OPERATION_FAILED": 502,
+        "BUILTIN_GPU_UNAVAILABLE": 409,
+        "BUILTIN_DEVICE_FAILED": 502,
+        "GPU_RUNTIME_UNAVAILABLE": 409,
     }.get(error.code, 400)
     response = error_response(
         request,
@@ -3798,6 +3849,7 @@ def _embedding_profile_payload(profile: EmbeddingProfile) -> dict[str, object]:
         "reindex_started_at": profile.reindex_started_at,
         "reindex_completed_at": profile.reindex_completed_at,
         "bundle_id": profile.bundle_id,
+        "compute_device": profile.compute_device,
     }
 
 

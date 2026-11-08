@@ -73,9 +73,10 @@ class SyntheticChat:
 class LazyBuiltin:
     """A tiny synthetic session; construction/identity never read or create files."""
 
-    def __init__(self, directory: Path, events: list[str]) -> None:
+    def __init__(self, directory: Path, events: list[str], device: str = "cpu") -> None:
         self.directory = directory
         self.events = events
+        self.device = device
         self.loaded = False
         self.closed = False
         self.loads = 0
@@ -151,8 +152,8 @@ def boot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Boot]:
     downloads: list[Path] = []
     events: list[str] = []
 
-    def constructor(directory: Path) -> LazyBuiltin:
-        instance = LazyBuiltin(directory, events)
+    def constructor(directory: Path, device: str = "cpu") -> LazyBuiltin:
+        instance = LazyBuiltin(directory, events, device)
         instances.append(instance)
         return instance
 
