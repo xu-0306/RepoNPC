@@ -218,8 +218,15 @@ describe("BuiltinModelPanel GPU support", () => {
 
   it("asks for a restart once the runtime is installed", () => {
     const markup = render({ info: withGpu({ state: "restart_required" }) });
-    expect(markup).toContain("Close RepoNPC completely");
+    expect(markup).toContain("Press Enter in the launcher window or close it");
+    expect(markup).toContain("then run start-reponpc.cmd again");
     expect(markup).not.toContain("Download and install GPU support");
+    const zh = render({
+      info: withGpu({ state: "restart_required" }),
+      locale: "zh-TW",
+    });
+    expect(zh).toContain("請按啟動器視窗的 Enter 或直接關閉該視窗");
+    expect(zh).toContain("再執行一次 start-reponpc.cmd");
     const done = render({
       info: withGpu(),
       gpuOperation: gpuOperation({ status: "succeeded" }),

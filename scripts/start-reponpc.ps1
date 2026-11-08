@@ -315,6 +315,94 @@ function Read-LauncherState {
     }
 }
 
+function Get-ProcessTreeIds {
+    param([int]$RootId)
+
+    $all = @(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId)
+    $ids = [System.Collections.Generic.List[int]]::new()
+    $ids.Add($RootId)
+    for ($i = 0; $i -lt $ids.Count; $i++) {
+        foreach ($candidate in $all) {
+            if ($candidate.ParentProcessId -eq $ids[$i] -and -not $ids.Contains([int]$candidate.ProcessId)) {
+                $ids.Add([int]$candidate.ProcessId)
+            }
+        }
+    }
+    return $ids
+}
+
+# Puts the server and its children in a Windows job object that the system closes, killing
+# them, when this launcher process ends: window closed, Ctrl+C, Enter at the prompt, or a kill.
+function Join-ServerToLauncher {
+    param([int]$ServerId)
+
+    try {
+        if (-not ("RepoNpc.LauncherJob" -as [type])) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace RepoNpc {
+    public static class LauncherJob {
+        [StructLayout(LayoutKind.Sequential)]
+        struct Basic {
+            public long PerProcessUserTime; public long PerJobUserTime; public uint LimitFlags;
+            public UIntPtr MinWorkingSet; public UIntPtr MaxWorkingSet; public uint ActiveProcessLimit;
+            public UIntPtr Affinity; public uint PriorityClass; public uint SchedulingClass;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        struct Extended {
+            public Basic Limits;
+            public ulong Io0; public ulong Io1; public ulong Io2; public ulong Io3; public ulong Io4; public ulong Io5;
+            public UIntPtr ProcessMemory; public UIntPtr JobMemory; public UIntPtr PeakProcess; public UIntPtr PeakJob;
+        }
+        [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateJobObject(IntPtr attributes, string name);
+        [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref Extended info, int length);
+        [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, int id);
+        [DllImport("kernel32.dll", SetLastError = true)] static extern bool IsProcessInJob(IntPtr process, IntPtr job, out bool result);
+        [DllImport("kernel32.dll", SetLastError = true)] static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+        [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+        // Held until this process ends; closing it is what kills the members.
+        static IntPtr job = IntPtr.Zero;
+        public static bool Add(int processId) {
+            if (job == IntPtr.Zero) {
+                job = CreateJobObject(IntPtr.Zero, null);
+                if (job == IntPtr.Zero) return false;
+                Extended info = new Extended();
+                info.Limits.LimitFlags = 0x2000; // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+                if (!SetInformationJobObject(job, 9, ref info, Marshal.SizeOf(typeof(Extended)))) {
+                    CloseHandle(job); job = IntPtr.Zero; return false;
+                }
+            }
+            IntPtr process = OpenProcess(0x1000 | 0x0100 | 0x0001, false, processId); // query, set quota, terminate
+            if (process == IntPtr.Zero) return false;
+            bool inJob;
+            bool ok = (IsProcessInJob(process, job, out inJob) && inJob) || AssignProcessToJobObject(job, process);
+            CloseHandle(process);
+            return ok;
+        }
+    }
+}
+'@
+        }
+        # The venv launcher process ($ServerId) already puts the real Python child into its own
+        # kill-on-close job, so that child cannot join a second job but still dies with its parent.
+        # Success therefore means the root joined; the rest are added when Windows allows it.
+        $joined = $false
+        foreach ($processId in (Get-ProcessTreeIds $ServerId)) {
+            $added = [RepoNpc.LauncherJob]::Add($processId)
+            if ($processId -eq $ServerId) {
+                $joined = $added
+            }
+        }
+        return $joined
+    }
+    catch {
+        return $false
+    }
+}
+
+$script:serverStopsWithLauncher = $false
+
 function Get-LauncherInputWriteTimeUtc {
     $latest = [DateTime]::MinValue.ToUniversalTime()
     $inputs = @(
@@ -651,6 +739,13 @@ sys.exit(0 if run_owner_console(Path(sys.argv[1]), environ=os.environ) else 2)
             data_dir = $resolvedDataDir
             started_at = [DateTime]::UtcNow.ToString("o")
         } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
+        if (-not $NoPause -and -not $SmokeTest) {
+            # Scripted runs (-NoPause) keep the detached server; a person at a window gets one that stops with it.
+            $script:serverStopsWithLauncher = Join-ServerToLauncher $server.Id
+            if (-not $script:serverStopsWithLauncher) {
+                Write-Host "Could not tie RepoNPC to this window, so it keeps running in the background until you stop it." -ForegroundColor Yellow
+            }
+        }
         Write-Step "Server is healthy."
     }
 
@@ -692,7 +787,10 @@ sys.exit(0 if run_owner_console(Path(sys.argv[1]), environ=os.environ) else 2)
         Write-Host $adminUrl -ForegroundColor White
     }
 
-    if (-not $SmokeTest) {
+    if ($script:serverStopsWithLauncher) {
+        Write-Host "RepoNPC stops when this window closes. Keep it open while you use RepoNPC." -ForegroundColor Green
+    }
+    elseif (-not $SmokeTest) {
         Write-Host "RepoNPC keeps running in the background after this window closes." -ForegroundColor Green
     }
 }
@@ -709,7 +807,12 @@ catch {
 finally {
     if (-not $NoPause) {
         Write-Host ""
-        [void](Read-Host "Press Enter to close this launcher")
+        if ($script:serverStopsWithLauncher) {
+            [void](Read-Host "Press Enter to stop RepoNPC and close this launcher")
+        }
+        else {
+            [void](Read-Host "Press Enter to close this launcher")
+        }
     }
 }
 exit $exitCode

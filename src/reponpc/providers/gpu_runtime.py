@@ -355,6 +355,23 @@ def _remove_tree(root: Path, path: Path, *, strict: bool) -> None:
         shutil.rmtree(path, ignore_errors=not strict)
 
 
+def _publish(staging: Path, final: Path) -> None:
+    """Rename the staged folder into place.
+
+    Windows refuses for a moment while a scanner or indexer still holds a file in either folder,
+    including a just-deleted `final` that is still pending removal.
+    """
+
+    for attempt in range(10):
+        try:
+            os.replace(staging, final)
+            return
+        except PermissionError:
+            if attempt == 9:
+                raise
+            time.sleep(0.3)
+
+
 def _extract(wheel: Path, destination: Path, cancelled: Callable[[], bool]) -> None:
     """Unpack only the allowed members; refuse links, escapes, duplicates and oversize."""
 
@@ -497,7 +514,7 @@ def install_gpu_runtime(
         _check_cancel(cancelled)
         (staging / _READY_FILE).write_text(json.dumps(_ready_payload(expected)), encoding="utf-8")
         _remove_tree(root, final, strict=True)
-        os.replace(staging, final)
+        _publish(staging, final)
     except BaseException:
         _remove_tree(root, staging, strict=False)
         raise

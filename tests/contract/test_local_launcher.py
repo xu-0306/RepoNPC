@@ -105,6 +105,22 @@ def test_local_launcher_reconciles_only_owned_stale_processes() -> None:
     assert "[string]$State.started_at" in script
 
 
+def test_local_launcher_stops_its_server_with_the_window() -> None:
+    script = POWERSHELL_LAUNCHER.read_text(encoding="utf-8")
+
+    # A person at a window gets a server tied to the launcher process by a kill-on-close job
+    # object, so closing the window (or Enter at the prompt) stops RepoNPC and a restart really
+    # restarts it. Scripted runs (-NoPause, -SmokeTest) keep the detached server.
+    assert "JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE" in script
+    assert "Get-ProcessTreeIds $ServerId" in script
+    assert "if (-not $NoPause -and -not $SmokeTest) {" in script
+    assert "Join-ServerToLauncher $server.Id" in script
+    assert "if ($processId -eq $ServerId) {" in script
+    assert "RepoNPC stops when this window closes" in script
+    assert "Press Enter to stop RepoNPC and close this launcher" in script
+    assert "RepoNPC keeps running in the background after this window closes." in script
+
+
 def test_local_launcher_selects_only_explicit_supported_profiles() -> None:
     script = POWERSHELL_LAUNCHER.read_text(encoding="utf-8")
     profile_read = script.index(

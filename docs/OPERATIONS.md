@@ -288,9 +288,11 @@ and press **Download and install GPU support**. RepoNPC downloads the pinned
 `onnxruntime-gpu` and NVIDIA runtime wheels from PyPI (`files.pythonhosted.org`;
 8 files, about 1.33 GB; about 4 GB of free disk space is needed while installing),
 unpacks them into `<data_dir>\gpu-runtime\<runtime id>\`, proves a CUDA session in
-a separate process and only then publishes the folder. Close RepoNPC completely,
-including the launcher window, open it again, then choose GPU in the select; the
-model loads on the GPU first and the choice is stored only when that works.
+a separate process and only then publishes the folder. Press Enter in the launcher
+window or close it, which stops RepoNPC (see the launcher paragraph below), then run
+`start-reponpc.cmd` again so the new server activates the runtime. Then choose GPU in
+the select; the model loads on the GPU first and the choice is stored only when that
+works.
 
 The install changes nothing else: not Windows, not `.venv`, not `uv.lock`, not the
 CPU `onnxruntime`. `uv sync` and a RepoNPC upgrade leave the folder alone. An
@@ -372,7 +374,7 @@ For a repository checkout on Windows, double-click `start-reponpc.cmd`, or run:
 
 The launcher requires Python 3.14 or newer and runs `uv sync --frozen` when its Python or RepoNPC executable is missing, or when `pyvenv.cfg` is unreadable, unparseable, or reports an older Python version.
 
-The launcher reads existing `REPONPC_*` overrides from `.env` and uses `REPONPC_DEPLOYMENT_PROFILE` from there (empty means `loopback_evaluation`; only `loopback_evaluation` and `production` are accepted). The default profile adapts container secret-file paths to ignored files below `secrets/`, validates `loopback_evaluation`, binds only `127.0.0.1`, uses same-origin `http://localhost:8090`, builds stale Web assets, starts the server in the background, and waits for `/healthz`. It then creates a fresh two-minute one-use launch grant and opens `/admin#local-launch=<grant>`; re-running replaces any prior unused grant. It never prints or creates a username/password and never requires GitHub configuration to enter settings. On startup it compares the managed process state with the latest backend/frontend inputs; a stale process is stopped through its recorded process tree and replaced. Before stopping, it verifies the recorded PID and configured RepoNPC Python executable. If Windows rejects tree termination because of an elevation-context mismatch, the launcher falls back to directly stopping that same verified PID. An unknown process occupying the port is never terminated automatically.
+The launcher reads existing `REPONPC_*` overrides from `.env` and uses `REPONPC_DEPLOYMENT_PROFILE` from there (empty means `loopback_evaluation`; only `loopback_evaluation` and `production` are accepted). The default profile adapts container secret-file paths to ignored files below `secrets/`, validates `loopback_evaluation`, binds only `127.0.0.1`, uses same-origin `http://localhost:8090`, builds stale Web assets, starts the server without a window, and waits for `/healthz`. In an interactive run (no `-NoPause`, no `-SmokeTest`) it ties that server and its children to the launcher process with a kill-on-close job object: closing the launcher window, Ctrl+C, Enter at the prompt or killing the launcher stops RepoNPC, so keep the window open while using it. Scripted runs (`-NoPause`) leave the server detached, and a server that was already running is not tied to the new window. It then creates a fresh two-minute one-use launch grant and opens `/admin#local-launch=<grant>`; re-running replaces any prior unused grant. It never prints or creates a username/password and never requires GitHub configuration to enter settings. On startup it compares the managed process state with the latest backend/frontend inputs; a stale process is stopped through its recorded process tree and replaced. Before stopping, it verifies the recorded PID and configured RepoNPC Python executable. If Windows rejects tree termination because of an elevation-context mismatch, the launcher falls back to directly stopping that same verified PID. An unknown process occupying the port is never terminated automatically.
 
 The launcher selects no chat model unless configured in `.env` or passed with `-ChatModel`. There is no silent model download: built-in bge-m3 downloads only after an explicit owner choice; external services remain available. It never fabricates a bundle or silently switches providers. Logs and mutable state are below ignored `runtime-data/local/`; terminal options include `-Port`, `-DataDir`, `-ChatModel`, `-SkipBuild`, `-NoBrowser` and `-NoPause`.
 

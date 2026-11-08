@@ -302,7 +302,9 @@ its DLL folders and `builtin_onnx` runs `onnxruntime.preload_dlls()` once.
 Activation is skipped when ONNX Runtime was already imported, the marker does
 not match the manifest, or the platform is unsupported. `gpu_available` is true
 when the CUDA provider is listed or the runtime was activated. The restart is
-manual.
+manual: the owner presses Enter in the launcher window or closes it, which stops the
+server (the launcher ties the server it started to its own process with a
+kill-on-close job object), and runs the launcher again.
 
 **Descriptor.** `GET /api/admin/embedding-models/builtin` adds `gpu_runtime`:
 `state` (`ready`, `restart_required` or a detection state), `gpu_name`,

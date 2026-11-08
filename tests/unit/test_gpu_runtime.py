@@ -1121,3 +1121,41 @@ def test_status_says_restart_required_once_installed_and_ready_once_active(
     assert _status(tmp_path, monkeypatch, detection=can, available=True)["state"] == "ready"
     none = GpuDetection("no_nvidia_gpu")
     assert _status(tmp_path, monkeypatch, detection=none, available=True)["state"] == "ready"
+
+
+def test_publish_retries_a_briefly_locked_rename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    staging, final = tmp_path / "ort.staging", tmp_path / "ort"
+    staging.mkdir()
+    real_replace = os.replace
+    calls: list[Path] = []
+
+    def locked_twice(source: Path, target: Path) -> None:
+        calls.append(source)
+        if len(calls) <= 2:
+            raise PermissionError("held by a scanner")
+        real_replace(source, target)
+
+    monkeypatch.setattr(gpu_runtime.os, "replace", locked_twice)
+    monkeypatch.setattr(gpu_runtime.time, "sleep", lambda _seconds: None)
+    gpu_runtime._publish(staging, final)
+    assert final.is_dir() and not staging.exists() and len(calls) == 3
+
+
+def test_publish_gives_up_when_the_rename_stays_locked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    staging, final = tmp_path / "ort.staging", tmp_path / "ort"
+    staging.mkdir()
+    calls: list[Path] = []
+
+    def always_locked(source: Path, target: Path) -> None:
+        calls.append(source)
+        raise PermissionError("held by a scanner")
+
+    monkeypatch.setattr(gpu_runtime.os, "replace", always_locked)
+    monkeypatch.setattr(gpu_runtime.time, "sleep", lambda _seconds: None)
+    with pytest.raises(PermissionError):
+        gpu_runtime._publish(staging, final)
+    assert len(calls) == 10 and staging.is_dir() and not final.exists()

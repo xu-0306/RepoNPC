@@ -40,7 +40,7 @@ const COPY = {
     unknown: "等待安裝進度資訊。",
     pending: "正在處理操作，請稍候。",
     restart:
-      "GPU 支援已安裝並通過驗證。請完全關閉 RepoNPC（包含啟動器視窗）後重新開啟，之後就能選擇 GPU。",
+      "GPU 支援已安裝並通過驗證。請按啟動器視窗的 Enter 或直接關閉該視窗（RepoNPC 會一併停止），再執行一次 start-reponpc.cmd，之後就能選擇 GPU。",
     noGpu:
       "這台主機目前無法使用 GPU：沒有偵測到 NVIDIA 顯示卡。想用 GPU，可改選「使用外部模型服務」連到 Ollama。",
     driverOld: (minimum: number) =>
@@ -83,7 +83,7 @@ const COPY = {
     unknown: "Waiting for installation progress information.",
     pending: "An operation is in progress. Please wait.",
     restart:
-      "GPU support is installed and verified. Close RepoNPC completely, including the launcher window, and open it again; then you can choose the GPU.",
+      "GPU support is installed and verified. Press Enter in the launcher window or close it (this also stops RepoNPC), then run start-reponpc.cmd again; then you can choose the GPU.",
     noGpu:
       "This host cannot use a GPU right now: no NVIDIA graphics card was detected. To use a GPU, choose Use an external model service and connect to Ollama.",
     driverOld: (minimum: number) =>
